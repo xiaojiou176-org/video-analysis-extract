@@ -29,6 +29,13 @@ temporal server start-dev --ip 127.0.0.1 --port 7233
 ```
 
 ## 3) Phase3 关键环境变量
+建议先从模板生成并编辑：
+```bash
+./scripts/init_env_example.sh
+cp .env.local.example .env.local
+```
+
+核心配置示例：
 ```bash
 export DATABASE_URL='postgresql+psycopg://localhost:5432/video_analysis'
 export TEMPORAL_TARGET_HOST='127.0.0.1:7233'
@@ -57,11 +64,16 @@ export LOCK_TTL_SECONDS='90'
 export VD_API_BASE_URL='http://127.0.0.1:8000'
 export VD_API_TIMEOUT_SEC='20'
 
-# Resend（通知发送）
-export RESEND_API_KEY='<required-for-send>'
+# Resend（仅在 NOTIFICATION_ENABLED=true 时必填）
+export NOTIFICATION_ENABLED='true'
+export RESEND_API_KEY='<required-when-enabled>'
 export RESEND_FROM_EMAIL='Video Digestor <noreply@example.com>'
 export NOTIFY_TO_EMAIL='you@example.com'
 ```
+
+说明：
+- `scripts/dev_api.sh`、`scripts/dev_worker.sh`、`scripts/dev_mcp.sh`、`scripts/run_daily_digest.sh`、`scripts/run_failure_alerts.sh` 会自动加载 `.env.local`（如果存在）。
+- 变量契约见 `ENVIRONMENT.md` 和 `infra/config/env.contract.json`。
 
 ## 4) 初始化数据库
 ```bash
@@ -148,13 +160,12 @@ WORKER_COMMAND=start-poll-workflow ./scripts/dev_worker.sh --max-new-videos 1
 ```
 
 ## 8) 初始化本机 env 示例（推荐）
-使用脚本生成可直接修改的模板，并创建本机状态目录：
+使用脚本生成可直接修改的模板：
 
 ```bash
 ./scripts/init_env_example.sh
 cp .env.local.example .env.local
 # 编辑 .env.local，填入 RESEND_API_KEY / RESEND_FROM_EMAIL / NOTIFY_TO_EMAIL
-source .env.local
 ```
 
 ## 9) 手动触发每日汇总与失败告警
@@ -185,10 +196,10 @@ crontab -e
 示例：
 ```cron
 # 每天 09:00 发送每日汇总
-0 9 * * * /bin/bash -lc 'cd "/Users/yuyifeng/Documents/VS Code/1_Personal_Project/[其他项目]Useful_Tools/📺视频分析提取" && source ./.env.local && ./scripts/run_daily_digest.sh >> ./logs/daily_digest.log 2>&1'
+0 9 * * * /bin/bash -lc 'cd "/Users/yuyifeng/Documents/VS Code/1_Personal_Project/[其他项目]Useful_Tools/📺视频分析提取" && ./scripts/run_daily_digest.sh >> ./logs/daily_digest.log 2>&1'
 
 # 每 30 分钟发送失败告警汇总
-*/30 * * * * /bin/bash -lc 'cd "/Users/yuyifeng/Documents/VS Code/1_Personal_Project/[其他项目]Useful_Tools/📺视频分析提取" && source ./.env.local && ./scripts/run_failure_alerts.sh >> ./logs/failure_alerts.log 2>&1'
+*/30 * * * * /bin/bash -lc 'cd "/Users/yuyifeng/Documents/VS Code/1_Personal_Project/[其他项目]Useful_Tools/📺视频分析提取" && ./scripts/run_failure_alerts.sh >> ./logs/failure_alerts.log 2>&1'
 ```
 
 > 建议先 `mkdir -p logs`，避免 cron 首次写日志失败。
@@ -211,7 +222,7 @@ mkdir -p ~/Library/LaunchAgents
   <array>
     <string>/bin/bash</string>
     <string>-lc</string>
-    <string>cd "/Users/yuyifeng/Documents/VS Code/1_Personal_Project/[其他项目]Useful_Tools/📺视频分析提取" &amp;&amp; source ./.env.local &amp;&amp; ./scripts/run_daily_digest.sh</string>
+    <string>cd "/Users/yuyifeng/Documents/VS Code/1_Personal_Project/[其他项目]Useful_Tools/📺视频分析提取" &amp;&amp; ./scripts/run_daily_digest.sh</string>
   </array>
   <key>StartCalendarInterval</key>
   <dict>
@@ -236,6 +247,6 @@ launchctl list | grep video-digestor
 ## 12) 常见故障排查
 - `status=404` 且日志提示 primary route unavailable：当前 API 未暴露对应 reports/alerts 路由，脚本会自动 fallback；如你不想 fallback，设置 `DIGEST_FALLBACK_ENABLED=0` 或 `FAILURE_FALLBACK_ENABLED=0`。
 - `notification recipient email is not configured`：先 `PUT /api/v1/notifications/config` 设置 `to_email`，或在脚本里传 `DIGEST_TO_EMAIL/FAILURE_TO_EMAIL`。
-- `RESEND_API_KEY is not configured` / `RESEND_FROM_EMAIL is not configured`：补齐 `.env.local` 对应变量并 `source .env.local`。
+- `RESEND_API_KEY is not configured` / `RESEND_FROM_EMAIL is not configured`：当 `NOTIFICATION_ENABLED=true` 时，补齐 `.env.local` 对应变量。
 - `API health check failed`：确认 `./scripts/dev_api.sh` 已启动，且 `VD_API_BASE_URL` 指向可访问地址。
 - `Fallback send failed` 且返回 503：通常是 Resend 调用失败，检查外网、Key、发件域名配置与 API 响应 body。

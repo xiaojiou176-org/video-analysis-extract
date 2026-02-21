@@ -61,7 +61,14 @@ temporal server start-dev --ip 127.0.0.1 --port 7233
 
 ### 3) 环境变量
 
-最小必填：
+先生成本地模板：
+
+```bash
+./scripts/init_env_example.sh
+cp .env.local.example .env.local
+```
+
+然后编辑 `.env.local`。核心必填最少包含：
 
 ```bash
 export DATABASE_URL='postgresql+psycopg://localhost:5432/video_analysis'
@@ -83,12 +90,17 @@ export VD_API_BASE_URL='http://127.0.0.1:8000'
 export VD_API_TIMEOUT_SEC='20'
 ```
 
-通知相关（可选）：
+通知相关（`NOTIFICATION_ENABLED=true` 时必填）：
 
 ```bash
-export RESEND_API_KEY='<optional>'
+export NOTIFICATION_ENABLED='true'
+export RESEND_API_KEY='<required-when-enabled>'
 export RESEND_FROM_EMAIL='noreply@example.com'
 ```
+
+说明：
+- 所有 `scripts/dev_*.sh`、`scripts/run_*.sh` 会自动尝试加载仓库根目录 `.env.local`。
+- 环境变量契约见 `ENVIRONMENT.md` 与 `infra/config/env.contract.json`。
 
 ### 4) 初始化数据库
 
@@ -153,6 +165,12 @@ uv run --with pytest --with playwright pytest apps/web/tests/e2e -q
 
 - `WEB_BASE_URL` 未设置时，E2E 用例会 `skip`。
 - `WEB_BASE_URL` 不可访问时，E2E 用例会 `skip`。
+
+### Env 治理检查
+
+```bash
+python scripts/check_env_contract.py --strict
+```
 
 ## 测试目录
 
