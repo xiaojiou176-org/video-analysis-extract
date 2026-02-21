@@ -1,0 +1,1 @@
+"""Workspace apps package."""

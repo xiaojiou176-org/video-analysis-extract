@@ -1,0 +1,129 @@
+{
+  "version": "phase3",
+  "description": "MCP tool manifest for video ingestion phase 3.",
+  "apiBaseEnv": "VD_API_BASE_URL",
+  "tools": [
+    {
+      "name": "vd.subscriptions.list",
+      "http": { "method": "GET", "path": "/api/v1/subscriptions" },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "platform": { "type": "string", "enum": ["bilibili", "youtube"] },
+          "enabled_only": { "type": "boolean", "default": false }
+        }
+      }
+    },
+    {
+      "name": "vd.subscriptions.upsert",
+      "http": { "method": "POST", "path": "/api/v1/subscriptions" },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["platform", "source_type", "source_value"],
+        "properties": {
+          "platform": { "type": "string", "enum": ["bilibili", "youtube"] },
+          "source_type": { "type": "string", "enum": ["bilibili_uid", "youtube_channel_id", "url"] },
+          "source_value": { "type": "string", "minLength": 1 },
+          "rsshub_route": { "type": "string" },
+          "enabled": { "type": "boolean", "default": true }
+        }
+      }
+    },
+    {
+      "name": "vd.subscriptions.remove",
+      "http": { "method": "DELETE", "path": "/api/v1/subscriptions/{id}" },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id"],
+        "properties": {
+          "id": { "type": "string", "format": "uuid" }
+        }
+      }
+    },
+    {
+      "name": "vd.ingest.poll",
+      "http": { "method": "POST", "path": "/api/v1/ingest/poll" },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "subscription_id": { "type": "string", "format": "uuid" },
+          "platform": { "type": "string", "enum": ["bilibili", "youtube"] },
+          "max_new_videos": { "type": "integer", "minimum": 1, "default": 50 }
+        }
+      }
+    },
+    {
+      "name": "vd.jobs.get",
+      "http": { "method": "GET", "path": "/api/v1/jobs/{job_id}" },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["job_id"],
+        "properties": {
+          "job_id": { "type": "string", "format": "uuid" }
+        }
+      }
+    },
+    {
+      "name": "vd.videos.list",
+      "http": { "method": "GET", "path": "/api/v1/videos" },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "platform": { "type": "string", "enum": ["bilibili", "youtube"] },
+          "status": { "type": "string", "enum": ["queued", "running", "succeeded", "failed", "partial"] },
+          "limit": { "type": "integer", "minimum": 1, "default": 50 }
+        }
+      }
+    },
+    {
+      "name": "vd.videos.process",
+      "http": { "method": "POST", "path": "/api/v1/videos/process" },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["video"],
+        "properties": {
+          "video": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["platform", "url"],
+            "properties": {
+              "platform": { "type": "string", "enum": ["bilibili", "youtube"] },
+              "url": { "type": "string", "minLength": 1 },
+              "video_id": { "type": "string", "minLength": 1 }
+            }
+          },
+          "mode": {
+            "type": "string",
+            "enum": ["full", "text_only", "refresh_comments", "refresh_llm"],
+            "default": "full"
+          },
+          "overrides": { "type": "object", "default": {} },
+          "force": { "type": "boolean", "default": false }
+        }
+      }
+    },
+    {
+      "name": "vd.artifacts.get_markdown",
+      "http": { "method": "GET", "path": "/api/v1/artifacts/markdown" },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "job_id": { "type": "string", "format": "uuid" },
+          "video_url": { "type": "string", "minLength": 1 }
+        },
+        "anyOf": [
+          { "required": ["job_id"] },
+          { "required": ["video_url"] }
+        ]
+      }
+    }
+  ]
+}

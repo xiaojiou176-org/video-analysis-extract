@@ -1,0 +1,26 @@
+# Runtime caches and virtual envs
+.runtime-cache/
+.pytest_cache/
+.venv/
+venv/
+__pycache__/
+*.pyc
+
+# Node / Next build artifacts
+apps/web/node_modules/
+apps/web/.next/
+apps/web/out/
+
+# Logs and temp outputs
+logs/
+*.log
+
+# Local env files
+.env*
+!.env.example
+
+# Local/editor/system noise
+.DS_Store
+
+# Personal local notes
+我和ChatGPT的对话.md

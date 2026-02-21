@@ -1,0 +1,415 @@
+from __future__ import annotations
+
+from datetime import datetime
+from typing import Any
+
+from sqlalchemy import create_engine, text
+from sqlalchemy.engine import Engine
+from sqlalchemy.exc import IntegrityError
+
+
+class PostgresBusinessStore:
+    def __init__(self, database_url: str) -> None:
+        self._engine: Engine = create_engine(database_url, future=True, pool_pre_ping=True)
+
+    def list_subscriptions(
+        self,
+        *,
+        subscription_id: str | None = None,
+        platform: str | None = None,
+    ) -> list[dict[str, Any]]:
+        with self._engine.begin() as conn:
+            rows = conn.execute(
+                text(
+                    """
+                    SELECT
+                        id::text AS id,
+                        platform,
+                        source_type,
+                        source_value,
+                        rsshub_route,
+                        enabled
+                    FROM subscriptions
+                    WHERE enabled = TRUE
+                      AND (:subscription_id IS NULL OR id = CAST(:subscription_id AS UUID))
+                      AND (:platform IS NULL OR platform = :platform)
+                    ORDER BY created_at DESC
+                    """
+                ),
+                {
+                    "subscription_id": subscription_id,
+                    "platform": platform,
+                },
+            ).mappings().all()
+        return [dict(row) for row in rows]
+
+    def upsert_video(
+        self,
+        *,
+        platform: str,
+        video_uid: str,
+        source_url: str,
+        title: str | None,
+        published_at: datetime | None,
+    ) -> dict[str, Any]:
+        with self._engine.begin() as conn:
+            row = conn.execute(
+                text(
+                    """
+                    INSERT INTO videos (
+                        platform,
+                        video_uid,
+                        source_url,
+                        title,
+                        published_at,
+                        first_seen_at,
+                        last_seen_at
+                    )
+                    VALUES (
+                        :platform,
+                        :video_uid,
+                        :source_url,
+                        :title,
+                        :published_at,
+                        NOW(),
+                        NOW()
+                    )
+                    ON CONFLICT (platform, video_uid) DO UPDATE SET
+                        source_url = EXCLUDED.source_url,
+                        title = COALESCE(EXCLUDED.title, videos.title),
+                        published_at = COALESCE(EXCLUDED.published_at, videos.published_at),
+                        last_seen_at = NOW()
+                    RETURNING
+                        id::text AS id,
+                        platform,
+                        video_uid,
+                        source_url,
+                        title,
+                        published_at
+                    """
+                ),
+                {
+                    "platform": platform,
+                    "video_uid": video_uid,
+                    "source_url": source_url,
+                    "title": title,
+                    "published_at": published_at,
+                },
+            ).mappings().one()
+        return dict(row)
+
+    def get_ingest_event(
+        self,
+        *,
+        subscription_id: str,
+        entry_hash: str,
+    ) -> dict[str, Any] | None:
+        with self._engine.begin() as conn:
+            row = conn.execute(
+                text(
+                    """
+                    SELECT id::text AS id, video_id::text AS video_id
+                    FROM ingest_events
+                    WHERE subscription_id = CAST(:subscription_id AS UUID)
+                      AND entry_hash = :entry_hash
+                    LIMIT 1
+                    """
+                ),
+                {
+                    "subscription_id": subscription_id,
+                    "entry_hash": entry_hash,
+                },
+            ).mappings().first()
+        return dict(row) if row else None
+
+    def create_ingest_event(
+        self,
+        *,
+        subscription_id: str,
+        feed_guid: str | None,
+        feed_link: str | None,
+        entry_hash: str,
+        video_id: str,
+    ) -> tuple[dict[str, Any], bool]:
+        with self._engine.begin() as conn:
+            row = conn.execute(
+                text(
+                    """
+                    INSERT INTO ingest_events (
+                        subscription_id,
+                        feed_guid,
+                        feed_link,
+                        entry_hash,
+                        video_id,
+                        created_at
+                    )
+                    VALUES (
+                        CAST(:subscription_id AS UUID),
+                        :feed_guid,
+                        :feed_link,
+                        :entry_hash,
+                        CAST(:video_id AS UUID),
+                        NOW()
+                    )
+                    ON CONFLICT (subscription_id, entry_hash) DO NOTHING
+                    RETURNING id::text AS id, video_id::text AS video_id
+                    """
+                ),
+                {
+                    "subscription_id": subscription_id,
+                    "feed_guid": feed_guid,
+                    "feed_link": feed_link,
+                    "entry_hash": entry_hash,
+                    "video_id": video_id,
+                },
+            ).mappings().first()
+
+        if row:
+            return dict(row), True
+
+        existing = self.get_ingest_event(subscription_id=subscription_id, entry_hash=entry_hash)
+        if existing is None:
+            raise RuntimeError("failed to create or fetch ingest_event")
+        return existing, False
+
+    def find_active_job(self, *, idempotency_key: str) -> dict[str, Any] | None:
+        with self._engine.begin() as conn:
+            row = conn.execute(
+                text(
+                    """
+                    SELECT id::text AS id, status
+                    FROM jobs
+                    WHERE idempotency_key = :idempotency_key
+                      AND status IN ('queued', 'running', 'succeeded', 'partial')
+                    ORDER BY created_at DESC
+                    LIMIT 1
+                    """
+                ),
+                {"idempotency_key": idempotency_key},
+            ).mappings().first()
+        return dict(row) if row else None
+
+    def find_job_by_idempotency_key(self, *, idempotency_key: str) -> dict[str, Any] | None:
+        with self._engine.begin() as conn:
+            row = conn.execute(
+                text(
+                    """
+                    SELECT id::text AS id, status
+                    FROM jobs
+                    WHERE idempotency_key = :idempotency_key
+                    ORDER BY created_at DESC
+                    LIMIT 1
+                    """
+                ),
+                {"idempotency_key": idempotency_key},
+            ).mappings().first()
+        return dict(row) if row else None
+
+    def create_queued_job(
+        self,
+        *,
+        video_id: str,
+        idempotency_key: str,
+    ) -> tuple[dict[str, Any], bool]:
+        try:
+            with self._engine.begin() as conn:
+                row = conn.execute(
+                    text(
+                        """
+                        INSERT INTO jobs (
+                            video_id,
+                            kind,
+                            status,
+                            idempotency_key,
+                            created_at,
+                            updated_at
+                        )
+                        VALUES (
+                            CAST(:video_id AS UUID),
+                            'phase2_ingest_stub',
+                            'queued',
+                            :idempotency_key,
+                            NOW(),
+                            NOW()
+                        )
+                        RETURNING id::text AS id, status
+                        """
+                    ),
+                    {
+                        "video_id": video_id,
+                        "idempotency_key": idempotency_key,
+                    },
+                ).mappings().one()
+                return dict(row), True
+        except IntegrityError:
+            existing = self.find_job_by_idempotency_key(idempotency_key=idempotency_key)
+            if existing is None:
+                raise
+            return existing, False
+
+    def mark_job_running(self, *, job_id: str) -> dict[str, Any]:
+        with self._engine.begin() as conn:
+            row = conn.execute(
+                text(
+                    """
+                    UPDATE jobs
+                    SET status = 'running',
+                        error_message = NULL,
+                        updated_at = NOW()
+                    WHERE id = CAST(:job_id AS UUID)
+                      AND status IN ('queued', 'failed')
+                    RETURNING id::text AS id, status
+                    """
+                ),
+                {"job_id": job_id},
+            ).mappings().first()
+
+            if row is not None:
+                return dict(row)
+
+            existing = conn.execute(
+                text(
+                    """
+                    SELECT id::text AS id, status
+                    FROM jobs
+                    WHERE id = CAST(:job_id AS UUID)
+                    """
+                ),
+                {"job_id": job_id},
+            ).mappings().first()
+            if existing is None:
+                raise ValueError(f"job not found: {job_id}")
+            return dict(existing)
+
+    def get_job_with_video(self, *, job_id: str) -> dict[str, Any]:
+        with self._engine.begin() as conn:
+            row = conn.execute(
+                text(
+                    """
+                    SELECT
+                        j.id::text AS job_id,
+                        j.status AS job_status,
+                        j.kind AS job_kind,
+                        j.mode AS mode,
+                        j.overrides_json AS overrides_json,
+                        j.idempotency_key AS idempotency_key,
+                        v.id::text AS video_id,
+                        v.platform AS platform,
+                        v.video_uid AS video_uid,
+                        v.source_url AS source_url,
+                        v.title AS title,
+                        v.published_at AS published_at
+                    FROM jobs j
+                    JOIN videos v ON v.id = j.video_id
+                    WHERE j.id = CAST(:job_id AS UUID)
+                    LIMIT 1
+                    """
+                ),
+                {"job_id": job_id},
+            ).mappings().first()
+            if row is None:
+                raise ValueError(f"job not found: {job_id}")
+        return dict(row)
+
+    def mark_job_succeeded(
+        self,
+        *,
+        job_id: str,
+        status: str = "succeeded",
+        artifact_digest_md: str | None = None,
+        artifact_root: str | None = None,
+        pipeline_final_status: str | None = None,
+        degradation_count: int | None = None,
+        last_error_code: str | None = None,
+    ) -> dict[str, Any]:
+        if status not in {"succeeded", "partial"}:
+            raise ValueError(f"invalid succeeded status: {status}")
+        final_status = pipeline_final_status or status
+        if final_status not in {"succeeded", "partial", "failed"}:
+            raise ValueError(f"invalid pipeline_final_status: {final_status}")
+        if degradation_count is not None and degradation_count < 0:
+            raise ValueError("degradation_count must be >= 0")
+        return self._mark_job_status(
+            job_id=job_id,
+            status=status,
+            error_message=None,
+            artifact_digest_md=artifact_digest_md,
+            artifact_root=artifact_root,
+            pipeline_final_status=final_status,
+            degradation_count=degradation_count,
+            last_error_code=last_error_code,
+        )
+
+    def mark_job_failed(
+        self,
+        *,
+        job_id: str,
+        error_message: str,
+        pipeline_final_status: str | None = None,
+        degradation_count: int | None = None,
+        last_error_code: str | None = None,
+    ) -> dict[str, Any]:
+        final_status = pipeline_final_status or "failed"
+        if final_status not in {"succeeded", "partial", "failed"}:
+            raise ValueError(f"invalid pipeline_final_status: {final_status}")
+        if degradation_count is not None and degradation_count < 0:
+            raise ValueError("degradation_count must be >= 0")
+        return self._mark_job_status(
+            job_id=job_id,
+            status="failed",
+            error_message=error_message,
+            artifact_digest_md=None,
+            artifact_root=None,
+            pipeline_final_status=final_status,
+            degradation_count=degradation_count,
+            last_error_code=last_error_code,
+        )
+
+    def _mark_job_status(
+        self,
+        *,
+        job_id: str,
+        status: str,
+        error_message: str | None,
+        artifact_digest_md: str | None,
+        artifact_root: str | None,
+        pipeline_final_status: str | None,
+        degradation_count: int | None,
+        last_error_code: str | None,
+    ) -> dict[str, Any]:
+        with self._engine.begin() as conn:
+            row = conn.execute(
+                text(
+                    """
+                    UPDATE jobs
+                    SET status = :status,
+                        error_message = :error_message,
+                        artifact_digest_md = COALESCE(:artifact_digest_md, artifact_digest_md),
+                        artifact_root = COALESCE(:artifact_root, artifact_root),
+                        pipeline_final_status = :pipeline_final_status,
+                        degradation_count = :degradation_count,
+                        last_error_code = :last_error_code,
+                        updated_at = NOW()
+                    WHERE id = CAST(:job_id AS UUID)
+                    RETURNING
+                        id::text AS id,
+                        status,
+                        pipeline_final_status,
+                        degradation_count,
+                        last_error_code
+                    """
+                ),
+                {
+                    "job_id": job_id,
+                    "status": status,
+                    "error_message": error_message,
+                    "artifact_digest_md": artifact_digest_md,
+                    "artifact_root": artifact_root,
+                    "pipeline_final_status": pipeline_final_status,
+                    "degradation_count": degradation_count,
+                    "last_error_code": last_error_code,
+                },
+            ).mappings().first()
+            if row is None:
+                raise ValueError(f"job not found: {job_id}")
+        return dict(row)

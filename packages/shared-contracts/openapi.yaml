@@ -1,0 +1,735 @@
+openapi: 3.1.0
+info:
+  title: Video Digestor Phase 3 API
+  version: 0.1.0
+  description: API contract for subscriptions, ingest polling, jobs, videos and artifacts.
+servers:
+  - url: http://127.0.0.1:8000
+paths:
+  /api/v1/subscriptions:
+    get:
+      operationId: listSubscriptions
+      parameters:
+        - in: query
+          name: platform
+          schema:
+            $ref: '#/components/schemas/Platform'
+        - in: query
+          name: enabled_only
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: Subscription list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Subscription'
+    post:
+      operationId: upsertSubscription
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubscriptionUpsertRequest'
+      responses:
+        '200':
+          description: Upsert result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubscriptionUpsertResponse'
+
+  /api/v1/subscriptions/{id}:
+    delete:
+      operationId: removeSubscription
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Deleted
+        '404':
+          description: Not found
+
+  /api/v1/ingest/poll:
+    post:
+      operationId: pollIngest
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IngestPollRequest'
+      responses:
+        '202':
+          description: Poll result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IngestPollResponse'
+
+  /api/v1/jobs/{job_id}:
+    get:
+      operationId: getJob
+      parameters:
+        - in: path
+          name: job_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Job detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Job'
+        '404':
+          description: Not found
+
+  /api/v1/videos:
+    get:
+      operationId: listVideos
+      parameters:
+        - in: query
+          name: platform
+          schema:
+            $ref: '#/components/schemas/Platform'
+        - in: query
+          name: status
+          schema:
+            $ref: '#/components/schemas/JobStatus'
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+      responses:
+        '200':
+          description: Video list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Video'
+
+  /api/v1/videos/process:
+    post:
+      operationId: processVideo
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VideoProcessRequest'
+      responses:
+        '202':
+          description: Process job accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VideoProcessResponse'
+        '503':
+          description: Temporal unavailable
+
+  /api/v1/artifacts/markdown:
+    get:
+      operationId: getArtifactMarkdown
+      parameters:
+        - in: query
+          name: job_id
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: video_url
+          schema:
+            type: string
+            minLength: 1
+        - in: query
+          name: include_meta
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: Markdown artifact text (plain text by default, JSON when include_meta=true)
+          content:
+            text/markdown:
+              schema:
+                type: string
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ArtifactMarkdownWithMeta'
+        '400':
+          description: Missing query parameters
+        '404':
+          description: Artifact not found
+
+  /api/v1/notifications/config:
+    get:
+      operationId: getNotificationConfig
+      responses:
+        '200':
+          description: Notification config
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationConfig'
+    put:
+      operationId: updateNotificationConfig
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NotificationConfigUpdateRequest'
+      responses:
+        '200':
+          description: Updated notification config
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationConfig'
+
+  /api/v1/notifications/test:
+    post:
+      operationId: sendNotificationTest
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NotificationTestRequest'
+      responses:
+        '200':
+          description: Test notification result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationSendResponse'
+        '400':
+          description: Bad request
+        '503':
+          description: Notification provider unavailable
+
+  /api/v1/reports/daily/send:
+    post:
+      operationId: sendDailyReport
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DailyReportSendRequest'
+      responses:
+        '200':
+          description: Daily report notification result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DailyReportSendResponse'
+        '400':
+          description: Bad request
+        '503':
+          description: Notification provider unavailable
+
+components:
+  schemas:
+    Platform:
+      type: string
+      enum: [bilibili, youtube]
+
+    SourceType:
+      type: string
+      enum: [bilibili_uid, youtube_channel_id, url]
+
+    JobStatus:
+      type: string
+      enum: [queued, running, succeeded, failed, partial]
+
+    Subscription:
+      type: object
+      required: [id, platform, source_type, source_value, rsshub_route, enabled, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        platform:
+          $ref: '#/components/schemas/Platform'
+        source_type:
+          $ref: '#/components/schemas/SourceType'
+        source_value:
+          type: string
+        rsshub_route:
+          type: string
+        enabled:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    SubscriptionUpsertRequest:
+      type: object
+      required: [platform, source_type, source_value]
+      properties:
+        platform:
+          $ref: '#/components/schemas/Platform'
+        source_type:
+          $ref: '#/components/schemas/SourceType'
+        source_value:
+          type: string
+        rsshub_route:
+          type: string
+        enabled:
+          type: boolean
+
+    SubscriptionUpsertResponse:
+      type: object
+      required: [subscription, created]
+      properties:
+        subscription:
+          $ref: '#/components/schemas/Subscription'
+        created:
+          type: boolean
+
+    IngestPollRequest:
+      type: object
+      properties:
+        subscription_id:
+          type: string
+          format: uuid
+        platform:
+          $ref: '#/components/schemas/Platform'
+        max_new_videos:
+          type: integer
+          minimum: 1
+          default: 50
+
+    IngestCandidate:
+      type: object
+      required: [video_id, platform, video_uid, source_url, job_id]
+      properties:
+        video_id:
+          type: string
+          format: uuid
+        platform:
+          $ref: '#/components/schemas/Platform'
+        video_uid:
+          type: string
+        source_url:
+          type: string
+        title:
+          type: string
+          nullable: true
+        published_at:
+          type: string
+          format: date-time
+          nullable: true
+        job_id:
+          type: string
+          format: uuid
+
+    IngestPollResponse:
+      type: object
+      required: [enqueued, candidates]
+      properties:
+        enqueued:
+          type: integer
+          minimum: 0
+        candidates:
+          type: array
+          items:
+            $ref: '#/components/schemas/IngestCandidate'
+
+    JobStep:
+      type: object
+      required: [name, status, attempt]
+      properties:
+        name:
+          type: string
+        status:
+          type: string
+        attempt:
+          type: integer
+        started_at:
+          type: string
+          nullable: true
+        finished_at:
+          type: string
+          nullable: true
+        error:
+          nullable: true
+
+    JobStepDetail:
+      type: object
+      required: [name, status, attempt]
+      properties:
+        name:
+          type: string
+        status:
+          type: string
+        attempt:
+          type: integer
+        started_at:
+          type: string
+          nullable: true
+        finished_at:
+          type: string
+          nullable: true
+        error:
+          nullable: true
+        error_kind:
+          type: string
+          nullable: true
+        retry_meta:
+          type: object
+          nullable: true
+          additionalProperties: true
+        result:
+          type: object
+          nullable: true
+          additionalProperties: true
+        cache_key:
+          type: string
+          nullable: true
+
+    JobDegradation:
+      type: object
+      properties:
+        step:
+          type: string
+          nullable: true
+        status:
+          type: string
+          nullable: true
+        reason:
+          type: string
+          nullable: true
+        error:
+          nullable: true
+        error_kind:
+          type: string
+          nullable: true
+        retry_meta:
+          type: object
+          nullable: true
+          additionalProperties: true
+        cache_meta:
+          type: object
+          nullable: true
+          additionalProperties: true
+
+    PipelineFinalStatus:
+      type: string
+      enum: [succeeded, partial, failed]
+
+    Job:
+      type: object
+      required:
+        [id, video_id, kind, status, idempotency_key, created_at, updated_at, step_summary, steps, degradations, pipeline_final_status, artifacts_index]
+      properties:
+        id:
+          type: string
+          format: uuid
+        video_id:
+          type: string
+          format: uuid
+        kind:
+          type: string
+          enum: [phase2_ingest_stub]
+        status:
+          $ref: '#/components/schemas/JobStatus'
+        idempotency_key:
+          type: string
+        error_message:
+          type: string
+          nullable: true
+        artifact_digest_md:
+          type: string
+          nullable: true
+        artifact_root:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        step_summary:
+          type: array
+          items:
+            $ref: '#/components/schemas/JobStep'
+        steps:
+          type: array
+          items:
+            $ref: '#/components/schemas/JobStepDetail'
+        degradations:
+          type: array
+          items:
+            $ref: '#/components/schemas/JobDegradation'
+        pipeline_final_status:
+          allOf:
+            - $ref: '#/components/schemas/PipelineFinalStatus'
+          nullable: true
+        artifacts_index:
+          type: object
+          additionalProperties:
+            type: string
+
+    ArtifactMarkdownWithMeta:
+      type: object
+      required: [markdown]
+      properties:
+        markdown:
+          type: string
+        meta:
+          type: object
+          nullable: true
+          additionalProperties: true
+
+    NotificationConfig:
+      type: object
+      required:
+        [enabled, to_email, daily_digest_enabled, daily_digest_hour_utc, failure_alert_enabled, created_at, updated_at]
+      properties:
+        enabled:
+          type: boolean
+        to_email:
+          type: string
+          nullable: true
+        daily_digest_enabled:
+          type: boolean
+        daily_digest_hour_utc:
+          type: integer
+          minimum: 0
+          maximum: 23
+          nullable: true
+        failure_alert_enabled:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    NotificationConfigUpdateRequest:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+          default: true
+        to_email:
+          type: string
+          nullable: true
+        daily_digest_enabled:
+          type: boolean
+          default: false
+        daily_digest_hour_utc:
+          type: integer
+          minimum: 0
+          maximum: 23
+          nullable: true
+        failure_alert_enabled:
+          type: boolean
+          default: true
+
+    NotificationTestRequest:
+      type: object
+      properties:
+        to_email:
+          type: string
+          nullable: true
+        subject:
+          type: string
+          nullable: true
+        body:
+          type: string
+          nullable: true
+
+    NotificationSendResponse:
+      type: object
+      required:
+        [delivery_id, status, provider_message_id, error_message, recipient_email, subject, sent_at, created_at]
+      properties:
+        delivery_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [queued, sent, failed, skipped]
+        provider_message_id:
+          type: string
+          nullable: true
+        error_message:
+          type: string
+          nullable: true
+        recipient_email:
+          type: string
+        subject:
+          type: string
+        sent_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+    DailyReportSendRequest:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+          nullable: true
+        to_email:
+          type: string
+          nullable: true
+        subject:
+          type: string
+          nullable: true
+        body:
+          type: string
+          nullable: true
+
+    DailyReportSendResponse:
+      type: object
+      required:
+        [sent, status, delivery_id, date, recipient_email, subject, error_message, sent_at, created_at]
+      properties:
+        sent:
+          type: boolean
+        status:
+          type: string
+          enum: [queued, sent, failed, skipped]
+        delivery_id:
+          type: string
+          format: uuid
+        date:
+          type: string
+          format: date
+        recipient_email:
+          type: string
+        subject:
+          type: string
+        error_message:
+          type: string
+          nullable: true
+        sent_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+    Video:
+      type: object
+      required: [id, platform, video_uid, source_url, first_seen_at, last_seen_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        platform:
+          $ref: '#/components/schemas/Platform'
+        video_uid:
+          type: string
+        source_url:
+          type: string
+        title:
+          type: string
+          nullable: true
+        published_at:
+          type: string
+          format: date-time
+          nullable: true
+        first_seen_at:
+          type: string
+          format: date-time
+        last_seen_at:
+          type: string
+          format: date-time
+        status:
+          $ref: '#/components/schemas/JobStatus'
+          nullable: true
+        last_job_id:
+          type: string
+          format: uuid
+          nullable: true
+
+    VideoProcessInput:
+      type: object
+      required: [platform, url]
+      properties:
+        platform:
+          $ref: '#/components/schemas/Platform'
+        url:
+          type: string
+          minLength: 1
+        video_id:
+          type: string
+          nullable: true
+
+    VideoProcessRequest:
+      type: object
+      required: [video]
+      properties:
+        video:
+          $ref: '#/components/schemas/VideoProcessInput'
+        mode:
+          type: string
+          enum: [full, text_only, refresh_comments, refresh_llm]
+          default: full
+        overrides:
+          type: object
+          additionalProperties: true
+          default: {}
+        force:
+          type: boolean
+          default: false
+
+    VideoProcessResponse:
+      type: object
+      required:
+        [job_id, video_db_id, video_uid, status, idempotency_key, mode, overrides, force, reused]
+      properties:
+        job_id:
+          type: string
+          format: uuid
+        video_db_id:
+          type: string
+          format: uuid
+        video_uid:
+          type: string
+        status:
+          $ref: '#/components/schemas/JobStatus'
+        idempotency_key:
+          type: string
+        mode:
+          type: string
+        overrides:
+          type: object
+          additionalProperties: true
+        force:
+          type: boolean
+        reused:
+          type: boolean
+        workflow_id:
+          type: string
+          nullable: true
