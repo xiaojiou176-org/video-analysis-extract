@@ -137,6 +137,54 @@ class YouTubeCommentCollector:
             "published_at": _ts_to_iso(snippet.get("publishedAt")),
         }
 
+    async def _collect_replies_by_parent_id(
+        self,
+        client: httpx.AsyncClient,
+        *,
+        parent_id: str,
+        remaining_limit: int,
+        existing_reply_ids: set[str] | None = None,
+    ) -> list[dict[str, Any]]:
+        if remaining_limit <= 0:
+            return []
+        seen_reply_ids = set(existing_reply_ids or set())
+        replies: list[dict[str, Any]] = []
+        page_token: str | None = None
+
+        while len(replies) < remaining_limit:
+            params: dict[str, Any] = {
+                "part": "snippet",
+                "parentId": parent_id,
+                "key": self._api_key,
+                "textFormat": "plainText",
+                "maxResults": min(100, max(1, remaining_limit - len(replies))),
+            }
+            if page_token:
+                params["pageToken"] = page_token
+
+            payload = await self._request_json(client, "/comments", params=params)
+            items = payload.get("items")
+            if not isinstance(items, list) or not items:
+                break
+
+            for raw in items:
+                if not isinstance(raw, dict):
+                    continue
+                reply = self._normalize_reply(raw)
+                reply_id = str(reply.get("reply_id") or "").strip()
+                if reply_id and reply_id in seen_reply_ids:
+                    continue
+                if reply_id:
+                    seen_reply_ids.add(reply_id)
+                replies.append(reply)
+                if len(replies) >= remaining_limit:
+                    break
+
+            page_token = str(payload.get("nextPageToken") or "").strip() or None
+            if not page_token:
+                break
+        return replies
+
     async def collect(
         self,
         *,
@@ -179,11 +227,33 @@ class YouTubeCommentCollector:
                     top_comment = self._normalize_top_comment(item)
                     replies_raw = ((item.get("replies") or {}).get("comments") or [])
                     replies: list[dict[str, Any]] = []
+                    reply_id_set: set[str] = set()
                     if isinstance(replies_raw, list) and self._replies_per_comment > 0:
                         for raw in replies_raw[: self._replies_per_comment]:
                             if not isinstance(raw, dict):
                                 continue
-                            replies.append(self._normalize_reply(raw))
+                            reply = self._normalize_reply(raw)
+                            reply_id = str(reply.get("reply_id") or "").strip()
+                            if reply_id:
+                                reply_id_set.add(reply_id)
+                            replies.append(reply)
+
+                    reply_count = _to_int(top_comment.get("reply_count"), default=0)
+                    target_reply_count = min(self._replies_per_comment, max(0, reply_count))
+                    parent_id = str(top_comment.get("comment_id") or "").strip()
+                    if (
+                        self._replies_per_comment > 0
+                        and parent_id
+                        and target_reply_count > len(replies)
+                    ):
+                        fetched_replies = await self._collect_replies_by_parent_id(
+                            client,
+                            parent_id=parent_id,
+                            remaining_limit=target_reply_count - len(replies),
+                            existing_reply_ids=reply_id_set,
+                        )
+                        replies.extend(fetched_replies)
+
                     top_comment["replies"] = replies
                     top_comments.append(top_comment)
                     replies_index[str(top_comment.get("comment_id") or "")] = replies

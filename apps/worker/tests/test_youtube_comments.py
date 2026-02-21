@@ -13,50 +13,57 @@ def test_youtube_comment_collector_maps_threads_and_replies(monkeypatch: Any) ->
     collector = YouTubeCommentCollector(
         api_key="test-key",
         top_n=2,
-        replies_per_comment=1,
+        replies_per_comment=2,
         request_timeout_seconds=5.0,
         retry_attempts=0,
     )
 
-    async def _fake_request_json(_: Any, __: str, *, params: dict[str, Any]) -> dict[str, Any]:
-        assert params["videoId"] == "abc123xyz09"
+    async def _fake_request_json(_: Any, path: str, *, params: dict[str, Any]) -> dict[str, Any]:
+        if path == "/commentThreads":
+            assert params["videoId"] == "abc123xyz09"
+            return {
+                "items": [
+                    {
+                        "id": "thread-1",
+                        "snippet": {
+                            "totalReplyCount": 2,
+                            "topLevelComment": {
+                                "id": "comment-1",
+                                "snippet": {
+                                    "authorDisplayName": "alice",
+                                    "textDisplay": "Top comment",
+                                    "likeCount": 12,
+                                    "publishedAt": "2024-01-01T00:00:00Z",
+                                },
+                            },
+                        },
+                        "replies": {
+                            "comments": [
+                                {
+                                    "id": "reply-1",
+                                    "snippet": {
+                                        "authorDisplayName": "bob",
+                                        "textDisplay": "reply text",
+                                        "likeCount": 3,
+                                        "publishedAt": "2024-01-01T00:01:00Z",
+                                    },
+                                }
+                            ]
+                        },
+                    }
+                ]
+            }
+        assert path == "/comments"
+        assert params["parentId"] == "comment-1"
         return {
             "items": [
                 {
-                    "id": "thread-1",
+                    "id": "reply-2",
                     "snippet": {
-                        "totalReplyCount": 2,
-                        "topLevelComment": {
-                            "id": "comment-1",
-                            "snippet": {
-                                "authorDisplayName": "alice",
-                                "textDisplay": "Top comment",
-                                "likeCount": 12,
-                                "publishedAt": "2024-01-01T00:00:00Z",
-                            },
-                        },
-                    },
-                    "replies": {
-                        "comments": [
-                            {
-                                "id": "reply-1",
-                                "snippet": {
-                                    "authorDisplayName": "bob",
-                                    "textDisplay": "reply text",
-                                    "likeCount": 3,
-                                    "publishedAt": "2024-01-01T00:01:00Z",
-                                },
-                            },
-                            {
-                                "id": "reply-2",
-                                "snippet": {
-                                    "authorDisplayName": "charlie",
-                                    "textDisplay": "ignored due to limit",
-                                    "likeCount": 1,
-                                    "publishedAt": "2024-01-01T00:02:00Z",
-                                },
-                            },
-                        ]
+                        "authorDisplayName": "charlie",
+                        "textDisplay": "fetched by parentId",
+                        "likeCount": 1,
+                        "publishedAt": "2024-01-01T00:02:00Z",
                     },
                 }
             ]
@@ -76,8 +83,9 @@ def test_youtube_comment_collector_maps_threads_and_replies(monkeypatch: Any) ->
     assert first["comment_id"] == "comment-1"
     assert first["author"] == "alice"
     assert first["reply_count"] == 2
-    assert len(first["replies"]) == 1
+    assert len(first["replies"]) == 2
     assert first["replies"][0]["reply_id"] == "reply-1"
+    assert first["replies"][1]["reply_id"] == "reply-2"
 
 
 def test_step_collect_comments_youtube_without_api_key_degrades(tmp_path: Path) -> None:

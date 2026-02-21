@@ -98,7 +98,7 @@ def make_entry_hash(
 
 
 def make_job_idempotency_key(platform: str, video_uid: str) -> str:
-    return _sha256(f"{platform}:{video_uid}:phase2_ingest_stub")
+    return _sha256(f"{platform}:{video_uid}:video_digest_v1")
 
 
 def normalize_entry(raw_entry: Mapping[str, Any], feed_url: str) -> dict[str, Any]:

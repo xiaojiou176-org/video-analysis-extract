@@ -18,7 +18,7 @@
     },
     "JobKind": {
       "type": "string",
-      "enum": ["phase2_ingest_stub"]
+      "enum": ["video_digest_v1", "phase2_ingest_stub"]
     },
     "JobStatus": {
       "type": "string",

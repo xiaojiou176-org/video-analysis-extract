@@ -9,9 +9,10 @@ import mimetypes
 import os
 from pathlib import Path
 import re
+import shutil
 import subprocess
 from typing import Any, Callable, Literal
-from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
+from urllib.parse import parse_qsl, quote, urlencode, urlparse, urlunparse
 
 from worker.comments import (
     BilibiliCommentCollector,
@@ -19,6 +20,52 @@ from worker.comments import (
     empty_comments_payload,
 )
 from worker.config import Settings
+from worker.pipeline.runner_policies import (
+    apply_comments_policy as _apply_comments_policy,
+    build_comments_policy as _build_comments_policy,
+    build_frame_policy as _build_frame_policy,
+    build_llm_policy as _build_llm_policy,
+    build_llm_policy_section as _build_llm_policy_section,
+    coerce_bool as _coerce_bool,
+    coerce_float as _coerce_float,
+    coerce_int as _coerce_int,
+    coerce_str_list as _coerce_str_list,
+    dedupe_keep_order as _dedupe_keep_order,
+    default_comment_sort_for_platform as _default_comment_sort_for_platform,
+    digest_is_chinese as _digest_is_chinese,
+    extract_json_object as _extract_json_object,
+    frame_paths_from_frames as _frame_paths_from_frames,
+    llm_media_input_dimension as _llm_media_input_dimension,
+    normalize_llm_input_mode as _normalize_llm_input_mode,
+    normalize_overrides_payload as _normalize_overrides_payload,
+    normalize_pipeline_mode as _normalize_pipeline_mode,
+    outline_is_chinese as _outline_is_chinese,
+    override_section as _override_section,
+    refresh_llm_media_input_dimension as _refresh_llm_media_input_dimension,
+)
+from worker.pipeline.runner_rendering import (
+    build_artifact_asset_url as _build_artifact_asset_url,
+    build_chapters_markdown as _build_chapters_markdown,
+    build_chapters_toc_markdown as _build_chapters_toc_markdown,
+    build_code_blocks_markdown as _build_code_blocks_markdown,
+    build_comments_markdown as _build_comments_markdown,
+    build_comments_prompt_context as _build_comments_prompt_context,
+    build_fallback_notes_markdown as _build_fallback_notes_markdown,
+    build_frames_embedded_markdown as _build_frames_embedded_markdown,
+    build_frames_markdown as _build_frames_markdown,
+    build_frames_prompt_context as _build_frames_prompt_context,
+    build_timestamp_refs_markdown as _build_timestamp_refs_markdown,
+    collect_code_blocks as _collect_code_blocks,
+    estimate_duration_seconds as _estimate_duration_seconds,
+    extract_code_snippets as _extract_code_snippets,
+    format_seconds as _format_seconds,
+    load_digest_template as _load_digest_template,
+    materialize_frames_for_artifacts as _materialize_frames_for_artifacts,
+    parse_duration_seconds as _parse_duration_seconds,
+    render_template as _render_template,
+    should_include_frame_prompt as _should_include_frame_prompt,
+    timestamp_link as _timestamp_link,
+)
 from worker.state.postgres_store import PostgresBusinessStore
 from worker.state.sqlite_store import SQLiteStateStore
 
@@ -40,9 +87,12 @@ PIPELINE_STEPS: list[str] = [
 ]
 
 STEP_VERSIONS: dict[str, str] = {step: "v1" for step in PIPELINE_STEPS}
-STEP_VERSIONS["collect_comments"] = "v3"
-STEP_VERSIONS["llm_outline"] = "v2"
-STEP_VERSIONS["llm_digest"] = "v2"
+STEP_VERSIONS["download_media"] = "v2"
+STEP_VERSIONS["collect_subtitles"] = "v2"
+STEP_VERSIONS["collect_comments"] = "v4"
+STEP_VERSIONS["llm_outline"] = "v3"
+STEP_VERSIONS["llm_digest"] = "v4"
+STEP_VERSIONS["write_artifacts"] = "v2"
 NON_DEGRADING_SKIP_REASONS = {
     "cache_hit",
     "legacy_cache_hit",
@@ -71,9 +121,9 @@ PIPELINE_MODE_SKIP_UPDATES: dict[str, dict[str, Any]] = {
 STEP_INPUT_KEYS: dict[str, tuple[str, ...]] = {
     "fetch_metadata": ("source_url", "title", "platform", "video_uid", "published_at"),
     "download_media": ("source_url",),
-    "collect_subtitles": ("media_path", "download_mode"),
-    "collect_comments": ("source_url", "platform", "video_uid"),
-    "extract_frames": ("media_path",),
+    "collect_subtitles": ("media_path", "download_mode", "source_url", "platform", "video_uid"),
+    "collect_comments": ("source_url", "platform", "video_uid", "comments_policy"),
+    "extract_frames": ("media_path", "frame_policy"),
     "llm_outline": (
         "title",
         "metadata",
@@ -83,6 +133,7 @@ STEP_INPUT_KEYS: dict[str, tuple[str, ...]] = {
         "source_url",
         "llm_input_mode",
         "llm_media_input",
+        "llm_policy",
     ),
     "llm_digest": (
         "title",
@@ -94,6 +145,7 @@ STEP_INPUT_KEYS: dict[str, tuple[str, ...]] = {
         "source_url",
         "llm_input_mode",
         "llm_media_input",
+        "llm_policy",
     ),
     "write_artifacts": (
         "source_url",
@@ -111,7 +163,13 @@ STEP_INPUT_KEYS: dict[str, tuple[str, ...]] = {
 
 STEP_SETTING_KEYS: dict[str, tuple[str, ...]] = {
     "fetch_metadata": ("pipeline_subprocess_timeout_seconds",),
-    "download_media": ("pipeline_subprocess_timeout_seconds",),
+    "download_media": ("pipeline_subprocess_timeout_seconds", "bilibili_downloader"),
+    "collect_subtitles": (
+        "pipeline_subprocess_timeout_seconds",
+        "youtube_transcript_fallback_enabled",
+        "asr_fallback_enabled",
+        "asr_model_size",
+    ),
     "collect_comments": (
         "comments_top_n",
         "comments_replies_per_comment",
@@ -124,8 +182,18 @@ STEP_SETTING_KEYS: dict[str, tuple[str, ...]] = {
         "pipeline_frame_interval_seconds",
         "pipeline_max_frames",
     ),
-    "llm_outline": ("gemini_model", "pipeline_max_frames", "pipeline_llm_input_mode"),
-    "llm_digest": ("gemini_model", "pipeline_max_frames", "pipeline_llm_input_mode"),
+    "llm_outline": (
+        "gemini_model",
+        "gemini_outline_model",
+        "pipeline_max_frames",
+        "pipeline_llm_input_mode",
+    ),
+    "llm_digest": (
+        "gemini_model",
+        "gemini_digest_model",
+        "pipeline_max_frames",
+        "pipeline_llm_input_mode",
+    ),
     "write_artifacts": ("digest_template_path",),
 }
 
@@ -306,6 +374,9 @@ def _load_step_execution_from_cache(cache_info: dict[str, Any]) -> tuple[StepExe
     if execution is not None:
         return execution, "cache_hit"
 
+    if str(cache_info.get("version") or "v1") != "v1":
+        return None, None
+
     legacy_path = cache_info["legacy_path"]
     legacy_execution = _load_cache_execution(legacy_path)
     if legacy_execution is not None:
@@ -468,6 +539,48 @@ async def _run_command(
     timeout = max(1, int(ctx.settings.pipeline_subprocess_timeout_seconds))
     return await asyncio.to_thread(_run_command_once, cmd, timeout)
 
+
+def _normalize_bilibili_downloader(value: Any) -> str:
+    text = str(value or "auto").strip().lower()
+    if text in {"auto", "yt-dlp", "bbdown"}:
+        return text
+    return "auto"
+
+
+def _build_download_provider_chain(platform: str, settings: Settings) -> list[str]:
+    if platform != "bilibili":
+        return ["yt-dlp"]
+    selected = _normalize_bilibili_downloader(getattr(settings, "bilibili_downloader", "auto"))
+    if selected == "auto":
+        return ["yt-dlp", "bbdown"]
+    return [selected]
+
+
+def _yt_dlp_download_command(source_url: str, output_tmpl: str) -> list[str]:
+    return [
+        "yt-dlp",
+        "--no-progress",
+        "--no-warnings",
+        "--write-auto-sub",
+        "--write-sub",
+        "--sub-format",
+        "vtt",
+        "-o",
+        output_tmpl,
+        "--print",
+        "after_move:filepath",
+        source_url,
+    ]
+
+
+def _bbdown_commands(source_url: str, download_dir: Path) -> list[list[str]]:
+    target_dir = str(download_dir.resolve())
+    return [
+        ["BBDown", source_url, "--work-dir", target_dir, "--save-subtitle"],
+        ["bbdown", source_url, "--work-dir", target_dir, "--save-subtitle"],
+    ]
+
+
 def _extract_media_file(download_dir: Path, command_stdout: str) -> str | None:
     for line in reversed(command_stdout.splitlines()):
         candidate = line.strip()
@@ -476,11 +589,14 @@ def _extract_media_file(download_dir: Path, command_stdout: str) -> str | None:
         if Path(candidate).exists():
             return str(Path(candidate).resolve())
 
+    suffixes = {".mp4", ".mkv", ".webm", ".flv", ".mov", ".m4v", ".ts"}
     files = sorted(
         [
             p
-            for p in download_dir.glob("media.*")
-            if p.is_file() and p.suffix.lower() not in {".part", ".tmp"}
+            for p in download_dir.glob("*")
+            if p.is_file()
+            and p.suffix.lower() not in {".part", ".tmp"}
+            and (p.name.startswith("media.") or p.suffix.lower() in suffixes)
         ],
         key=lambda p: p.stat().st_mtime,
         reverse=True,
@@ -488,6 +604,110 @@ def _extract_media_file(download_dir: Path, command_stdout: str) -> str | None:
     if files:
         return str(files[0].resolve())
     return None
+
+
+def _subtitle_candidates(download_dir: Path) -> list[Path]:
+    return sorted(
+        [p for p in download_dir.glob("*.vtt") if p.is_file()]
+        + [p for p in download_dir.glob("*.srt") if p.is_file()]
+        + [p for p in download_dir.glob("*.ass") if p.is_file()]
+    )
+
+
+def _collect_subtitle_text_from_files(
+    subtitle_candidates: list[Path], *, limit: int = 6
+) -> tuple[str, list[str]]:
+    transcript_chunks: list[str] = []
+    subtitle_files: list[str] = []
+    for path in subtitle_candidates[:limit]:
+        text = _subtitle_to_text(_read_text_file(path))
+        if text:
+            transcript_chunks.append(text)
+        subtitle_files.append(str(path.resolve()))
+    transcript = "\n".join(chunk for chunk in transcript_chunks if chunk).strip()
+    return transcript, subtitle_files
+
+
+def _extract_youtube_video_id(source_url: str | None, video_uid: str | None) -> str:
+    uid = str(video_uid or "").strip()
+    if uid:
+        return uid
+
+    raw = str(source_url or "").strip()
+    if not raw:
+        return ""
+    parsed = urlparse(raw)
+    host = (parsed.netloc or "").lower()
+    if host == "youtu.be":
+        return parsed.path.strip("/").split("/")[0]
+    if "youtube.com" not in host:
+        return ""
+    query = dict(parse_qsl(parsed.query, keep_blank_values=True))
+    candidate = str(query.get("v") or "").strip()
+    if candidate:
+        return candidate
+    parts = [part for part in parsed.path.split("/") if part]
+    if len(parts) >= 2 and parts[0] == "shorts":
+        return parts[1]
+    return ""
+
+
+def _fetch_youtube_transcript_text(video_id: str) -> str:
+    from youtube_transcript_api import YouTubeTranscriptApi  # type: ignore[import-not-found]
+
+    languages = ["zh-Hans", "zh-Hant", "zh", "en", "en-US"]
+    entries: Any = None
+
+    if hasattr(YouTubeTranscriptApi, "get_transcript"):
+        entries = YouTubeTranscriptApi.get_transcript(video_id, languages=languages)
+    else:
+        api = YouTubeTranscriptApi()  # type: ignore[operator]
+        if hasattr(api, "get_transcript"):
+            entries = api.get_transcript(video_id, languages=languages)  # type: ignore[call-arg]
+        elif hasattr(api, "fetch"):
+            try:
+                entries = api.fetch(video_id, languages=languages)  # type: ignore[call-arg]
+            except TypeError:
+                entries = api.fetch(video_id)  # type: ignore[call-arg]
+
+    lines: list[str] = []
+    if isinstance(entries, list):
+        iterable = entries
+    else:
+        iterable = list(entries or [])
+    for item in iterable:
+        if isinstance(item, dict):
+            text = str(item.get("text") or "").strip()
+        else:
+            text = str(getattr(item, "text", "") or "").strip()
+        if text:
+            lines.append(text)
+    return "\n".join(lines).strip()
+
+
+def _collect_asr_output_text(download_dir: Path, media_path: str) -> str:
+    media_stem = Path(media_path).stem
+    preferred = download_dir / f"{media_stem}.txt"
+    candidates: list[Path] = []
+    if preferred.exists() and preferred.is_file():
+        candidates.append(preferred)
+    candidates.extend(
+        sorted(
+            [
+                p
+                for p in download_dir.glob("*.txt")
+                if p.is_file() and p.name not in {preferred.name}
+            ],
+            key=lambda p: p.stat().st_mtime,
+            reverse=True,
+        )
+    )
+    for path in candidates:
+        text = _read_text_file(path).strip()
+        if text:
+            return text
+    return ""
+
 
 def _subtitle_to_text(raw_content: str) -> str:
     lines: list[str] = []
@@ -514,480 +734,41 @@ def _collect_key_points_from_text(text: str, limit: int = 5) -> list[str]:
         return []
     return cleaned[:limit]
 
-def _coerce_bool(value: Any, default: bool = False) -> bool:
-    if isinstance(value, bool):
-        return value
-    if value is None:
-        return default
-    text = str(value).strip().lower()
-    if text in {"1", "true", "yes", "on", "y"}:
-        return True
-    if text in {"0", "false", "no", "off", "n"}:
-        return False
-    return default
-
-def _coerce_int(value: Any, default: int = 0) -> int:
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return default
-
-
-def _normalize_pipeline_mode(value: Any) -> PipelineMode:
-    text = str(value or "full").strip().lower()
-    if text in {"full", "text_only", "refresh_comments", "refresh_llm"}:
-        return text  # type: ignore[return-value]
-    return "full"
-
-
-def _normalize_llm_input_mode(value: Any) -> LLMInputMode:
-    text = str(value or "auto").strip().lower()
-    if text in {"auto", "text", "video_text", "frames_text"}:
-        return text  # type: ignore[return-value]
-    return "auto"
-
-
-def _frame_paths_from_frames(frames: list[dict[str, Any]], *, limit: int = 8) -> list[str]:
-    paths: list[str] = []
-    for item in frames:
-        if not isinstance(item, dict):
-            continue
-        path = str(item.get("path") or "").strip()
-        if not path:
-            continue
-        if path in paths:
-            continue
-        paths.append(path)
-        if len(paths) >= limit:
-            break
-    return paths
-
-
-def _llm_media_input_dimension(state: dict[str, Any]) -> dict[str, Any]:
-    media_path = str(state.get("media_path") or "").strip()
-    frames = list(state.get("frames") or [])
-    frame_paths = _frame_paths_from_frames(frames, limit=200)
-    return {
-        "video_available": bool(media_path),
-        "frame_count": len(frame_paths),
-    }
-
-
-def _refresh_llm_media_input_dimension(state: dict[str, Any]) -> None:
-    state["llm_media_input"] = _llm_media_input_dimension(state)
-
-
-def _coerce_str_list(values: Any, *, limit: int = 12) -> list[str]:
-    if not isinstance(values, list):
-        return []
-    normalized: list[str] = []
-    for item in values:
-        text = str(item).strip()
-        if text:
-            normalized.append(text)
-        if len(normalized) >= limit:
-            break
-    return normalized
-
-def _dedupe_keep_order(values: list[str], *, limit: int = 12) -> list[str]:
-    seen: set[str] = set()
-    result: list[str] = []
-    for value in values:
-        key = value.strip()
-        if not key or key in seen:
-            continue
-        seen.add(key)
-        result.append(key)
-        if len(result) >= limit:
-            break
-    return result
-
-def _extract_json_object(text: str) -> str:
-    content = text.strip()
-    fenced = re.search(r"```(?:json)?\s*(\{[\s\S]*\})\s*```", content, re.IGNORECASE)
-    if fenced:
-        return fenced.group(1).strip()
-    start = content.find("{")
-    end = content.rfind("}")
-    if start >= 0 and end > start:
-        return content[start : end + 1]
-    return content
-
-def _parse_duration_seconds(value: Any) -> int:
-    if isinstance(value, (int, float)):
-        return max(0, int(value))
-    if not isinstance(value, str):
-        return 0
-    text = value.strip()
-    if not text:
-        return 0
-    if text.isdigit():
-        return max(0, int(text))
-    parts = text.split(":")
-    if len(parts) not in {2, 3}:
-        return 0
-    try:
-        nums = [int(part) for part in parts]
-    except ValueError:
-        return 0
-    if len(nums) == 2:
-        mm, ss = nums
-        return max(0, mm * 60 + ss)
-    hh, mm, ss = nums
-    return max(0, hh * 3600 + mm * 60 + ss)
-
-def _estimate_duration_seconds(
-    metadata: dict[str, Any], frames: list[dict[str, Any]], fallback_points: int
-) -> int:
-    for key in ("duration_s", "duration", "duration_seconds"):
-        parsed = _parse_duration_seconds(metadata.get(key))
-        if parsed > 0:
-            return parsed
-    frame_max = max((_coerce_int(frame.get("timestamp_s"), 0) for frame in frames), default=0)
-    if frame_max > 0:
-        return max(frame_max + 15, 60)
-    return max(fallback_points * 90, 180)
-
-def _timestamp_link(source_url: str, timestamp_s: int) -> str:
-    if not source_url:
-        return ""
-    if timestamp_s < 0:
-        timestamp_s = 0
-    try:
-        parsed = urlparse(source_url)
-        query = dict(parse_qsl(parsed.query, keep_blank_values=True))
-        host = (parsed.netloc or "").lower()
-        if "youtube.com" in host or "youtu.be" in host:
-            query["t"] = f"{timestamp_s}s"
-        else:
-            query["t"] = str(timestamp_s)
-        return urlunparse(parsed._replace(query=urlencode(query)))
-    except Exception:
-        return source_url
-
-def _build_comments_prompt_context(comments: dict[str, Any], *, top_n: int = 4) -> str:
-    top_comments = comments.get("top_comments") if isinstance(comments, dict) else None
-    if not isinstance(top_comments, list) or not top_comments:
-        return "No comment data."
-    lines: list[str] = []
-    for idx, item in enumerate(top_comments[:top_n], start=1):
-        if not isinstance(item, dict):
-            continue
-        author = str(item.get("author") or "unknown")
-        content = str(item.get("content") or "").strip() or "empty"
-        likes = _coerce_int(item.get("like_count"), 0)
-        lines.append(f"{idx}. {author} (likes={likes}): {content}")
-        replies = item.get("replies")
-        if isinstance(replies, list):
-            for reply in replies[:2]:
-                if not isinstance(reply, dict):
-                    continue
-                reply_author = str(reply.get("author") or "unknown")
-                reply_text = str(reply.get("content") or "").strip() or "empty"
-                reply_likes = _coerce_int(reply.get("like_count"), 0)
-                lines.append(
-                    f"   - reply by {reply_author} (likes={reply_likes}): {reply_text}"
-                )
-    return "\n".join(lines) if lines else "No comment data."
-
-def _should_include_frame_prompt(settings: Settings) -> bool:
-    env_value = os.getenv("PIPELINE_LLM_INCLUDE_FRAMES")
-    if env_value is not None:
-        return _coerce_bool(env_value, default=False)
-    if hasattr(settings, "pipeline_llm_include_frames"):
-        return _coerce_bool(getattr(settings, "pipeline_llm_include_frames"), default=False)
-    return False
-
-def _build_frames_prompt_context(frames: list[dict[str, Any]], source_url: str, *, limit: int = 8) -> str:
-    if not frames:
-        return "No frame data."
-    lines: list[str] = []
-    for idx, frame in enumerate(frames[:limit], start=1):
-        ts = _coerce_int(frame.get("timestamp_s"), 0)
-        reason = str(frame.get("reason") or "key frame").strip()
-        note = str(frame.get("note") or "").strip()
-        path = str(frame.get("path") or "").strip()
-        lines.append(
-            f"{idx}. [{_format_seconds(ts)}] {_timestamp_link(source_url, ts) or 'n/a'} | {reason} | {note or 'n/a'} | {path or 'n/a'}"
-        )
-    return "\n".join(lines) if lines else "No frame data."
-
-def _extract_code_snippets(transcript: str, *, limit: int = 4) -> list[dict[str, Any]]:
-    if not transcript.strip():
-        return []
-    pattern = re.compile(r"```(?P<lang>[A-Za-z0-9_+-]*)\n(?P<body>[\s\S]*?)```")
-    snippets: list[dict[str, Any]] = []
-    for idx, match in enumerate(pattern.finditer(transcript), start=1):
-        snippet = match.group("body").strip()
-        if not snippet:
-            continue
-        snippets.append(
-            {
-                "title": f"Snippet {idx}",
-                "language": (match.group("lang") or "text").strip() or "text",
-                "snippet": snippet[:1000],
-                "range_start_s": 0,
-                "range_end_s": 0,
-            }
-        )
-        if len(snippets) >= limit:
-            break
-    return snippets
-
-def _load_digest_template(settings: Settings) -> str:
-    template_path = Path(settings.digest_template_path)
-    if template_path.exists():
-        return _read_text_file(template_path)
-    return (
-        "# {{title}}\n\n"
-        "- Source: {{source_url}}\n"
-        "- Platform: {{platform}}\n"
-        "- Video UID: {{video_uid}}\n"
-        "- Generated At: {{generated_at}}\n\n"
-        "## TL;DR\n\n"
-        "{{tldr_markdown}}\n\n"
-        "## Summary\n\n"
-        "{{summary}}\n\n"
-        "## Highlights\n\n"
-        "{{highlights_markdown}}\n\n"
-        "## Chapters\n\n"
-        "{{chapters_toc_markdown}}\n\n"
-        "{{chapters_markdown}}\n\n"
-        "## Code Blocks\n\n"
-        "{{code_blocks_markdown}}\n\n"
-        "## Comment Highlights\n\n"
-        "{{comments_markdown}}\n\n"
-        "## Screenshot Index\n\n"
-        "{{frames_index_markdown}}\n\n"
-        "## Timestamp References\n\n"
-        "{{timestamp_refs_markdown}}\n\n"
-        "## Fallback Notes\n\n"
-        "{{fallback_notes_markdown}}\n\n"
-        "## Degradation Notes\n\n"
-        "{{degradations_markdown}}\n"
+def _translate_payload_to_chinese(
+    settings: Settings,
+    payload: dict[str, Any],
+    *,
+    model: str,
+    max_output_tokens: int | None,
+    schema_label: str,
+) -> dict[str, Any] | None:
+    prompt = "\n\n".join(
+        [
+            "将下面 JSON 中所有面向读者的自然语言翻译为简体中文。",
+            "保持 JSON 的 key、结构、数字、时间戳、URL、ID 不变。",
+            "如果包含代码片段（如 code_snippets.snippet / code_blocks.snippet），代码内容不要翻译。",
+            "只返回 JSON，不要解释。",
+            f"Schema: {schema_label}",
+            json.dumps(_jsonable(payload), ensure_ascii=False),
+        ]
     )
-
-def _render_template(template: str, values: dict[str, str]) -> str:
-    rendered = template
-    for key, value in values.items():
-        rendered = re.sub(
-            r"{{\s*" + re.escape(key) + r"\s*}}",
-            lambda _: value,
-            rendered,
-        )
-    return rendered
-
-def _format_seconds(seconds: int) -> str:
-    value = max(0, int(seconds))
-    h = value // 3600
-    m = (value % 3600) // 60
-    s = value % 60
-    return f"{h:02d}:{m:02d}:{s:02d}"
-
-def _build_chapters_toc_markdown(outline: dict[str, Any], source_url: str) -> str:
-    chapters = outline.get("chapters")
-    if not isinstance(chapters, list) or not chapters:
-        return "- （暂无章节）"
-    lines: list[str] = []
-    for idx, chapter in enumerate(chapters, start=1):
-        if not isinstance(chapter, dict):
-            continue
-        title = str(chapter.get("title") or chapter.get("heading") or f"Chapter {idx}")
-        chapter_no = _coerce_int(chapter.get("chapter_no"), idx)
-        anchor = str(chapter.get("anchor") or f"chapter-{chapter_no:02d}")
-        start_s = _coerce_int(chapter.get("start_s"), 0)
-        end_s = _coerce_int(chapter.get("end_s"), start_s)
-        start_link = _timestamp_link(source_url, start_s)
-        end_link = _timestamp_link(source_url, end_s)
-        lines.append(
-            f"- [{chapter_no}. {title}](#{anchor})（[{_format_seconds(start_s)}]({start_link}) - [{_format_seconds(end_s)}]({end_link})）"
-        )
-    return "\n".join(lines).strip() or "- （暂无章节）"
-
-def _build_chapters_markdown(outline: dict[str, Any], source_url: str) -> str:
-    chapters = outline.get("chapters")
-    if not isinstance(chapters, list) or not chapters:
-        return "（暂无章节）"
-
-    lines: list[str] = []
-    for idx, chapter in enumerate(chapters, start=1):
-        if not isinstance(chapter, dict):
-            continue
-        title = str(chapter.get("title") or chapter.get("heading") or f"Chapter {idx}")
-        chapter_no = _coerce_int(chapter.get("chapter_no"), idx)
-        anchor = str(chapter.get("anchor") or f"chapter-{chapter_no:02d}")
-        start_s = _coerce_int(chapter.get("start_s"), 0)
-        end_s = _coerce_int(chapter.get("end_s"), start_s)
-        summary = str(chapter.get("summary") or "").strip() or "（无小结）"
-        start_link = _timestamp_link(source_url, start_s)
-        end_link = _timestamp_link(source_url, end_s)
-
-        lines.append(f"<a id=\"{anchor}\"></a>")
-        lines.append(f"### {chapter_no}. {title}")
-        lines.append(
-            f"- 时间范围：[{_format_seconds(start_s)}]({start_link}) - [{_format_seconds(end_s)}]({end_link})"
-        )
-        lines.append(f"- 小结：{summary}")
-        lines.append("")
-        lines.append("要点：")
-
-        bullets = _coerce_str_list(chapter.get("bullets"), limit=8)
-        if bullets:
-            for bullet in bullets:
-                lines.append(f"- {bullet}")
-        else:
-            lines.append("- （无要点）")
-
-        key_terms = _coerce_str_list(chapter.get("key_terms"), limit=8)
-        lines.append("")
-        lines.append("关键术语：")
-        if key_terms:
-            for term in key_terms:
-                lines.append(f"- `{term}`")
-        else:
-            lines.append("- （无术语）")
-        lines.append("")
-    return "\n".join(lines).strip() or "（暂无章节）"
-
-def _build_comments_markdown(comments: dict[str, Any]) -> str:
-    top_comments = comments.get("top_comments") if isinstance(comments, dict) else None
-    if not isinstance(top_comments, list) or not top_comments:
-        return "（未采集到评论，或当前未启用评论采集）"
-
-    lines: list[str] = []
-    for idx, item in enumerate(top_comments, start=1):
-        if not isinstance(item, dict):
-            continue
-        author = str(item.get("author") or "unknown")
-        content = str(item.get("content") or "").strip()
-        likes = item.get("like_count")
-        lines.append(f"{idx}. **{author}**（👍 {likes if likes is not None else 0}）")
-        lines.append(f"   - {content or '（空）'}")
-        replies = item.get("replies")
-        if isinstance(replies, list) and replies:
-            for reply in replies:
-                if not isinstance(reply, dict):
-                    continue
-                reply_author = str(reply.get("author") or "unknown")
-                reply_content = str(reply.get("content") or "").strip() or "（空）"
-                reply_likes = reply.get("like_count")
-                lines.append(
-                    f"   - ↳ **{reply_author}**（👍 {reply_likes if reply_likes is not None else 0}）：{reply_content}"
-                )
-    return "\n".join(lines) if lines else "（评论数据为空）"
-
-def _collect_code_blocks(
-    outline: dict[str, Any],
-    digest: dict[str, Any],
-) -> list[dict[str, Any]]:
-    merged: list[dict[str, Any]] = []
-    raw_blocks = digest.get("code_blocks")
-    if isinstance(raw_blocks, list):
-        for block in raw_blocks:
-            if isinstance(block, dict):
-                merged.append(dict(block))
-    chapters = outline.get("chapters")
-    if isinstance(chapters, list):
-        for chapter in chapters:
-            if not isinstance(chapter, dict):
-                continue
-            chapter_blocks = chapter.get("code_snippets")
-            if not isinstance(chapter_blocks, list):
-                continue
-            for block in chapter_blocks:
-                if isinstance(block, dict):
-                    merged.append(dict(block))
-    return merged
-
-def _build_code_blocks_markdown(
-    outline: dict[str, Any],
-    digest: dict[str, Any],
-    source_url: str,
-) -> str:
-    blocks = _collect_code_blocks(outline, digest)
-    if not blocks:
-        return "（无代码片段）"
-    lines: list[str] = []
-    for idx, block in enumerate(blocks, start=1):
-        title = str(block.get("title") or f"Snippet {idx}")
-        language = str(block.get("language") or "text").strip() or "text"
-        snippet = str(block.get("snippet") or "").strip()
-        if not snippet:
-            continue
-        start_s = _coerce_int(block.get("range_start_s"), 0)
-        end_s = _coerce_int(block.get("range_end_s"), start_s)
-        start_link = _timestamp_link(source_url, start_s)
-        end_link = _timestamp_link(source_url, end_s)
-        lines.append(
-            f"#### {idx}. {title}（[{_format_seconds(start_s)}]({start_link}) - [{_format_seconds(end_s)}]({end_link})）"
-        )
-        lines.append(f"```{language}")
-        lines.append(snippet)
-        lines.append("```")
-        lines.append("")
-    return "\n".join(lines).strip() or "（无代码片段）"
-
-def _build_timestamp_refs_markdown(
-    outline: dict[str, Any],
-    digest: dict[str, Any],
-    source_url: str,
-) -> str:
-    refs_raw = digest.get("timestamp_references")
-    references: list[dict[str, Any]] = []
-    if isinstance(refs_raw, list):
-        for item in refs_raw:
-            if isinstance(item, dict):
-                references.append(item)
-    if not references:
-        refs_outline = outline.get("timestamp_references")
-        if isinstance(refs_outline, list):
-            for item in refs_outline:
-                if isinstance(item, dict):
-                    references.append(item)
-    if not references:
-        return "- （无时间戳引用）"
-
-    lines: list[str] = []
-    for idx, item in enumerate(references, start=1):
-        ts = _coerce_int(item.get("ts_s"), 0)
-        label = str(item.get("label") or f"Reference {idx}")
-        reason = str(item.get("reason") or "").strip()
-        link = _timestamp_link(source_url, ts)
-        suffix = f" - {reason}" if reason else ""
-        lines.append(f"- [{_format_seconds(ts)}]({link}) {label}{suffix}")
-    return "\n".join(lines).strip() or "- （无时间戳引用）"
-
-def _build_frames_markdown(frames: list[dict[str, Any]], source_url: str) -> str:
-    if not frames:
-        return "（无截图）"
-    lines = [
-        "| # | 时间戳 | 跳转 | 原因 | 说明 | 文件 |",
-        "|---:|:---:|:---:|---|---|---|",
-    ]
-    for idx, frame in enumerate(frames, start=1):
-        ts_s = _coerce_int(frame.get("timestamp_s"), 0)
-        ts = _format_seconds(ts_s)
-        link = _timestamp_link(source_url, ts_s)
-        path = str(frame.get("path") or "")
-        reason = str(frame.get("reason") or "key_frame").strip() or "key_frame"
-        note = str(frame.get("note") or "").strip() or "-"
-        lines.append(f"| {idx} | {ts} | [link]({link}) | {reason} | {note} | `{path}` |")
-    return "\n".join(lines)
-
-def _build_fallback_notes_markdown(digest: dict[str, Any], degradations: list[dict[str, Any]]) -> str:
-    notes = _coerce_str_list(digest.get("fallback_notes"), limit=8)
-    if notes:
-        return "\n".join(f"- {note}" for note in notes)
-    degraded_steps = []
-    for item in degradations:
-        if not isinstance(item, dict):
-            continue
-        step = str(item.get("step") or "").strip()
-        reason = str(item.get("reason") or "n/a").strip()
-        status = str(item.get("status") or "unknown").strip()
-        if step:
-            degraded_steps.append(f"- {step}: {status} ({reason})")
-    return "\n".join(degraded_steps) if degraded_steps else "- none"
+    translated_raw, _ = _gemini_generate(
+        settings,
+        prompt,
+        llm_input_mode="text",
+        model=model,
+        temperature=0.1,
+        max_output_tokens=max_output_tokens,
+    )
+    if not translated_raw:
+        return None
+    try:
+        parsed = json.loads(_extract_json_object(translated_raw))
+    except (json.JSONDecodeError, TypeError, ValueError):
+        return None
+    if isinstance(parsed, dict):
+        return parsed
+    return None
 
 def _build_context(
     settings: Settings,
@@ -1345,6 +1126,7 @@ async def _step_fetch_metadata(ctx: PipelineContext, state: dict[str, Any]) -> S
 
 async def _step_download_media(ctx: PipelineContext, state: dict[str, Any]) -> StepExecution:
     source_url = str(state.get("source_url") or "")
+    platform = str(state.get("platform") or "").strip().lower()
     if not source_url:
         return StepExecution(
             status="skipped",
@@ -1353,86 +1135,207 @@ async def _step_download_media(ctx: PipelineContext, state: dict[str, Any]) -> S
             degraded=True,
         )
 
+    providers = _build_download_provider_chain(platform, ctx.settings)
     output_tmpl = str((ctx.download_dir / "media.%(ext)s").resolve())
-    cmd = [
-        "yt-dlp",
-        "--no-progress",
-        "--no-warnings",
-        "--write-auto-sub",
-        "--write-sub",
-        "--sub-format",
-        "vtt",
-        "-o",
-        output_tmpl,
-        "--print",
-        "after_move:filepath",
-        source_url,
-    ]
-    result = await _run_command(ctx, cmd)
-    if not result.ok:
-        status: StepStatus = "skipped" if result.reason == "binary_not_found" else "failed"
-        return StepExecution(
-            status=status,
-            state_updates={"media_path": None, "download_mode": "text_only"},
-            reason=result.reason or "yt_dlp_failed",
-            error=(result.stderr or "").strip()[-500:] or result.reason,
-            degraded=True,
+    attempts: list[dict[str, Any]] = []
+    for provider in providers:
+        provider_result: CommandResult | None = None
+        if provider == "yt-dlp":
+            provider_result = await _run_command(
+                ctx,
+                _yt_dlp_download_command(source_url, output_tmpl),
+            )
+        elif provider == "bbdown":
+            for cmd in _bbdown_commands(source_url, ctx.download_dir):
+                provider_result = await _run_command(ctx, cmd)
+                if provider_result.ok:
+                    break
+                if provider_result.reason != "binary_not_found":
+                    break
+            if provider_result is None:
+                provider_result = CommandResult(ok=False, reason="binary_not_found")
+        else:
+            provider_result = CommandResult(ok=False, reason="provider_unsupported")
+
+        media_path = _extract_media_file(ctx.download_dir, provider_result.stdout)
+        if provider_result.ok and media_path:
+            return StepExecution(
+                status="succeeded",
+                output={"mode": "media", "provider": provider, "providers_tried": providers},
+                state_updates={"media_path": media_path, "download_mode": "media"},
+            )
+
+        reason = provider_result.reason or "provider_failed"
+        if provider_result.ok and not media_path:
+            reason = "media_not_found_after_download"
+        attempts.append(
+            {
+                "provider": provider,
+                "reason": reason,
+                "error": (provider_result.stderr or "").strip()[-500:] or reason,
+                "returncode": provider_result.returncode,
+            }
         )
 
-    media_path = _extract_media_file(ctx.download_dir, result.stdout)
-    if not media_path:
-        return StepExecution(
-            status="failed",
-            state_updates={"media_path": None, "download_mode": "text_only"},
-            reason="media_not_found_after_download",
-            error="media_not_found_after_download",
-            degraded=True,
-        )
-
+    only_binary_missing = bool(attempts) and all(
+        str(item.get("reason")) == "binary_not_found" for item in attempts
+    )
+    status: StepStatus = "skipped" if only_binary_missing else "failed"
+    last_attempt = attempts[-1] if attempts else {}
     return StepExecution(
-        status="succeeded",
-        output={"mode": "media"},
-        state_updates={"media_path": media_path, "download_mode": "media"},
+        status=status,
+        output={"mode": "text_only", "providers_tried": providers, "attempts": attempts},
+        state_updates={"media_path": None, "download_mode": "text_only"},
+        reason=str(last_attempt.get("reason") or "download_provider_chain_failed"),
+        error=str(last_attempt.get("error") or "download_provider_chain_failed"),
+        degraded=True,
     )
 
 async def _step_collect_subtitles(ctx: PipelineContext, state: dict[str, Any]) -> StepExecution:
-    subtitle_candidates = sorted(
-        [p for p in ctx.download_dir.glob("*.vtt") if p.is_file()]
-        + [p for p in ctx.download_dir.glob("*.srt") if p.is_file()]
-    )
-    if not subtitle_candidates:
+    subtitle_candidates = _subtitle_candidates(ctx.download_dir)
+    transcript, subtitle_files = _collect_subtitle_text_from_files(subtitle_candidates)
+    if transcript:
         return StepExecution(
-            status="skipped",
-            state_updates={"transcript": "", "subtitle_files": []},
-            reason="subtitle_file_not_found",
-            degraded=True,
+            status="succeeded",
+            output={
+                "subtitle_files": len(subtitle_files),
+                "transcript_provider": "downloaded_subtitles",
+                "fallback_used": False,
+            },
+            state_updates={"transcript": transcript, "subtitle_files": subtitle_files},
         )
 
-    transcript_chunks: list[str] = []
-    subtitle_files: list[str] = []
-    for path in subtitle_candidates[:6]:
-        text = _subtitle_to_text(_read_text_file(path))
-        if text:
-            transcript_chunks.append(text)
-        subtitle_files.append(str(path.resolve()))
-    transcript = "\n".join(chunk for chunk in transcript_chunks if chunk).strip()
+    failure_reasons: list[str] = []
+    if subtitle_files:
+        failure_reasons.append("subtitle_text_empty_after_parse")
+    else:
+        failure_reasons.append("subtitle_file_not_found")
+
+    source_url = str(state.get("source_url") or "").strip()
+    video_uid = str(state.get("video_uid") or "").strip()
+    platform = str(state.get("platform") or "").strip().lower()
+    if (
+        platform == "youtube"
+        and _coerce_bool(getattr(ctx.settings, "youtube_transcript_fallback_enabled", True), default=True)
+    ):
+        video_id = _extract_youtube_video_id(source_url, video_uid)
+        if video_id:
+            try:
+                yt_transcript = await asyncio.to_thread(_fetch_youtube_transcript_text, video_id)
+                if yt_transcript.strip():
+                    return StepExecution(
+                        status="succeeded",
+                        output={
+                            "subtitle_files": len(subtitle_files),
+                            "transcript_provider": "youtube_transcript_fallback",
+                            "fallback_used": True,
+                        },
+                        state_updates={
+                            "transcript": yt_transcript.strip(),
+                            "subtitle_files": subtitle_files,
+                        },
+                    )
+                failure_reasons.append("youtube_transcript_empty")
+            except Exception as exc:
+                failure_reasons.append(f"youtube_transcript_failed:{exc.__class__.__name__}")
+        else:
+            failure_reasons.append("youtube_video_id_not_resolved")
+    else:
+        failure_reasons.append("youtube_transcript_fallback_disabled_or_not_youtube")
+
+    if _coerce_bool(getattr(ctx.settings, "asr_fallback_enabled", False), default=False):
+        media_path = str(state.get("media_path") or "").strip()
+        if media_path:
+            asr_model_size = str(getattr(ctx.settings, "asr_model_size", "small") or "small").strip()
+            asr_failure_reasons: list[str] = []
+            asr_commands = [
+                [
+                    "whisper",
+                    media_path,
+                    "--model",
+                    asr_model_size,
+                    "--task",
+                    "transcribe",
+                    "--output_format",
+                    "txt",
+                    "--output_dir",
+                    str(ctx.download_dir.resolve()),
+                ],
+                [
+                    "faster-whisper",
+                    media_path,
+                    "--model",
+                    asr_model_size,
+                    "--output_dir",
+                    str(ctx.download_dir.resolve()),
+                    "--output_format",
+                    "txt",
+                ],
+            ]
+            for cmd in asr_commands:
+                result = await _run_command(ctx, cmd)
+                if result.ok:
+                    asr_text = _collect_asr_output_text(ctx.download_dir, media_path)
+                    if asr_text:
+                        return StepExecution(
+                            status="succeeded",
+                            output={
+                                "subtitle_files": len(subtitle_files),
+                                "transcript_provider": "asr_fallback",
+                                "asr_model_size": asr_model_size,
+                                "fallback_used": True,
+                            },
+                            state_updates={
+                                "transcript": asr_text,
+                                "subtitle_files": subtitle_files,
+                            },
+                        )
+                    asr_failure_reasons.append("asr_transcript_empty")
+                    continue
+                asr_failure_reasons.append(result.reason or "asr_command_failed")
+                if result.reason != "binary_not_found":
+                    break
+            if asr_failure_reasons:
+                failure_reasons.append(f"asr_failed:{'|'.join(asr_failure_reasons)}")
+        else:
+            failure_reasons.append("asr_media_path_missing")
+    else:
+        failure_reasons.append("asr_fallback_disabled")
+
     return StepExecution(
         status="succeeded",
-        output={"subtitle_files": len(subtitle_files)},
-        state_updates={"transcript": transcript, "subtitle_files": subtitle_files},
+        output={
+            "subtitle_files": len(subtitle_files),
+            "transcript_provider": "none",
+            "fallback_chain": failure_reasons,
+        },
+        state_updates={"transcript": "", "subtitle_files": subtitle_files},
+        reason=failure_reasons[-1] if failure_reasons else "subtitle_unavailable",
+        degraded=True,
     )
 
 async def _step_collect_comments(ctx: PipelineContext, state: dict[str, Any]) -> StepExecution:
     platform = str(state.get("platform") or "").lower()
     source_url = str(state.get("source_url") or "")
     video_uid = str(state.get("video_uid") or "")
+    comments_policy = dict(state.get("comments_policy") or {})
+    top_n = max(1, _coerce_int(comments_policy.get("top_n"), ctx.settings.comments_top_n))
+    replies_per_comment = max(
+        0,
+        _coerce_int(
+            comments_policy.get("replies_per_comment"),
+            ctx.settings.comments_replies_per_comment,
+        ),
+    )
+    requested_sort = str(comments_policy.get("sort") or _default_comment_sort_for_platform(platform))
     if platform == "bilibili":
         collector = BilibiliCommentCollector(
-            top_n=ctx.settings.comments_top_n,
-            replies_per_comment=ctx.settings.comments_replies_per_comment,
+            top_n=top_n,
+            replies_per_comment=replies_per_comment,
             request_timeout_seconds=ctx.settings.comments_request_timeout_seconds,
             retry_attempts=ctx.settings.request_retry_attempts,
             retry_backoff_seconds=ctx.settings.request_retry_backoff_seconds,
+            cookie=getattr(ctx.settings, "bilibili_cookie", None),
         )
         try:
             comments_payload = await collector.collect(source_url=source_url, video_uid=video_uid)
@@ -1440,7 +1343,13 @@ async def _step_collect_comments(ctx: PipelineContext, state: dict[str, Any]) ->
             return StepExecution(
                 status="succeeded",
                 output={"count": 0, "provider": "bilibili"},
-                state_updates={"comments": empty_comments_payload()},
+                state_updates={
+                    "comments": _apply_comments_policy(
+                        empty_comments_payload(sort=requested_sort),
+                        policy=comments_policy,
+                        platform=platform,
+                    )
+                },
                 reason="comments_collection_failed_degraded",
                 error=str(exc)[:500],
                 error_kind=_classify_error("comments_collection_failed_degraded", str(exc)),
@@ -1451,7 +1360,13 @@ async def _step_collect_comments(ctx: PipelineContext, state: dict[str, Any]) ->
             return StepExecution(
                 status="succeeded",
                 output={"count": 0, "provider": "youtube_data_api"},
-                state_updates={"comments": empty_comments_payload(sort="hot")},
+                state_updates={
+                    "comments": _apply_comments_policy(
+                        empty_comments_payload(sort=requested_sort),
+                        policy=comments_policy,
+                        platform=platform,
+                    )
+                },
                 reason="youtube_api_key_missing",
                 error="youtube_api_key_missing",
                 error_kind="auth",
@@ -1459,8 +1374,8 @@ async def _step_collect_comments(ctx: PipelineContext, state: dict[str, Any]) ->
             )
         collector = YouTubeCommentCollector(
             api_key=str(ctx.settings.youtube_api_key or ""),
-            top_n=ctx.settings.comments_top_n,
-            replies_per_comment=ctx.settings.comments_replies_per_comment,
+            top_n=top_n,
+            replies_per_comment=replies_per_comment,
             request_timeout_seconds=ctx.settings.comments_request_timeout_seconds,
             retry_attempts=ctx.settings.request_retry_attempts,
             retry_backoff_seconds=ctx.settings.request_retry_backoff_seconds,
@@ -1471,7 +1386,13 @@ async def _step_collect_comments(ctx: PipelineContext, state: dict[str, Any]) ->
             return StepExecution(
                 status="succeeded",
                 output={"count": 0, "provider": "youtube_data_api"},
-                state_updates={"comments": empty_comments_payload(sort="hot")},
+                state_updates={
+                    "comments": _apply_comments_policy(
+                        empty_comments_payload(sort=requested_sort),
+                        policy=comments_policy,
+                        platform=platform,
+                    )
+                },
                 reason="youtube_comments_collection_failed_degraded",
                 error=str(exc)[:500],
                 error_kind=_classify_error("youtube_comments_collection_failed_degraded", str(exc)),
@@ -1481,10 +1402,22 @@ async def _step_collect_comments(ctx: PipelineContext, state: dict[str, Any]) ->
         return StepExecution(
             status="skipped",
             output={"count": 0},
-            state_updates={"comments": empty_comments_payload()},
+            state_updates={
+                "comments": _apply_comments_policy(
+                    empty_comments_payload(sort=requested_sort),
+                    policy=comments_policy,
+                    platform=platform,
+                )
+            },
             reason="comments_collection_skipped_platform_unsupported",
             degraded=True,
         )
+
+    comments_payload = _apply_comments_policy(
+        dict(comments_payload or {}),
+        policy=comments_policy,
+        platform=platform,
+    )
 
     try:
         top_comments = comments_payload.get("top_comments")
@@ -1508,8 +1441,12 @@ async def _step_extract_frames(ctx: PipelineContext, state: dict[str, Any]) -> S
             degraded=True,
         )
 
+    frame_policy = dict(state.get("frame_policy") or {})
     frame_interval = max(1, int(ctx.settings.pipeline_frame_interval_seconds))
-    max_frames = max(1, int(ctx.settings.pipeline_max_frames))
+    frame_method = str(frame_policy.get("method") or "fps").strip().lower()
+    if frame_method not in {"fps", "scene"}:
+        frame_method = "fps"
+    max_frames = max(1, _coerce_int(frame_policy.get("max_frames"), int(ctx.settings.pipeline_max_frames)))
     output_pattern = str((ctx.frames_dir / "frame_%03d.jpg").resolve())
     cmd = [
         "ffmpeg",
@@ -1519,8 +1456,20 @@ async def _step_extract_frames(ctx: PipelineContext, state: dict[str, Any]) -> S
         "-y",
         "-i",
         str(media_path),
-        "-vf",
-        f"fps=1/{frame_interval}",
+    ]
+    if frame_method == "scene":
+        cmd += [
+            "-vf",
+            "select='gt(scene,0.3)'",
+            "-vsync",
+            "vfr",
+        ]
+    else:
+        cmd += [
+            "-vf",
+            f"fps=1/{frame_interval}",
+        ]
+    cmd += [
         "-frames:v",
         str(max_frames),
         output_pattern,
@@ -1554,7 +1503,7 @@ async def _step_extract_frames(ctx: PipelineContext, state: dict[str, Any]) -> S
     ]
     return StepExecution(
         status="succeeded",
-        output={"frames": len(frames_meta)},
+        output={"frames": len(frames_meta), "method": frame_method, "max_frames": max_frames},
         state_updates={"frames": frames_meta},
     )
 
@@ -1579,8 +1528,8 @@ def _build_local_outline(state: dict[str, Any]) -> dict[str, Any]:
     merged_points = _dedupe_keep_order(key_points + comment_points, limit=12)
     if not merged_points:
         merged_points = [
-            f"Focus topic: {title}",
-            "Transcript unavailable; outline synthesized from metadata and comments.",
+            f"本期核心主题：{title}",
+            "字幕缺失，以下导读基于元信息与评论区自动生成。",
         ]
 
     chapter_count = min(4, max(2, (len(merged_points) + 2) // 3))
@@ -1597,7 +1546,7 @@ def _build_local_outline(state: dict[str, Any]) -> dict[str, Any]:
         bullet_end = bullet_start + 3
         bullets = merged_points[bullet_start:bullet_end]
         if not bullets:
-            bullets = [f"Chapter {chapter_no} follows the main topic progression."]
+            bullets = [f"第 {chapter_no} 章承接主线内容展开。"]
         summary = bullets[0]
         title_hint = re.sub(r"[。.!?！？].*$", "", summary).strip()[:48]
         chapter_title = title_hint or f"Chapter {chapter_no}"
@@ -1812,6 +1761,9 @@ def _gemini_generate(
     media_path: str | None = None,
     frame_paths: list[str] | None = None,
     llm_input_mode: LLMInputMode = "auto",
+    model: str | None = None,
+    temperature: float | None = None,
+    max_output_tokens: int | None = None,
 ) -> tuple[str | None, str]:
     if not settings.gemini_api_key:
         return None, "none"
@@ -1822,13 +1774,24 @@ def _gemini_generate(
 
     try:
         genai.configure(api_key=settings.gemini_api_key)
-        model = genai.GenerativeModel(settings.gemini_model)
+        model_name = str(model or settings.gemini_model).strip() or settings.gemini_model
+        model = genai.GenerativeModel(model_name)
     except Exception:
         return None, "none"
 
     normalized_mode = _normalize_llm_input_mode(llm_input_mode)
     normalized_media_path = str(media_path or "").strip()
     normalized_frame_paths = list(frame_paths or [])
+    generation_config: dict[str, Any] = {}
+    if temperature is not None:
+        generation_config["temperature"] = temperature
+    if max_output_tokens is not None:
+        generation_config["max_output_tokens"] = max_output_tokens
+
+    def _generate_content(content: Any) -> Any:
+        if generation_config:
+            return model.generate_content(content, generation_config=generation_config)
+        return model.generate_content(content)
 
     should_try_video = normalized_mode in {"auto", "video_text"} and bool(normalized_media_path)
     if should_try_video:
@@ -1836,7 +1799,7 @@ def _gemini_generate(
             upload_fn = getattr(genai, "upload_file", None)
             if callable(upload_fn):
                 video_part = upload_fn(path=normalized_media_path)
-                response = model.generate_content([video_part, prompt])
+                response = _generate_content([video_part, prompt])
                 text = _extract_gemini_text(response)
                 if text:
                     return text, "video_text"
@@ -1850,7 +1813,7 @@ def _gemini_generate(
         try:
             frame_parts = _build_frame_parts(normalized_frame_paths, limit=max(1, settings.pipeline_max_frames))
             if frame_parts:
-                response = model.generate_content([prompt, *frame_parts])
+                response = _generate_content([prompt, *frame_parts])
                 text = _extract_gemini_text(response)
                 if text:
                     return text, "frames_text"
@@ -1859,7 +1822,7 @@ def _gemini_generate(
 
     if normalized_mode in {"auto", "text"}:
         try:
-            response = model.generate_content(prompt)
+            response = _generate_content(prompt)
             text = _extract_gemini_text(response)
             if text:
                 return text, "text"
@@ -1877,18 +1840,39 @@ async def _step_llm_outline(ctx: PipelineContext, state: dict[str, Any]) -> Step
     llm_input_mode = _normalize_llm_input_mode(
         state.get("llm_input_mode") or getattr(ctx.settings, "pipeline_llm_input_mode", "auto")
     )
+    llm_policy = dict(state.get("llm_policy") or {})
+    llm_outline_policy = dict(llm_policy.get("outline") or {})
+    llm_model = (
+        str(
+            llm_outline_policy.get("model")
+            or llm_policy.get("model")
+            or ctx.settings.gemini_outline_model
+        ).strip()
+        or ctx.settings.gemini_outline_model
+    )
+    llm_temperature = _coerce_float(
+        llm_outline_policy.get("temperature"),
+        _coerce_float(llm_policy.get("temperature"), None),
+    )
+    llm_max_output_tokens = (
+        _coerce_int(
+            llm_outline_policy.get("max_output_tokens"),
+            _coerce_int(llm_policy.get("max_output_tokens"), 0),
+        )
+        or None
+    )
     title = str(metadata.get("title") or state.get("title") or "")
     source_url = str(state.get("source_url") or metadata.get("webpage_url") or "")
     include_frame_context = bool(frames) and _should_include_frame_prompt(ctx.settings)
 
     prompt_parts = [
-        "Generate a strict JSON outline for a video digest.",
-        "Return JSON only, no markdown, no code fence.",
-        "Required top-level keys:",
-        "title, tldr(array), highlights(array), recommended_actions(array), risk_or_pitfalls(array), chapters(array), timestamp_references(array).",
-        "Each chapter object must contain:",
-        "chapter_no, title, anchor, start_s, end_s, summary, bullets(array), key_terms(array), code_snippets(array).",
-        "Each code_snippets item must contain: title, language, snippet, range_start_s, range_end_s.",
+        "为视频摘要生成严格 JSON 大纲。",
+        "只返回 JSON，不要 Markdown，不要代码块围栏。",
+        "所有面向读者的字段必须使用简体中文（专有名词、产品名、代码标识可保留英文）。",
+        "顶层必填字段：title, tldr(array), highlights(array), recommended_actions(array), risk_or_pitfalls(array), chapters(array), timestamp_references(array)。",
+        "chapter 对象必填：chapter_no, title, anchor, start_s, end_s, summary, bullets(array), key_terms(array), code_snippets(array)。",
+        "code_snippets 项必填：title, language, snippet, range_start_s, range_end_s。",
+        "内容风格：人类可读，避免空话，不要重复，不要编造无法从输入中确认的事实。",
         f"Title: {title}",
         f"Metadata: {json.dumps(_jsonable(metadata), ensure_ascii=False)}",
         f"Transcript (truncated):\n{transcript[:9000]}",
@@ -1907,11 +1891,27 @@ async def _step_llm_outline(ctx: PipelineContext, state: dict[str, Any]) -> Step
         media_path=media_path,
         frame_paths=frame_paths,
         llm_input_mode=llm_input_mode,
+        model=llm_model,
+        temperature=llm_temperature,
+        max_output_tokens=llm_max_output_tokens,
     )
     if generated:
         try:
             payload = json.loads(_extract_json_object(generated))
             if isinstance(payload, dict):
+                translated_to_zh = False
+                if not _outline_is_chinese(payload):
+                    translated_payload = await asyncio.to_thread(
+                        _translate_payload_to_chinese,
+                        ctx.settings,
+                        payload,
+                        model=llm_model,
+                        max_output_tokens=llm_max_output_tokens,
+                        schema_label="outline",
+                    )
+                    if isinstance(translated_payload, dict):
+                        payload = translated_payload
+                        translated_to_zh = True
                 outline = _normalize_outline_payload(payload, state)
                 outline["generated_by"] = "gemini"
                 outline["generated_at"] = _utc_now_iso()
@@ -1922,6 +1922,10 @@ async def _step_llm_outline(ctx: PipelineContext, state: dict[str, Any]) -> Step
                         "frame_context_used": include_frame_context,
                         "media_input": media_input,
                         "llm_input_mode": llm_input_mode,
+                        "model": llm_model,
+                        "temperature": llm_temperature,
+                        "max_output_tokens": llm_max_output_tokens,
+                        "translated_to_zh": translated_to_zh,
                     },
                     state_updates={"outline": outline},
                 )
@@ -1936,6 +1940,9 @@ async def _step_llm_outline(ctx: PipelineContext, state: dict[str, Any]) -> Step
             "frame_context_used": include_frame_context,
             "media_input": media_input,
             "llm_input_mode": llm_input_mode,
+            "model": llm_model,
+            "temperature": llm_temperature,
+            "max_output_tokens": llm_max_output_tokens,
         },
         state_updates={"outline": outline},
         reason="gemini_unavailable_or_invalid",
@@ -1953,12 +1960,12 @@ def _local_digest(state: dict[str, Any]) -> dict[str, Any]:
     if not highlights:
         highlights = _collect_key_points_from_text(transcript, limit=6)
     if not highlights:
-        highlights = ["Transcript unavailable, use metadata and comments for understanding."]
+        highlights = ["未获取到有效字幕，以下内容基于标题、简介与评论区生成。"]
     if not tldr:
         tldr = highlights[:4]
     if not actions:
         actions = [f"复盘 {item}" for item in tldr[:3]]
-    summary = transcript.strip()[:320] if transcript.strip() else f"Digest generated from metadata: {title}"
+    summary = transcript.strip()[:320] if transcript.strip() else f"该摘要基于视频元信息自动生成：{title}"
 
     code_blocks = _collect_code_blocks(outline, {})
     refs = outline.get("timestamp_references")
@@ -1972,7 +1979,7 @@ def _local_digest(state: dict[str, Any]) -> dict[str, Any]:
         "code_blocks": code_blocks,
         "timestamp_references": timestamp_refs,
         "fallback_notes": [
-            "LLM digest unavailable; this digest is generated from local deterministic rules."
+            "LLM 摘要不可用，当前内容由本地规则降级生成。"
         ],
         "generated_by": "local_rule",
         "generated_at": _utc_now_iso(),
@@ -2044,7 +2051,7 @@ def _normalize_digest_payload(payload: dict[str, Any], state: dict[str, Any]) ->
 
     return {
         "title": title,
-        "summary": summary or "No summary generated.",
+        "summary": summary or "未生成摘要。",
         "tldr": tldr,
         "highlights": highlights,
         "action_items": action_items,
@@ -2064,16 +2071,41 @@ async def _step_llm_digest(ctx: PipelineContext, state: dict[str, Any]) -> StepE
     llm_input_mode = _normalize_llm_input_mode(
         state.get("llm_input_mode") or getattr(ctx.settings, "pipeline_llm_input_mode", "auto")
     )
+    llm_policy = dict(state.get("llm_policy") or {})
+    llm_digest_policy = dict(llm_policy.get("digest") or {})
+    llm_model = (
+        str(
+            llm_digest_policy.get("model")
+            or llm_policy.get("model")
+            or ctx.settings.gemini_digest_model
+        ).strip()
+        or ctx.settings.gemini_digest_model
+    )
+    llm_temperature = _coerce_float(
+        llm_digest_policy.get("temperature"),
+        _coerce_float(llm_policy.get("temperature"), None),
+    )
+    llm_max_output_tokens = (
+        _coerce_int(
+            llm_digest_policy.get("max_output_tokens"),
+            _coerce_int(llm_policy.get("max_output_tokens"), 0),
+        )
+        or None
+    )
     source_url = str(state.get("source_url") or metadata.get("webpage_url") or "")
     include_frame_context = bool(frames) and _should_include_frame_prompt(ctx.settings)
 
     outline = _normalize_outline_payload(dict(state.get("outline") or {}), state)
     prompt_parts = [
-        "Generate digest JSON based on the provided outline.",
-        "Return JSON only, no markdown, no code fence.",
-        "Required keys: title, summary, tldr(array), highlights(array), action_items(array), code_blocks(array), timestamp_references(array), fallback_notes(array).",
-        "Code block item schema: {title, language, snippet, range_start_s, range_end_s}.",
-        "Timestamp reference schema: {ts_s, label, reason}.",
+        "基于输入内容生成面向人类阅读的摘要 JSON。",
+        "只返回 JSON，不要 Markdown，不要代码块围栏。",
+        "所有面向读者的字段必须使用简体中文（专有名词、产品名、代码标识可保留英文）。",
+        "必填字段：title, summary, tldr(array), highlights(array), action_items(array), code_blocks(array), timestamp_references(array), fallback_notes(array)。",
+        "summary 请控制在 120~220 字，直说结论，避免套话。",
+        "tldr/highlights/action_items 每项要简短、可执行、去重。",
+        "code_blocks 项结构：{title, language, snippet, range_start_s, range_end_s}。",
+        "timestamp_references 项结构：{ts_s, label, reason}。",
+        "内容风格：中文优先、证据导向、便于快速阅读。",
         f"Metadata:\n{json.dumps(_jsonable(metadata), ensure_ascii=False)}",
         f"Outline:\n{json.dumps(_jsonable(outline), ensure_ascii=False)}",
         f"Transcript (truncated):\n{str(state.get('transcript') or '')[:9000]}",
@@ -2092,11 +2124,27 @@ async def _step_llm_digest(ctx: PipelineContext, state: dict[str, Any]) -> StepE
         media_path=media_path,
         frame_paths=frame_paths,
         llm_input_mode=llm_input_mode,
+        model=llm_model,
+        temperature=llm_temperature,
+        max_output_tokens=llm_max_output_tokens,
     )
     if generated:
         try:
             payload = json.loads(_extract_json_object(generated))
             if isinstance(payload, dict):
+                translated_to_zh = False
+                if not _digest_is_chinese(payload):
+                    translated_payload = await asyncio.to_thread(
+                        _translate_payload_to_chinese,
+                        ctx.settings,
+                        payload,
+                        model=llm_model,
+                        max_output_tokens=llm_max_output_tokens,
+                        schema_label="digest",
+                    )
+                    if isinstance(translated_payload, dict):
+                        payload = translated_payload
+                        translated_to_zh = True
                 digest = _normalize_digest_payload(payload, state)
                 digest["generated_by"] = "gemini"
                 digest["generated_at"] = _utc_now_iso()
@@ -2107,6 +2155,10 @@ async def _step_llm_digest(ctx: PipelineContext, state: dict[str, Any]) -> StepE
                         "frame_context_used": include_frame_context,
                         "media_input": media_input,
                         "llm_input_mode": llm_input_mode,
+                        "model": llm_model,
+                        "temperature": llm_temperature,
+                        "max_output_tokens": llm_max_output_tokens,
+                        "translated_to_zh": translated_to_zh,
                     },
                     state_updates={"digest": digest},
                 )
@@ -2121,6 +2173,9 @@ async def _step_llm_digest(ctx: PipelineContext, state: dict[str, Any]) -> StepE
             "frame_context_used": include_frame_context,
             "media_input": media_input,
             "llm_input_mode": llm_input_mode,
+            "model": llm_model,
+            "temperature": llm_temperature,
+            "max_output_tokens": llm_max_output_tokens,
         },
         state_updates={"digest": digest},
         reason="gemini_unavailable_or_invalid",
@@ -2139,13 +2194,14 @@ async def _step_write_artifacts(ctx: PipelineContext, state: dict[str, Any]) -> 
         comments = dict(state.get("comments") or empty_comments_payload())
         transcript = str(state.get("transcript") or "")
         degradations = list(state.get("degradations") or [])
-        frames = list(state.get("frames") or [])
+        raw_frames = list(state.get("frames") or [])
+        frames, frame_files = _materialize_frames_for_artifacts(raw_frames, ctx.artifacts_dir)
 
         tldr = [str(item) for item in (digest.get("tldr") or []) if str(item).strip()]
         highlights = [str(item) for item in (digest.get("highlights") or []) if str(item).strip()]
         action_items = [str(item) for item in (digest.get("action_items") or []) if str(item).strip()]
         if not highlights:
-            highlights = ["No highlight extracted."]
+            highlights = ["未提取到高置信度要点。"]
         if not tldr:
             tldr = highlights[:4]
         if not action_items:
@@ -2157,7 +2213,7 @@ async def _step_write_artifacts(ctx: PipelineContext, state: dict[str, Any]) -> 
             if isinstance(item, dict)
         ]
         if not degradation_lines:
-            degradation_lines = ["- none"]
+            degradation_lines = ["- 无明显降级。"]
 
         rendered_digest = _render_template(
             template,
@@ -2169,7 +2225,7 @@ async def _step_write_artifacts(ctx: PipelineContext, state: dict[str, Any]) -> 
                 "platform": str(state.get("platform") or ""),
                 "video_uid": str(state.get("video_uid") or ""),
                 "generated_at": _utc_now_iso(),
-                "summary": str(digest.get("summary") or "No summary generated."),
+                "summary": str(digest.get("summary") or "未生成摘要。"),
                 "tldr_markdown": "\n".join(f"- {item}" for item in tldr),
                 "highlights_markdown": "\n".join(f"- {item}" for item in highlights),
                 "action_items_markdown": "\n".join(f"- [ ] {item}" for item in action_items),
@@ -2177,6 +2233,7 @@ async def _step_write_artifacts(ctx: PipelineContext, state: dict[str, Any]) -> 
                 "chapters_markdown": _build_chapters_markdown(outline, source_url),
                 "code_blocks_markdown": _build_code_blocks_markdown(outline, digest, source_url),
                 "comments_markdown": _build_comments_markdown(comments),
+                "frames_embedded_markdown": _build_frames_embedded_markdown(frames, ctx.job_id),
                 "frames_index_markdown": _build_frames_markdown(frames, source_url),
                 "timestamp_refs_markdown": _build_timestamp_refs_markdown(outline, digest, source_url),
                 "fallback_notes_markdown": _build_fallback_notes_markdown(digest, degradations),
@@ -2190,7 +2247,7 @@ async def _step_write_artifacts(ctx: PipelineContext, state: dict[str, Any]) -> 
             "download_mode": state.get("download_mode"),
             "media_path": state.get("media_path"),
             "subtitle_files": state.get("subtitle_files") or [],
-            "frame_files": [item.get("path") for item in frames if isinstance(item, dict)],
+            "frame_files": frame_files,
             "degradations": degradations,
             "generated_at": _utc_now_iso(),
         }
@@ -2258,10 +2315,18 @@ async def run_pipeline(
     job_id: str,
     attempt: int,
     mode: str = "full",
+    overrides: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     pipeline_mode = _normalize_pipeline_mode(mode)
     llm_input_mode = _normalize_llm_input_mode(getattr(settings, "pipeline_llm_input_mode", "auto"))
     ctx = _build_context(settings, sqlite_store, pg_store, job_id=job_id, attempt=attempt)
+    resolved_overrides = _normalize_overrides_payload(overrides)
+    if not resolved_overrides:
+        resolved_overrides = _normalize_overrides_payload(ctx.job_record.get("overrides_json"))
+    platform = str(ctx.job_record.get("platform") or "").strip().lower()
+    comments_policy = _build_comments_policy(settings, resolved_overrides, platform=platform)
+    frame_policy = _build_frame_policy(settings, resolved_overrides)
+    llm_policy = _build_llm_policy(settings, resolved_overrides)
     checkpoint = sqlite_store.get_checkpoint(job_id)
     checkpoint_step = str((checkpoint or {}).get("last_completed_step") or "")
     checkpoint_payload = dict((checkpoint or {}).get("payload") or {})
@@ -2276,6 +2341,10 @@ async def run_pipeline(
         "platform": ctx.job_record.get("platform"),
         "video_uid": ctx.job_record.get("video_uid"),
         "published_at": ctx.job_record.get("published_at"),
+        "overrides": resolved_overrides,
+        "comments_policy": comments_policy,
+        "frame_policy": frame_policy,
+        "llm_policy": llm_policy,
         "metadata": {},
         "media_path": None,
         "download_mode": "text_only",
