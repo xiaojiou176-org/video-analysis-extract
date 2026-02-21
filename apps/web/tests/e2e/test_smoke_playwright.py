@@ -601,7 +601,13 @@ def test_jobs_to_artifacts_query_navigation(page: Page, mock_api_state: MockApiS
     page.get_by_label("Job ID").fill(mock_api_state.job_id)
     page.get_by_role("button", name="Load artifact markdown").click()
 
+    _wait_for_call_count(mock_api_state, "get_artifact_markdown", 1)
+    artifact_payload = mock_api_state.last_call("get_artifact_markdown")
+    assert artifact_payload["job_id"] == mock_api_state.job_id
+    assert artifact_payload["include_meta"] == "true"
+
     expect(page).to_have_url(re.compile(r"/artifacts\?job_id=job-e2e-001"))
     expect(page.get_by_role("heading", name="Artifact lookup")).to_be_visible()
-    # Next.js 16 async `searchParams` migration is pending in app code, so page currently shows placeholder.
-    expect(page.get_by_text("No artifact loaded yet.")).to_be_visible()
+    expect(page.get_by_role("heading", name="Embedded screenshots")).to_be_visible()
+    expect(page.get_by_role("heading", name="Markdown preview")).to_be_visible()
+    expect(page.get_by_text("Key finding A")).to_be_visible()

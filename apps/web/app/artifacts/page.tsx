@@ -1,11 +1,10 @@
 import { MarkdownPreview } from "@/components/markdown-preview";
 import { apiClient } from "@/lib/api/client";
+import type { ArtifactMarkdownWithMeta } from "@/lib/api/types";
+import { resolveSearchParams, type SearchParamsInput } from "@/lib/search-params";
 
 type ArtifactsPageProps = {
-  searchParams?: {
-    job_id?: string;
-    video_url?: string;
-  };
+  searchParams?: SearchParamsInput;
 };
 
 function getApiBaseUrl(): string {
@@ -66,23 +65,28 @@ function buildArtifactAssetUrl(jobId: string, path: string): string {
 }
 
 export default async function ArtifactsPage({ searchParams }: ArtifactsPageProps) {
-  const jobId = searchParams?.job_id?.trim() ?? "";
-  const videoUrl = searchParams?.video_url?.trim() ?? "";
+  const { job_id: jobId, video_url: videoUrl } = await resolveSearchParams(searchParams, [
+    "job_id",
+    "video_url",
+  ] as const);
+  const hasLookupParams = Boolean(jobId || videoUrl);
 
   let error: string | null = null;
-  const payload =
-    jobId || videoUrl
-      ? await apiClient
-          .getArtifactMarkdown({
-            job_id: jobId || undefined,
-            video_url: videoUrl || undefined,
-            include_meta: true,
-          })
-          .catch((err) => {
-            error = err instanceof Error ? err.message : "Failed to load artifact";
-            return null;
-          })
-      : null;
+  let payload: ArtifactMarkdownWithMeta | null = null;
+
+  if (hasLookupParams) {
+    payload = await apiClient
+      .getArtifactMarkdown({
+        job_id: jobId || undefined,
+        video_url: videoUrl || undefined,
+        include_meta: true,
+      })
+      .catch((err) => {
+        const reason = err instanceof Error ? err.message : "Failed to load artifact";
+        error = `API error: ${reason}`;
+        return null;
+      });
+  }
 
   const screenshotIndex = payload ? extractFrameFiles(payload.meta) : [];
   const artifactJobId = payload ? extractArtifactJobId(jobId, payload.meta) : "";
@@ -169,8 +173,12 @@ export default async function ArtifactsPage({ searchParams }: ArtifactsPageProps
             <MarkdownPreview markdown={payload.markdown} />
           </section>
         </>
-      ) : (
+      ) : !hasLookupParams ? (
         <p className="small">No artifact loaded yet.</p>
+      ) : !error ? (
+        <p className="small">Artifact request completed but no markdown payload was returned.</p>
+      ) : (
+        <p className="small">Artifact request failed.</p>
       )}
     </div>
   );

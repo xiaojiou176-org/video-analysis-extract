@@ -1,16 +1,12 @@
 import { pollIngestAction, processVideoAction } from "@/app/actions";
 import { apiClient } from "@/lib/api/client";
+import { resolveSearchParams, type SearchParamsInput } from "@/lib/search-params";
 
 type DashboardProps = {
-  searchParams?: {
-    status?: string;
-    message?: string;
-  };
+  searchParams?: SearchParamsInput;
 };
 
-function renderAlert(searchParams: DashboardProps["searchParams"]) {
-  const status = searchParams?.status;
-  const message = searchParams?.message;
+function renderAlert(status: string, message: string) {
   if (!status || !message) {
     return null;
   }
@@ -20,17 +16,18 @@ function renderAlert(searchParams: DashboardProps["searchParams"]) {
 }
 
 export default async function DashboardPage({ searchParams }: DashboardProps) {
+  const { status, message } = await resolveSearchParams(searchParams, ["status", "message"] as const);
   const [subscriptions, videos] = await Promise.all([
     apiClient.listSubscriptions().catch(() => []),
     apiClient.listVideos({ limit: 200 }).catch(() => []),
   ]);
 
   const runningJobs = videos.filter((video) => video.status === "running" || video.status === "queued").length;
-  const failedJobs = videos.filter((video) => video.status === "failed" || video.status === "partial").length;
+  const failedJobs = videos.filter((video) => video.status === "failed").length;
 
   return (
     <div className="stack">
-      {renderAlert(searchParams)}
+      {renderAlert(status, message)}
 
       <section className="grid grid-cols-2">
         <div className="card metric">
@@ -46,7 +43,7 @@ export default async function DashboardPage({ searchParams }: DashboardProps) {
           <span className="metric-value">{runningJobs}</span>
         </div>
         <div className="card metric">
-          <span className="metric-label">Failed or partial</span>
+          <span className="metric-label">Failed jobs</span>
           <span className="metric-value">{failedJobs}</span>
         </div>
       </section>

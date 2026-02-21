@@ -2,15 +2,14 @@ import Link from "next/link";
 
 import { apiClient } from "@/lib/api/client";
 import { formatDateTime } from "@/lib/format";
+import { resolveSearchParams, type SearchParamsInput } from "@/lib/search-params";
 
 type JobsPageProps = {
-  searchParams?: {
-    job_id?: string;
-  };
+  searchParams?: SearchParamsInput;
 };
 
 export default async function JobsPage({ searchParams }: JobsPageProps) {
-  const jobId = searchParams?.job_id?.trim() ?? "";
+  const { job_id: jobId } = await resolveSearchParams(searchParams, ["job_id"] as const);
 
   let error: string | null = null;
   const job = jobId
