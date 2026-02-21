@@ -1,11 +1,18 @@
 from __future__ import annotations
 
 import importlib
+import os
 import sys
 import types
 
 import pytest
 from fastapi.testclient import TestClient
+
+os.environ.setdefault("DATABASE_URL", "sqlite+pysqlite:///:memory:")
+os.environ.setdefault("TEMPORAL_TARGET_HOST", "127.0.0.1:7233")
+os.environ.setdefault("TEMPORAL_NAMESPACE", "default")
+os.environ.setdefault("TEMPORAL_TASK_QUEUE", "video-analysis-worker")
+os.environ.setdefault("SQLITE_STATE_PATH", "/tmp/video-digestor-api-tests.db")
 
 
 @pytest.fixture

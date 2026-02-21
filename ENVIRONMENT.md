@@ -11,7 +11,7 @@ This repository uses a contract-first environment model:
 
 1. Process environment variables
 2. `.env.local` (auto-loaded by `scripts/dev_*.sh` and `scripts/run_*.sh`, when present)
-3. Code defaults (only for optional values)
+3. Code defaults (only for optional values; required variables must come from environment)
 
 ## Fail-Fast Rules
 
@@ -25,6 +25,9 @@ Startup validation fails when:
    - `SQLITE_STATE_PATH` (API)
    - `SQLITE_PATH`, `PIPELINE_WORKSPACE_DIR`, `PIPELINE_ARTIFACT_ROOT` (Worker)
 2. `NOTIFICATION_ENABLED=true` but either `RESEND_API_KEY` or `RESEND_FROM_EMAIL` is missing/blank.
+3. Web API client cannot resolve a valid base URL:
+   - `NEXT_PUBLIC_API_BASE_URL` (preferred) or
+   - `VD_API_BASE_URL` (compat fallback)
 
 ## Variable Tiers
 
@@ -79,5 +82,9 @@ GitHub Actions workflow: `.github/workflows/env-governance.yml`
 
 1. Environment contract check:
    - `python scripts/check_env_contract.py --strict`
+   - Validates:
+     - all referenced env vars are registered in `infra/config/env.contract.json`
+     - every `required=true` contract variable has `default=null`
+     - `.env.example` covers all required vars and web e2e critical vars
 2. Secret scanning:
    - `gitleaks detect --source . --verbose --redact`

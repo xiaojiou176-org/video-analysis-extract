@@ -19,6 +19,7 @@ CONTRACT_FIELDS = {
 
 IGNORE_REFS = {
     "BASH_SOURCE",
+    "GITHUB_ACTOR",
     "HOME",
     "PATH",
     "PWD",
@@ -30,6 +31,7 @@ PY_ENV_RE = re.compile(r'os\.environ\[\s*["\']([A-Z][A-Z0-9_]*)["\']\s*\]')
 PY_ENV_GET_RE = re.compile(r'os\.environ\.get\(\s*["\']([A-Z][A-Z0-9_]*)["\']')
 TS_PROCESS_ENV_RE = re.compile(r"process\.env\.([A-Z][A-Z0-9_]*)")
 SH_DEFAULT_ENV_RE = re.compile(r"\$\{([A-Z][A-Z0-9_]*)[:-][^}]*\}")
+ENV_EXAMPLE_EXPORT_RE = re.compile(r"^\s*(?:#\s*)?export\s+([A-Z][A-Z0-9_]*)\s*=", re.MULTILINE)
 
 
 def _repo_root() -> Path:
@@ -52,6 +54,22 @@ def _load_contract(path: Path) -> dict:
         name = item.get("name")
         if not isinstance(name, str) or not re.fullmatch(r"[A-Z][A-Z0-9_]*", name):
             raise ValueError(f"variables[{idx}] has invalid name: {name!r}")
+        if not isinstance(item.get("required"), bool):
+            raise ValueError(f"variables[{idx}] required must be boolean")
+        if not isinstance(item.get("secret"), bool):
+            raise ValueError(f"variables[{idx}] secret must be boolean")
+        consumers = item.get("consumer")
+        if not isinstance(consumers, list) or any(not isinstance(c, str) for c in consumers):
+            raise ValueError(f"variables[{idx}] consumer must be list[str]")
+
+    required_default_violations = sorted(
+        item["name"] for item in variables if item["required"] and item["default"] is not None
+    )
+    if required_default_violations:
+        raise ValueError(
+            "required variables must use default=null: "
+            + ", ".join(required_default_violations)
+        )
     return payload
 
 
@@ -91,6 +109,26 @@ def _collect_references(root: Path) -> dict[str, set[str]]:
     return refs
 
 
+def _load_env_example_vars(path: Path) -> set[str]:
+    if not path.is_file():
+        raise ValueError(f".env example not found: {path}")
+    content = path.read_text(encoding="utf-8")
+    return set(ENV_EXAMPLE_EXPORT_RE.findall(content))
+
+
+def _required_contract_vars(contract: dict) -> set[str]:
+    return {item["name"] for item in contract["variables"] if item["required"]}
+
+
+def _web_e2e_critical_vars(contract: dict) -> set[str]:
+    names: set[str] = set()
+    for item in contract["variables"]:
+        consumers = item.get("consumer", [])
+        if any("apps/web/tests/e2e/" in ref for ref in consumers):
+            names.add(item["name"])
+    return names
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Validate env references against env.contract.json")
     parser.add_argument(
@@ -128,6 +166,17 @@ def main() -> int:
 
     all_refs = sorted({item for refs in refs_by_file.values() for item in refs})
     missing_refs = sorted({item for refs in missing_by_file.values() for item in refs})
+    required_vars = _required_contract_vars(contract)
+    web_e2e_critical_vars = _web_e2e_critical_vars(contract)
+    expected_in_example = required_vars | web_e2e_critical_vars
+
+    try:
+        env_example_vars = _load_env_example_vars(root / ".env.example")
+    except Exception as exc:  # noqa: BLE001
+        print(f"[env-contract] invalid .env.example: {exc}", file=sys.stderr)
+        return 2
+
+    missing_in_example = sorted(var for var in expected_in_example if var not in env_example_vars)
 
     print(f"[env-contract] registered vars: {len(registered)}")
     print(f"[env-contract] referenced vars: {len(all_refs)}")
@@ -137,8 +186,15 @@ def main() -> int:
             print(f"  - {file_path}: {', '.join(missing)}")
     else:
         print("[env-contract] all references are registered")
+    print(f"[env-contract] required vars in contract: {len(required_vars)}")
+    print(f"[env-contract] web e2e critical vars: {len(web_e2e_critical_vars)}")
+    if missing_in_example:
+        print(f"[env-contract] missing in .env.example: {len(missing_in_example)}")
+        print(f"  - vars: {', '.join(missing_in_example)}")
+    else:
+        print("[env-contract] .env.example covers required + web e2e critical vars")
 
-    if args.strict and missing_refs:
+    if args.strict and (missing_refs or missing_in_example):
         return 1
     return 0
 
