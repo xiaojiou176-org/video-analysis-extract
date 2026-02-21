@@ -1,0 +1,269 @@
+from __future__ import annotations
+
+import json
+from typing import Any
+from urllib.error import HTTPError, URLError
+from urllib.parse import urlencode
+from urllib.request import Request, urlopen
+
+from sqlalchemy import text
+
+from worker.config import Settings
+from worker.state.postgres_store import PostgresBusinessStore
+from worker.temporal.activities_delivery import _classify_delivery_error
+from worker.temporal.activities_email import (
+    sanitize_text_preview as _sanitize_text_preview,
+    sanitize_url_for_payload as _sanitize_url_for_payload,
+)
+from worker.temporal.activities_timing import _coerce_int
+
+try:
+    from temporalio import activity
+except ModuleNotFoundError:  # pragma: no cover
+    class _ActivityFallback:
+        @staticmethod
+        def defn(name: str | None = None):
+            def _decorator(func):
+                return func
+
+            return _decorator
+
+    activity = _ActivityFallback()
+
+
+HEALTH_CHECK_KINDS = ("rsshub", "youtube_data_api", "gemini", "resend")
+
+
+def _classify_http_error_kind(*, status_code: int | None, error_message: str) -> str:
+    if status_code in {401, 403}:
+        return "auth"
+    if status_code == 429:
+        return "rate_limit"
+    if status_code is not None and status_code >= 500:
+        return "transient"
+    return _classify_delivery_error(error_message)
+
+
+def _http_probe(
+    *,
+    url: str,
+    method: str = "GET",
+    headers: dict[str, str] | None = None,
+    timeout_seconds: int = 8,
+) -> dict[str, Any]:
+    sanitized_url = _sanitize_url_for_payload(url)
+    request = Request(url, headers=headers or {}, method=method)
+    try:
+        with urlopen(request, timeout=timeout_seconds) as response:
+            status_code = int(response.status)
+            body_preview = _sanitize_text_preview(
+                response.read(512).decode("utf-8", errors="replace")
+            )
+    except HTTPError as exc:
+        error_body = _sanitize_text_preview(exc.read().decode("utf-8", errors="replace"))
+        error_kind = _classify_http_error_kind(status_code=exc.code, error_message=error_body)
+        status = "warn" if error_kind == "rate_limit" else "fail"
+        return {
+            "status": status,
+            "error_kind": error_kind,
+            "message": f"http_error:{exc.code}",
+            "payload_json": {
+                "url": sanitized_url,
+                "status_code": exc.code,
+                "body": error_body,
+            },
+        }
+    except URLError as exc:
+        reason = _sanitize_text_preview(str(exc.reason))
+        return {
+            "status": "fail",
+            "error_kind": "transient",
+            "message": f"network_error:{reason}",
+            "payload_json": {"url": sanitized_url},
+        }
+
+    if 200 <= status_code < 300:
+        return {
+            "status": "ok",
+            "error_kind": None,
+            "message": "ok",
+            "payload_json": {"url": sanitized_url, "status_code": status_code},
+        }
+
+    error_kind = _classify_http_error_kind(status_code=status_code, error_message=body_preview)
+    return {
+        "status": "warn" if error_kind == "rate_limit" else "fail",
+        "error_kind": error_kind,
+        "message": f"http_status:{status_code}",
+        "payload_json": {
+            "url": sanitized_url,
+            "status_code": status_code,
+            "body": body_preview,
+        },
+    }
+
+
+def _record_provider_health_check(
+    conn: Any,
+    *,
+    check_kind: str,
+    status: str,
+    error_kind: str | None,
+    message: str,
+    payload_json: dict[str, Any] | None,
+) -> None:
+    conn.execute(
+        text(
+            """
+            INSERT INTO provider_health_checks (
+                check_kind,
+                status,
+                error_kind,
+                message,
+                payload_json,
+                checked_at
+            )
+            VALUES (
+                :check_kind,
+                :status,
+                :error_kind,
+                :message,
+                CAST(:payload_json AS JSONB),
+                NOW()
+            )
+            """
+        ),
+        {
+            "check_kind": check_kind,
+            "status": status,
+            "error_kind": error_kind,
+            "message": message,
+            "payload_json": (
+                json.dumps(payload_json, ensure_ascii=False) if payload_json is not None else None
+            ),
+        },
+    )
+
+
+@activity.defn(name="provider_canary_activity")
+async def provider_canary_activity(payload: dict[str, Any] | None = None) -> dict[str, Any]:
+    settings = Settings.from_env()
+    pg_store = PostgresBusinessStore(settings.database_url)
+    payload = payload or {}
+    timeout_seconds = max(3, _coerce_int(payload.get("timeout_seconds"), fallback=8))
+
+    checks: list[dict[str, Any]] = []
+
+    rsshub_url = f"{settings.rsshub_base_url.rstrip('/')}/healthz"
+    checks.append(
+        {
+            "check_kind": "rsshub",
+            **_http_probe(url=rsshub_url, timeout_seconds=timeout_seconds),
+        }
+    )
+
+    if settings.youtube_api_key:
+        youtube_query = urlencode(
+            {
+                "part": "id",
+                "id": "dQw4w9WgXcQ",
+                "maxResults": 1,
+                "key": settings.youtube_api_key,
+            }
+        )
+        youtube_url = f"https://www.googleapis.com/youtube/v3/videos?{youtube_query}"
+        checks.append(
+            {
+                "check_kind": "youtube_data_api",
+                **_http_probe(url=youtube_url, timeout_seconds=timeout_seconds),
+            }
+        )
+    else:
+        checks.append(
+            {
+                "check_kind": "youtube_data_api",
+                "status": "warn",
+                "error_kind": "config_error",
+                "message": "YOUTUBE_API_KEY is not configured",
+                "payload_json": {},
+            }
+        )
+
+    if settings.gemini_api_key:
+        gemini_url = (
+            "https://generativelanguage.googleapis.com/v1beta/models"
+            f"?{urlencode({'key': settings.gemini_api_key})}"
+        )
+        checks.append(
+            {
+                "check_kind": "gemini",
+                **_http_probe(url=gemini_url, timeout_seconds=timeout_seconds),
+            }
+        )
+    else:
+        checks.append(
+            {
+                "check_kind": "gemini",
+                "status": "warn",
+                "error_kind": "config_error",
+                "message": "GEMINI_API_KEY is not configured",
+                "payload_json": {},
+            }
+        )
+
+    if settings.resend_api_key and settings.resend_from_email:
+        checks.append(
+            {
+                "check_kind": "resend",
+                **_http_probe(
+                    url="https://api.resend.com/domains",
+                    headers={"Authorization": f"Bearer {settings.resend_api_key}"},
+                    timeout_seconds=timeout_seconds,
+                ),
+            }
+        )
+    else:
+        checks.append(
+            {
+                "check_kind": "resend",
+                "status": "warn",
+                "error_kind": "config_error",
+                "message": "RESEND_API_KEY or RESEND_FROM_EMAIL is not configured",
+                "payload_json": {},
+            }
+        )
+
+    with pg_store._engine.begin() as conn:  # type: ignore[attr-defined]
+        for check in checks:
+            kind = str(check.get("check_kind") or "")
+            if kind not in HEALTH_CHECK_KINDS:
+                continue
+            _record_provider_health_check(
+                conn,
+                check_kind=kind,
+                status=str(check.get("status") or "fail"),
+                error_kind=(
+                    str(check.get("error_kind"))
+                    if isinstance(check.get("error_kind"), str)
+                    else None
+                ),
+                message=str(check.get("message") or ""),
+                payload_json=(
+                    check.get("payload_json")
+                    if isinstance(check.get("payload_json"), dict)
+                    else {}
+                ),
+            )
+
+    summary = {"ok": 0, "warn": 0, "fail": 0}
+    for check in checks:
+        status = str(check.get("status") or "fail")
+        if status not in summary:
+            status = "fail"
+        summary[status] += 1
+
+    return {
+        "ok": True,
+        "checks": checks,
+        "summary": summary,
+    }

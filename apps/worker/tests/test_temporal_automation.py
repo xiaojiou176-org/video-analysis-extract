@@ -11,6 +11,19 @@ from worker.temporal.activities import _build_daily_digest_markdown, cleanup_wor
 from worker import main as worker_main
 
 
+def _ensure_required_worker_env() -> None:
+    os.environ.setdefault("SQLITE_PATH", "/tmp/video-analysis-test.db")
+    os.environ.setdefault(
+        "DATABASE_URL",
+        "postgresql+psycopg://postgres:postgres@localhost:5432/video_analysis",
+    )
+    os.environ.setdefault("TEMPORAL_TARGET_HOST", "localhost:7233")
+    os.environ.setdefault("TEMPORAL_NAMESPACE", "default")
+    os.environ.setdefault("TEMPORAL_TASK_QUEUE", "video-analysis-worker")
+    os.environ.setdefault("PIPELINE_WORKSPACE_DIR", "/tmp/video-analysis-workspace")
+    os.environ.setdefault("PIPELINE_ARTIFACT_ROOT", "/tmp/video-analysis-artifacts")
+
+
 def _set_mtime(path: Path, dt: datetime) -> None:
     ts = dt.timestamp()
     os.utime(path, (ts, ts))
@@ -56,13 +69,15 @@ def test_build_daily_digest_markdown_contains_counts_and_rows() -> None:
         {
             "job_id": "job-1",
             "status": "succeeded",
+            "pipeline_final_status": "succeeded",
             "updated_at": datetime(2026, 2, 21, 8, 0, tzinfo=timezone.utc),
             "platform": "youtube",
             "title": "Video A",
         },
         {
             "job_id": "job-2",
-            "status": "partial",
+            "status": "succeeded",
+            "pipeline_final_status": "degraded",
             "updated_at": datetime(2026, 2, 21, 9, 0, tzinfo=timezone.utc),
             "platform": "bilibili",
             "title": "Video B",
@@ -77,9 +92,9 @@ def test_build_daily_digest_markdown_contains_counts_and_rows() -> None:
 
     assert "# Daily Digest 2026-02-21" in markdown
     assert "- Succeeded: 1" in markdown
-    assert "- Partial: 1" in markdown
+    assert "- Degraded: 1" in markdown
     assert "| job-1 | succeeded | youtube | Video A |" in markdown
-    assert "| job-2 | partial | bilibili | Video B |" in markdown
+    assert "| job-2 | succeeded | bilibili | Video B |" in markdown
 
 
 def test_to_html_renders_markdown_elements() -> None:
@@ -441,6 +456,7 @@ def _install_temporal_stubs() -> type[Exception]:
 
 async def _run_start_daily_for_test(*, run_once: bool) -> tuple[dict, _FakeClient]:
     _install_temporal_stubs()
+    _ensure_required_worker_env()
     handle = _FakeHandle(
         workflow_id="daily-id",
         run_id="daily-run",
@@ -487,6 +503,7 @@ def test_start_cleanup_workflow_waits_result():
     import asyncio
 
     _install_temporal_stubs()
+    _ensure_required_worker_env()
     handle = _FakeHandle(
         workflow_id="cleanup-id",
         run_id="cleanup-run",

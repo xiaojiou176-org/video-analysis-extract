@@ -8,7 +8,7 @@ from temporalio.common import RetryPolicy
 with workflow.unsafe.imports_passed_through():
     from datetime import timedelta
 
-    from worker.temporal.activities import (
+    from worker.temporal.activities_entry import (
         cleanup_workspace_activity,
         mark_failed_activity,
         mark_running_activity,
