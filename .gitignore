@@ -1,6 +1,8 @@
 # Runtime caches and virtual envs
 .runtime-cache/
 .pytest_cache/
+.coverage
+.coverage.*
 .venv/
 venv/
 __pycache__/
