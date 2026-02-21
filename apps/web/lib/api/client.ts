@@ -49,8 +49,8 @@ function normalizeJob(job: Job): Job {
 
 function getApiBaseUrl(): string {
   const base =
-    process.env.VD_API_BASE_URL ??
     process.env.NEXT_PUBLIC_API_BASE_URL ??
+    process.env.VD_API_BASE_URL ??
     "http://127.0.0.1:8000";
   return base.replace(/\/$/, "");
 }

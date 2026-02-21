@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import os
 from datetime import date, datetime, time, timedelta, timezone
 from html import escape
 from os import getpid
@@ -69,12 +68,17 @@ def _to_html(text_value: str) -> str:
     return f"<div>{'<br/>'.join(lines)}</div>"
 
 
-def _send_with_resend(*, to_email: str, subject: str, text_body: str) -> str | None:
-    resend_api_key = os.getenv("RESEND_API_KEY")
-    resend_from_email = os.getenv("RESEND_FROM_EMAIL")
-    if not resend_api_key:
+def _send_with_resend(
+    *,
+    to_email: str,
+    subject: str,
+    text_body: str,
+    resend_api_key: str | None,
+    resend_from_email: str | None,
+) -> str | None:
+    if not resend_api_key or not resend_api_key.strip():
         raise RuntimeError("RESEND_API_KEY is not configured")
-    if not resend_from_email:
+    if not resend_from_email or not resend_from_email.strip():
         raise RuntimeError("RESEND_FROM_EMAIL is not configured")
 
     payload = {
@@ -717,9 +721,12 @@ def _prepare_delivery_skip_reason(
     *,
     config: dict[str, Any],
     recipient_email: str | None,
+    notification_enabled: bool,
 ) -> str | None:
     if recipient_email is None:
         return "notification recipient email is not configured"
+    if not notification_enabled:
+        return "notification is disabled by environment"
     if not bool(config.get("enabled")):
         return "notification config is disabled"
     if not bool(config.get("daily_digest_enabled")):
@@ -1007,6 +1014,7 @@ async def send_video_digest_activity(payload: dict[str, Any]) -> dict[str, Any]:
         skip_reason = _prepare_delivery_skip_reason(
             config=config,
             recipient_email=recipient_email,
+            notification_enabled=settings.notification_enabled,
         )
         subject_title = str(job.get("title") or job.get("video_uid") or job_id)
         subject = f"[Video Digestor] Video digest {subject_title}"
@@ -1076,6 +1084,8 @@ async def send_video_digest_activity(payload: dict[str, Any]) -> dict[str, Any]:
             to_email=recipient_email,
             subject=str(delivery["subject"]),
             text_body=body_markdown,
+            resend_api_key=settings.resend_api_key,
+            resend_from_email=settings.resend_from_email,
         )
     except RuntimeError as exc:
         failed = _mark_delivery_state(
@@ -1164,6 +1174,7 @@ async def send_daily_digest_activity(payload: dict[str, Any] | None = None) -> d
         skip_reason = _prepare_delivery_skip_reason(
             config=config,
             recipient_email=recipient_email,
+            notification_enabled=settings.notification_enabled,
         )
         subject = f"[Video Digestor] Daily digest {digest_day.isoformat()}"
         insert_payload = {
@@ -1233,6 +1244,8 @@ async def send_daily_digest_activity(payload: dict[str, Any] | None = None) -> d
             to_email=recipient_email,
             subject=str(delivery["subject"]),
             text_body=digest_markdown,
+            resend_api_key=settings.resend_api_key,
+            resend_from_email=settings.resend_from_email,
         )
     except RuntimeError as exc:
         failed = _mark_delivery_state(

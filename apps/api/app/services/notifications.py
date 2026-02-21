@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import os
 import uuid
 from datetime import date, datetime, timezone
 from html import escape
@@ -12,6 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from ..config import settings
 from ..models import NotificationConfig, NotificationDelivery
 
 RESEND_API_URL = "https://api.resend.com/emails"
@@ -226,9 +226,13 @@ def _dispatch_email(
         raise
     db.refresh(delivery)
 
-    if skip_reason is not None:
+    effective_skip_reason = skip_reason
+    if effective_skip_reason is None and not settings.notification_enabled:
+        effective_skip_reason = "notification is disabled by environment"
+
+    if effective_skip_reason is not None:
         delivery.status = "skipped"
-        delivery.error_message = skip_reason
+        delivery.error_message = effective_skip_reason
         db.commit()
         db.refresh(delivery)
         return delivery
@@ -238,6 +242,8 @@ def _dispatch_email(
             to_email=recipient_email,
             subject=subject,
             text_body=text_body,
+            resend_api_key=settings.resend_api_key,
+            resend_from_email=settings.resend_from_email,
         )
         delivery.status = "sent"
         delivery.provider_message_id = provider_message_id
@@ -255,13 +261,17 @@ def _dispatch_email(
     return delivery
 
 
-def _send_with_resend(*, to_email: str, subject: str, text_body: str) -> str | None:
-    resend_api_key = os.getenv("RESEND_API_KEY")
-    resend_from_email = os.getenv("RESEND_FROM_EMAIL")
-
-    if not resend_api_key:
+def _send_with_resend(
+    *,
+    to_email: str,
+    subject: str,
+    text_body: str,
+    resend_api_key: str | None,
+    resend_from_email: str | None,
+) -> str | None:
+    if not resend_api_key or not resend_api_key.strip():
         raise RuntimeError("RESEND_API_KEY is not configured")
-    if not resend_from_email:
+    if not resend_from_email or not resend_from_email.strip():
         raise RuntimeError("RESEND_FROM_EMAIL is not configured")
 
     payload = {

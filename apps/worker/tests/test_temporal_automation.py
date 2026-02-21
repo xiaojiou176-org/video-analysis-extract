@@ -172,7 +172,14 @@ def test_send_video_digest_activity_duplicate_job_skips_second_send(monkeypatch)
     monkeypatch.setattr(
         temporal_activities.Settings,
         "from_env",
-        staticmethod(lambda: types.SimpleNamespace(database_url="postgresql://example.invalid/db")),
+        staticmethod(
+            lambda: types.SimpleNamespace(
+                database_url="postgresql://example.invalid/db",
+                notification_enabled=True,
+                resend_api_key=None,
+                resend_from_email=None,
+            )
+        ),
     )
     monkeypatch.setattr(
         temporal_activities,
@@ -217,7 +224,16 @@ def test_send_video_digest_activity_duplicate_job_skips_second_send(monkeypatch)
         lambda _conn, *, job_id: {"delivery_id": "delivery-1", "status": "sent"},
     )
 
-    def _fake_send_with_resend(*, to_email: str, subject: str, text_body: str) -> str:
+    def _fake_send_with_resend(
+        *,
+        to_email: str,
+        subject: str,
+        text_body: str,
+        resend_api_key: str | None,
+        resend_from_email: str | None,
+    ) -> str:
+        assert resend_api_key is None
+        assert resend_from_email is None
         state["send_calls"] += 1
         return f"msg-{state['send_calls']}"
 

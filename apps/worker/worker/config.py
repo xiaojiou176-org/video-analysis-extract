@@ -11,6 +11,21 @@ def _split_csv(value: str | None) -> list[str]:
     return [item.strip() for item in value.split(",") if item.strip()]
 
 
+def _parse_bool(raw: str | None, *, default: bool) -> bool:
+    if raw is None:
+        return default
+    value = raw.strip().lower()
+    if value in {"1", "true", "yes", "on"}:
+        return True
+    if value in {"0", "false", "no", "off"}:
+        return False
+    return default
+
+
+def _is_blank(value: str | None) -> bool:
+    return value is None or not value.strip()
+
+
 @dataclass(frozen=True)
 class Settings:
     rsshub_base_url: str = "https://rsshub.app"
@@ -41,6 +56,9 @@ class Settings:
     gemini_api_key: str | None = None
     gemini_model: str = "gemini-1.5-flash"
     youtube_api_key: str | None = None
+    notification_enabled: bool = False
+    resend_api_key: str | None = None
+    resend_from_email: str | None = None
     digest_template_path: str = str(
         Path(__file__).resolve().parent.parent / "templates" / "digest.md.mustache"
     )
@@ -62,7 +80,7 @@ class Settings:
     def from_env(cls) -> "Settings":
         feed_urls = _split_csv(os.getenv("FEED_URLS"))
         feed_paths = feed_urls or _split_csv(os.getenv("FEED_PATHS"))
-        return cls(
+        settings = cls(
             rsshub_base_url=os.getenv("RSSHUB_BASE_URL", "https://rsshub.app"),
             feed_paths=feed_paths,
             request_timeout_seconds=float(os.getenv("REQUEST_TIMEOUT_SECONDS", "15")),
@@ -110,8 +128,36 @@ class Settings:
             gemini_api_key=os.getenv("GEMINI_API_KEY"),
             gemini_model=os.getenv("GEMINI_MODEL", "gemini-1.5-flash"),
             youtube_api_key=os.getenv("YOUTUBE_API_KEY"),
+            notification_enabled=_parse_bool(
+                os.getenv("NOTIFICATION_ENABLED"),
+                default=False,
+            ),
+            resend_api_key=os.getenv("RESEND_API_KEY"),
+            resend_from_email=os.getenv("RESEND_FROM_EMAIL"),
             digest_template_path=os.getenv(
                 "DIGEST_TEMPLATE_PATH",
                 str(Path(__file__).resolve().parent.parent / "templates" / "digest.md.mustache"),
             ),
         )
+        return settings.validate()
+
+    def validate(self) -> "Settings":
+        required_fields = {
+            "DATABASE_URL": self.database_url,
+            "TEMPORAL_TARGET_HOST": self.temporal_target_host,
+            "TEMPORAL_NAMESPACE": self.temporal_namespace,
+            "TEMPORAL_TASK_QUEUE": self.temporal_task_queue,
+            "SQLITE_PATH": self.sqlite_path,
+            "PIPELINE_WORKSPACE_DIR": self.pipeline_workspace_dir,
+            "PIPELINE_ARTIFACT_ROOT": self.pipeline_artifact_root,
+        }
+        for key, value in required_fields.items():
+            if _is_blank(value):
+                raise RuntimeError(f"{key} is not configured")
+
+        if self.notification_enabled:
+            if _is_blank(self.resend_api_key):
+                raise RuntimeError("RESEND_API_KEY is not configured")
+            if _is_blank(self.resend_from_email):
+                raise RuntimeError("RESEND_FROM_EMAIL is not configured")
+        return self
