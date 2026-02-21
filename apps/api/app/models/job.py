@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, String, Text, func
+from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, String, Text, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -19,7 +19,7 @@ class Job(Base):
             name="jobs_kind_check",
         ),
         CheckConstraint(
-            "status IN ('queued', 'running', 'succeeded', 'failed', 'partial')",
+            "status IN ('queued', 'running', 'succeeded', 'failed')",
             name="jobs_status_check",
         ),
     )
@@ -36,6 +36,9 @@ class Job(Base):
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     artifact_digest_md: Mapped[str | None] = mapped_column(Text, nullable=True)
     artifact_root: Mapped[str | None] = mapped_column(Text, nullable=True)
+    llm_required: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    llm_gate_passed: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    hard_fail_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     mode: Mapped[str | None] = mapped_column(String(64), nullable=True)
     overrides_json: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(

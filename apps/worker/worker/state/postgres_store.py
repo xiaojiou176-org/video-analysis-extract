@@ -180,7 +180,7 @@ class PostgresBusinessStore:
                     SELECT id::text AS id, status
                     FROM jobs
                     WHERE idempotency_key = :idempotency_key
-                      AND status IN ('queued', 'running', 'succeeded', 'partial')
+                      AND status IN ('queued', 'running', 'succeeded')
                     ORDER BY created_at DESC
                     LIMIT 1
                     """
@@ -322,10 +322,10 @@ class PostgresBusinessStore:
         degradation_count: int | None = None,
         last_error_code: str | None = None,
     ) -> dict[str, Any]:
-        if status not in {"succeeded", "partial"}:
+        if status not in {"succeeded"}:
             raise ValueError(f"invalid succeeded status: {status}")
         final_status = pipeline_final_status or status
-        if final_status not in {"succeeded", "partial", "failed"}:
+        if final_status not in {"succeeded", "degraded", "failed"}:
             raise ValueError(f"invalid pipeline_final_status: {final_status}")
         if degradation_count is not None and degradation_count < 0:
             raise ValueError("degradation_count must be >= 0")
@@ -350,7 +350,7 @@ class PostgresBusinessStore:
         last_error_code: str | None = None,
     ) -> dict[str, Any]:
         final_status = pipeline_final_status or "failed"
-        if final_status not in {"succeeded", "partial", "failed"}:
+        if final_status not in {"succeeded", "degraded", "failed"}:
             raise ValueError(f"invalid pipeline_final_status: {final_status}")
         if degradation_count is not None and degradation_count < 0:
             raise ValueError("degradation_count must be >= 0")

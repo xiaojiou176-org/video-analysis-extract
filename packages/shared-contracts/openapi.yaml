@@ -275,7 +275,7 @@ components:
 
     JobStatus:
       type: string
-      enum: [queued, running, succeeded, failed, partial]
+      enum: [queued, running, succeeded, failed]
 
     Subscription:
       type: object
@@ -454,7 +454,7 @@ components:
 
     PipelineFinalStatus:
       type: string
-      enum: [succeeded, partial, failed]
+      enum: [succeeded, degraded, failed]
 
     NotificationRetrySummary:
       type: object
@@ -520,7 +520,7 @@ components:
     Job:
       type: object
       required:
-        [id, video_id, kind, status, idempotency_key, created_at, updated_at, step_summary, steps, degradations, pipeline_final_status, artifacts_index]
+        [id, video_id, kind, status, idempotency_key, created_at, updated_at, step_summary, steps, degradations, pipeline_final_status, artifacts_index, llm_required, llm_gate_passed, hard_fail_reason]
       properties:
         id:
           type: string
@@ -565,6 +565,15 @@ components:
         pipeline_final_status:
           allOf:
             - $ref: '#/components/schemas/PipelineFinalStatus'
+          nullable: true
+        llm_required:
+          type: boolean
+          nullable: true
+        llm_gate_passed:
+          type: boolean
+          nullable: true
+        hard_fail_reason:
+          type: string
           nullable: true
         artifacts_index:
           type: object

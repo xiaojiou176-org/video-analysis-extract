@@ -137,12 +137,15 @@ def test_job_get_returns_mode_and_pipeline_fields(
             id=job_id,
             video_id=uuid.uuid4(),
             kind="phase2_ingest_stub",
-            status="partial",
+            status="succeeded",
             mode="refresh_llm",
             idempotency_key="idem-1",
             error_message=None,
             artifact_digest_md=None,
             artifact_root=None,
+            llm_required=True,
+            llm_gate_passed=False,
+            hard_fail_reason="llm_gate_blocked",
             created_at=now,
             updated_at=now,
         )
@@ -153,7 +156,7 @@ def test_job_get_returns_mode_and_pipeline_fields(
         lambda self, _job_id: [
             {
                 "name": "write_artifacts",
-                "status": "partial",
+                "status": "failed",
                 "attempt": 1,
                 "started_at": now.isoformat(),
                 "finished_at": now.isoformat(),
@@ -167,7 +170,7 @@ def test_job_get_returns_mode_and_pipeline_fields(
     )
     monkeypatch.setattr(
         "apps.api.app.services.jobs.JobsService.get_degradations",
-        lambda self, **kwargs: [{"step": "write_artifacts", "status": "partial"}],
+        lambda self, **kwargs: [{"step": "write_artifacts", "status": "failed"}],
     )
     monkeypatch.setattr(
         "apps.api.app.services.jobs.JobsService.get_artifacts_index",
@@ -175,7 +178,7 @@ def test_job_get_returns_mode_and_pipeline_fields(
     )
     monkeypatch.setattr(
         "apps.api.app.services.jobs.JobsService.get_pipeline_final_status",
-        lambda self, _job_id, fallback_status: "partial",
+        lambda self, _job_id, fallback_status: "degraded",
     )
     monkeypatch.setattr(
         "apps.api.app.services.jobs.JobsService.get_notification_retry",
@@ -194,9 +197,12 @@ def test_job_get_returns_mode_and_pipeline_fields(
     assert response.status_code == 200
     assert payload["kind"] == "phase2_ingest_stub"
     assert payload["mode"] == "refresh_llm"
+    assert payload["llm_required"] is True
+    assert payload["llm_gate_passed"] is False
+    assert payload["hard_fail_reason"] == "llm_gate_blocked"
     assert payload["steps"][0]["name"] == "write_artifacts"
     assert payload["degradations"][0]["step"] == "write_artifacts"
-    assert payload["pipeline_final_status"] == "partial"
+    assert payload["pipeline_final_status"] == "degraded"
     assert payload["notification_retry"]["status"] == "failed"
     assert payload["notification_retry"]["attempt_count"] == 2
 

@@ -1,6 +1,6 @@
 {
-  "version": "phase3",
-  "description": "MCP tool manifest for video ingestion phase 3.",
+  "version": "phase4",
+  "description": "MCP tool manifest for video ingestion phase 4.",
   "apiBaseEnv": "VD_API_BASE_URL",
   "$defs": {
     "errorPayload": {
@@ -29,11 +29,11 @@
     },
     "jobStatus": {
       "type": "string",
-      "enum": ["queued", "running", "succeeded", "failed", "partial"]
+      "enum": ["queued", "running", "succeeded", "failed"]
     },
     "pipelineFinalStatus": {
       "type": "string",
-      "enum": ["succeeded", "partial", "failed"]
+      "enum": ["succeeded", "degraded", "failed"]
     },
     "videoProcessMode": {
       "type": "string",
@@ -342,6 +342,9 @@
               "error_message",
               "artifact_digest_md",
               "artifact_root",
+              "llm_required",
+              "llm_gate_passed",
+              "hard_fail_reason",
               "created_at",
               "updated_at",
               "step_summary",
@@ -356,11 +359,14 @@
               "id": { "type": ["string", "null"], "format": "uuid" },
               "video_id": { "type": ["string", "null"], "format": "uuid" },
               "kind": { "type": ["string", "null"] },
-              "status": { "type": ["string", "null"] },
+              "status": { "anyOf": [{ "$ref": "#/$defs/jobStatus" }, { "type": "null" }] },
               "idempotency_key": { "type": ["string", "null"] },
               "error_message": { "type": ["string", "null"] },
               "artifact_digest_md": { "type": ["string", "null"] },
               "artifact_root": { "type": ["string", "null"] },
+              "llm_required": { "type": ["boolean", "null"] },
+              "llm_gate_passed": { "type": ["boolean", "null"] },
+              "hard_fail_reason": { "type": ["string", "null"] },
               "created_at": { "type": ["string", "null"], "format": "date-time" },
               "updated_at": { "type": ["string", "null"], "format": "date-time" },
               "step_summary": {

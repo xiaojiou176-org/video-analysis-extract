@@ -22,7 +22,7 @@
     },
     "JobStatus": {
       "type": "string",
-      "enum": ["queued", "running", "succeeded", "partial", "failed"]
+      "enum": ["queued", "running", "succeeded", "failed"]
     },
     "StepStatus": {
       "type": "string",
@@ -30,7 +30,7 @@
     },
     "PipelineFinalStatus": {
       "type": "string",
-      "enum": ["succeeded", "partial", "failed"]
+      "enum": ["succeeded", "degraded", "failed"]
     },
     "LLMMode": {
       "type": "string",

@@ -33,10 +33,14 @@ class JobsService:
 
     def get_pipeline_final_status(self, job_id: uuid.UUID, *, fallback_status: str) -> str | None:
         status = self.repo.get_pipeline_final_status(job_id=job_id)
-        if status in {"succeeded", "partial", "failed"}:
+        if status in {"succeeded", "degraded", "failed"}:
             return status
-        if fallback_status in {"succeeded", "partial", "failed"}:
+        if status == "partial":
+            return "degraded"
+        if fallback_status in {"succeeded", "degraded", "failed"}:
             return fallback_status
+        if fallback_status == "partial":
+            return "degraded"
         return None
 
     def get_steps(self, job_id: uuid.UUID) -> list[dict[str, object]]:

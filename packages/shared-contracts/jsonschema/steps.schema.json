@@ -213,11 +213,11 @@
         },
         "final_status": {
           "type": "string",
-          "enum": ["succeeded", "partial"]
+          "enum": ["succeeded", "degraded"]
         },
         "pipeline_final_status": {
           "type": ["string", "null"],
-          "enum": ["succeeded", "partial", "failed", null]
+          "enum": ["succeeded", "degraded", "failed", null]
         },
         "artifact_dir": {
           "type": ["string", "null"]
@@ -269,15 +269,15 @@
         },
         "status": {
           "type": "string",
-          "enum": ["succeeded", "partial"]
+          "enum": ["succeeded", "degraded"]
         },
         "db_status": {
           "type": "string",
-          "enum": ["succeeded", "partial"]
+          "enum": ["succeeded"]
         },
         "pipeline_final_status": {
           "type": ["string", "null"],
-          "enum": ["succeeded", "partial", "failed", null]
+          "enum": ["succeeded", "degraded", "failed", null]
         },
         "degradation_count": {
           "type": ["integer", "null"],
@@ -349,15 +349,15 @@
         },
         "status": {
           "type": "string",
-          "enum": ["succeeded", "partial", "failed"]
+          "enum": ["succeeded", "degraded", "failed"]
         },
         "pipeline_final_status": {
           "type": ["string", "null"],
-          "enum": ["succeeded", "partial", "failed", null]
+          "enum": ["succeeded", "degraded", "failed", null]
         },
         "db_status": {
           "type": ["string", "null"],
-          "enum": ["succeeded", "partial", "failed", null]
+          "enum": ["succeeded", "failed", null]
         },
         "degradation_count": {
           "type": ["integer", "null"],

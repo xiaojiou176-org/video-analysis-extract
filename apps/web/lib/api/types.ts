@@ -1,7 +1,7 @@
 export type Platform = "bilibili" | "youtube";
 export type SourceType = "bilibili_uid" | "youtube_channel_id" | "url";
-export type JobStatus = "queued" | "running" | "succeeded" | "failed" | "partial";
-export type PipelineFinalStatus = "succeeded" | "partial" | "failed";
+export type JobStatus = "queued" | "running" | "succeeded" | "failed";
+export type PipelineFinalStatus = "succeeded" | "degraded" | "failed";
 export type VideoProcessMode = "full" | "text_only" | "refresh_comments" | "refresh_llm";
 
 export type Subscription = {
@@ -121,6 +121,9 @@ export type Job = {
   error_message: string | null;
   artifact_digest_md: string | null;
   artifact_root: string | null;
+  llm_required: boolean | null;
+  llm_gate_passed: boolean | null;
+  hard_fail_reason: string | null;
   created_at: string;
   updated_at: string;
   step_summary: JobStepSummary[];

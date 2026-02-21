@@ -54,7 +54,10 @@ def test_job_normalizer_keeps_extended_pipeline_fields() -> None:
             "id": "job-1",
             "status": "running",
             "mode": "text_only",
-            "pipeline_final_status": "partial",
+            "pipeline_final_status": "degraded",
+            "llm_required": True,
+            "llm_gate_passed": False,
+            "hard_fail_reason": "llm_gate_blocked",
             "artifacts_index": {
                 "digest_markdown": "/tmp/artifacts/digest.md",
                 "step_json": "/tmp/artifacts/steps.json",
@@ -106,7 +109,10 @@ def test_job_normalizer_keeps_extended_pipeline_fields() -> None:
     assert normalized["id"] == "job-1"
     assert normalized["status"] == "running"
     assert normalized["mode"] == "text_only"
-    assert normalized["pipeline_final_status"] == "partial"
+    assert normalized["pipeline_final_status"] == "degraded"
+    assert normalized["llm_required"] is True
+    assert normalized["llm_gate_passed"] is False
+    assert normalized["hard_fail_reason"] == "llm_gate_blocked"
     assert normalized["artifacts_index"]["digest_markdown"] == "/tmp/artifacts/digest.md"
     assert normalized["step_summary"][0]["name"] == "fetch_metadata"
     assert normalized["step_summary"][0]["attempt"] == 1

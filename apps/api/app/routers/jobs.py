@@ -52,18 +52,21 @@ class JobResponse(BaseModel):
     id: uuid.UUID
     video_id: uuid.UUID
     kind: Literal["video_digest_v1", "phase2_ingest_stub"]
-    status: Literal["queued", "running", "succeeded", "failed", "partial"]
+    status: Literal["queued", "running", "succeeded", "failed"]
     mode: str | None = None
     idempotency_key: str
     error_message: str | None
     artifact_digest_md: str | None
     artifact_root: str | None
+    llm_required: bool | None = None
+    llm_gate_passed: bool | None = None
+    hard_fail_reason: str | None = None
     created_at: datetime
     updated_at: datetime
     step_summary: list[JobStepSummary]
     steps: list[JobStepDetail]
     degradations: list[JobDegradation]
-    pipeline_final_status: Literal["succeeded", "partial", "failed"] | None = None
+    pipeline_final_status: Literal["succeeded", "degraded", "failed"] | None = None
     artifacts_index: dict[str, str]
     notification_retry: NotificationRetrySummary | None = None
 
@@ -107,6 +110,9 @@ def get_job(job_id: uuid.UUID, db: Session = Depends(get_db)):
         error_message=row.error_message,
         artifact_digest_md=row.artifact_digest_md,
         artifact_root=row.artifact_root,
+        llm_required=getattr(row, "llm_required", None),
+        llm_gate_passed=getattr(row, "llm_gate_passed", None),
+        hard_fail_reason=getattr(row, "hard_fail_reason", None),
         created_at=row.created_at,
         updated_at=row.updated_at,
         step_summary=step_summary,

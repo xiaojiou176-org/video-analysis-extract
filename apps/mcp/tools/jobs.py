@@ -8,6 +8,7 @@ from apps.mcp.tools._common import (
     ApiCall,
     is_error_payload,
     to_int,
+    to_optional_bool,
     to_optional_dict,
     to_optional_str,
 )
@@ -95,6 +96,9 @@ def _normalize_job_payload(payload: dict[str, Any]) -> dict[str, Any]:
         "error_message": to_optional_str(source.get("error_message")),
         "artifact_digest_md": to_optional_str(source.get("artifact_digest_md")),
         "artifact_root": to_optional_str(source.get("artifact_root")),
+        "llm_required": to_optional_bool(source.get("llm_required")),
+        "llm_gate_passed": to_optional_bool(source.get("llm_gate_passed")),
+        "hard_fail_reason": to_optional_str(source.get("hard_fail_reason")),
         "created_at": to_optional_str(source.get("created_at")),
         "updated_at": to_optional_str(source.get("updated_at")),
         "step_summary": [_normalize_step(item) for item in step_summary_items],
