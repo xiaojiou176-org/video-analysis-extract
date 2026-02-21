@@ -96,6 +96,25 @@ paths:
         '404':
           description: Not found
 
+  /api/v1/health/providers:
+    get:
+      operationId: getProviderHealth
+      parameters:
+        - in: query
+          name: window_hours
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 168
+            default: 24
+      responses:
+        '200':
+          description: Provider health rollup
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProviderHealthResponse'
+
   /api/v1/videos:
     get:
       operationId: listVideos
@@ -437,6 +456,67 @@ components:
       type: string
       enum: [succeeded, partial, failed]
 
+    NotificationRetrySummary:
+      type: object
+      required: [delivery_id, status, attempt_count]
+      properties:
+        delivery_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+        attempt_count:
+          type: integer
+          minimum: 0
+        next_retry_at:
+          type: string
+          format: date-time
+          nullable: true
+        last_error_kind:
+          type: string
+          nullable: true
+
+    ProviderHealthSummary:
+      type: object
+      required: [provider, ok, warn, fail]
+      properties:
+        provider:
+          type: string
+        ok:
+          type: integer
+          minimum: 0
+        warn:
+          type: integer
+          minimum: 0
+        fail:
+          type: integer
+          minimum: 0
+        last_status:
+          type: string
+          nullable: true
+        last_checked_at:
+          type: string
+          format: date-time
+          nullable: true
+        last_error_kind:
+          type: string
+          nullable: true
+        last_message:
+          type: string
+          nullable: true
+
+    ProviderHealthResponse:
+      type: object
+      required: [window_hours, providers]
+      properties:
+        window_hours:
+          type: integer
+          minimum: 1
+        providers:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProviderHealthSummary'
+
     Job:
       type: object
       required:
@@ -450,7 +530,7 @@ components:
           format: uuid
         kind:
           type: string
-          enum: [phase2_ingest_stub]
+          enum: [video_digest_v1, phase2_ingest_stub]
         status:
           $ref: '#/components/schemas/JobStatus'
         idempotency_key:
@@ -490,6 +570,10 @@ components:
           type: object
           additionalProperties:
             type: string
+        notification_retry:
+          allOf:
+            - $ref: '#/components/schemas/NotificationRetrySummary'
+          nullable: true
 
     ArtifactMarkdownWithMeta:
       type: object

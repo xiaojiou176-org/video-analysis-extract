@@ -9,6 +9,7 @@ import httpx
 from mcp.server.fastmcp import FastMCP
 
 from .tools.artifacts import register_artifact_tools
+from .tools.health import register_health_tools
 from .tools.ingest import register_ingest_tools
 from .tools.jobs import register_job_tools
 from .tools.notifications import register_notification_tools
@@ -226,6 +227,7 @@ def create_server() -> FastMCP:
     register_artifact_tools(mcp, api_call)
     register_notification_tools(mcp, api_call)
     register_report_tools(mcp, api_call)
+    register_health_tools(mcp, api_call)
     return mcp
 
 

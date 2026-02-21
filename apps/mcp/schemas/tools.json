@@ -130,6 +130,48 @@
         "cache_meta": { "type": ["object", "null"], "additionalProperties": true }
       }
     },
+    "notificationRetry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "delivery_id",
+        "status",
+        "attempt_count",
+        "next_retry_at",
+        "last_error_kind"
+      ],
+      "properties": {
+        "delivery_id": { "type": ["string", "null"], "format": "uuid" },
+        "status": { "type": ["string", "null"] },
+        "attempt_count": { "type": "integer", "minimum": 0 },
+        "next_retry_at": { "type": ["string", "null"], "format": "date-time" },
+        "last_error_kind": { "type": ["string", "null"] }
+      }
+    },
+    "providerHealthSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "provider",
+        "ok",
+        "warn",
+        "fail",
+        "last_status",
+        "last_checked_at",
+        "last_error_kind",
+        "last_message"
+      ],
+      "properties": {
+        "provider": { "type": "string" },
+        "ok": { "type": "integer", "minimum": 0 },
+        "warn": { "type": "integer", "minimum": 0 },
+        "fail": { "type": "integer", "minimum": 0 },
+        "last_status": { "type": ["string", "null"] },
+        "last_checked_at": { "type": ["string", "null"], "format": "date-time" },
+        "last_error_kind": { "type": ["string", "null"] },
+        "last_message": { "type": ["string", "null"] }
+      }
+    },
     "video": {
       "type": "object",
       "additionalProperties": false,
@@ -307,7 +349,8 @@
               "degradations",
               "pipeline_final_status",
               "artifacts_index",
-              "mode"
+              "mode",
+              "notification_retry"
             ],
             "properties": {
               "id": { "type": ["string", "null"], "format": "uuid" },
@@ -341,6 +384,9 @@
               },
               "mode": {
                 "anyOf": [{ "$ref": "#/$defs/videoProcessMode" }, { "type": "null" }]
+              },
+              "notification_retry": {
+                "anyOf": [{ "$ref": "#/$defs/notificationRetry" }, { "type": "null" }]
               }
             }
           },
@@ -438,6 +484,34 @@
               "force": { "type": "boolean" },
               "reused": { "type": "boolean" },
               "workflow_id": { "type": ["string", "null"] }
+            }
+          },
+          { "$ref": "#/$defs/errorPayload" }
+        ]
+      }
+    },
+    {
+      "name": "vd.health.providers",
+      "http": { "method": "GET", "path": "/api/v1/health/providers" },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "window_hours": { "type": "integer", "minimum": 1, "maximum": 168, "default": 24 }
+        }
+      },
+      "outputSchema": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["window_hours", "providers"],
+            "properties": {
+              "window_hours": { "type": "integer", "minimum": 1 },
+              "providers": {
+                "type": "array",
+                "items": { "$ref": "#/$defs/providerHealthSummary" }
+              }
             }
           },
           { "$ref": "#/$defs/errorPayload" }
