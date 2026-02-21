@@ -14,7 +14,10 @@ from .base import Base
 class Job(Base):
     __tablename__ = "jobs"
     __table_args__ = (
-        CheckConstraint("kind IN ('phase2_ingest_stub')", name="jobs_kind_check"),
+        CheckConstraint(
+            "kind = 'video_digest_v1'",
+            name="jobs_kind_check",
+        ),
         CheckConstraint(
             "status IN ('queued', 'running', 'succeeded', 'failed', 'partial')",
             name="jobs_status_check",

@@ -1,18 +1,10 @@
 from __future__ import annotations
 
-from typing import Any, Callable
+from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
-ApiCall = Callable[..., dict[str, Any]]
-
-
-def _is_error_payload(payload: dict[str, Any]) -> bool:
-    return {"code", "message", "details"}.issubset(payload.keys())
-
-
-def _to_optional_str(value: Any) -> str | None:
-    return value if isinstance(value, str) else None
+from apps.mcp.tools._common import ApiCall, is_error_payload, to_optional_str
 
 
 def register_report_tools(mcp: FastMCP, api_call: ApiCall) -> None:
@@ -34,17 +26,17 @@ def register_report_tools(mcp: FastMCP, api_call: ApiCall) -> None:
             },
         )
 
-        if _is_error_payload(response):
+        if is_error_payload(response):
             return response
 
         return {
             "sent": bool(response.get("sent", False)),
-            "status": _to_optional_str(response.get("status")),
-            "delivery_id": _to_optional_str(response.get("delivery_id")),
-            "date": _to_optional_str(response.get("date")) or date,
-            "recipient_email": _to_optional_str(response.get("recipient_email")),
-            "subject": _to_optional_str(response.get("subject")),
-            "error_message": _to_optional_str(response.get("error_message")),
-            "sent_at": _to_optional_str(response.get("sent_at")),
-            "created_at": _to_optional_str(response.get("created_at")),
+            "status": to_optional_str(response.get("status")),
+            "delivery_id": to_optional_str(response.get("delivery_id")),
+            "date": to_optional_str(response.get("date")) or date,
+            "recipient_email": to_optional_str(response.get("recipient_email")),
+            "subject": to_optional_str(response.get("subject")),
+            "error_message": to_optional_str(response.get("error_message")),
+            "sent_at": to_optional_str(response.get("sent_at")),
+            "created_at": to_optional_str(response.get("created_at")),
         }

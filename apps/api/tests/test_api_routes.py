@@ -177,12 +177,147 @@ def test_job_get_returns_mode_and_pipeline_fields(
         "apps.api.app.services.jobs.JobsService.get_pipeline_final_status",
         lambda self, _job_id, fallback_status: "partial",
     )
+    monkeypatch.setattr(
+        "apps.api.app.services.jobs.JobsService.get_notification_retry",
+        lambda self, _job_id: {
+            "delivery_id": str(uuid.uuid4()),
+            "status": "failed",
+            "attempt_count": 2,
+            "next_retry_at": now,
+            "last_error_kind": "transient",
+        },
+    )
 
     response = api_client.get(f"/api/v1/jobs/{job_id}")
     payload = response.json()
 
     assert response.status_code == 200
+    assert payload["kind"] == "phase2_ingest_stub"
     assert payload["mode"] == "refresh_llm"
     assert payload["steps"][0]["name"] == "write_artifacts"
     assert payload["degradations"][0]["step"] == "write_artifacts"
     assert payload["pipeline_final_status"] == "partial"
+    assert payload["notification_retry"]["status"] == "failed"
+    assert payload["notification_retry"]["attempt_count"] == 2
+
+
+def test_health_providers_returns_rollup(api_client: TestClient, monkeypatch) -> None:
+    now = datetime.now(timezone.utc)
+    monkeypatch.setattr(
+        "apps.api.app.services.health.HealthService.get_provider_health",
+        lambda self, window_hours=24: {
+            "window_hours": window_hours,
+            "providers": [
+                {
+                    "provider": "rsshub",
+                    "ok": 3,
+                    "warn": 1,
+                    "fail": 0,
+                    "last_status": "ok",
+                    "last_checked_at": now,
+                    "last_error_kind": None,
+                    "last_message": "ok",
+                }
+            ],
+        },
+    )
+
+    response = api_client.get("/api/v1/health/providers?window_hours=24")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["window_hours"] == 24
+    assert payload["providers"][0]["provider"] == "rsshub"
+    assert payload["providers"][0]["ok"] == 3
+
+
+def _mock_artifact_job(
+    monkeypatch,
+    *,
+    artifact_root: str | None,
+    artifact_digest_md: str | None = None,
+) -> None:
+    monkeypatch.setattr(
+        "apps.api.app.services.jobs.JobsService.get_job",
+        lambda self, query_job_id: SimpleNamespace(
+            id=query_job_id,
+            artifact_root=artifact_root,
+            artifact_digest_md=artifact_digest_md,
+        ),
+    )
+
+
+def test_artifact_assets_allows_whitelisted_meta(api_client: TestClient, monkeypatch, tmp_path) -> None:
+    job_id = uuid.uuid4()
+    artifact_root = tmp_path / "artifacts"
+    artifact_root.mkdir(parents=True, exist_ok=True)
+    (artifact_root / "meta.json").write_text('{"ok": true}', encoding="utf-8")
+    _mock_artifact_job(monkeypatch, artifact_root=str(artifact_root))
+
+    response = api_client.get(
+        "/api/v1/artifacts/assets",
+        params={"job_id": str(job_id), "path": "meta"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"ok": True}
+
+
+def test_artifact_assets_blocks_path_traversal(api_client: TestClient, monkeypatch, tmp_path) -> None:
+    job_id = uuid.uuid4()
+    artifact_root = tmp_path / "artifacts"
+    artifact_root.mkdir(parents=True, exist_ok=True)
+    (tmp_path / "secret.txt").write_text("secret", encoding="utf-8")
+    _mock_artifact_job(monkeypatch, artifact_root=str(artifact_root))
+
+    response = api_client.get(
+        "/api/v1/artifacts/assets",
+        params={"job_id": str(job_id), "path": "../secret.txt"},
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "artifact asset not found"
+
+
+def test_artifact_assets_blocks_non_whitelisted_file(api_client: TestClient, monkeypatch, tmp_path) -> None:
+    job_id = uuid.uuid4()
+    artifact_root = tmp_path / "artifacts"
+    artifact_root.mkdir(parents=True, exist_ok=True)
+    (artifact_root / "notes.txt").write_text("private", encoding="utf-8")
+    _mock_artifact_job(monkeypatch, artifact_root=str(artifact_root))
+
+    response = api_client.get(
+        "/api/v1/artifacts/assets",
+        params={"job_id": str(job_id), "path": "notes.txt"},
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "artifact asset not found"
+
+
+def test_artifact_assets_allows_frame_image(api_client: TestClient, monkeypatch, tmp_path) -> None:
+    job_id = uuid.uuid4()
+    artifact_root = tmp_path / "artifacts"
+    frame_dir = artifact_root / "frames"
+    frame_dir.mkdir(parents=True, exist_ok=True)
+    frame_path = frame_dir / "frame_001.jpg"
+    frame_path.write_bytes(b"\xff\xd8\xff\xd9")
+    _mock_artifact_job(monkeypatch, artifact_root=str(artifact_root))
+
+    response = api_client.get(
+        "/api/v1/artifacts/assets",
+        params={"job_id": str(job_id), "path": "frames/frame_001.jpg"},
+    )
+
+    assert response.status_code == 200
+    assert response.content.startswith(b"\xff\xd8")
+    assert response.headers["content-type"].startswith("image/jpeg")
+
+
+def test_notification_html_renderer_supports_markdown() -> None:
+    from apps.api.app.services.notifications import _to_html
+
+    html = _to_html("# 标题\n\n- 一\n- 二\n\n[链接](https://example.com)")
+    assert "<h1>标题</h1>" in html
+    assert "<li>一</li>" in html
+    assert "<a href=\"https://example.com\">链接</a>" in html

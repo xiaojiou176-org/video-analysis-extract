@@ -115,7 +115,7 @@ export type JobDegradation = {
 export type Job = {
   id: string;
   video_id: string;
-  kind: "phase2_ingest_stub";
+  kind: "video_digest_v1" | "phase2_ingest_stub";
   status: JobStatus;
   idempotency_key: string;
   error_message: string | null;

@@ -40,10 +40,18 @@ class JobDegradation(BaseModel):
     cache_meta: dict[str, Any] | None = None
 
 
+class NotificationRetrySummary(BaseModel):
+    delivery_id: uuid.UUID
+    status: str
+    attempt_count: int
+    next_retry_at: datetime | None = None
+    last_error_kind: str | None = None
+
+
 class JobResponse(BaseModel):
     id: uuid.UUID
     video_id: uuid.UUID
-    kind: Literal["phase2_ingest_stub"]
+    kind: Literal["video_digest_v1", "phase2_ingest_stub"]
     status: Literal["queued", "running", "succeeded", "failed", "partial"]
     mode: str | None = None
     idempotency_key: str
@@ -57,6 +65,7 @@ class JobResponse(BaseModel):
     degradations: list[JobDegradation]
     pipeline_final_status: Literal["succeeded", "partial", "failed"] | None = None
     artifacts_index: dict[str, str]
+    notification_retry: NotificationRetrySummary | None = None
 
 
 @router.get("/{job_id}", response_model=JobResponse)
@@ -105,4 +114,5 @@ def get_job(job_id: uuid.UUID, db: Session = Depends(get_db)):
         degradations=[JobDegradation(**item) for item in degradations],
         pipeline_final_status=service.get_pipeline_final_status(job_id, fallback_status=row.status),
         artifacts_index=artifacts_index,
+        notification_retry=service.get_notification_retry(job_id),
     )

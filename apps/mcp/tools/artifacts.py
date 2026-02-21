@@ -1,22 +1,14 @@
 from __future__ import annotations
 
-from typing import Any, Callable
+from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
-ApiCall = Callable[..., dict[str, Any]]
-
-
-def _is_error_payload(payload: dict[str, Any]) -> bool:
-    return {"code", "message", "details"}.issubset(payload.keys())
-
-
-def _to_optional_str(value: Any) -> str | None:
-    return value if isinstance(value, str) else None
+from apps.mcp.tools._common import ApiCall, is_error_payload, to_optional_str
 
 
 def _normalize_markdown_payload(payload: dict[str, Any]) -> dict[str, Any]:
-    if _is_error_payload(payload):
+    if is_error_payload(payload):
         return payload
 
     markdown = payload.get("markdown")
@@ -26,8 +18,8 @@ def _normalize_markdown_payload(payload: dict[str, Any]) -> dict[str, Any]:
 
     return {
         "markdown": markdown,
-        "job_id": _to_optional_str(payload.get("job_id")),
-        "video_url": _to_optional_str(payload.get("video_url")),
+        "job_id": to_optional_str(payload.get("job_id")),
+        "video_url": to_optional_str(payload.get("video_url")),
         "found": bool(markdown),
     }
 

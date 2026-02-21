@@ -5,6 +5,8 @@ SCRIPT_NAME="run_failure_alerts"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck source=./scripts/lib/load_env.sh
 source "$ROOT_DIR/scripts/lib/load_env.sh"
+# shellcheck source=./scripts/lib/http_api.sh
+source "$ROOT_DIR/scripts/lib/http_api.sh"
 load_env_file "$ROOT_DIR/.env.local" "$SCRIPT_NAME"
 
 VD_API_BASE_URL="${VD_API_BASE_URL:-http://127.0.0.1:8000}"
@@ -49,57 +51,6 @@ json_bool() {
   fi
 }
 
-api_get() {
-  local path="$1"
-  local tmp_body
-  tmp_body="$(mktemp)"
-
-  local status
-  if ! status="$(
-    curl -sS -o "$tmp_body" -w '%{http_code}' \
-      -H 'Accept: application/json' \
-      "${VD_API_BASE_URL}${path}"
-  )"; then
-    rm -f "$tmp_body"
-    fail "GET ${path} failed (network error)"
-  fi
-
-  HTTP_STATUS="$status"
-  HTTP_BODY="$(cat "$tmp_body")"
-  rm -f "$tmp_body"
-}
-
-api_post() {
-  local path="$1"
-  local payload="$2"
-  local tmp_body
-  tmp_body="$(mktemp)"
-
-  local status
-  if ! status="$(
-    curl -sS -o "$tmp_body" -w '%{http_code}' \
-      -H 'Accept: application/json' \
-      -H 'Content-Type: application/json' \
-      -X POST "${VD_API_BASE_URL}${path}" \
-      --data "$payload"
-  )"; then
-    rm -f "$tmp_body"
-    fail "POST ${path} failed (network error)"
-  fi
-
-  HTTP_STATUS="$status"
-  HTTP_BODY="$(cat "$tmp_body")"
-  rm -f "$tmp_body"
-}
-
-check_api_health() {
-  api_get "/healthz"
-  if [[ "$HTTP_STATUS" -lt 200 || "$HTTP_STATUS" -ge 300 ]]; then
-    fail "API health check failed: status=${HTTP_STATUS}, body=${HTTP_BODY}"
-  fi
-  log "API reachable: ${VD_API_BASE_URL}"
-}
-
 build_failure_payload() {
   local dry_run force
   dry_run="$(json_bool "$FAILURE_DRY_RUN")"
@@ -137,7 +88,7 @@ try_primary_routes() {
     api_post "$path" "$payload"
     if [[ "$HTTP_STATUS" -ge 200 && "$HTTP_STATUS" -lt 300 ]]; then
       log "Primary route succeeded: ${path}"
-      log "Response: ${HTTP_BODY}"
+      log "Response: $(safe_body_preview "$HTTP_BODY")"
       return 0
     fi
 
@@ -146,7 +97,7 @@ try_primary_routes() {
       continue
     fi
 
-    fail "Primary route failed: ${path}, status=${HTTP_STATUS}, body=${HTTP_BODY}"
+    fail "Primary route failed: ${path}, status=${HTTP_STATUS}, body=$(safe_body_preview "$HTTP_BODY")"
   done
 
   return 1
@@ -236,7 +187,7 @@ fallback_failure_alerts() {
   log "Fallback step 1/2: fetching failed videos."
   api_get "/api/v1/videos?status=failed&limit=${FAILURE_LIMIT}"
   if [[ "$HTTP_STATUS" -lt 200 || "$HTTP_STATUS" -ge 300 ]]; then
-    fail "Failed to list failed videos: status=${HTTP_STATUS}, body=${HTTP_BODY}"
+    fail "Failed to list failed videos: status=${HTTP_STATUS}, body=$(safe_body_preview "$HTTP_BODY")"
   fi
 
   local payload
@@ -250,11 +201,11 @@ fallback_failure_alerts() {
   api_post "/api/v1/notifications/test" "$payload"
   if [[ "$HTTP_STATUS" -ge 200 && "$HTTP_STATUS" -lt 300 ]]; then
     log "Fallback send succeeded."
-    log "Response: ${HTTP_BODY}"
+    log "Response: $(safe_body_preview "$HTTP_BODY")"
     return 0
   fi
 
-  fail "Fallback send failed: status=${HTTP_STATUS}, body=${HTTP_BODY}"
+  fail "Fallback send failed: status=${HTTP_STATUS}, body=$(safe_body_preview "$HTTP_BODY")"
 }
 
 main() {
