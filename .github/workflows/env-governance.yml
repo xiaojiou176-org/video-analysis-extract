@@ -22,6 +22,35 @@ jobs:
       - name: Validate env contract
         run: python scripts/check_env_contract.py --strict
 
+      - name: Validate schema contract parity (apps/mcp vs shared-contracts)
+        run: |
+          python - <<'PY'
+          import difflib
+          import json
+          from pathlib import Path
+
+          source_path = Path("apps/mcp/schemas/tools.json")
+          shared_path = Path("packages/shared-contracts/jsonschema/mcp-tools.schema.json")
+
+          source = json.loads(source_path.read_text(encoding="utf-8"))
+          shared = json.loads(shared_path.read_text(encoding="utf-8"))
+
+          if source != shared:
+              source_pretty = json.dumps(source, ensure_ascii=False, indent=2, sort_keys=True).splitlines()
+              shared_pretty = json.dumps(shared, ensure_ascii=False, indent=2, sort_keys=True).splitlines()
+              print("Schema parity check failed:")
+              for line in difflib.unified_diff(
+                  source_pretty,
+                  shared_pretty,
+                  fromfile=str(source_path),
+                  tofile=str(shared_path),
+                  lineterm="",
+              ):
+                  print(line)
+              raise SystemExit(1)
+          print("Schema parity check passed.")
+          PY
+
   secret-scan:
     runs-on: ubuntu-latest
     steps:
