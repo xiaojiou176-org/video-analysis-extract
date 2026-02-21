@@ -107,10 +107,12 @@ def _patch_activity_runtime(
         job_id: str,
         attempt: int,
         mode: str = "full",
+        overrides: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         captured["job_id"] = job_id
         captured["attempt"] = attempt
         captured["mode"] = mode
+        captured["overrides"] = dict(overrides or {})
         return {
             "job_id": job_id,
             "attempt": attempt,
@@ -171,6 +173,7 @@ def test_process_job_workflow_explicit_mode_reaches_runner(monkeypatch: Any, tmp
     assert payloads[0]["mode"] == "text_only"
     assert payloads[0]["overrides"] == {"lang": "zh-CN"}
     assert captured["mode"] == "text_only"
+    assert captured["overrides"] == {"lang": "zh-CN"}
     assert result["pipeline"]["mode"] == "text_only"
     assert fake_pg.get_job_calls == 0
 
@@ -192,5 +195,6 @@ def test_process_job_workflow_db_mode_reaches_runner_when_mode_missing(
 
     assert "mode" not in payloads[0]
     assert captured["mode"] == "refresh_llm"
+    assert captured["overrides"] == {"lang": "zh-CN"}
     assert result["pipeline"]["mode"] == "refresh_llm"
     assert fake_pg.get_job_calls == 1

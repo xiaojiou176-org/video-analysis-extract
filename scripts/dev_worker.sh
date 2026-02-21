@@ -40,6 +40,8 @@ if [[ "$SHOW_HINTS" == "1" ]]; then
 [dev_worker]   PIPELINE_MAX_FRAMES=${PIPELINE_MAX_FRAMES:-6}
 [dev_worker]   PIPELINE_FRAME_INTERVAL_SECONDS=${PIPELINE_FRAME_INTERVAL_SECONDS:-30}
 [dev_worker]   GEMINI_MODEL=${GEMINI_MODEL:-gemini-1.5-flash}
+[dev_worker]   DIGEST_LOCAL_TIMEZONE=${DIGEST_LOCAL_TIMEZONE:-system-local}
+[dev_worker]   DIGEST_DAILY_LOCAL_HOUR=${DIGEST_DAILY_LOCAL_HOUR:-9}
 [dev_worker] Set DEV_WORKER_SHOW_HINTS=0 to hide this block.
 EOF
 fi

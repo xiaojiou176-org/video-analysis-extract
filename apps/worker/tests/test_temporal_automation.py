@@ -82,6 +82,13 @@ def test_build_daily_digest_markdown_contains_counts_and_rows() -> None:
     assert "| job-2 | partial | bilibili | Video B |" in markdown
 
 
+def test_to_html_renders_markdown_elements() -> None:
+    html = temporal_activities._to_html("# 标题\n\n- 一\n- 二\n\n[链接](https://example.com)")
+    assert "<h1>标题</h1>" in html
+    assert "<li>一</li>" in html
+    assert "<a href=\"https://example.com\">链接</a>" in html
+
+
 class _FakeMappingsResult:
     def __init__(self, *, first_row: dict | None = None, one_row: dict | None = None):
         self._first_row = first_row
@@ -247,6 +254,10 @@ def test_send_video_digest_activity_duplicate_job_skips_second_send(monkeypatch)
         error_message: str | None = None,
         provider_message_id: str | None = None,
         sent: bool = False,
+        record_attempt: bool = False,
+        last_error_kind: str | None = None,
+        next_retry_at: datetime | None = None,
+        clear_retry_meta: bool = False,
     ) -> dict:
         return {
             "delivery_id": delivery_id,
@@ -254,6 +265,9 @@ def test_send_video_digest_activity_duplicate_job_skips_second_send(monkeypatch)
             "provider_message_id": provider_message_id,
             "error_message": error_message,
             "sent_at": datetime(2026, 2, 21, 12, 0, tzinfo=timezone.utc) if sent else None,
+            "attempt_count": 1 if record_attempt else 0,
+            "last_error_kind": last_error_kind,
+            "next_retry_at": next_retry_at,
         }
 
     monkeypatch.setattr(temporal_activities, "_mark_delivery_state", _fake_mark_delivery_state)
@@ -267,6 +281,103 @@ def test_send_video_digest_activity_duplicate_job_skips_second_send(monkeypatch)
     assert second["skipped"] is True
     assert second["reason"] == "duplicate_delivery"
     assert state["send_calls"] == 1
+
+
+def test_send_video_digest_ignores_daily_digest_switch(monkeypatch) -> None:
+    import asyncio
+
+    class _DummyBegin:
+        def __enter__(self):
+            return object()
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    class _DummyEngine:
+        def begin(self):
+            return _DummyBegin()
+
+    class _DummyPostgresStore:
+        def __init__(self, _database_url: str):
+            self._engine = _DummyEngine()
+
+    monkeypatch.setattr(temporal_activities, "PostgresBusinessStore", _DummyPostgresStore)
+    monkeypatch.setattr(
+        temporal_activities.Settings,
+        "from_env",
+        staticmethod(
+            lambda: types.SimpleNamespace(
+                database_url="postgresql://example.invalid/db",
+                notification_enabled=True,
+                resend_api_key=None,
+                resend_from_email=None,
+            )
+        ),
+    )
+    monkeypatch.setattr(
+        temporal_activities,
+        "_fetch_job_digest_record",
+        lambda _conn, *, job_id: {
+            "job_id": job_id,
+            "title": "Demo",
+            "video_uid": "demo-uid",
+            "status": "succeeded",
+            "pipeline_final_status": "succeeded",
+            "artifact_digest_md": "",
+            "platform": "youtube",
+            "source_url": "https://example.com/video",
+        },
+    )
+    monkeypatch.setattr(
+        temporal_activities,
+        "_get_or_init_notification_config",
+        lambda _conn: {
+            "enabled": True,
+            "daily_digest_enabled": False,
+            "to_email": "notify@example.com",
+        },
+    )
+    monkeypatch.setattr(
+        temporal_activities,
+        "_insert_video_digest_delivery",
+        lambda _conn, *, job, recipient_email, subject, payload_json: {
+            "delivery_id": "delivery-1",
+            "status": "queued",
+            "recipient_email": recipient_email,
+            "subject": subject,
+        },
+    )
+    monkeypatch.setattr(
+        temporal_activities,
+        "_safe_read_text",
+        lambda _path: "digest content",
+    )
+    monkeypatch.setattr(
+        temporal_activities,
+        "_send_with_resend",
+        lambda **_: "msg-1",
+    )
+    monkeypatch.setattr(
+        temporal_activities,
+        "_mark_delivery_state",
+        lambda _pg_store, **kwargs: {
+            "delivery_id": kwargs["delivery_id"],
+            "status": kwargs["status"],
+            "provider_message_id": kwargs.get("provider_message_id"),
+            "error_message": kwargs.get("error_message"),
+            "sent_at": datetime(2026, 2, 21, 12, 0, tzinfo=timezone.utc),
+            "attempt_count": 1,
+        },
+    )
+
+    result = asyncio.run(
+        temporal_activities.send_video_digest_activity(
+            {"job_id": "00000000-0000-0000-0000-000000000001"}
+        )
+    )
+
+    assert result["ok"] is True
+    assert result["status"] == "sent"
 
 
 class _FakeHandle:

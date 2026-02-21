@@ -226,7 +226,7 @@ class PostgresBusinessStore:
                         )
                         VALUES (
                             CAST(:video_id AS UUID),
-                            'phase2_ingest_stub',
+                            'video_digest_v1',
                             'queued',
                             :idempotency_key,
                             NOW(),

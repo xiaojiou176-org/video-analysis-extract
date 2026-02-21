@@ -27,6 +27,9 @@ async def run_temporal_worker(settings: Settings) -> None:
         mark_running_activity,
         mark_succeeded_activity,
         poll_feeds_activity,
+        provider_canary_activity,
+        resolve_daily_digest_timing_activity,
+        retry_failed_deliveries_activity,
         run_pipeline_activity,
         send_daily_digest_activity,
         send_video_digest_activity,
@@ -34,8 +37,10 @@ async def run_temporal_worker(settings: Settings) -> None:
     from worker.temporal.workflows import (
         CleanupWorkspaceWorkflow,
         DailyDigestWorkflow,
+        NotificationRetryWorkflow,
         PollFeedsWorkflow,
         ProcessJobWorkflow,
+        ProviderCanaryWorkflow,
     )
 
     client = await _connect_temporal(settings)
@@ -47,6 +52,8 @@ async def run_temporal_worker(settings: Settings) -> None:
             ProcessJobWorkflow,
             DailyDigestWorkflow,
             CleanupWorkspaceWorkflow,
+            NotificationRetryWorkflow,
+            ProviderCanaryWorkflow,
         ],
         activities=[
             poll_feeds_activity,
@@ -55,7 +62,10 @@ async def run_temporal_worker(settings: Settings) -> None:
             mark_succeeded_activity,
             mark_failed_activity,
             send_video_digest_activity,
+            resolve_daily_digest_timing_activity,
             send_daily_digest_activity,
+            retry_failed_deliveries_activity,
+            provider_canary_activity,
             cleanup_workspace_activity,
         ],
     )
@@ -110,7 +120,8 @@ async def start_daily_workflow(
     settings: Settings,
     *,
     run_once: bool = False,
-    local_hour: int = 9,
+    local_hour: int | None = None,
+    timezone_name: str | None = None,
     timezone_offset_minutes: int | None = None,
     workflow_id: str = "daily-digest-workflow",
 ) -> dict:
@@ -124,9 +135,12 @@ async def start_daily_workflow(
         else _local_utc_offset_minutes()
     )
     client = await _connect_temporal(settings)
+    effective_local_hour = int(local_hour if local_hour is not None else settings.digest_daily_local_hour)
+    effective_timezone_name = timezone_name or settings.digest_local_timezone
     payload = {
         "run_once": run_once,
-        "local_hour": int(local_hour),
+        "local_hour": effective_local_hour,
+        "timezone_name": effective_timezone_name,
         "timezone_offset_minutes": int(offset_minutes),
     }
     try:
@@ -154,30 +168,167 @@ async def start_daily_workflow(
         "run_id": run_id,
         "status": "started",
         "run_once": False,
-        "local_hour": int(local_hour),
+        "local_hour": effective_local_hour,
+        "timezone_name": effective_timezone_name,
         "timezone_offset_minutes": int(offset_minutes),
+    }
+
+
+async def start_notification_retry_workflow(
+    settings: Settings,
+    *,
+    run_once: bool = False,
+    interval_minutes: int = 10,
+    retry_batch_limit: int = 50,
+    workflow_id: str = "notification-retry-workflow",
+) -> dict:
+    from temporalio.exceptions import WorkflowAlreadyStartedError
+
+    from worker.temporal.workflows import NotificationRetryWorkflow
+
+    client = await _connect_temporal(settings)
+    payload = {
+        "run_once": run_once,
+        "interval_minutes": max(1, int(interval_minutes)),
+        "retry_batch_limit": max(1, int(retry_batch_limit)),
+    }
+    try:
+        handle = await client.start_workflow(
+            NotificationRetryWorkflow.run,
+            payload,
+            id=workflow_id if not run_once else f"{workflow_id}-{uuid4()}",
+            task_queue=settings.temporal_task_queue,
+        )
+    except WorkflowAlreadyStartedError:
+        return {
+            "ok": True,
+            "workflow_id": workflow_id,
+            "status": "already_running",
+            "run_once": run_once,
+        }
+
+    if run_once:
+        return await handle.result()
+
+    run_id = getattr(handle, "first_execution_run_id", None) or getattr(handle, "run_id", None)
+    return {
+        "ok": True,
+        "workflow_id": handle.id,
+        "run_id": run_id,
+        "status": "started",
+        "run_once": False,
+        "interval_minutes": payload["interval_minutes"],
+        "retry_batch_limit": payload["retry_batch_limit"],
+    }
+
+
+async def start_provider_canary_workflow(
+    settings: Settings,
+    *,
+    run_once: bool = False,
+    interval_hours: int = 1,
+    timeout_seconds: int = 8,
+    workflow_id: str = "provider-canary-workflow",
+) -> dict:
+    from temporalio.exceptions import WorkflowAlreadyStartedError
+
+    from worker.temporal.workflows import ProviderCanaryWorkflow
+
+    client = await _connect_temporal(settings)
+    payload = {
+        "run_once": run_once,
+        "interval_hours": max(1, int(interval_hours)),
+        "timeout_seconds": max(3, int(timeout_seconds)),
+    }
+    try:
+        handle = await client.start_workflow(
+            ProviderCanaryWorkflow.run,
+            payload,
+            id=workflow_id if not run_once else f"{workflow_id}-{uuid4()}",
+            task_queue=settings.temporal_task_queue,
+        )
+    except WorkflowAlreadyStartedError:
+        return {
+            "ok": True,
+            "workflow_id": workflow_id,
+            "status": "already_running",
+            "run_once": run_once,
+        }
+
+    if run_once:
+        return await handle.result()
+
+    run_id = getattr(handle, "first_execution_run_id", None) or getattr(handle, "run_id", None)
+    return {
+        "ok": True,
+        "workflow_id": handle.id,
+        "run_id": run_id,
+        "status": "started",
+        "run_once": False,
+        "interval_hours": payload["interval_hours"],
+        "timeout_seconds": payload["timeout_seconds"],
     }
 
 
 async def start_cleanup_workflow(
     settings: Settings,
     *,
+    run_once: bool = True,
+    interval_hours: int = 6,
     older_than_hours: int = 24,
     workspace_dir: str | None = None,
+    cache_dir: str | None = None,
+    cache_older_than_hours: int | None = None,
+    cache_max_size_mb: int | None = None,
+    workflow_id: str = "cleanup-workspace-workflow",
 ) -> dict:
+    from temporalio.exceptions import WorkflowAlreadyStartedError
+
     from worker.temporal.workflows import CleanupWorkspaceWorkflow
 
     client = await _connect_temporal(settings)
-    handle = await client.start_workflow(
-        CleanupWorkspaceWorkflow.run,
-        {
-            "older_than_hours": max(1, int(older_than_hours)),
-            "workspace_dir": workspace_dir,
-        },
-        id=f"cleanup-workspace-{uuid4()}",
-        task_queue=settings.temporal_task_queue,
-    )
-    return await handle.result()
+    payload: dict[str, object] = {
+        "run_once": run_once,
+        "interval_hours": max(1, int(interval_hours)),
+        "older_than_hours": max(1, int(older_than_hours)),
+        "workspace_dir": workspace_dir,
+        "cache_dir": cache_dir,
+    }
+    if cache_older_than_hours is not None:
+        payload["cache_older_than_hours"] = max(1, int(cache_older_than_hours))
+    if cache_max_size_mb is not None:
+        payload["cache_max_size_mb"] = max(1, int(cache_max_size_mb))
+
+    try:
+        handle = await client.start_workflow(
+            CleanupWorkspaceWorkflow.run,
+            payload,
+            id=workflow_id if not run_once else f"{workflow_id}-{uuid4()}",
+            task_queue=settings.temporal_task_queue,
+        )
+    except WorkflowAlreadyStartedError:
+        return {
+            "ok": True,
+            "workflow_id": workflow_id,
+            "status": "already_running",
+            "run_once": run_once,
+        }
+
+    if run_once:
+        return await handle.result()
+
+    run_id = getattr(handle, "first_execution_run_id", None) or getattr(handle, "run_id", None)
+    return {
+        "ok": True,
+        "workflow_id": handle.id,
+        "run_id": run_id,
+        "status": "started",
+        "run_once": False,
+        "interval_hours": payload["interval_hours"],
+        "older_than_hours": payload["older_than_hours"],
+        "cache_older_than_hours": payload.get("cache_older_than_hours"),
+        "cache_max_size_mb": payload.get("cache_max_size_mb"),
+    }
 
 
 async def _main_async(args: argparse.Namespace) -> None:
@@ -200,14 +351,37 @@ async def _main_async(args: argparse.Namespace) -> None:
             settings,
             run_once=args.run_once,
             local_hour=args.local_hour,
+            timezone_name=args.timezone_name,
             timezone_offset_minutes=args.timezone_offset_minutes,
+            workflow_id=args.workflow_id,
+        )
+    elif args.command == "start-notification-retry-workflow":
+        output = await start_notification_retry_workflow(
+            settings,
+            run_once=args.run_once,
+            interval_minutes=args.interval_minutes,
+            retry_batch_limit=args.retry_batch_limit,
+            workflow_id=args.workflow_id,
+        )
+    elif args.command == "start-provider-canary-workflow":
+        output = await start_provider_canary_workflow(
+            settings,
+            run_once=args.run_once,
+            interval_hours=args.interval_hours,
+            timeout_seconds=args.timeout_seconds,
             workflow_id=args.workflow_id,
         )
     elif args.command == "start-cleanup-workflow":
         output = await start_cleanup_workflow(
             settings,
+            run_once=args.run_once,
+            interval_hours=args.interval_hours,
             older_than_hours=args.older_than_hours,
             workspace_dir=args.workspace_dir,
+            cache_dir=args.cache_dir,
+            cache_older_than_hours=args.cache_older_than_hours,
+            cache_max_size_mb=args.cache_max_size_mb,
+            workflow_id=args.workflow_id,
         )
     else:
         raise ValueError(f"Unsupported command: {args.command}")
@@ -247,8 +421,13 @@ def _build_parser() -> argparse.ArgumentParser:
     start_daily.add_argument(
         "--local-hour",
         type=int,
-        default=9,
-        help="Daily local trigger hour for scheduler mode",
+        default=None,
+        help="Daily local trigger hour for scheduler mode (default: DIGEST_DAILY_LOCAL_HOUR)",
+    )
+    start_daily.add_argument(
+        "--timezone-name",
+        default=None,
+        help="IANA timezone name (default: DIGEST_LOCAL_TIMEZONE)",
     )
     start_daily.add_argument(
         "--timezone-offset-minutes",
@@ -262,9 +441,38 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Temporal workflow id used for scheduler mode",
     )
 
+    start_retry = sub.add_parser(
+        "start-notification-retry-workflow",
+        help="Start NotificationRetryWorkflow via Temporal",
+    )
+    start_retry.add_argument("--run-once", action="store_true")
+    start_retry.add_argument("--interval-minutes", type=int, default=10)
+    start_retry.add_argument("--retry-batch-limit", type=int, default=50)
+    start_retry.add_argument("--workflow-id", default="notification-retry-workflow")
+
+    start_canary = sub.add_parser(
+        "start-provider-canary-workflow",
+        help="Start ProviderCanaryWorkflow via Temporal",
+    )
+    start_canary.add_argument("--run-once", action="store_true")
+    start_canary.add_argument("--interval-hours", type=int, default=1)
+    start_canary.add_argument("--timeout-seconds", type=int, default=8)
+    start_canary.add_argument("--workflow-id", default="provider-canary-workflow")
+
     start_cleanup = sub.add_parser(
         "start-cleanup-workflow",
         help="Start CleanupWorkspaceWorkflow via Temporal",
+    )
+    start_cleanup.add_argument(
+        "--run-once",
+        action="store_true",
+        help="Run once immediately and wait for result",
+    )
+    start_cleanup.add_argument(
+        "--interval-hours",
+        type=int,
+        default=6,
+        help="Interval for periodic cleanup mode when --run-once is not set",
     )
     start_cleanup.add_argument(
         "--older-than-hours",
@@ -276,6 +484,28 @@ def _build_parser() -> argparse.ArgumentParser:
         "--workspace-dir",
         default=None,
         help="Optional workspace root override",
+    )
+    start_cleanup.add_argument(
+        "--cache-dir",
+        default=None,
+        help="Optional cache directory override (default: sibling 'cache' directory of workspace)",
+    )
+    start_cleanup.add_argument(
+        "--cache-older-than-hours",
+        type=int,
+        default=None,
+        help="Delete cache files older than this many hours",
+    )
+    start_cleanup.add_argument(
+        "--cache-max-size-mb",
+        type=int,
+        default=None,
+        help="After age cleanup, delete oldest cache files until this size threshold is met",
+    )
+    start_cleanup.add_argument(
+        "--workflow-id",
+        default="cleanup-workspace-workflow",
+        help="Temporal workflow id used for periodic cleanup mode",
     )
 
     return parser
