@@ -41,6 +41,9 @@ jobs:
       - name: Sync Python deps (locked)
         run: uv sync --frozen --extra dev --extra e2e
 
+      - name: Worker file line limits (pipeline/temporal <= 800)
+        run: python3 scripts/check_worker_line_limits.py
+
       - name: Schema parity check (apps/mcp vs shared-contracts)
         run: |
           python - <<'PY'

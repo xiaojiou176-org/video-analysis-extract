@@ -13,7 +13,6 @@
 
 ## Job 状态（`jobs.status`）
 - `queued -> running -> succeeded`
-- `queued -> running -> partial`
 - `queued -> running -> failed`
 - `failed -> running`（允许重跑）
 
@@ -74,6 +73,9 @@
 - `steps`
 - `degradations`
 - `pipeline_final_status`
+- `llm_required`
+- `llm_gate_passed`
+- `hard_fail_reason`
 - `artifacts_index`
 - `mode`
 
@@ -91,6 +93,8 @@
 ## Cache 与 Degrade（摘要）
 - 业务层去重：`videos`、`ingest_events`、`jobs.idempotency_key` 唯一约束。
 - pipeline step cache：每步基于输入签名命中缓存。
-- 可降级失败场景会记录到 `degradations`，最终状态可能为 `partial`。
+- 可降级失败场景会记录到 `degradations`，最终状态会收敛为：
+  - `jobs.status = succeeded`
+  - `pipeline_final_status = degraded`
 
 详细缓存策略见 `docs/reference/cache.md`。

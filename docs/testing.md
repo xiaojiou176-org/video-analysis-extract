@@ -49,6 +49,9 @@ uv run \
 - `steps`
 - `degradations`
 - `pipeline_final_status`
+- `llm_required`
+- `llm_gate_passed`
+- `hard_fail_reason`
 - `artifacts_index`
 - `mode`
 
