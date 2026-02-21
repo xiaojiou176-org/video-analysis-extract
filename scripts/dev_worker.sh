@@ -2,6 +2,10 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=./scripts/lib/load_env.sh
+source "$ROOT_DIR/scripts/lib/load_env.sh"
+load_env_file "$ROOT_DIR/.env.local" "dev_worker"
+
 WORKER_DIR="${WORKER_DIR:-$ROOT_DIR/apps/worker}"
 WORKER_ENTRY="${WORKER_ENTRY:-worker.main}"
 WORKER_COMMAND="${WORKER_COMMAND:-run-worker}"

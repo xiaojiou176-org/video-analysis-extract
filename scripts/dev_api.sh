@@ -2,6 +2,10 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=./scripts/lib/load_env.sh
+source "$ROOT_DIR/scripts/lib/load_env.sh"
+load_env_file "$ROOT_DIR/.env.local" "dev_api"
+
 API_APP="${API_APP:-apps.api.app.main:app}"
 API_HOST="${API_HOST:-127.0.0.1}"
 API_PORT="${API_PORT:-8000}"

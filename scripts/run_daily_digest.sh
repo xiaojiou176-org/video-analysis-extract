@@ -3,6 +3,9 @@ set -euo pipefail
 
 SCRIPT_NAME="run_daily_digest"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=./scripts/lib/load_env.sh
+source "$ROOT_DIR/scripts/lib/load_env.sh"
+load_env_file "$ROOT_DIR/.env.local" "$SCRIPT_NAME"
 
 VD_API_BASE_URL="${VD_API_BASE_URL:-http://127.0.0.1:8000}"
 DIGEST_DATE="${DIGEST_DATE:-$(date -u +%F)}"
