@@ -164,6 +164,11 @@ def test_step_collect_subtitles_asr_missing_binary_degrades(monkeypatch: Any, tm
 
 
 def test_settings_from_env_reads_new_fallback_flags(monkeypatch: Any, tmp_path: Path) -> None:
+    monkeypatch.setenv("SQLITE_PATH", str((tmp_path / "state.db").resolve()))
+    monkeypatch.setenv("DATABASE_URL", "postgresql+psycopg://postgres:postgres@localhost:5432/video_analysis")
+    monkeypatch.setenv("TEMPORAL_TARGET_HOST", "localhost:7233")
+    monkeypatch.setenv("TEMPORAL_NAMESPACE", "default")
+    monkeypatch.setenv("TEMPORAL_TASK_QUEUE", "video-analysis-worker")
     monkeypatch.setenv("PIPELINE_WORKSPACE_DIR", str((tmp_path / "workspace").resolve()))
     monkeypatch.setenv("PIPELINE_ARTIFACT_ROOT", str((tmp_path / "artifact-root").resolve()))
     monkeypatch.setenv("BILIBILI_DOWNLOADER", "bbdown")
