@@ -43,6 +43,11 @@ def _normalize_set_config_payload(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 def register_notification_tools(mcp: FastMCP, api_call: ApiCall) -> None:
+    @mcp.tool(name="vd.notifications.get_config", description="Get notification config.")
+    def get_notification_config() -> dict[str, Any]:
+        response = api_call("GET", "/api/v1/notifications/config")
+        return _normalize_set_config_payload(response)
+
     @mcp.tool(name="vd.notifications.send_test", description="Send a test notification.")
     def send_test_notification(
         to_email: str | None = None,

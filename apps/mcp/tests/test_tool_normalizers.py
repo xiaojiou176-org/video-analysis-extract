@@ -10,13 +10,15 @@ from apps.mcp.tools._common import (
     to_optional_int,
     to_optional_str,
 )
-from apps.mcp.tools.artifacts import _normalize_markdown_payload
+from apps.mcp.tools.artifacts import _normalize_markdown_payload, register_artifact_tools
 from apps.mcp.tools.health import register_health_tools
 from apps.mcp.tools.jobs import _normalize_job_payload, register_job_tools
 from apps.mcp.tools.notifications import (
     _normalize_send_test_payload,
     _normalize_set_config_payload,
+    register_notification_tools,
 )
+from apps.mcp.tools.workflows import register_workflow_tools
 
 
 def test_common_normalizers_handle_basic_types() -> None:
@@ -218,3 +220,117 @@ def test_health_providers_tool_normalizes_payload() -> None:
     assert payload["window_hours"] == 24
     assert payload["providers"][0]["provider"] == "rsshub"
     assert payload["providers"][0]["ok"] == 2
+
+
+def test_artifacts_get_asset_tool_exposes_asset_url_and_base64() -> None:
+    mcp = _FakeMCP()
+    calls: list[dict[str, Any]] = []
+
+    def fake_api_call(method: str, path: str, **kwargs: Any) -> dict[str, Any]:
+        calls.append({"method": method, "path": path, "kwargs": kwargs})
+        return {
+            "mime_type": "image/jpeg",
+            "base64": "dGVzdA==",
+            "size_bytes": 4,
+        }
+
+    register_artifact_tools(mcp, fake_api_call)
+    payload = mcp.tools["vd.artifacts.get_asset"](
+        job_id="job-1",
+        path="frames/frame_001.jpg",
+        include_base64=True,
+    )
+
+    assert calls[0]["method"] == "GET"
+    assert calls[0]["path"] == "/api/v1/artifacts/assets"
+    assert calls[0]["kwargs"]["params"] == {"job_id": "job-1", "path": "frames/frame_001.jpg"}
+    assert calls[0]["kwargs"]["return_bytes_base64"] is True
+    assert payload["exists"] is True
+    assert payload["asset_url"] == "/api/v1/artifacts/assets?job_id=job-1&path=frames%2Fframe_001.jpg"
+    assert payload["mime_type"] == "image/jpeg"
+    assert payload["base64"] == "dGVzdA=="
+    assert payload["size_bytes"] == 4
+
+
+def test_notifications_get_config_tool_normalizes_payload() -> None:
+    mcp = _FakeMCP()
+
+    def fake_api_call(method: str, path: str, **kwargs: Any) -> dict[str, Any]:
+        assert method == "GET"
+        assert path == "/api/v1/notifications/config"
+        assert kwargs == {}
+        return {
+            "enabled": True,
+            "to_email": "ops@example.com",
+            "daily_digest_enabled": True,
+            "daily_digest_hour_utc": 8,
+            "failure_alert_enabled": False,
+            "created_at": "2026-02-22T01:00:00Z",
+            "updated_at": "2026-02-22T01:10:00Z",
+        }
+
+    register_notification_tools(mcp, fake_api_call)
+    payload = mcp.tools["vd.notifications.get_config"]()
+
+    assert payload["enabled"] is True
+    assert payload["to_email"] == "ops@example.com"
+    assert payload["daily_digest_enabled"] is True
+    assert payload["daily_digest_hour_utc"] == 8
+    assert payload["failure_alert_enabled"] is False
+
+
+def test_health_system_tool_returns_status() -> None:
+    mcp = _FakeMCP()
+
+    def fake_api_call(method: str, path: str, **kwargs: Any) -> dict[str, Any]:
+        assert method == "GET"
+        assert path == "/healthz"
+        assert kwargs == {}
+        return {"status": "ok"}
+
+    register_health_tools(mcp, fake_api_call)
+    payload = mcp.tools["vd.health.system"]()
+
+    assert payload["status"] == "ok"
+
+
+def test_workflows_run_tool_posts_expected_body_and_normalizes_result() -> None:
+    mcp = _FakeMCP()
+    calls: list[dict[str, Any]] = []
+
+    def fake_api_call(method: str, path: str, **kwargs: Any) -> dict[str, Any]:
+        calls.append({"method": method, "path": path, "kwargs": kwargs})
+        return {
+            "workflow": "daily_digest",
+            "workflow_name": "DailyDigestWorkflow",
+            "workflow_id": "wf-123",
+            "run_id": "run-456",
+            "status": "started",
+            "started_at": "2026-02-22T08:00:00Z",
+            "result": {"ok": True},
+        }
+
+    register_workflow_tools(mcp, fake_api_call)
+    payload = mcp.tools["vd.workflows.run"](
+        workflow="daily_digest",
+        run_once=True,
+        wait_for_result=False,
+        workflow_id="wf-123",
+        payload={"scope": "all"},
+    )
+
+    assert calls[0]["method"] == "POST"
+    assert calls[0]["path"] == "/api/v1/workflows/run"
+    assert calls[0]["kwargs"]["json_body"] == {
+        "workflow": "daily_digest",
+        "run_once": True,
+        "wait_for_result": False,
+        "workflow_id": "wf-123",
+        "payload": {"scope": "all"},
+    }
+    assert payload["workflow"] == "daily_digest"
+    assert payload["workflow_name"] == "DailyDigestWorkflow"
+    assert payload["workflow_id"] == "wf-123"
+    assert payload["run_id"] == "run-456"
+    assert payload["status"] == "started"
+    assert payload["result"] == {"ok": True}

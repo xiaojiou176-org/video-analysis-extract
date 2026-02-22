@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import base64
 from dataclasses import dataclass
 from typing import Any
 
@@ -15,6 +16,7 @@ from .tools.jobs import register_job_tools
 from .tools.notifications import register_notification_tools
 from .tools.reports import register_report_tools
 from .tools.subscriptions import register_subscription_tools
+from .tools.workflows import register_workflow_tools
 
 
 class ApiError(RuntimeError):
@@ -60,6 +62,7 @@ class ApiClient:
         *,
         params: dict[str, Any] | None = None,
         json_body: dict[str, Any] | None = None,
+        return_bytes_base64: bool = False,
     ) -> dict[str, Any]:
         headers: dict[str, str] = {"Accept": "application/json"}
         if self._config.api_key:
@@ -100,7 +103,7 @@ class ApiClient:
                     "method": method,
                     "path": path,
                     "status_code": response.status_code,
-                    "body": _stringify_value(error_body),
+                    "body_preview": _stringify_value(error_body)[:400],
                 },
             )
 
@@ -109,6 +112,12 @@ class ApiClient:
 
         content_type = response.headers.get("content-type", "")
         if "application/json" not in content_type:
+            if return_bytes_base64:
+                return {
+                    "base64": base64.b64encode(response.content).decode("ascii"),
+                    "mime_type": content_type or "application/octet-stream",
+                    "size_bytes": len(response.content),
+                }
             return {"text": response.text}
 
         try:
@@ -178,9 +187,9 @@ def _normalize_error_details(details: dict[str, Any]) -> dict[str, Any]:
     if error is not None:
         normalized["error"] = _stringify_value(error)
 
-    body = details.get("body")
-    if body is not None:
-        normalized["body"] = _stringify_value(body)
+    body_preview = details.get("body_preview")
+    if body_preview is not None:
+        normalized["body_preview"] = _stringify_value(body_preview)
 
     return normalized
 
@@ -196,6 +205,7 @@ def create_server() -> FastMCP:
         *,
         params: dict[str, Any] | None = None,
         json_body: dict[str, Any] | None = None,
+        return_bytes_base64: bool = False,
     ) -> dict[str, Any]:
         normalized_params = _drop_none_values(params or {}) or None
         normalized_body = _drop_none_values(json_body or {}) or None
@@ -205,6 +215,7 @@ def create_server() -> FastMCP:
                 path=path,
                 params=normalized_params,
                 json_body=normalized_body,
+                return_bytes_base64=return_bytes_base64,
             )
         except ApiError as exc:
             return exc.to_payload()
@@ -228,6 +239,7 @@ def create_server() -> FastMCP:
     register_notification_tools(mcp, api_call)
     register_report_tools(mcp, api_call)
     register_health_tools(mcp, api_call)
+    register_workflow_tools(mcp, api_call)
     return mcp
 
 

@@ -22,6 +22,14 @@ def _normalize_provider_item(item: Any) -> dict[str, Any]:
 
 
 def register_health_tools(mcp: FastMCP, api_call: ApiCall) -> None:
+    @mcp.tool(name="vd.health.system", description="Get system liveness healthz.")
+    def get_system_health() -> dict[str, Any]:
+        response = api_call("GET", "/healthz")
+        if is_error_payload(response):
+            return response
+        status = to_optional_str(response.get("status")) or "unknown"
+        return {"status": status}
+
     @mcp.tool(name="vd.health.providers", description="Get provider health rollup.")
     def get_provider_health(window_hours: int = 24) -> dict[str, Any]:
         response = api_call(

@@ -3,7 +3,6 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-import uuid
 from urllib.parse import parse_qs, urlparse
 from uuid import uuid4
 
