@@ -685,9 +685,9 @@ def test_jobs_to_artifacts_query_navigation(page: Page, mock_api_state: MockApiS
     expect(page.get_by_role("heading", name="Job lookup")).to_be_visible()
 
     page.goto("/artifacts", wait_until="domcontentloaded")
-    expect(page.get_by_text("Enter a job ID or video URL to load artifact markdown and screenshots.")).to_be_visible()
+    expect(page.get_by_text("Provide either")).to_be_visible()
     page.get_by_label("Job ID").fill(mock_api_state.job_id)
-    page.get_by_role("button", name="Load artifact markdown").click()
+    page.get_by_role("button", name="Load artifacts").click()
 
     _wait_for_call_count(mock_api_state, "get_artifact_markdown", 1)
     _wait_for_http_path(mock_api_state, "/api/v1/artifacts/assets")

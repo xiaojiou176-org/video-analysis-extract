@@ -43,20 +43,6 @@ function extractArtifactJobId(jobId: string, meta: Record<string, unknown> | nul
   return typeof rawJobId === "string" ? rawJobId : "";
 }
 
-function inferImageMime(path: string): string {
-  const lower = path.toLowerCase();
-  if (lower.endsWith(".png")) {
-    return "image/png";
-  }
-  if (lower.endsWith(".webp")) {
-    return "image/webp";
-  }
-  if (lower.endsWith(".jpeg") || lower.endsWith(".jpg")) {
-    return "image/jpeg";
-  }
-  return "image/jpeg";
-}
-
 function buildArtifactAssetUrl(jobId: string, path: string): string {
   const target = new URL("/api/v1/artifacts/assets", getApiBaseUrl());
   target.searchParams.set("job_id", jobId);
@@ -92,7 +78,6 @@ export default async function ArtifactsPage({ searchParams }: ArtifactsPageProps
   const artifactJobId = payload ? extractArtifactJobId(jobId, payload.meta) : "";
   const embeddedScreenshots = screenshotIndex.map((path) => ({
     path,
-    mimeType: inferImageMime(path),
     assetUrl: artifactJobId ? buildArtifactAssetUrl(artifactJobId, path) : null,
   }));
 
@@ -100,24 +85,42 @@ export default async function ArtifactsPage({ searchParams }: ArtifactsPageProps
     <div className="stack">
       <section className="card stack">
         <h2>Artifact lookup</h2>
-        <form method="GET" className="grid grid-cols-2">
+        <p className="small">
+          Provide either a Job ID or a Video URL, then load artifact markdown and screenshots.
+        </p>
+        <form method="GET" className="stack" data-require-one="job_id,video_url" data-require-one-exclusive="true">
           <label>
             Job ID
-            <input name="job_id" type="text" defaultValue={jobId} placeholder="job uuid" />
+            <input
+              name="job_id"
+              type="text"
+              defaultValue={jobId}
+              placeholder="9be4cbe7-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+              data-field-kind="identifier"
+            />
           </label>
+
+          <p className="small artifacts-or-divider" aria-label="Use one of two fields">
+            OR
+          </p>
 
           <label>
             Video URL
-            <input name="video_url" type="url" defaultValue={videoUrl} placeholder="https://..." />
+            <input
+              name="video_url"
+              type="url"
+              defaultValue={videoUrl}
+              placeholder="https://www.youtube.com/watch?v=..."
+              data-field-kind="url"
+            />
           </label>
 
-          <div className="inline">
+          <div>
             <button type="submit" className="primary">
-              Load artifact markdown
+              Load artifacts
             </button>
           </div>
         </form>
-        <p className="small">Provide either job_id or video_url.</p>
       </section>
 
       {error ? <p className="alert error">{error}</p> : null}
@@ -133,16 +136,37 @@ export default async function ArtifactsPage({ searchParams }: ArtifactsPageProps
                 {embeddedScreenshots.map((item, index) => (
                   <li key={`${item.path}-${index}`} className="stack">
                     {item.assetUrl ? (
-                      <object
-                        aria-label={`Screenshot ${index + 1}: ${item.path}`}
-                        data={item.assetUrl}
-                        type={item.mimeType}
-                        style={{ width: "100%", minHeight: "120px", borderRadius: "8px" }}
-                      >
-                        <p className="small">
-                          Unable to load screenshot, fallback path: <code>{item.path}</code>
-                        </p>
-                      </object>
+                      <>
+                        <object
+                          aria-hidden="true"
+                          data={item.assetUrl}
+                          type="image/png"
+                          style={{ width: "1px", height: "1px", opacity: 0, position: "absolute", left: "-9999px" }}
+                        />
+                        <a className="screenshot-link" href={item.assetUrl} target="_blank" rel="noreferrer">
+                          Open screenshot {index + 1}
+                        </a>
+                        <details>
+                          <summary className="small screenshot-preview-toggle">Preview</summary>
+                          <object
+                            aria-label={`Screenshot ${index + 1}: ${item.path}`}
+                            data={item.assetUrl}
+                            type="image/png"
+                            style={{
+                              width: "100%",
+                              minHeight: "120px",
+                              maxHeight: "320px",
+                              borderRadius: "8px",
+                              border: "1px solid var(--color-border)",
+                              background: "#f8fafc",
+                            }}
+                          >
+                            <p className="small">
+                              Unable to load screenshot, fallback path: <code>{item.path}</code>
+                            </p>
+                          </object>
+                        </details>
+                      </>
                     ) : (
                       <p className="small">
                         Missing job_id for screenshot preview, fallback path: <code>{item.path}</code>
@@ -162,7 +186,18 @@ export default async function ArtifactsPage({ searchParams }: ArtifactsPageProps
               <ol>
                 {screenshotIndex.map((path, index) => (
                   <li key={`${path}-${index}`}>
-                    <code>{path}</code>
+                    {artifactJobId ? (
+                      <a
+                        className="screenshot-link"
+                        href={buildArtifactAssetUrl(artifactJobId, path)}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        Open <code>{path}</code>
+                      </a>
+                    ) : (
+                      <code>{path}</code>
+                    )}
                   </li>
                 ))}
               </ol>
@@ -175,11 +210,11 @@ export default async function ArtifactsPage({ searchParams }: ArtifactsPageProps
           </section>
         </>
       ) : !hasLookupParams ? (
-        <p className="small">Enter a job ID or video URL to load artifact markdown and screenshots.</p>
+        null
       ) : !error ? (
         <p className="small">Artifact request completed but no markdown payload was returned.</p>
       ) : (
-        <p className="small">Artifact request failed.</p>
+        null
       )}
     </div>
   );

@@ -2,12 +2,27 @@ import Link from "next/link";
 
 import { toDisplayStatus } from "@/app/status";
 import { apiClient } from "@/lib/api/client";
-import { formatDateTime } from "@/lib/format";
+import { formatDateTime, formatDateTimeWithSeconds } from "@/lib/format";
 import { resolveSearchParams, type SearchParamsInput } from "@/lib/search-params";
 
 type JobsPageProps = {
   searchParams?: SearchParamsInput;
 };
+
+function getApiBaseUrl(): string {
+  const base =
+    process.env.NEXT_PUBLIC_API_BASE_URL ??
+    process.env.VD_API_BASE_URL ??
+    "http://127.0.0.1:8000";
+  return base.replace(/\/$/, "");
+}
+
+function buildArtifactAssetUrl(jobId: string, path: string): string {
+  const target = new URL("/api/v1/artifacts/assets", getApiBaseUrl());
+  target.searchParams.set("job_id", jobId);
+  target.searchParams.set("path", path);
+  return target.toString();
+}
 
 export default async function JobsPage({ searchParams }: JobsPageProps) {
   const { job_id: jobId } = await resolveSearchParams(searchParams, ["job_id"] as const);
@@ -22,19 +37,23 @@ export default async function JobsPage({ searchParams }: JobsPageProps) {
         })
     : null;
   const jobStatus = job ? toDisplayStatus(job.status) : null;
+  const pipelineStatus = job?.pipeline_final_status ? toDisplayStatus(job.pipeline_final_status) : null;
 
   return (
     <div className="stack">
       <section className="card stack">
         <h2>Job lookup</h2>
-        <form method="GET" className="inline">
-          <label style={{ minWidth: "420px", flex: 1 }}>
-            Job ID
+        <p className="small">Enter a Job ID to inspect step details and artifacts.</p>
+        <form method="GET" className="inline" data-auto-disable-required="true">
+          <label className="wide-field">
+            Job ID *
             <input
               name="job_id"
               type="text"
               placeholder="9be4cbe7-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
               defaultValue={jobId}
+              required
+              data-field-kind="identifier"
             />
           </label>
           <button type="submit" className="primary">
@@ -42,8 +61,6 @@ export default async function JobsPage({ searchParams }: JobsPageProps) {
           </button>
         </form>
       </section>
-
-      {!jobId ? <p className="small">Enter a job id to inspect step details and artifacts.</p> : null}
 
       {error ? <p className="alert error">{error}</p> : null}
 
@@ -66,7 +83,11 @@ export default async function JobsPage({ searchParams }: JobsPageProps) {
               </div>
               <div>
                 <div className="small">Pipeline final</div>
-                <div>{job.pipeline_final_status ?? "-"}</div>
+                {pipelineStatus ? (
+                  <span className={`status-chip status-${pipelineStatus.css}`}>{pipelineStatus.label}</span>
+                ) : (
+                  <div>-</div>
+                )}
               </div>
               <div>
                 <div className="small">Created</div>
@@ -103,10 +124,12 @@ export default async function JobsPage({ searchParams }: JobsPageProps) {
                     return (
                       <tr key={`${step.name}-${index}`}>
                         <td>{step.name}</td>
-                        <td>{stepStatus.label}</td>
+                        <td>
+                          <span className={`status-chip status-${stepStatus.css}`}>{stepStatus.label}</span>
+                        </td>
                         <td>{step.attempt}</td>
-                        <td>{formatDateTime(step.started_at)}</td>
-                        <td>{formatDateTime(step.finished_at)}</td>
+                        <td>{formatDateTimeWithSeconds(step.started_at)}</td>
+                        <td>{formatDateTimeWithSeconds(step.finished_at)}</td>
                       </tr>
                     );
                   })}
@@ -143,7 +166,10 @@ export default async function JobsPage({ searchParams }: JobsPageProps) {
                 <ul>
                   {Object.entries(job.artifacts_index).map(([key, value]) => (
                     <li key={key}>
-                      <strong>{key}</strong>: <code>{value}</code>
+                      <strong>{key}</strong>:{" "}
+                      <a href={buildArtifactAssetUrl(job.id, value)} target="_blank" rel="noreferrer">
+                        <code>{value}</code>
+                      </a>
                     </li>
                   ))}
                 </ul>

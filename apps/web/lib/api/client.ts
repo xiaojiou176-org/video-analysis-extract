@@ -92,22 +92,39 @@ function buildUrl(path: string, query?: Record<string, string | number | boolean
 
 async function parseError(response: Response): Promise<string> {
   const contentType = response.headers.get("content-type") ?? "";
+  let detailMessage: string | null = null;
 
   if (contentType.includes("application/json")) {
     const payload = (await response.json().catch(() => null)) as Record<string, unknown> | null;
     if (payload && typeof payload === "object") {
       const detail = payload["detail"];
       if (typeof detail === "string") {
-        return detail;
+        detailMessage = detail;
       }
       const message = payload["message"];
       if (typeof message === "string") {
-        return message;
+        detailMessage = message;
       }
     }
   }
 
-  const text = await response.text().catch(() => "");
+  if (detailMessage) {
+    return detailMessage;
+  }
+
+  const text = (await response.text().catch(() => "")).trim();
+  if (response.status === 404) {
+    return "Requested resource was not found.";
+  }
+  if (response.status >= 500) {
+    return "Service is temporarily unavailable. Please try again.";
+  }
+  if (response.status === 401 || response.status === 403) {
+    return "You do not have permission to access this resource.";
+  }
+  if (response.status === 400) {
+    return "Request payload is invalid. Please check your input.";
+  }
   return text || `Request failed (${response.status})`;
 }
 

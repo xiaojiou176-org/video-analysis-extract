@@ -8,9 +8,25 @@ export function formatDateTime(input: string | null | undefined): string {
     return input;
   }
 
-  return new Intl.DateTimeFormat("zh-CN", {
+  return new Intl.DateTimeFormat("en-US", {
     dateStyle: "medium",
     timeStyle: "short",
+  }).format(date);
+}
+
+export function formatDateTimeWithSeconds(input: string | null | undefined): string {
+  if (!input) {
+    return "-";
+  }
+
+  const date = new Date(input);
+  if (Number.isNaN(date.getTime())) {
+    return input;
+  }
+
+  return new Intl.DateTimeFormat("en-US", {
+    dateStyle: "medium",
+    timeStyle: "medium",
   }).format(date);
 }
 
