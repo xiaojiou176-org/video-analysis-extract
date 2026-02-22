@@ -6,6 +6,17 @@ info:
 servers:
   - url: http://127.0.0.1:8000
 paths:
+  /healthz:
+    get:
+      operationId: healthz
+      responses:
+        '200':
+          description: System health status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthzResponse'
+
   /api/v1/subscriptions:
     get:
       operationId: listSubscriptions
@@ -113,6 +124,25 @@ paths:
               schema:
                 $ref: '#/components/schemas/RetrievalSearchResponse'
 
+  /api/v1/computer-use/run:
+    post:
+      operationId: runComputerUse
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ComputerUseRunRequest'
+      responses:
+        '200':
+          description: Computer use planning result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ComputerUseRunResponse'
+        '400':
+          description: Invalid request payload
+
   /api/v1/health/providers:
     get:
       operationId: getProviderHealth
@@ -212,6 +242,54 @@ paths:
         '404':
           description: Artifact not found
 
+  /api/v1/artifacts/assets:
+    get:
+      operationId: getArtifactAsset
+      parameters:
+        - in: query
+          name: job_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: path
+          required: true
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        '200':
+          description: Artifact asset binary payload
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '404':
+          description: Artifact asset not found
+
+  /api/v1/workflows/run:
+    post:
+      operationId: runWorkflow
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkflowRunRequest'
+      responses:
+        '200':
+          description: Workflow run accepted/completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowRunResponse'
+        '502':
+          description: Workflow execution failed
+        '503':
+          description: Temporal unavailable or workflow start failed
+
   /api/v1/notifications/config:
     get:
       operationId: getNotificationConfig
@@ -282,6 +360,13 @@ paths:
 
 components:
   schemas:
+    HealthzResponse:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+
     Platform:
       type: string
       enum: [bilibili, youtube]
@@ -513,6 +598,76 @@ components:
           items:
             $ref: '#/components/schemas/RetrievalHit'
 
+    ComputerUseSafety:
+      type: object
+      required: [confirm_before_execute, blocked_actions, max_actions]
+      properties:
+        confirm_before_execute:
+          type: boolean
+          default: true
+        blocked_actions:
+          type: array
+          items:
+            type: string
+          default: []
+        max_actions:
+          type: integer
+          minimum: 1
+          maximum: 20
+          default: 8
+
+    ComputerUseRunRequest:
+      type: object
+      required: [instruction, screenshot_base64]
+      properties:
+        instruction:
+          type: string
+          minLength: 1
+        screenshot_base64:
+          type: string
+          minLength: 1
+        safety:
+          $ref: '#/components/schemas/ComputerUseSafety'
+
+    ComputerUseAction:
+      type: object
+      required: [step, action, target, input_text, reasoning]
+      properties:
+        step:
+          type: integer
+          minimum: 1
+        action:
+          type: string
+        target:
+          type: string
+          nullable: true
+        input_text:
+          type: string
+          nullable: true
+        reasoning:
+          type: string
+          nullable: true
+
+    ComputerUseRunResponse:
+      type: object
+      required: [actions, require_confirmation, blocked_actions, final_text, thought_metadata]
+      properties:
+        actions:
+          type: array
+          items:
+            $ref: '#/components/schemas/ComputerUseAction'
+        require_confirmation:
+          type: boolean
+        blocked_actions:
+          type: array
+          items:
+            type: string
+        final_text:
+          type: string
+        thought_metadata:
+          type: object
+          additionalProperties: true
+
     JobDegradation:
       type: object
       properties:
@@ -728,6 +883,50 @@ components:
         failure_alert_enabled:
           type: boolean
           default: true
+
+    WorkflowRunRequest:
+      type: object
+      required: [workflow]
+      properties:
+        workflow:
+          type: string
+          pattern: ^(poll_feeds|daily_digest|notification_retry|cleanup|provider_canary)$
+        run_once:
+          type: boolean
+          default: true
+        wait_for_result:
+          type: boolean
+          default: false
+        workflow_id:
+          type: string
+          nullable: true
+        payload:
+          type: object
+          additionalProperties: true
+          default: {}
+
+    WorkflowRunResponse:
+      type: object
+      required: [workflow, workflow_name, workflow_id, status, started_at, result]
+      properties:
+        workflow:
+          type: string
+        workflow_name:
+          type: string
+        workflow_id:
+          type: string
+        run_id:
+          type: string
+          nullable: true
+        status:
+          type: string
+        started_at:
+          type: string
+          format: date-time
+        result:
+          type: object
+          nullable: true
+          additionalProperties: true
 
     NotificationTestRequest:
       type: object

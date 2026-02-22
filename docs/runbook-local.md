@@ -111,6 +111,40 @@ WORKER_COMMAND=start-cleanup-workflow ./scripts/dev_worker.sh --run-once --older
 - Media Resolution：`PIPELINE_LLM_INPUT_MODE`、`PIPELINE_MAX_FRAMES`、`overrides.frames.max_frames`、`llm_media_input`。
 - Embedding / Retrieval：`GEMINI_EMBEDDING_MODEL`；检索入口为 `jobs.artifacts_index`。
 
+## Computer Use（函数调用）与安全闸
+
+- 使用入口：`POST /api/v1/videos/process` 的 `overrides.llm*`。
+- 安全闸（当前实现）：
+  - 仅白名单工具：`select_supporting_frames`、`build_evidence_citations`。
+  - 非白名单会记录为 `blocked`，不会执行任意工具。
+  - 调用回合上限：`max_function_call_rounds`（默认 `2`）。
+  - `computer_use` 开关可配置，但当前 worker 未注入执行 handler，调用会返回 `computer_use_handler_missing`（默认拒绝）。
+  - `computer_use_require_confirmation` 默认 `true`，未确认会返回 `computer_use_confirmation_required`。
+  - 翻译回退阶段固定关闭 function calling。
+
+示例（限制回合并开启 thought 输出）：
+```bash
+curl -sS -X POST http://127.0.0.1:8000/api/v1/videos/process \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "video": {"platform": "youtube", "url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ"},
+    "mode": "refresh_llm",
+    "overrides": {
+      "llm": {
+        "max_function_call_rounds": 1,
+        "include_thoughts": true,
+        "enable_computer_use": true
+      }
+    }
+  }'
+```
+
+## Thought Metadata / Signatures 可见性
+
+- API：`GET /api/v1/jobs/<job_id>` 的 `steps[].result.llm_meta.thinking` 可见 `thought_signatures` / `thought_signature_digest` / `usage`。
+- MCP：`vd.jobs.get` 保留相同结构。
+- 兼容字段：`steps[].thought_metadata` 为兼容提取位，未命中时返回 `null`。
+
 ## 文档联动规则
 以下改动必须同步本文件：
 - 新增迁移文件（`infra/migrations/*.sql`）

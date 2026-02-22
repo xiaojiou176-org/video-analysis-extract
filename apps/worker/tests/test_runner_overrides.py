@@ -143,6 +143,12 @@ def test_step_llm_outline_applies_overrides(monkeypatch: Any, tmp_path: Path) ->
         enable_function_calling: bool = True,
         media_resolution: dict[str, Any] | str | None = None,
         max_function_call_rounds: int = 2,
+        enable_computer_use: bool = False,
+        computer_use_handler: Any | None = None,
+        computer_use_require_confirmation: bool = True,
+        computer_use_confirmed: bool = False,
+        computer_use_max_steps: int = 3,
+        computer_use_timeout_seconds: float = 30.0,
     ) -> tuple[str | None, str]:
         calls.append(
             {
@@ -160,6 +166,12 @@ def test_step_llm_outline_applies_overrides(monkeypatch: Any, tmp_path: Path) ->
                 "enable_function_calling": enable_function_calling,
                 "media_resolution": media_resolution,
                 "max_function_call_rounds": max_function_call_rounds,
+                "enable_computer_use": enable_computer_use,
+                "computer_use_handler": computer_use_handler,
+                "computer_use_require_confirmation": computer_use_require_confirmation,
+                "computer_use_confirmed": computer_use_confirmed,
+                "computer_use_max_steps": computer_use_max_steps,
+                "computer_use_timeout_seconds": computer_use_timeout_seconds,
             }
         )
         return (
@@ -185,6 +197,10 @@ def test_step_llm_outline_applies_overrides(monkeypatch: Any, tmp_path: Path) ->
             "include_thoughts": True,
             "media_resolution": {"frame": "high", "image": "medium", "pdf": "low"},
             "max_function_call_rounds": 3,
+            "enable_computer_use": True,
+            "computer_use_require_confirmation": False,
+            "computer_use_max_steps": 5,
+            "computer_use_timeout_seconds": 8.0,
         },
     }
 
@@ -198,6 +214,10 @@ def test_step_llm_outline_applies_overrides(monkeypatch: Any, tmp_path: Path) ->
     assert first["max_output_tokens"] == 1024
     assert first["include_thoughts"] is True
     assert first["max_function_call_rounds"] == 3
+    assert first["enable_computer_use"] is True
+    assert first["computer_use_require_confirmation"] is False
+    assert first["computer_use_max_steps"] == 5
+    assert first["computer_use_timeout_seconds"] == 8.0
     assert first["media_resolution"] == {"frame": "high", "image": "medium", "pdf": "low"}
 
 
@@ -258,6 +278,10 @@ def test_build_llm_policy_supports_thoughts_media_and_function_rounds(tmp_path: 
                 "include_thoughts": True,
                 "media_resolution": {"default": "low", "frame": "high"},
                 "max_function_call_rounds": 4,
+                "enable_computer_use": True,
+                "computer_use_require_confirmation": False,
+                "computer_use_max_steps": 6,
+                "computer_use_timeout_seconds": 7.5,
             },
             "llm_outline": {
                 "include_thoughts": False,
@@ -269,6 +293,10 @@ def test_build_llm_policy_supports_thoughts_media_and_function_rounds(tmp_path: 
 
     assert policy["include_thoughts"] is True
     assert policy["max_function_call_rounds"] == 4
+    assert policy["enable_computer_use"] is True
+    assert policy["computer_use_require_confirmation"] is False
+    assert policy["computer_use_max_steps"] == 6
+    assert policy["computer_use_timeout_seconds"] == 7.5
     assert policy["media_resolution"]["default"] == "low"
     assert policy["media_resolution"]["frame"] == "high"
     assert policy["outline"]["include_thoughts"] is False

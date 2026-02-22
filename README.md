@@ -10,10 +10,10 @@
 
 `ProcessJobWorkflow` 由 3 个阶段组成：
 1. `mark_running`
-2. `run_pipeline_activity`（固定 8 steps）
+2. `run_pipeline_activity`（固定 9 steps）
 3. `mark_succeeded` 或 `mark_failed`
 
-8-step pipeline：
+9-step pipeline：
 1. `fetch_metadata`
 2. `download_media`
 3. `collect_subtitles`
@@ -21,7 +21,8 @@
 5. `extract_frames`
 6. `llm_outline`
 7. `llm_digest`
-8. `write_artifacts`
+8. `build_embeddings`
+9. `write_artifacts`
 
 状态机细节见 `docs/state-machine.md`。
 
@@ -32,6 +33,12 @@
 - Function calling：
   - `llm_outline` / `llm_digest` 启用工具（证据引用与帧选择）。
   - 翻译回退路径关闭 function calling。
+- Computer Use（函数调用回合）安全闸：
+  - 仅允许 `select_supporting_frames` 与 `build_evidence_citations` 两个工具；非白名单调用会被标记 `blocked`。
+  - `computer_use` 入口由 `GEMINI_COMPUTER_USE_*` 与 `overrides.llm*.enable_computer_use` 控制，但当前 pipeline 未注入执行 handler，调用会返回 `computer_use_handler_missing`（安全默认拒绝）。
+  - `computer_use_require_confirmation` 默认 `true`；即使未来接入 handler，未确认也会返回 `computer_use_confirmation_required`。
+  - 最大调用回合由 `max_function_call_rounds` 控制（默认 `2`，可由 `overrides.llm.max_function_call_rounds` / `overrides.llm_outline.max_function_call_rounds` / `overrides.llm_digest.max_function_call_rounds` 覆盖）。
+  - 达到上限后以 `termination_reason=max_function_call_rounds_reached` 结束当前轮。
 - Thinking 策略：
   - 默认由 `GEMINI_THINKING_LEVEL` 控制。
   - 请求级可通过 `overrides.llm.thinking_level` 覆盖。
@@ -46,6 +53,16 @@
 
 - Embedding 配置入口：`GEMINI_EMBEDDING_MODEL`
 - Retrieval 入口（当前阶段）：`GET /api/v1/jobs/{job_id}` 的 `artifacts_index`（MCP `vd.jobs.get` 同步暴露）
+
+### Thought Metadata / Signatures 可见性
+
+- API：`GET /api/v1/jobs/{job_id}` 的 `steps[].result.llm_meta.thinking` 包含：
+  - `thought_count`
+  - `thought_signatures`
+  - `thought_signature_digest`
+  - `usage`（token 统计）
+- MCP：`vd.jobs.get` 保留同结构字段（位于 `steps[].result`）。
+- 兼容字段：`steps[].thought_metadata` 为兼容提取位（来源于 `result` 中 `thought_metadata|thinking_metadata|thoughts_metadata|thoughts`）；若未写入这些键则为 `null`。
 
 ## 本地运行（标准 6 步）
 

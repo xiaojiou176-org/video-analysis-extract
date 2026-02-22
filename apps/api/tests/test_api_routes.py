@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import uuid
 from datetime import datetime, timezone
 from types import SimpleNamespace
@@ -249,6 +250,63 @@ def test_retrieval_search_returns_items(api_client: TestClient, monkeypatch) -> 
     assert payload["filters"] == {"platform": "youtube"}
     assert payload["items"][0]["source"] == "digest"
     assert payload["items"][0]["score"] == 2.5
+
+
+def test_computer_use_run_returns_required_fields(api_client: TestClient, monkeypatch) -> None:
+    screenshot_b64 = base64.b64encode(b"fake-image-bytes").decode("ascii")
+    monkeypatch.setattr(
+        "apps.api.app.services.computer_use.ComputerUseService.run",
+        lambda self, **kwargs: {
+            "actions": [
+                {
+                    "step": 1,
+                    "action": "click",
+                    "target": "submit button",
+                    "input_text": None,
+                    "reasoning": "click submit",
+                }
+            ],
+            "require_confirmation": True,
+            "blocked_actions": ["submit"],
+            "final_text": "confirmation required",
+            "thought_metadata": {"provider": "gemini", "planner": "gemini_computer_use"},
+        },
+    )
+
+    response = api_client.post(
+        "/api/v1/computer-use/run",
+        json={
+            "instruction": "Open settings; click submit button",
+            "screenshot_base64": screenshot_b64,
+            "safety": {
+                "confirm_before_execute": False,
+                "blocked_actions": ["submit"],
+                "max_actions": 5,
+            },
+        },
+    )
+    payload = response.json()
+
+    assert response.status_code == 200
+    assert isinstance(payload["actions"], list)
+    assert payload["actions"][0]["step"] == 1
+    assert payload["require_confirmation"] is True
+    assert payload["blocked_actions"] == ["submit"]
+    assert isinstance(payload["final_text"], str)
+    assert isinstance(payload["thought_metadata"], dict)
+
+
+def test_computer_use_run_rejects_invalid_screenshot_base64(api_client: TestClient) -> None:
+    response = api_client.post(
+        "/api/v1/computer-use/run",
+        json={
+            "instruction": "Open settings",
+            "screenshot_base64": "%%%not-base64%%%",
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "screenshot must be valid base64"
 
 
 def test_job_get_infers_llm_gate_fields_from_steps_when_legacy_fields_are_null(
@@ -506,6 +564,26 @@ def test_artifact_assets_allows_frame_image(api_client: TestClient, monkeypatch,
     assert response.status_code == 200
     assert response.content.startswith(b"\xff\xd8")
     assert response.headers["content-type"].startswith("image/jpeg")
+
+
+def test_workflows_run_returns_503_when_temporal_unavailable(api_client: TestClient, monkeypatch) -> None:
+    async def fake_connect(*args, **kwargs):
+        raise RuntimeError("connection refused")
+
+    monkeypatch.setattr("temporalio.client.Client.connect", fake_connect)
+
+    response = api_client.post(
+        "/api/v1/workflows/run",
+        json={
+            "workflow": "provider_canary",
+            "run_once": True,
+            "wait_for_result": False,
+            "payload": {},
+        },
+    )
+
+    assert response.status_code == 503
+    assert "failed to connect temporal" in response.json()["detail"]
 
 
 def test_notification_html_renderer_supports_markdown() -> None:

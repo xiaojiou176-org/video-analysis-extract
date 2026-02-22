@@ -42,5 +42,20 @@ tail -f logs/failure_alerts.log
 rg -n "ERROR|failed|status=5" logs scripts -g '*.log'
 ```
 
+定位 Computer Use（函数调用）安全闸/终止原因：
+```bash
+rg -n "function_calling|termination_reason|max_function_call_rounds|tool_not_allowed" logs -g '*.log'
+```
+
+定位缓存自愈与缓存来源：
+```bash
+rg -n "cache_hit|cache_recreate|cache_bypass_reason|legacy_cache_hit|checkpoint_recovered|cache_meta|cache_key" logs -g '*.log'
+```
+
+定位 thought metadata/signatures（来自 job read model）：
+```bash
+rg -n "thought_signatures|thought_signature_digest|thought_metadata|llm_meta" logs -g '*.log'
+```
+
 ## Doc Drift Trigger
 如修改日志格式、脱敏规则或日志落盘策略，必须同步更新本文件与 `docs/runbook-local.md`。

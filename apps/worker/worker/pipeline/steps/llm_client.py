@@ -1,17 +1,34 @@
 from __future__ import annotations
 
 import hashlib
-import mimetypes
-from pathlib import Path
+import time
 from typing import Any, Callable
 
 from worker.config import Settings
 from worker.pipeline.policies import normalize_llm_input_mode
 from worker.pipeline.types import LLMInputMode
+from worker.pipeline.steps.llm_client_helpers import (
+    _build_computer_use_tool,
+    _build_frame_parts,
+    _build_function_response_content,
+    _cache_meta_default,
+    _collect_thought_metadata,
+    _extract_finish_reason,
+    _execute_function_call,
+    _extract_function_calls,
+    _extract_primary_candidate_content,
+    _extract_response_text,
+    _is_cache_error,
+    _response_is_safety_blocked,
+    _normalize_media_resolution_policy,
+    _thinking_config,
+    classify_gemini_exception,
+)
 from worker.pipeline.steps.llm_prompts import build_evidence_citations, select_supporting_frames
 
-_CACHE_NAME_BY_KEY: dict[str, str] = {}
-_ALLOWED_MEDIA_RESOLUTION = {"low", "medium", "high"}
+_CACHE_NAME_BY_KEY: dict[str, dict[str, Any]] = {}
+_LAST_CACHE_SWEEP_AT = 0.0
+ComputerUseHandler = Callable[..., dict[str, Any]]
 
 
 def _cache_key(*parts: str) -> str:
@@ -22,138 +39,6 @@ def _cache_key(*parts: str) -> str:
     return digest.hexdigest()
 
 
-def _part_is_thought(part: Any) -> bool:
-    thought_flag = getattr(part, "thought", None)
-    if isinstance(thought_flag, bool):
-        return thought_flag
-    if isinstance(part, dict):
-        raw = part.get("thought")
-        if isinstance(raw, bool):
-            return raw
-    return False
-
-
-def _extract_response_text(response: Any) -> str | None:
-    text = getattr(response, "text", None)
-    if isinstance(text, str) and text.strip():
-        return text.strip()
-
-    candidates = getattr(response, "candidates", None)
-    if isinstance(candidates, list):
-        for candidate in candidates:
-            content = getattr(candidate, "content", None)
-            parts = getattr(content, "parts", None)
-            if not isinstance(parts, list):
-                continue
-            chunks: list[str] = []
-            for part in parts:
-                if _part_is_thought(part):
-                    continue
-                part_text = getattr(part, "text", None)
-                if isinstance(part_text, str) and part_text.strip():
-                    chunks.append(part_text.strip())
-            if chunks:
-                return "\n".join(chunks)
-    return None
-
-
-def _normalize_media_resolution(value: Any, *, default: str = "medium") -> str:
-    text = str(value or "").strip().lower()
-    if text in _ALLOWED_MEDIA_RESOLUTION:
-        return text
-    return default
-
-
-def _normalize_media_resolution_policy(value: Any) -> dict[str, str]:
-    if isinstance(value, dict):
-        base = _normalize_media_resolution(value.get("default"), default="medium")
-        return {
-            "default": base,
-            "frame": _normalize_media_resolution(value.get("frame"), default=base),
-            "image": _normalize_media_resolution(value.get("image"), default=base),
-            "pdf": _normalize_media_resolution(value.get("pdf"), default=base),
-        }
-    base = _normalize_media_resolution(value, default="medium")
-    return {"default": base, "frame": base, "image": base, "pdf": base}
-
-
-def _part_media_resolution(policy: dict[str, str], *, mime_type: str, kind: str | None = None) -> str:
-    if kind and kind in policy:
-        return policy[kind]
-    mime = (mime_type or "").strip().lower()
-    if mime.startswith("image/"):
-        return policy.get("image", policy["default"])
-    if mime == "application/pdf":
-        return policy.get("pdf", policy["default"])
-    return policy["default"]
-
-
-def _part_from_bytes(genai_types: Any, *, data: bytes, mime_type: str, media_resolution: str) -> Any:
-    part_cls = getattr(genai_types, "Part", None)
-    if part_cls is None:
-        return {"mime_type": mime_type, "data": data, "media_resolution": media_resolution}
-
-    for kwargs in (
-        {"data": data, "mime_type": mime_type, "media_resolution": media_resolution},
-        {
-            "data": data,
-            "mime_type": mime_type,
-            "config": {"media_resolution": media_resolution.upper()},
-        },
-        {"data": data, "mime_type": mime_type},
-    ):
-        try:
-            return part_cls.from_bytes(**kwargs)
-        except Exception:
-            continue
-    return {"mime_type": mime_type, "data": data, "media_resolution": media_resolution}
-
-
-def _build_frame_parts(
-    genai_types: Any,
-    frame_paths: list[str],
-    *,
-    limit: int,
-    media_resolution_policy: dict[str, str],
-) -> list[Any]:
-    parts: list[Any] = []
-    for frame_path in frame_paths[:limit]:
-        path = Path(frame_path)
-        if not path.exists() or not path.is_file():
-            continue
-        try:
-            data = path.read_bytes()
-        except OSError:
-            continue
-        if not data:
-            continue
-        mime_type = mimetypes.guess_type(path.name)[0] or "image/jpeg"
-        media_resolution = _part_media_resolution(
-            media_resolution_policy,
-            mime_type=mime_type,
-            kind="frame",
-        )
-        parts.append(
-            _part_from_bytes(
-                genai_types,
-                data=data,
-                mime_type=mime_type,
-                media_resolution=media_resolution,
-            )
-        )
-    return parts
-
-
-def _thinking_config(genai_types: Any, *, thinking_level: str, include_thoughts: bool) -> Any:
-    level = (thinking_level or "high").strip().lower()
-    if level not in {"minimal", "low", "medium", "high"}:
-        level = "high"
-    return genai_types.ThinkingConfig(
-        thinking_level=level.upper(),
-        include_thoughts=include_thoughts,
-    )
-
-
 def _create_cached_content(
     client: Any,
     genai_types: Any,
@@ -162,10 +47,24 @@ def _create_cached_content(
     prompt: str,
     cache_key: str,
     ttl_seconds: int,
+    max_keys: int,
+    local_ttl_seconds: int,
 ) -> str | None:
-    cached_name = _CACHE_NAME_BY_KEY.get(cache_key)
-    if cached_name:
-        return cached_name
+    now = time.time()
+    cached_entry = _CACHE_NAME_BY_KEY.get(cache_key)
+    if isinstance(cached_entry, str) and cached_entry.strip():
+        _CACHE_NAME_BY_KEY[cache_key] = {
+            "name": cached_entry.strip(),
+            "created_at": now,
+            "last_used_at": now,
+        }
+        return cached_entry.strip()
+    if isinstance(cached_entry, dict):
+        cached_name = cached_entry.get("name")
+        created_at = float(cached_entry.get("created_at") or 0.0)
+        if isinstance(cached_name, str) and cached_name and (now - created_at) <= max(60, local_ttl_seconds):
+            cached_entry["last_used_at"] = now
+            return cached_name
 
     ttl_seconds = max(300, int(ttl_seconds))
     cached = client.caches.create(
@@ -180,160 +79,77 @@ def _create_cached_content(
     )
     name = getattr(cached, "name", None)
     if isinstance(name, str) and name.strip():
-        _CACHE_NAME_BY_KEY[cache_key] = name
+        _CACHE_NAME_BY_KEY[cache_key] = {
+            "name": name,
+            "created_at": now,
+            "last_used_at": now,
+        }
+        _trim_local_cache(max_keys=max_keys)
         return name
     return None
 
 
-def _extract_function_calls(response: Any) -> list[dict[str, Any]]:
-    calls: list[dict[str, Any]] = []
-    candidates = getattr(response, "candidates", None)
-    if not isinstance(candidates, list):
-        return calls
-    for candidate in candidates:
-        content = getattr(candidate, "content", None)
-        parts = getattr(content, "parts", None)
-        if not isinstance(parts, list):
-            continue
-        for part in parts:
-            function_call = getattr(part, "function_call", None)
-            if function_call is None and isinstance(part, dict):
-                function_call = part.get("function_call")
-            if function_call is None:
-                continue
-
-            if isinstance(function_call, dict):
-                name = str(function_call.get("name") or "").strip()
-                args = function_call.get("args")
-            else:
-                name = str(getattr(function_call, "name", "") or "").strip()
-                args = getattr(function_call, "args", None)
-            if not name:
-                continue
-
-            if not isinstance(args, dict):
-                args = {}
-            calls.append({"name": name, "args": dict(args)})
-    return calls
+def _drop_cached_content(cache_key: str) -> None:
+    if not cache_key:
+        return
+    _CACHE_NAME_BY_KEY.pop(cache_key, None)
 
 
-def _execute_function_call(
-    allowed_tools: dict[str, Callable[..., dict[str, Any]]],
+def _trim_local_cache(*, max_keys: int) -> None:
+    max_keys = max(1, int(max_keys))
+    if len(_CACHE_NAME_BY_KEY) <= max_keys:
+        return
+    ordered = sorted(
+        _CACHE_NAME_BY_KEY.items(),
+        key=lambda item: float((item[1] or {}).get("last_used_at") or 0.0),
+    )
+    overflow = len(_CACHE_NAME_BY_KEY) - max_keys
+    for key, _ in ordered[:overflow]:
+        _CACHE_NAME_BY_KEY.pop(key, None)
+
+
+def _sweep_local_cache(*, local_ttl_seconds: int, sweep_interval_seconds: int) -> None:
+    global _LAST_CACHE_SWEEP_AT
+    now = time.time()
+    if (now - _LAST_CACHE_SWEEP_AT) < max(10, int(sweep_interval_seconds)):
+        return
+    _LAST_CACHE_SWEEP_AT = now
+    ttl = max(60, int(local_ttl_seconds))
+    expired_keys: list[str] = []
+    for key, entry in _CACHE_NAME_BY_KEY.items():
+        created_at = float((entry or {}).get("created_at") or 0.0)
+        if created_at <= 0 or (now - created_at) > ttl:
+            expired_keys.append(key)
+    for key in expired_keys:
+        _CACHE_NAME_BY_KEY.pop(key, None)
+
+
+def _failure_meta(
     *,
-    tool_name: str,
-    args: dict[str, Any],
+    model: str,
+    media_input: str,
+    reason: str,
+    detail: str,
+    error_kind: str | None,
+    request_id: str | None = None,
+    http_status: int | None = None,
+    termination_reason: str | None = None,
 ) -> dict[str, Any]:
-    tool = allowed_tools.get(tool_name)
-    if tool is None:
-        return {
-            "name": tool_name,
-            "status": "blocked",
-            "response": {"error": f"tool_not_allowed:{tool_name}"},
-        }
-    try:
-        response = tool(**args)
-    except Exception as exc:
-        return {
-            "name": tool_name,
-            "status": "failed",
-            "response": {"error": f"tool_execution_failed:{tool_name}", "detail": str(exc)},
-        }
-    if not isinstance(response, dict):
-        response = {"result": response}
-    return {"name": tool_name, "status": "ok", "response": response}
-
-
-def _extract_primary_candidate_content(response: Any) -> Any | None:
-    candidates = getattr(response, "candidates", None)
-    if isinstance(candidates, list) and candidates:
-        return getattr(candidates[0], "content", None)
-    return None
-
-
-def _build_function_response_part(genai_types: Any, *, name: str, payload: dict[str, Any]) -> Any:
-    part_cls = getattr(genai_types, "Part", None)
-    if part_cls is not None:
-        try:
-            return part_cls.from_function_response(
-                name=name,
-                response=payload,
-            )
-        except Exception:
-            pass
-    return {"function_response": {"name": name, "response": payload}}
-
-
-def _build_function_response_content(genai_types: Any, responses: list[dict[str, Any]]) -> Any:
-    parts = [
-        _build_function_response_part(genai_types, name=item["name"], payload=item["response"])
-        for item in responses
-    ]
-
-    content_cls = getattr(genai_types, "Content", None)
-    if content_cls is not None:
-        for role in ("tool", "user"):
-            try:
-                return content_cls(role=role, parts=parts)
-            except Exception:
-                continue
-    return {"role": "tool", "parts": parts}
-
-
-def _collect_thought_metadata(response: Any) -> dict[str, Any]:
-    thought_count = 0
-    thought_signatures: list[str] = []
-
-    candidates = getattr(response, "candidates", None)
-    if isinstance(candidates, list):
-        for candidate in candidates:
-            content = getattr(candidate, "content", None)
-            parts = getattr(content, "parts", None)
-            if not isinstance(parts, list):
-                continue
-            for part in parts:
-                if not _part_is_thought(part):
-                    continue
-                thought_count += 1
-                signature = getattr(part, "signature", None)
-                if signature is None:
-                    signature = getattr(part, "thought_signature", None)
-                if isinstance(signature, bytes):
-                    thought_signatures.append(signature.hex())
-                elif isinstance(signature, str) and signature.strip():
-                    thought_signatures.append(signature.strip())
-                else:
-                    text = getattr(part, "text", None)
-                    if isinstance(text, str) and text.strip():
-                        thought_signatures.append(
-                            hashlib.sha256(text.strip().encode("utf-8", errors="ignore")).hexdigest()
-                        )
-
-    usage = getattr(response, "usage_metadata", None)
-    usage_payload: dict[str, Any] = {}
-    if usage is not None:
-        for key in (
-            "prompt_token_count",
-            "candidates_token_count",
-            "total_token_count",
-            "thoughts_token_count",
-        ):
-            value = getattr(usage, key, None)
-            if isinstance(value, int):
-                usage_payload[key] = value
-
-    deduped_signatures = list(dict.fromkeys(thought_signatures))
-    signature_digest = ""
-    if deduped_signatures:
-        signature_digest = hashlib.sha256(
-            "|".join(deduped_signatures).encode("utf-8", errors="ignore")
-        ).hexdigest()
-
-    return {
-        "thought_count": thought_count,
-        "thought_signatures": deduped_signatures,
-        "thought_signature_digest": signature_digest or None,
-        "usage": usage_payload,
+    payload: dict[str, Any] = {
+        "request_id": request_id,
+        "model": model,
+        "media_input": media_input,
+        "finish_reason": None,
+        "termination_reason": termination_reason or "failed",
+        "safety_blocked": reason == "llm_safety_blocked",
+        "retry_attempts": 0,
+        "http_status": http_status,
+        "error_code": reason,
+        "error_kind": error_kind,
+        "error_detail": detail[:1000],
     }
+    payload.update(_cache_meta_default(bypass_reason="request_failed"))
+    return payload
 
 
 def gemini_generate(
@@ -354,25 +170,57 @@ def gemini_generate(
     enable_function_calling: bool = True,
     media_resolution: dict[str, Any] | str | None = None,
     max_function_call_rounds: int = 2,
+    enable_computer_use: bool = False,
+    computer_use_handler: ComputerUseHandler | None = None,
+    computer_use_require_confirmation: bool = True,
+    computer_use_confirmed: bool = False,
+    computer_use_max_steps: int = 3,
+    computer_use_timeout_seconds: float = 30.0,
 ) -> tuple[str | None, str, dict[str, Any]]:
-    if not settings.gemini_api_key:
-        return None, "none", {}
-
-    try:
-        from google import genai  # type: ignore
-        from google.genai import types as genai_types  # type: ignore
-    except Exception:
-        return None, "none", {}
-
     model_name = str(model or settings.gemini_model).strip() or settings.gemini_model
     normalized_mode = normalize_llm_input_mode(llm_input_mode)
     normalized_media_path = str(media_path or "").strip()
     normalized_frame_paths = list(frame_paths or [])
 
+    if not settings.gemini_api_key:
+        return None, "none", _failure_meta(
+            model=model_name,
+            media_input="none",
+            reason="gemini_api_key_missing",
+            detail="gemini api key is missing",
+            error_kind="auth",
+        )
+
+    try:
+        from google import genai  # type: ignore
+        from google.genai import types as genai_types  # type: ignore
+    except Exception as exc:
+        return None, "none", _failure_meta(
+            model=model_name,
+            media_input="none",
+            reason="llm_runtime_import_failed",
+            detail=str(exc),
+            error_kind="runtime",
+        )
+
     try:
         client = genai.Client(api_key=settings.gemini_api_key)
-    except Exception:
-        return None, "none", {}
+    except Exception as exc:
+        reason, error_kind, http_status = classify_gemini_exception(exc)
+        return None, "none", _failure_meta(
+            model=model_name,
+            media_input="none",
+            reason=reason,
+            detail=str(exc),
+            error_kind=error_kind,
+            http_status=http_status,
+        )
+
+    _sweep_local_cache(
+        local_ttl_seconds=settings.gemini_context_cache_local_ttl_seconds,
+        sweep_interval_seconds=settings.gemini_context_cache_sweep_interval_seconds,
+    )
+    deferred_failure: tuple[str, dict[str, Any]] | None = None
 
     effective_thinking_level = str(thinking_level or settings.gemini_thinking_level or "high")
     effective_include_thoughts = (
@@ -380,6 +228,8 @@ def gemini_generate(
     )
     effective_media_resolution = _normalize_media_resolution_policy(media_resolution)
     max_function_call_rounds = max(0, int(max_function_call_rounds))
+    computer_use_max_steps = max(0, int(computer_use_max_steps))
+    effective_computer_use_timeout = max(0.1, float(computer_use_timeout_seconds))
     allowed_tools: dict[str, Callable[..., dict[str, Any]]] = {
         "select_supporting_frames": select_supporting_frames,
         "build_evidence_citations": build_evidence_citations,
@@ -398,20 +248,38 @@ def gemini_generate(
     if response_mime_type:
         config_kwargs["response_mime_type"] = response_mime_type
     if response_schema:
-        config_kwargs["response_schema"] = response_schema
+        config_kwargs["response_json_schema"] = response_schema
+    tool_defs: list[Any] = []
     if enable_function_calling:
-        config_kwargs["tools"] = [select_supporting_frames, build_evidence_citations]
+        tool_defs.extend([select_supporting_frames, build_evidence_citations])
+    if enable_computer_use:
+        tool_defs.append(_build_computer_use_tool(genai_types))
+    if tool_defs:
+        config_kwargs["tools"] = tool_defs
+    config_variants: list[dict[str, Any]] = [dict(config_kwargs)]
+    if response_schema:
+        fallback_kwargs = dict(config_kwargs)
+        fallback_kwargs.pop("response_json_schema", None)
+        config_variants.append(fallback_kwargs)
 
     def _generate(contents: Any, *, cached_content: str | None = None) -> Any:
-        kwargs = dict(config_kwargs)
-        if cached_content:
-            kwargs["cached_content"] = cached_content
-        config = genai_types.GenerateContentConfig(**kwargs)
-        return client.models.generate_content(
-            model=model_name,
-            contents=contents,
-            config=config,
-        )
+        last_exc: Exception | None = None
+        for variant in config_variants:
+            kwargs = dict(variant)
+            if cached_content:
+                kwargs["cached_content"] = cached_content
+            try:
+                config = genai_types.GenerateContentConfig(**kwargs)
+                return client.models.generate_content(
+                    model=model_name,
+                    contents=contents,
+                    config=config,
+                )
+            except Exception as exc:
+                last_exc = exc
+        if last_exc is not None:
+            raise last_exc
+        raise RuntimeError("gemini_generate_unexpected_empty_config")
 
     def _generate_with_function_loop(
         contents: Any,
@@ -422,26 +290,50 @@ def gemini_generate(
         thought_signatures: list[str] = []
         usage_rollup: dict[str, int] = {}
         call_trace: list[dict[str, Any]] = []
+        computer_use_steps_used = 0
         rounds = 0
         termination_reason = "no_response"
+        finish_reason: str | None = None
+        safety_blocked = False
+        request_id: str | None = None
         conversation = list(contents) if isinstance(contents, list) else [contents]
 
         while True:
             rounds += 1
-            response = _generate(conversation, cached_content=cached_content)
+            try:
+                response = _generate(conversation, cached_content=cached_content)
+            except Exception as exc:
+                reason, error_kind, http_status = classify_gemini_exception(exc)
+                return None, _failure_meta(
+                    model=model_name,
+                    media_input="text",
+                    reason=reason,
+                    detail=str(exc),
+                    error_kind=error_kind,
+                    http_status=http_status,
+                    termination_reason="generate_exception",
+                )
+            request_id = str(
+                getattr(response, "response_id", None)
+                or getattr(response, "id", None)
+                or request_id
+                or ""
+            ).strip() or request_id
             thought_meta = _collect_thought_metadata(response)
             thought_count += int(thought_meta.get("thought_count") or 0)
             thought_signatures.extend(list(thought_meta.get("thought_signatures") or []))
             for key, value in dict(thought_meta.get("usage") or {}).items():
                 if isinstance(value, int):
                     usage_rollup[key] = usage_rollup.get(key, 0) + value
+            finish_reason = _extract_finish_reason(response) or finish_reason
+            safety_blocked = safety_blocked or _response_is_safety_blocked(response)
 
             text = _extract_response_text(response)
             if text:
                 termination_reason = "text"
                 break
 
-            if not enable_function_calling:
+            if not (enable_function_calling or enable_computer_use):
                 termination_reason = "function_calling_disabled"
                 break
 
@@ -463,7 +355,15 @@ def gemini_generate(
                     allowed_tools,
                     tool_name=tool_name,
                     args=args,
+                    computer_use_handler=computer_use_handler,
+                    computer_use_require_confirmation=computer_use_require_confirmation,
+                    computer_use_confirmed=computer_use_confirmed,
+                    computer_use_timeout_seconds=effective_computer_use_timeout,
+                    computer_use_step_limit=computer_use_max_steps,
+                    computer_use_steps_used=computer_use_steps_used,
                 )
+                if tool_name == "computer_use" and result.get("status") == "ok":
+                    computer_use_steps_used += 1
                 call_trace.append(
                     {
                         "round": rounds,
@@ -487,6 +387,8 @@ def gemini_generate(
             ).hexdigest()
 
         return text if termination_reason == "text" else None, {
+            "request_id": request_id,
+            "model": model_name,
             "thinking": {
                 "enabled": True,
                 "level": str(effective_thinking_level).strip().lower(),
@@ -497,11 +399,21 @@ def gemini_generate(
                 "usage": usage_rollup,
             },
             "function_calling": {
-                "enabled": bool(enable_function_calling),
+                "enabled": bool(enable_function_calling or enable_computer_use),
                 "max_rounds": max_function_call_rounds,
                 "rounds_used": rounds,
                 "calls": call_trace,
                 "termination_reason": termination_reason,
+            },
+            "finish_reason": finish_reason,
+            "safety_blocked": safety_blocked,
+            "computer_use": {
+                "enabled": bool(enable_computer_use),
+                "require_confirmation": bool(computer_use_require_confirmation),
+                "confirmed": bool(computer_use_confirmed),
+                "max_steps": computer_use_max_steps,
+                "steps_used": computer_use_steps_used,
+                "timeout_seconds": effective_computer_use_timeout,
             },
             "media_resolution": effective_media_resolution,
         }
@@ -512,9 +424,21 @@ def gemini_generate(
             uploaded = client.files.upload(file=normalized_media_path)
             text, metadata = _generate_with_function_loop([uploaded, prompt])
             if text:
+                metadata.update(_cache_meta_default(bypass_reason="non_text_mode"))
                 return text, "video_text", metadata
-        except Exception:
-            pass
+            if metadata:
+                metadata.setdefault("media_input", "video_text")
+                deferred_failure = ("video_text", metadata)
+        except Exception as exc:
+            reason, error_kind, http_status = classify_gemini_exception(exc)
+            deferred_failure = ("video_text", _failure_meta(
+                model=model_name,
+                media_input="video_text",
+                reason=reason,
+                detail=str(exc),
+                error_kind=error_kind,
+                http_status=http_status,
+            ))
 
     should_try_frames = normalized_mode in {"auto", "video_text", "frames_text"} and bool(normalized_frame_paths)
     if should_try_frames:
@@ -528,39 +452,177 @@ def gemini_generate(
             if frame_parts:
                 text, metadata = _generate_with_function_loop([prompt, *frame_parts])
                 if text:
+                    metadata.update(_cache_meta_default(bypass_reason="non_text_mode"))
                     return text, "frames_text", metadata
-        except Exception:
-            pass
+                if metadata:
+                    metadata.setdefault("media_input", "frames_text")
+                    deferred_failure = ("frames_text", metadata)
+        except Exception as exc:
+            reason, error_kind, http_status = classify_gemini_exception(exc)
+            deferred_failure = ("frames_text", _failure_meta(
+                model=model_name,
+                media_input="frames_text",
+                reason=reason,
+                detail=str(exc),
+                error_kind=error_kind,
+                http_status=http_status,
+            ))
 
     if normalized_mode in {"auto", "text"}:
+        cache_key = _cache_key(model_name, prompt, normalized_mode)
         cached_content_name: str | None = None
         cache_enabled = bool(use_context_cache) and bool(settings.gemini_context_cache_enabled)
-        if cache_enabled and len(prompt) >= max(0, settings.gemini_context_cache_min_chars):
+        cache_meta = _cache_meta_default()
+        if not cache_enabled:
+            cache_meta["cache_bypass_reason"] = "cache_disabled"
+        elif len(prompt) < max(0, settings.gemini_context_cache_min_chars):
+            cache_meta["cache_bypass_reason"] = "prompt_too_short"
+        else:
             try:
                 cache_name = _create_cached_content(
                     client,
                     genai_types,
                     model=model_name,
                     prompt=prompt,
-                    cache_key=_cache_key(model_name, prompt, normalized_mode),
+                    cache_key=cache_key,
                     ttl_seconds=settings.gemini_context_cache_ttl_seconds,
+                    max_keys=settings.gemini_context_cache_max_keys,
+                    local_ttl_seconds=settings.gemini_context_cache_local_ttl_seconds,
                 )
                 if cache_name:
                     cached_content_name = cache_name
-            except Exception:
+            except Exception as exc:
+                cache_meta["cache_bypass_reason"] = f"cache_create_failed:{type(exc).__name__}"
                 cached_content_name = None
 
         try:
             if cached_content_name:
-                text, metadata = _generate_with_function_loop(
-                    "Use the cached context and return a strict JSON response.",
-                    cached_content=cached_content_name,
-                )
+                try:
+                    text, metadata = _generate_with_function_loop(
+                        "Use the cached context and return a strict JSON response.",
+                        cached_content=cached_content_name,
+                    )
+                    if text:
+                        metadata.update(
+                            {
+                                "cache_hit": True,
+                                "cache_recreate": False,
+                                "cache_bypass_reason": None,
+                            }
+                        )
+                    elif _is_cache_error(
+                        RuntimeError(str(metadata.get("error_detail") or metadata.get("error_code") or ""))
+                    ):
+                        _drop_cached_content(cache_key)
+                        try:
+                            recreated_name = _create_cached_content(
+                                client,
+                                genai_types,
+                                model=model_name,
+                                prompt=prompt,
+                                cache_key=cache_key,
+                                ttl_seconds=settings.gemini_context_cache_ttl_seconds,
+                                max_keys=settings.gemini_context_cache_max_keys,
+                                local_ttl_seconds=settings.gemini_context_cache_local_ttl_seconds,
+                            )
+                        except Exception:
+                            recreated_name = None
+                        if recreated_name:
+                            text, metadata = _generate_with_function_loop(
+                                "Use the cached context and return a strict JSON response.",
+                                cached_content=recreated_name,
+                            )
+                            metadata.update(
+                                {
+                                    "cache_hit": bool(text),
+                                    "cache_recreate": True,
+                                    "cache_bypass_reason": None if text else "cache_recreate_empty",
+                                }
+                            )
+                        else:
+                            text, metadata = _generate_with_function_loop(prompt)
+                            metadata.update(
+                                {
+                                    "cache_hit": False,
+                                    "cache_recreate": False,
+                                    "cache_bypass_reason": "cache_recreate_failed",
+                                }
+                            )
+                except Exception as cached_exc:
+                    if _is_cache_error(cached_exc):
+                        _drop_cached_content(cache_key)
+                        try:
+                            recreated_name = _create_cached_content(
+                                client,
+                                genai_types,
+                                model=model_name,
+                                prompt=prompt,
+                                cache_key=cache_key,
+                                ttl_seconds=settings.gemini_context_cache_ttl_seconds,
+                                max_keys=settings.gemini_context_cache_max_keys,
+                                local_ttl_seconds=settings.gemini_context_cache_local_ttl_seconds,
+                            )
+                        except Exception:
+                            recreated_name = None
+                        if recreated_name:
+                            text, metadata = _generate_with_function_loop(
+                                "Use the cached context and return a strict JSON response.",
+                                cached_content=recreated_name,
+                            )
+                            metadata.update(
+                                {
+                                    "cache_hit": bool(text),
+                                    "cache_recreate": True,
+                                    "cache_bypass_reason": None if text else "cache_recreate_empty",
+                                }
+                            )
+                        else:
+                            text, metadata = _generate_with_function_loop(prompt)
+                            metadata.update(
+                                {
+                                    "cache_hit": False,
+                                    "cache_recreate": False,
+                                    "cache_bypass_reason": "cache_recreate_failed",
+                                }
+                            )
+                    else:
+                        text, metadata = _generate_with_function_loop(prompt)
+                        metadata.update(
+                            {
+                                "cache_hit": False,
+                                "cache_recreate": False,
+                                "cache_bypass_reason": f"cache_bypass:{type(cached_exc).__name__}",
+                            }
+                        )
             else:
                 text, metadata = _generate_with_function_loop(prompt)
+                metadata.update(cache_meta)
             if text:
                 return text, "text", metadata
-        except Exception:
-            pass
+            if metadata:
+                metadata.setdefault("model", model_name)
+                metadata.setdefault("media_input", "text")
+                return None, "text", metadata
+        except Exception as exc:
+            reason, error_kind, http_status = classify_gemini_exception(exc)
+            deferred_failure = ("text", _failure_meta(
+                model=model_name,
+                media_input="text",
+                reason=reason,
+                detail=str(exc),
+                error_kind=error_kind,
+                http_status=http_status,
+            ))
 
-    return None, "none", {}
+    if deferred_failure is not None:
+        media_input, meta = deferred_failure
+        return None, media_input, meta
+
+    return None, "none", _failure_meta(
+        model=model_name,
+        media_input="none",
+        reason="llm_no_response",
+        detail="no text response from model",
+        error_kind="runtime",
+        termination_reason="no_response",
+    )

@@ -4,7 +4,7 @@
 本系统运行前置固定为同一套流程：
 1. 安装依赖（`uv sync --frozen --extra dev --extra e2e`）
 2. 启动 PostgreSQL / Temporal
-3. 初始化 `.env.local` 并校验 env contract
+3. 初始化 `.env` 并校验 env contract（仅 `.env` 缺失时回退 `.env.local`）
 4. 执行全部 SQL 迁移 + SQLite 初始化
 5. 启动 API / Worker / MCP
 6. 触发最小验收请求
@@ -28,12 +28,12 @@
 4. 写入 `videos` + `ingest_events`，按幂等去重创建 `jobs`。
 5. 为每个新 job 启动 `ProcessJobWorkflow`。
 
-## Process Workflow（3 阶段 + 8-step pipeline）
+## Process Workflow（3 阶段 + 9-step pipeline）
 
 ### 阶段 A：运行前标记
 - `mark_running`
 
-### 阶段 B：`run_pipeline_activity`（8 steps）
+### 阶段 B：`run_pipeline_activity`（9 steps）
 1. `fetch_metadata`
 2. `download_media`
 3. `collect_subtitles`
@@ -41,7 +41,8 @@
 5. `extract_frames`
 6. `llm_outline`
 7. `llm_digest`
-8. `write_artifacts`
+8. `build_embeddings`
+9. `write_artifacts`
 
 ### 阶段 C：收敛状态
 - 成功/部分成功：`mark_succeeded`
@@ -67,6 +68,15 @@
 
 限制：`overrides` 仅调参，不替代 `mode` 的步骤执行矩阵。
 
+## Computer Use（函数调用）安全闸
+- 适用步骤：`llm_outline`、`llm_digest`。
+- 允许工具白名单：`select_supporting_frames`、`build_evidence_citations`。
+- 非白名单调用：记为 `blocked`，不执行。
+- `computer_use` 开关已接入策略层（`GEMINI_COMPUTER_USE_*` + `overrides.llm*`），但当前 worker 未注入执行 handler，调用返回 `computer_use_handler_missing`。
+- `computer_use_require_confirmation` 默认 `true`，未确认返回 `computer_use_confirmation_required`。
+- 回合上限：`max_function_call_rounds`（默认 `2`，可通过 `overrides.llm*` 覆盖）。
+- 翻译回退路径固定 `enable_function_calling=false`。
+
 ## Read Model Contract（API/MCP/Web）
 `jobs.get` 稳定字段：
 - `step_summary`
@@ -78,6 +88,14 @@
 - `hard_fail_reason`
 - `artifacts_index`
 - `mode`
+
+与 thought/cache 观测相关的可见字段：
+- `steps[].result.llm_meta.thinking.thought_signatures`
+- `steps[].result.llm_meta.thinking.thought_signature_digest`
+- `steps[].result.llm_meta.function_calling`（`calls`、`termination_reason` 等）
+- `steps[].cache_key`
+- `steps[].thought_metadata`（兼容提取位，可能为 `null`）
+- `degradations[].cache_meta`
 
 ## Retry Strategy
 - RSS 拉取：`REQUEST_RETRY_ATTEMPTS` + `REQUEST_RETRY_BACKOFF_SECONDS`
@@ -93,6 +111,7 @@
 ## Cache 与 Degrade（摘要）
 - 业务层去重：`videos`、`ingest_events`、`jobs.idempotency_key` 唯一约束。
 - pipeline step cache：每步基于输入签名命中缓存。
+- 缓存自愈：`resume_hint` 场景下可从 checkpoint / SQLite 历史成功记录恢复，step 以 `checkpoint_recovered` 标记 `skipped`。
 - 可降级失败场景会记录到 `degradations`，最终状态会收敛为：
   - `jobs.status = succeeded`
   - `pipeline_final_status = degraded`

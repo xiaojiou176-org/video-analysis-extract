@@ -11,6 +11,7 @@ from apps.mcp.tools._common import (
     to_optional_str,
 )
 from apps.mcp.tools.artifacts import _normalize_markdown_payload, register_artifact_tools
+from apps.mcp.tools.computer_use import register_computer_use_tools
 from apps.mcp.tools.health import register_health_tools
 from apps.mcp.tools.jobs import _normalize_job_payload, register_job_tools
 from apps.mcp.tools.notifications import (
@@ -239,17 +240,22 @@ def test_artifacts_get_asset_tool_exposes_asset_url_and_base64() -> None:
 
     register_artifact_tools(mcp, fake_api_call)
     payload = mcp.tools["vd.artifacts.get_asset"](
-        job_id="job-1",
+        job_id="00000000-0000-0000-0000-000000000001",
         path="frames/frame_001.jpg",
         include_base64=True,
     )
 
     assert calls[0]["method"] == "GET"
     assert calls[0]["path"] == "/api/v1/artifacts/assets"
-    assert calls[0]["kwargs"]["params"] == {"job_id": "job-1", "path": "frames/frame_001.jpg"}
+    assert calls[0]["kwargs"]["params"] == {
+        "job_id": "00000000-0000-0000-0000-000000000001",
+        "path": "frames/frame_001.jpg",
+    }
     assert calls[0]["kwargs"]["return_bytes_base64"] is True
     assert payload["exists"] is True
-    assert payload["asset_url"] == "/api/v1/artifacts/assets?job_id=job-1&path=frames%2Fframe_001.jpg"
+    assert payload["asset_url"] == (
+        "/api/v1/artifacts/assets?job_id=00000000-0000-0000-0000-000000000001&path=frames%2Fframe_001.jpg"
+    )
     assert payload["mime_type"] == "image/jpeg"
     assert payload["base64"] == "dGVzdA=="
     assert payload["size_bytes"] == 4
@@ -380,3 +386,47 @@ def test_workflows_run_tool_posts_expected_body_and_normalizes_result() -> None:
     assert payload["run_id"] == "run-456"
     assert payload["status"] == "started"
     assert payload["result"] == {"ok": True}
+
+
+def test_computer_use_run_tool_posts_expected_body_and_normalizes_result() -> None:
+    mcp = _FakeMCP()
+    calls: list[dict[str, Any]] = []
+
+    def fake_api_call(method: str, path: str, **kwargs: Any) -> dict[str, Any]:
+        calls.append({"method": method, "path": path, "kwargs": kwargs})
+        return {
+            "actions": [
+                {
+                    "step": 1,
+                    "action": "click",
+                    "target": "submit button",
+                    "input_text": None,
+                    "reasoning": "click submit button",
+                }
+            ],
+            "require_confirmation": True,
+            "blocked_actions": ["submit"],
+            "final_text": "Need confirmation.",
+            "thought_metadata": {"planner": "rule_based"},
+        }
+
+    register_computer_use_tools(mcp, fake_api_call)
+    payload = mcp.tools["vd.computer_use.run"](
+        instruction="click submit button",
+        screenshot_base64="ZmFrZQ==",
+        safety={"blocked_actions": ["submit"], "confirm_before_execute": False},
+    )
+
+    assert calls[0]["method"] == "POST"
+    assert calls[0]["path"] == "/api/v1/computer-use/run"
+    assert calls[0]["kwargs"]["json_body"] == {
+        "instruction": "click submit button",
+        "screenshot_base64": "ZmFrZQ==",
+        "safety": {"blocked_actions": ["submit"], "confirm_before_execute": False},
+    }
+    assert payload["actions"][0]["step"] == 1
+    assert payload["actions"][0]["action"] == "click"
+    assert payload["require_confirmation"] is True
+    assert payload["blocked_actions"] == ["submit"]
+    assert payload["final_text"] == "Need confirmation."
+    assert payload["thought_metadata"] == {"planner": "rule_based"}

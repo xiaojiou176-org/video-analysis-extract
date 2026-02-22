@@ -60,7 +60,9 @@ Startup validation fails when:
 - `GEMINI_API_KEY`, `GEMINI_MODEL`, `GEMINI_OUTLINE_MODEL`, `GEMINI_DIGEST_MODEL`
 - `GEMINI_FAST_MODEL`, `GEMINI_EMBEDDING_MODEL`, `YOUTUBE_API_KEY`
 - `GEMINI_THINKING_LEVEL`, `GEMINI_INCLUDE_THOUGHTS`
-- `GEMINI_CONTEXT_CACHE_ENABLED`, `GEMINI_CONTEXT_CACHE_TTL_SECONDS`, `GEMINI_CONTEXT_CACHE_MIN_CHARS`
+- `GEMINI_CONTEXT_CACHE_ENABLED`, `GEMINI_CONTEXT_CACHE_TTL_SECONDS`, `GEMINI_CONTEXT_CACHE_MIN_CHARS`, `GEMINI_CONTEXT_CACHE_MAX_KEYS`, `GEMINI_CONTEXT_CACHE_LOCAL_TTL_SECONDS`, `GEMINI_CONTEXT_CACHE_SWEEP_INTERVAL_SECONDS`
+- `GEMINI_COMPUTER_USE_ENABLED`, `GEMINI_COMPUTER_USE_REQUIRE_CONFIRMATION`
+- `GEMINI_COMPUTER_USE_MAX_STEPS`, `GEMINI_COMPUTER_USE_TIMEOUT_SECONDS`
 
 ## Gemini-Only Model Strategy
 
@@ -93,6 +95,14 @@ LLM generation is Gemini-only in this repository:
 - `FAILURE_*`
 - `LIVE_SMOKE_*`
 - `API_*`, `WORKER_*`, `MCP_*`, `OUTPUT_PATH`, `INIT_ENV_FORCE`
+
+`LIVE_SMOKE_*` includes strict computer-use controls:
+
+- `LIVE_SMOKE_API_BASE_URL` / `LIVE_SMOKE_API_PORT`: API target override for live smoke. Leave `LIVE_SMOKE_API_BASE_URL` empty to follow `API_PORT`. Parent shell values have higher priority than values loaded from `.env`.
+- `LIVE_SMOKE_HEALTH_PATH`: Health endpoint path used by live smoke (default `/healthz`).
+- `LIVE_SMOKE_COMPUTER_USE_STRICT`: defaults to strict mode (`1`) so missing/failing computer-use smoke command fails the run.
+- `LIVE_SMOKE_COMPUTER_USE_SKIP`: optional explicit skip switch; when `1`, `LIVE_SMOKE_COMPUTER_USE_SKIP_REASON` must be non-empty.
+- `LIVE_SMOKE_COMPUTER_USE_CMD`: optional shell command override for computer-use smoke. By default, the script runs `scripts/smoke_computer_use_local.sh`.
 
 ## Local Setup
 

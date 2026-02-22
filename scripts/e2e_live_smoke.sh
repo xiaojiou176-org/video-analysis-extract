@@ -3,14 +3,44 @@ set -euo pipefail
 
 SCRIPT_NAME="e2e_live_smoke"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+# Keep parent-shell overrides for API routing knobs before loading repo .env files.
+SHELL_VD_API_BASE_URL="${VD_API_BASE_URL-}"
+SHELL_VD_API_BASE_URL_SET="${VD_API_BASE_URL+x}"
+SHELL_LIVE_SMOKE_API_BASE_URL="${LIVE_SMOKE_API_BASE_URL-}"
+SHELL_LIVE_SMOKE_API_BASE_URL_SET="${LIVE_SMOKE_API_BASE_URL+x}"
+SHELL_LIVE_SMOKE_API_PORT="${LIVE_SMOKE_API_PORT-}"
+SHELL_LIVE_SMOKE_API_PORT_SET="${LIVE_SMOKE_API_PORT+x}"
+
 # shellcheck source=./scripts/lib/load_env.sh
 source "$ROOT_DIR/scripts/lib/load_env.sh"
 load_repo_env "$ROOT_DIR" "$SCRIPT_NAME"
 
-VD_API_BASE_URL="${VD_API_BASE_URL:-http://127.0.0.1:8000}"
-LIVE_SMOKE_TIMEOUT_SECONDS="${LIVE_SMOKE_TIMEOUT_SECONDS:-60}"
+if [[ -n "$SHELL_VD_API_BASE_URL_SET" ]]; then
+  VD_API_BASE_URL="$SHELL_VD_API_BASE_URL"
+fi
+if [[ -n "$SHELL_LIVE_SMOKE_API_BASE_URL_SET" ]]; then
+  LIVE_SMOKE_API_BASE_URL="$SHELL_LIVE_SMOKE_API_BASE_URL"
+fi
+if [[ -n "$SHELL_LIVE_SMOKE_API_PORT_SET" ]]; then
+  LIVE_SMOKE_API_PORT="$SHELL_LIVE_SMOKE_API_PORT"
+fi
+
+LIVE_SMOKE_API_PORT="${LIVE_SMOKE_API_PORT:-${API_PORT:-8000}}"
+LIVE_SMOKE_API_BASE_URL="${LIVE_SMOKE_API_BASE_URL:-${VD_API_BASE_URL:-}}"
+if [[ -z "$LIVE_SMOKE_API_BASE_URL" ]]; then
+  LIVE_SMOKE_API_BASE_URL="http://127.0.0.1:${LIVE_SMOKE_API_PORT}"
+fi
+VD_API_BASE_URL="$LIVE_SMOKE_API_BASE_URL"
+
+LIVE_SMOKE_TIMEOUT_SECONDS="${LIVE_SMOKE_TIMEOUT_SECONDS:-180}"
 LIVE_SMOKE_REQUIRE_API="${LIVE_SMOKE_REQUIRE_API:-1}"
 LIVE_SMOKE_POLL_INTERVAL_SECONDS="${LIVE_SMOKE_POLL_INTERVAL_SECONDS:-3}"
+LIVE_SMOKE_HEALTH_PATH="${LIVE_SMOKE_HEALTH_PATH:-/healthz}"
+LIVE_SMOKE_COMPUTER_USE_STRICT="${LIVE_SMOKE_COMPUTER_USE_STRICT:-1}"
+LIVE_SMOKE_COMPUTER_USE_SKIP="${LIVE_SMOKE_COMPUTER_USE_SKIP:-0}"
+LIVE_SMOKE_COMPUTER_USE_SKIP_REASON="${LIVE_SMOKE_COMPUTER_USE_SKIP_REASON:-}"
+LIVE_SMOKE_COMPUTER_USE_CMD="${LIVE_SMOKE_COMPUTER_USE_CMD:-}"
 YOUTUBE_SMOKE_URL="${YOUTUBE_SMOKE_URL:-https://www.youtube.com/watch?v=dQw4w9WgXcQ}"
 BILIBILI_SMOKE_URL="${BILIBILI_SMOKE_URL:-https://www.bilibili.com/video/BV1xx411c7mD}"
 
@@ -48,6 +78,13 @@ require_enum() {
     fi
   done
   fail "invalid ${name}=${value}; allowed: ${allowed[*]}"
+}
+
+trim_whitespace() {
+  local value="${1:-}"
+  value="${value#"${value%%[![:space:]]*}"}"
+  value="${value%"${value##*[![:space:]]}"}"
+  printf '%s' "$value"
 }
 
 api_post() {
@@ -89,6 +126,26 @@ check_prerequisites() {
   require_cmd curl
   require_cmd python3
 
+  if ! [[ "$LIVE_SMOKE_API_PORT" =~ ^[0-9]+$ ]] || (( LIVE_SMOKE_API_PORT < 1 || LIVE_SMOKE_API_PORT > 65535 )); then
+    fail "invalid LIVE_SMOKE_API_PORT=${LIVE_SMOKE_API_PORT}; expected integer in [1,65535]"
+  fi
+  if [[ -z "$LIVE_SMOKE_HEALTH_PATH" || "${LIVE_SMOKE_HEALTH_PATH:0:1}" != "/" ]]; then
+    fail "invalid LIVE_SMOKE_HEALTH_PATH=${LIVE_SMOKE_HEALTH_PATH}; expected absolute path (e.g. /healthz)"
+  fi
+
+  local computer_use_strict
+  computer_use_strict="$(printf '%s' "$LIVE_SMOKE_COMPUTER_USE_STRICT" | tr '[:upper:]' '[:lower:]')"
+  require_enum "LIVE_SMOKE_COMPUTER_USE_STRICT" "$computer_use_strict" 0 1 true false yes no on off
+
+  local computer_use_skip
+  computer_use_skip="$(printf '%s' "$LIVE_SMOKE_COMPUTER_USE_SKIP" | tr '[:upper:]' '[:lower:]')"
+  require_enum "LIVE_SMOKE_COMPUTER_USE_SKIP" "$computer_use_skip" 0 1 true false yes no on off
+
+  log "API target: base=${VD_API_BASE_URL} port=${LIVE_SMOKE_API_PORT}"
+  if [[ -z "$(trim_whitespace "$LIVE_SMOKE_COMPUTER_USE_CMD")" ]]; then
+    LIVE_SMOKE_COMPUTER_USE_CMD="bash \"$ROOT_DIR/scripts/smoke_computer_use_local.sh\" --api-base-url \"$VD_API_BASE_URL\""
+  fi
+
   local missing=()
   [[ -z "${GEMINI_API_KEY:-}" ]] && missing+=("GEMINI_API_KEY")
   [[ -z "${RESEND_API_KEY:-}" ]] && missing+=("RESEND_API_KEY")
@@ -110,7 +167,7 @@ check_prerequisites() {
   log "LLM strategy: provider=gemini model=${GEMINI_MODEL:-gemini-3.1-pro-preview} fast_model=${GEMINI_FAST_MODEL:-gemini-3-flash-preview} thinking=${thinking_level} input_mode=${llm_input_mode} cache=${GEMINI_CONTEXT_CACHE_ENABLED:-true}"
 
   local status body response
-  response="$(api_get "/healthz")"
+  response="$(api_get "$LIVE_SMOKE_HEALTH_PATH")"
   status="${response%%$'\n'*}"
   body="${response#*$'\n'}"
   if [[ "$status" != "200" ]]; then
@@ -120,6 +177,40 @@ check_prerequisites() {
     log "SKIP: API is unavailable at ${VD_API_BASE_URL} (status=${status})"
     exit 0
   fi
+}
+
+run_computer_use_smoke() {
+  local strict_value skip_value skip_reason cmd
+  strict_value="$(printf '%s' "$LIVE_SMOKE_COMPUTER_USE_STRICT" | tr '[:upper:]' '[:lower:]')"
+  skip_value="$(printf '%s' "$LIVE_SMOKE_COMPUTER_USE_SKIP" | tr '[:upper:]' '[:lower:]')"
+  skip_reason="$(trim_whitespace "$LIVE_SMOKE_COMPUTER_USE_SKIP_REASON")"
+  cmd="$(trim_whitespace "$LIVE_SMOKE_COMPUTER_USE_CMD")"
+
+  if is_truthy "$skip_value"; then
+    [[ -n "$skip_reason" ]] || fail "LIVE_SMOKE_COMPUTER_USE_SKIP=1 requires LIVE_SMOKE_COMPUTER_USE_SKIP_REASON"
+    log "Scenario: computer_use smoke skipped; reason=${skip_reason}"
+    return 0
+  fi
+
+  if [[ -z "$cmd" ]]; then
+    local message="computer_use smoke command is empty; set LIVE_SMOKE_COMPUTER_USE_CMD or skip with LIVE_SMOKE_COMPUTER_USE_SKIP=1 and reason"
+    if is_truthy "$strict_value"; then
+      fail "$message"
+    fi
+    log "Scenario: computer_use smoke non-strict skip; reason=${message}"
+    return 0
+  fi
+
+  log "Scenario: computer_use smoke"
+  if bash -lc "$cmd"; then
+    log "computer_use smoke passed"
+    return 0
+  fi
+
+  if is_truthy "$strict_value"; then
+    fail "computer_use smoke failed: cmd=${cmd}"
+  fi
+  log "Scenario: computer_use smoke non-strict skip; reason=command failed cmd=${cmd}"
 }
 
 process_video() {
@@ -228,20 +319,20 @@ run_worker_workflow_once() {
 
 main() {
   check_prerequisites
-  local -a submitted_jobs=()
-
   log "Scenario: YouTube full"
-  submitted_jobs+=("$(process_video "youtube" "$YOUTUBE_SMOKE_URL" "full" "youtube_full")")
+  local youtube_job_id
+  youtube_job_id="$(process_video "youtube" "$YOUTUBE_SMOKE_URL" "full" "youtube_full")"
+  wait_for_terminal_status "$youtube_job_id" "video_process:youtube_full"
 
   log "Scenario: Bilibili full"
-  submitted_jobs+=("$(process_video "bilibili" "$BILIBILI_SMOKE_URL" "full" "bilibili_full")")
+  local bilibili_job_id
+  bilibili_job_id="$(process_video "bilibili" "$BILIBILI_SMOKE_URL" "full" "bilibili_full")"
+  wait_for_terminal_status "$bilibili_job_id" "video_process:bilibili_full"
 
   log "Scenario: Gemini degrade(text_only fallback path)"
-  submitted_jobs+=("$(process_video "youtube" "$YOUTUBE_SMOKE_URL" "text_only" "gemini_degrade")")
-
-  for job_id in "${submitted_jobs[@]}"; do
-    wait_for_terminal_status "$job_id" "video_process"
-  done
+  local degrade_job_id
+  degrade_job_id="$(process_video "youtube" "$YOUTUBE_SMOKE_URL" "text_only" "gemini_degrade")"
+  wait_for_terminal_status "$degrade_job_id" "video_process:gemini_degrade"
 
   log "Scenario: video_digest retry recovery"
   run_worker_workflow_once "start-notification-retry-workflow" --retry-batch-limit 20
@@ -252,6 +343,8 @@ main() {
 
   log "Scenario: provider canary"
   run_worker_workflow_once "start-provider-canary-workflow" --timeout-seconds "$LIVE_SMOKE_TIMEOUT_SECONDS"
+
+  run_computer_use_smoke
 
   log "LIVE SMOKE DONE"
 }

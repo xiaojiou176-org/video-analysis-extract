@@ -10,6 +10,7 @@ import httpx
 from mcp.server.fastmcp import FastMCP
 
 from .tools.artifacts import register_artifact_tools
+from .tools.computer_use import register_computer_use_tools
 from .tools.health import register_health_tools
 from .tools.ingest import register_ingest_tools
 from .tools.jobs import register_job_tools
@@ -242,6 +243,7 @@ def create_server() -> FastMCP:
     register_health_tools(mcp, api_call)
     register_workflow_tools(mcp, api_call)
     register_retrieval_tools(mcp, api_call)
+    register_computer_use_tools(mcp, api_call)
     return mcp
 
 

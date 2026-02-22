@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Literal
-
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -43,7 +41,7 @@ class OutlinePayload(_StrictModel):
     risk_or_pitfalls: list[str] = Field(default_factory=list)
     chapters: list[OutlineChapter] = Field(min_length=1)
     timestamp_references: list[TimestampReference] = Field(default_factory=list)
-    generated_by: Literal["gemini"] = "gemini"
+    generated_by: str | None = None
     generated_at: str | None = None
 
 
@@ -56,7 +54,7 @@ class DigestPayload(_StrictModel):
     code_blocks: list[CodeSnippet] = Field(default_factory=list)
     timestamp_references: list[TimestampReference] = Field(default_factory=list)
     fallback_notes: list[str] = Field(default_factory=list)
-    generated_by: Literal["gemini"] = "gemini"
+    generated_by: str | None = None
     generated_at: str | None = None
 
 

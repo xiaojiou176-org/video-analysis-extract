@@ -122,6 +122,16 @@ def build_llm_policy_section(default_model: str, section: dict[str, Any]) -> dic
             max_output_tokens = parsed
     max_function_call_rounds = max(0, coerce_int(section.get("max_function_call_rounds"), 2))
     include_thoughts = coerce_bool(section.get("include_thoughts"), default=False)
+    enable_computer_use = coerce_bool(section.get("enable_computer_use"), default=False)
+    computer_use_require_confirmation = coerce_bool(
+        section.get("computer_use_require_confirmation"),
+        default=True,
+    )
+    computer_use_max_steps = max(0, coerce_int(section.get("computer_use_max_steps"), 0))
+    computer_use_timeout_seconds = max(
+        0.1,
+        coerce_float(section.get("computer_use_timeout_seconds"), 30.0) or 30.0,
+    )
     media_resolution = _normalize_media_resolution_policy(section.get("media_resolution"), default="medium")
     return {
         "model": model,
@@ -129,6 +139,10 @@ def build_llm_policy_section(default_model: str, section: dict[str, Any]) -> dic
         "max_output_tokens": max_output_tokens,
         "max_function_call_rounds": max_function_call_rounds,
         "include_thoughts": include_thoughts,
+        "enable_computer_use": enable_computer_use,
+        "computer_use_require_confirmation": computer_use_require_confirmation,
+        "computer_use_max_steps": computer_use_max_steps,
+        "computer_use_timeout_seconds": computer_use_timeout_seconds,
         "media_resolution": media_resolution,
     }
 
@@ -177,6 +191,26 @@ def build_llm_policy(settings: Settings, overrides: dict[str, Any]) -> dict[str,
         if parsed > 0:
             max_output_tokens = parsed
     max_function_call_rounds = max(0, coerce_int(section.get("max_function_call_rounds"), 2))
+    enable_computer_use = coerce_bool(
+        section.get("enable_computer_use"),
+        default=bool(settings.gemini_computer_use_enabled),
+    )
+    computer_use_require_confirmation = coerce_bool(
+        section.get("computer_use_require_confirmation"),
+        default=bool(settings.gemini_computer_use_require_confirmation),
+    )
+    computer_use_max_steps = max(
+        0,
+        coerce_int(section.get("computer_use_max_steps"), int(settings.gemini_computer_use_max_steps)),
+    )
+    computer_use_timeout_seconds = max(
+        0.1,
+        coerce_float(
+            section.get("computer_use_timeout_seconds"),
+            float(settings.gemini_computer_use_timeout_seconds),
+        )
+        or float(settings.gemini_computer_use_timeout_seconds),
+    )
     return {
         "model": model,
         "temperature": temperature,
@@ -185,6 +219,10 @@ def build_llm_policy(settings: Settings, overrides: dict[str, Any]) -> dict[str,
         "speed_priority": speed_priority,
         "thinking_level": thinking_level,
         "include_thoughts": include_thoughts,
+        "enable_computer_use": enable_computer_use,
+        "computer_use_require_confirmation": computer_use_require_confirmation,
+        "computer_use_max_steps": computer_use_max_steps,
+        "computer_use_timeout_seconds": computer_use_timeout_seconds,
         "media_resolution": media_resolution,
         "outline": outline,
         "digest": digest,

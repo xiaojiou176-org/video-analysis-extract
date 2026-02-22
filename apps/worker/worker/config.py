@@ -85,6 +85,13 @@ class Settings:
     gemini_context_cache_enabled: bool = True
     gemini_context_cache_ttl_seconds: int = 21600
     gemini_context_cache_min_chars: int = 4096
+    gemini_context_cache_max_keys: int = 1000
+    gemini_context_cache_local_ttl_seconds: int = 21600
+    gemini_context_cache_sweep_interval_seconds: int = 300
+    gemini_computer_use_enabled: bool = False
+    gemini_computer_use_require_confirmation: bool = True
+    gemini_computer_use_max_steps: int = 3
+    gemini_computer_use_timeout_seconds: float = 30.0
     youtube_api_key: str | None = None
     notification_enabled: bool = False
     resend_api_key: str | None = None
@@ -186,6 +193,29 @@ class Settings:
             gemini_context_cache_min_chars=int(
                 os.getenv("GEMINI_CONTEXT_CACHE_MIN_CHARS", "4096")
             ),
+            gemini_context_cache_max_keys=int(
+                os.getenv("GEMINI_CONTEXT_CACHE_MAX_KEYS", "1000")
+            ),
+            gemini_context_cache_local_ttl_seconds=int(
+                os.getenv("GEMINI_CONTEXT_CACHE_LOCAL_TTL_SECONDS", "21600")
+            ),
+            gemini_context_cache_sweep_interval_seconds=int(
+                os.getenv("GEMINI_CONTEXT_CACHE_SWEEP_INTERVAL_SECONDS", "300")
+            ),
+            gemini_computer_use_enabled=_parse_bool(
+                os.getenv("GEMINI_COMPUTER_USE_ENABLED"),
+                default=False,
+            ),
+            gemini_computer_use_require_confirmation=_parse_bool(
+                os.getenv("GEMINI_COMPUTER_USE_REQUIRE_CONFIRMATION"),
+                default=True,
+            ),
+            gemini_computer_use_max_steps=int(
+                os.getenv("GEMINI_COMPUTER_USE_MAX_STEPS", "3")
+            ),
+            gemini_computer_use_timeout_seconds=float(
+                os.getenv("GEMINI_COMPUTER_USE_TIMEOUT_SECONDS", "30")
+            ),
             youtube_api_key=os.getenv("YOUTUBE_API_KEY"),
             notification_enabled=_parse_bool(
                 os.getenv("NOTIFICATION_ENABLED"),
@@ -239,4 +269,14 @@ class Settings:
             raise RuntimeError("GEMINI_CONTEXT_CACHE_TTL_SECONDS must be >= 60")
         if self.gemini_context_cache_min_chars < 0:
             raise RuntimeError("GEMINI_CONTEXT_CACHE_MIN_CHARS must be >= 0")
+        if self.gemini_context_cache_max_keys < 1:
+            raise RuntimeError("GEMINI_CONTEXT_CACHE_MAX_KEYS must be >= 1")
+        if self.gemini_context_cache_local_ttl_seconds < 60:
+            raise RuntimeError("GEMINI_CONTEXT_CACHE_LOCAL_TTL_SECONDS must be >= 60")
+        if self.gemini_context_cache_sweep_interval_seconds < 30:
+            raise RuntimeError("GEMINI_CONTEXT_CACHE_SWEEP_INTERVAL_SECONDS must be >= 30")
+        if self.gemini_computer_use_max_steps < 0:
+            raise RuntimeError("GEMINI_COMPUTER_USE_MAX_STEPS must be >= 0")
+        if self.gemini_computer_use_timeout_seconds <= 0:
+            raise RuntimeError("GEMINI_COMPUTER_USE_TIMEOUT_SECONDS must be > 0")
         return self

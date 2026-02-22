@@ -2,11 +2,13 @@ from __future__ import annotations
 
 from pathlib import Path
 import sys
+import time
 import types
 from typing import Any
 
 from worker.config import Settings
 from worker.pipeline import runner
+from worker.pipeline.steps import llm_client
 
 
 def test_gemini_multimodal_falls_back_from_video_to_frames(monkeypatch: Any, tmp_path: Path) -> None:
@@ -252,3 +254,314 @@ def test_llm_cache_signature_includes_input_mode_and_media_dimension(tmp_path: P
 
     assert sig_1 != sig_2
     assert sig_1 != sig_3
+
+
+def test_gemini_text_cache_self_heals_on_stale_cached_content(monkeypatch: Any) -> None:
+    prompt = "cache-self-heal-prompt"
+    cache_key = llm_client._cache_key("gemini-3.1-pro-preview", prompt, "text")
+    llm_client._CACHE_NAME_BY_KEY[cache_key] = "stale-cache"
+
+    class _FakeModels:
+        def generate_content(self, *, model: str, contents: Any, config: Any) -> Any:
+            kwargs = dict(getattr(config, "kwargs", {}))
+            cached_content = kwargs.get("cached_content")
+            if cached_content == "stale-cache":
+                raise RuntimeError("cached_content not found")
+            return types.SimpleNamespace(text='{"ok":true}')
+
+    class _FakeCaches:
+        @staticmethod
+        def create(*, model: str, config: Any) -> Any:
+            return types.SimpleNamespace(name="fresh-cache")
+
+    class _FakeClient:
+        def __init__(self, *, api_key: str):
+            self.api_key = api_key
+            self.models = _FakeModels()
+            self.files = object()
+            self.caches = _FakeCaches()
+
+    class _FakeThinkingConfig:
+        def __init__(self, **kwargs: Any):
+            self.kwargs = kwargs
+
+    class _FakeGenerateContentConfig:
+        def __init__(self, **kwargs: Any):
+            self.kwargs = kwargs
+
+    class _FakeCreateCachedContentConfig:
+        def __init__(self, **kwargs: Any):
+            self.kwargs = kwargs
+
+    fake_types = types.SimpleNamespace(
+        ThinkingConfig=_FakeThinkingConfig,
+        GenerateContentConfig=_FakeGenerateContentConfig,
+        CreateCachedContentConfig=_FakeCreateCachedContentConfig,
+    )
+    fake_genai = types.ModuleType("google.genai")
+    fake_genai.Client = _FakeClient  # type: ignore[attr-defined]
+    fake_genai.types = fake_types  # type: ignore[attr-defined]
+
+    fake_google = types.ModuleType("google")
+    fake_google.genai = fake_genai  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "google", fake_google)
+    monkeypatch.setitem(sys.modules, "google.genai", fake_genai)
+
+    settings = Settings(
+        gemini_api_key="key",
+        gemini_context_cache_enabled=True,
+        gemini_context_cache_min_chars=1,
+    )
+    text, media_input, meta = llm_client.gemini_generate(
+        settings,
+        prompt,
+        llm_input_mode="text",
+        use_context_cache=True,
+        enable_function_calling=False,
+    )
+
+    assert text == '{"ok":true}'
+    assert media_input == "text"
+    assert meta["cache_hit"] is True
+    assert meta["cache_recreate"] is True
+    assert meta["cache_bypass_reason"] is None
+    assert llm_client._CACHE_NAME_BY_KEY[cache_key]["name"] == "fresh-cache"
+    llm_client._CACHE_NAME_BY_KEY.pop(cache_key, None)
+
+
+def test_gemini_computer_use_requires_confirmation(monkeypatch: Any) -> None:
+    class _FunctionCall:
+        def __init__(self, name: str, args: dict[str, Any]):
+            self.name = name
+            self.args = args
+
+    class _Part:
+        def __init__(self, *, text: str | None = None, function_call: Any = None):
+            self.text = text
+            self.function_call = function_call
+
+    class _FakeModels:
+        def __init__(self) -> None:
+            self.round = 0
+
+        def generate_content(self, *, model: str, contents: Any, config: Any) -> Any:
+            self.round += 1
+            if self.round == 1:
+                content = types.SimpleNamespace(
+                    parts=[_Part(function_call=_FunctionCall("computer_use", {"action": "click"}))]
+                )
+                return types.SimpleNamespace(text=None, candidates=[types.SimpleNamespace(content=content)])
+            content = types.SimpleNamespace(parts=[_Part(text='{"ok":true}')])
+            return types.SimpleNamespace(text='{"ok":true}', candidates=[types.SimpleNamespace(content=content)])
+
+    class _FakeClient:
+        def __init__(self, *, api_key: str):
+            self.api_key = api_key
+            self.models = _FakeModels()
+            self.files = object()
+            self.caches = object()
+
+    class _FakeThinkingConfig:
+        def __init__(self, **kwargs: Any):
+            self.kwargs = kwargs
+
+    class _FakeGenerateContentConfig:
+        def __init__(self, **kwargs: Any):
+            self.kwargs = kwargs
+
+    fake_types = types.SimpleNamespace(
+        ThinkingConfig=_FakeThinkingConfig,
+        GenerateContentConfig=_FakeGenerateContentConfig,
+        Content=lambda **kwargs: dict(kwargs),
+    )
+    fake_genai = types.ModuleType("google.genai")
+    fake_genai.Client = _FakeClient  # type: ignore[attr-defined]
+    fake_genai.types = fake_types  # type: ignore[attr-defined]
+
+    fake_google = types.ModuleType("google")
+    fake_google.genai = fake_genai  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "google", fake_google)
+    monkeypatch.setitem(sys.modules, "google.genai", fake_genai)
+
+    def _should_not_run(**_: Any) -> dict[str, Any]:
+        raise AssertionError("computer_use handler should not run without confirmation")
+
+    settings = Settings(gemini_api_key="key")
+    text, media_input, meta = llm_client.gemini_generate(
+        settings,
+        "prompt",
+        llm_input_mode="text",
+        use_context_cache=False,
+        enable_function_calling=False,
+        enable_computer_use=True,
+        computer_use_handler=_should_not_run,
+        computer_use_require_confirmation=True,
+        computer_use_confirmed=False,
+    )
+
+    assert text == '{"ok":true}'
+    assert media_input == "text"
+    call_meta = meta["function_calling"]["calls"]
+    assert call_meta[0]["name"] == "computer_use"
+    assert call_meta[0]["status"] == "blocked"
+    assert meta["computer_use"]["steps_used"] == 0
+
+
+def test_gemini_computer_use_honors_max_steps(monkeypatch: Any) -> None:
+    class _FunctionCall:
+        def __init__(self, name: str, args: dict[str, Any]):
+            self.name = name
+            self.args = args
+
+    class _Part:
+        def __init__(self, *, text: str | None = None, function_call: Any = None):
+            self.text = text
+            self.function_call = function_call
+
+    class _FakeModels:
+        def __init__(self) -> None:
+            self.round = 0
+
+        def generate_content(self, *, model: str, contents: Any, config: Any) -> Any:
+            self.round += 1
+            if self.round in {1, 2}:
+                content = types.SimpleNamespace(
+                    parts=[_Part(function_call=_FunctionCall("computer_use", {"action": "click"}))]
+                )
+                return types.SimpleNamespace(text=None, candidates=[types.SimpleNamespace(content=content)])
+            content = types.SimpleNamespace(parts=[_Part(text='{"ok":true}')])
+            return types.SimpleNamespace(text='{"ok":true}', candidates=[types.SimpleNamespace(content=content)])
+
+    class _FakeClient:
+        def __init__(self, *, api_key: str):
+            self.api_key = api_key
+            self.models = _FakeModels()
+            self.files = object()
+            self.caches = object()
+
+    class _FakeThinkingConfig:
+        def __init__(self, **kwargs: Any):
+            self.kwargs = kwargs
+
+    class _FakeGenerateContentConfig:
+        def __init__(self, **kwargs: Any):
+            self.kwargs = kwargs
+
+    fake_types = types.SimpleNamespace(
+        ThinkingConfig=_FakeThinkingConfig,
+        GenerateContentConfig=_FakeGenerateContentConfig,
+        Content=lambda **kwargs: dict(kwargs),
+    )
+    fake_genai = types.ModuleType("google.genai")
+    fake_genai.Client = _FakeClient  # type: ignore[attr-defined]
+    fake_genai.types = fake_types  # type: ignore[attr-defined]
+
+    fake_google = types.ModuleType("google")
+    fake_google.genai = fake_genai  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "google", fake_google)
+    monkeypatch.setitem(sys.modules, "google.genai", fake_genai)
+
+    def _handler(**_: Any) -> dict[str, Any]:
+        return {"ok": True}
+
+    settings = Settings(gemini_api_key="key")
+    text, media_input, meta = llm_client.gemini_generate(
+        settings,
+        "prompt",
+        llm_input_mode="text",
+        use_context_cache=False,
+        enable_function_calling=False,
+        enable_computer_use=True,
+        computer_use_handler=_handler,
+        computer_use_require_confirmation=False,
+        computer_use_confirmed=True,
+        computer_use_max_steps=1,
+        computer_use_timeout_seconds=1.0,
+    )
+
+    assert text == '{"ok":true}'
+    assert media_input == "text"
+    calls = meta["function_calling"]["calls"]
+    assert calls[0]["status"] == "ok"
+    assert calls[1]["status"] == "blocked"
+    assert meta["computer_use"]["steps_used"] == 1
+
+
+def test_gemini_computer_use_honors_timeout(monkeypatch: Any) -> None:
+    class _FunctionCall:
+        def __init__(self, name: str, args: dict[str, Any]):
+            self.name = name
+            self.args = args
+
+    class _Part:
+        def __init__(self, *, text: str | None = None, function_call: Any = None):
+            self.text = text
+            self.function_call = function_call
+
+    class _FakeModels:
+        def __init__(self) -> None:
+            self.round = 0
+
+        def generate_content(self, *, model: str, contents: Any, config: Any) -> Any:
+            self.round += 1
+            if self.round == 1:
+                content = types.SimpleNamespace(
+                    parts=[_Part(function_call=_FunctionCall("computer_use", {"action": "click"}))]
+                )
+                return types.SimpleNamespace(text=None, candidates=[types.SimpleNamespace(content=content)])
+            content = types.SimpleNamespace(parts=[_Part(text='{"ok":true}')])
+            return types.SimpleNamespace(text='{"ok":true}', candidates=[types.SimpleNamespace(content=content)])
+
+    class _FakeClient:
+        def __init__(self, *, api_key: str):
+            self.api_key = api_key
+            self.models = _FakeModels()
+            self.files = object()
+            self.caches = object()
+
+    class _FakeThinkingConfig:
+        def __init__(self, **kwargs: Any):
+            self.kwargs = kwargs
+
+    class _FakeGenerateContentConfig:
+        def __init__(self, **kwargs: Any):
+            self.kwargs = kwargs
+
+    fake_types = types.SimpleNamespace(
+        ThinkingConfig=_FakeThinkingConfig,
+        GenerateContentConfig=_FakeGenerateContentConfig,
+        Content=lambda **kwargs: dict(kwargs),
+    )
+    fake_genai = types.ModuleType("google.genai")
+    fake_genai.Client = _FakeClient  # type: ignore[attr-defined]
+    fake_genai.types = fake_types  # type: ignore[attr-defined]
+
+    fake_google = types.ModuleType("google")
+    fake_google.genai = fake_genai  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "google", fake_google)
+    monkeypatch.setitem(sys.modules, "google.genai", fake_genai)
+
+    def _slow_handler(**_: Any) -> dict[str, Any]:
+        time.sleep(0.2)
+        return {"ok": True}
+
+    settings = Settings(gemini_api_key="key")
+    text, media_input, meta = llm_client.gemini_generate(
+        settings,
+        "prompt",
+        llm_input_mode="text",
+        use_context_cache=False,
+        enable_function_calling=False,
+        enable_computer_use=True,
+        computer_use_handler=_slow_handler,
+        computer_use_require_confirmation=False,
+        computer_use_confirmed=True,
+        computer_use_max_steps=2,
+        computer_use_timeout_seconds=0.1,
+    )
+
+    assert text == '{"ok":true}'
+    assert media_input == "text"
+    calls = meta["function_calling"]["calls"]
+    assert calls[0]["status"] == "failed"
+    assert meta["computer_use"]["steps_used"] == 0

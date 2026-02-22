@@ -562,6 +562,45 @@
           "type": "number"
         }
       }
+    },
+    "computerUseAction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "step",
+        "action",
+        "target",
+        "input_text",
+        "reasoning"
+      ],
+      "properties": {
+        "step": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "action": {
+          "type": "string",
+          "minLength": 1
+        },
+        "target": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "input_text": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "reasoning": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
     }
   },
   "tools": [
@@ -1817,6 +1856,97 @@
             "properties": {
               "status": {
                 "type": "string"
+              }
+            }
+          },
+          {
+            "$ref": "#/$defs/errorPayload"
+          }
+        ]
+      }
+    },
+    {
+      "name": "vd.computer_use.run",
+      "http": {
+        "method": "POST",
+        "path": "/api/v1/computer-use/run"
+      },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "instruction",
+          "screenshot_base64"
+        ],
+        "properties": {
+          "instruction": {
+            "type": "string",
+            "minLength": 1
+          },
+          "screenshot_base64": {
+            "type": "string",
+            "minLength": 1
+          },
+          "safety": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "confirm_before_execute": {
+                "type": "boolean",
+                "default": true
+              },
+              "blocked_actions": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "default": []
+              },
+              "max_actions": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 20,
+                "default": 8
+              }
+            },
+            "default": {}
+          }
+        }
+      },
+      "outputSchema": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "actions",
+              "require_confirmation",
+              "blocked_actions",
+              "final_text",
+              "thought_metadata"
+            ],
+            "properties": {
+              "actions": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/computerUseAction"
+                }
+              },
+              "require_confirmation": {
+                "type": "boolean"
+              },
+              "blocked_actions": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "final_text": {
+                "type": "string"
+              },
+              "thought_metadata": {
+                "type": "object",
+                "additionalProperties": true
               }
             }
           },

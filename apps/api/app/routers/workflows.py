@@ -58,10 +58,13 @@ async def run_workflow(payload: WorkflowRunRequest, db: Session = Depends(get_db
     if not payload.run_once and payload.workflow_id is None:
         workflow_id = f"{payload.workflow}-workflow"
 
-    client = await Client.connect(
-        settings.temporal_target_host,
-        namespace=settings.temporal_namespace,
-    )
+    try:
+        client = await Client.connect(
+            settings.temporal_target_host,
+            namespace=settings.temporal_namespace,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"failed to connect temporal: {exc}") from exc
 
     try:
         handle = await client.start_workflow(

@@ -25,6 +25,15 @@ from worker.pipeline.runner_rendering import (
 from worker.pipeline.step_executor import utc_now_iso
 from worker.pipeline.types import PipelineContext, StepExecution
 from worker.pipeline.steps.llm_client import gemini_generate
+from worker.pipeline.steps.llm_step_gates import (
+    _digest_quality_ok,
+    _include_thoughts_from_policy,
+    _max_function_call_rounds,
+    _media_resolution_from_policy,
+    _outline_quality_ok,
+    _thinking_level_from_policy,
+    build_computer_use_options,
+)
 from worker.pipeline.steps.llm_prompts import (
     build_digest_prompt,
     build_outline_prompt,
@@ -38,44 +47,7 @@ from worker.pipeline.steps.llm_schema import (
 )
 
 
-GeminiGenerateReturn = (
-    tuple[str | None, str]
-    | tuple[str | None, str, dict[str, Any]]
-)
-
-
-def _semantic_len(text: str) -> int:
-    content = "".join(ch for ch in str(text or "").strip() if ch.isalnum() or ("\u4e00" <= ch <= "\u9fff"))
-    return len(content)
-
-
-def _has_meaningful_line(items: list[str], *, min_len: int) -> bool:
-    return any(_semantic_len(item) >= min_len for item in items)
-
-
-def _outline_quality_ok(payload: dict[str, Any]) -> bool:
-    highlights = [str(item) for item in payload.get("highlights") or [] if str(item).strip()]
-    if not _has_meaningful_line(highlights, min_len=8):
-        return False
-    chapters = payload.get("chapters")
-    if not isinstance(chapters, list) or not chapters:
-        return False
-    for chapter in chapters:
-        if not isinstance(chapter, dict):
-            continue
-        summary_len = _semantic_len(str(chapter.get("summary") or ""))
-        bullets = [str(item) for item in chapter.get("bullets") or [] if str(item).strip()]
-        if summary_len >= 10 or _has_meaningful_line(bullets, min_len=8):
-            return True
-    return False
-
-
-def _digest_quality_ok(payload: dict[str, Any]) -> bool:
-    summary = str(payload.get("summary") or "")
-    if _semantic_len(summary) < 20:
-        return False
-    highlights = [str(item) for item in payload.get("highlights") or [] if str(item).strip()]
-    return _has_meaningful_line(highlights, min_len=8)
+GeminiGenerateReturn = tuple[str | None, str] | tuple[str | None, str, dict[str, Any]]
 
 
 def _translate_payload_to_chinese(
@@ -271,6 +243,7 @@ def _llm_failure_result(
     reason: str,
     error: str,
     error_kind: str | None = None,
+    llm_meta: dict[str, Any] | None = None,
 ) -> StepExecution:
     return StepExecution(
         status="failed",
@@ -285,66 +258,13 @@ def _llm_failure_result(
             "llm_required": True,
             "llm_gate_passed": False,
             "hard_fail_reason": reason,
+            "llm_meta": dict(llm_meta or {}),
         },
         reason=reason,
         error=error,
         error_kind=error_kind,
         degraded=False,
     )
-
-
-def _thinking_level_from_policy(llm_policy: dict[str, Any]) -> str:
-    speed_priority = bool(llm_policy.get("speed_priority"))
-    raw = str(llm_policy.get("thinking_level") or ("low" if speed_priority else "high")).strip().lower()
-    if raw not in {"minimal", "low", "medium", "high"}:
-        return "high"
-    if raw == "minimal":
-        return "low"
-    return raw
-
-
-def _coerce_bool(value: Any, default: bool) -> bool:
-    if isinstance(value, bool):
-        return value
-    if value is None:
-        return default
-    text = str(value).strip().lower()
-    if text in {"1", "true", "yes", "on", "y"}:
-        return True
-    if text in {"0", "false", "no", "off", "n"}:
-        return False
-    return default
-
-
-def _max_function_call_rounds(llm_policy: dict[str, Any], section_policy: dict[str, Any]) -> int:
-    raw = section_policy.get("max_function_call_rounds", llm_policy.get("max_function_call_rounds", 2))
-    parsed = coerce_int(raw, 2)
-    return max(0, parsed)
-
-
-def _include_thoughts_from_policy(
-    ctx: PipelineContext,
-    llm_policy: dict[str, Any],
-    section_policy: dict[str, Any],
-) -> bool:
-    default_value = bool(ctx.settings.gemini_include_thoughts)
-    if "include_thoughts" in section_policy:
-        return _coerce_bool(section_policy.get("include_thoughts"), default=default_value)
-    if "include_thoughts" in llm_policy:
-        return _coerce_bool(llm_policy.get("include_thoughts"), default=default_value)
-    return default_value
-
-
-def _media_resolution_from_policy(
-    llm_policy: dict[str, Any],
-    section_policy: dict[str, Any],
-) -> dict[str, Any]:
-    raw = section_policy.get("media_resolution", llm_policy.get("media_resolution"))
-    if isinstance(raw, dict):
-        return dict(raw)
-    if isinstance(raw, str) and raw.strip():
-        return {"default": raw.strip().lower()}
-    return {}
 
 
 def _unpack_gemini_result(result: GeminiGenerateReturn) -> tuple[str | None, str, dict[str, Any]]:
@@ -405,12 +325,16 @@ async def step_llm_outline(
         enable_function_calling=True,
         media_resolution=_media_resolution_from_policy(llm_policy, llm_outline_policy),
         max_function_call_rounds=_max_function_call_rounds(llm_policy, llm_outline_policy),
+        **build_computer_use_options(ctx, llm_policy, llm_outline_policy),
     )
     generated, media_input, llm_meta = _unpack_gemini_result(generated_result)
 
     if not generated:
         missing_api_key = not str(ctx.settings.gemini_api_key or "").strip()
-        reason = "gemini_api_key_missing" if missing_api_key else "llm_provider_unavailable"
+        reason = str(llm_meta.get("error_code") or "").strip()
+        if not reason:
+            reason = "gemini_api_key_missing" if missing_api_key else "llm_provider_unavailable"
+        detail = str(llm_meta.get("error_detail") or "").strip() or reason
         return _llm_failure_result(
             include_frame_context=include_frame_context,
             media_input=media_input,
@@ -419,8 +343,9 @@ async def step_llm_outline(
             llm_temperature=llm_temperature,
             llm_max_output_tokens=llm_max_output_tokens,
             reason=reason,
-            error=reason,
-            error_kind="auth" if missing_api_key else None,
+            error=detail,
+            error_kind=str(llm_meta.get("error_kind") or "").strip() or ("auth" if missing_api_key else None),
+            llm_meta=llm_meta,
         )
 
     try:
@@ -438,6 +363,7 @@ async def step_llm_outline(
             llm_max_output_tokens=llm_max_output_tokens,
             reason="llm_output_invalid_json",
             error=f"llm_output_invalid_json:{exc}",
+            llm_meta=llm_meta,
         )
 
     if not outline_is_chinese(parsed):
@@ -460,6 +386,7 @@ async def step_llm_outline(
                 llm_max_output_tokens=llm_max_output_tokens,
                 reason="llm_translation_failed",
                 error="llm_translation_failed:outline",
+                llm_meta=llm_meta,
             )
         try:
             parsed = OutlinePayload.model_validate(translated_payload).model_dump()
@@ -473,6 +400,7 @@ async def step_llm_outline(
                 llm_max_output_tokens=llm_max_output_tokens,
                 reason="llm_translation_failed",
                 error=f"llm_translation_failed:outline:{exc}",
+                llm_meta=llm_meta,
             )
         if not outline_is_chinese(parsed):
             return _llm_failure_result(
@@ -484,6 +412,7 @@ async def step_llm_outline(
                 llm_max_output_tokens=llm_max_output_tokens,
                 reason="llm_output_not_chinese",
                 error="llm_output_not_chinese:outline",
+                llm_meta=llm_meta,
             )
 
     if not _outline_quality_ok(parsed):
@@ -496,6 +425,7 @@ async def step_llm_outline(
             llm_max_output_tokens=llm_max_output_tokens,
             reason="llm_quality_insufficient",
             error="llm_quality_insufficient:outline",
+            llm_meta=llm_meta,
         )
 
     outline = normalize_outline_payload(parsed, state)
@@ -570,12 +500,16 @@ async def step_llm_digest(
         enable_function_calling=True,
         media_resolution=_media_resolution_from_policy(llm_policy, llm_digest_policy),
         max_function_call_rounds=_max_function_call_rounds(llm_policy, llm_digest_policy),
+        **build_computer_use_options(ctx, llm_policy, llm_digest_policy),
     )
     generated, media_input, llm_meta = _unpack_gemini_result(generated_result)
 
     if not generated:
         missing_api_key = not str(ctx.settings.gemini_api_key or "").strip()
-        reason = "gemini_api_key_missing" if missing_api_key else "llm_provider_unavailable"
+        reason = str(llm_meta.get("error_code") or "").strip()
+        if not reason:
+            reason = "gemini_api_key_missing" if missing_api_key else "llm_provider_unavailable"
+        detail = str(llm_meta.get("error_detail") or "").strip() or reason
         return _llm_failure_result(
             include_frame_context=include_frame_context,
             media_input=media_input,
@@ -584,8 +518,9 @@ async def step_llm_digest(
             llm_temperature=llm_temperature,
             llm_max_output_tokens=llm_max_output_tokens,
             reason=reason,
-            error=reason,
-            error_kind="auth" if missing_api_key else None,
+            error=detail,
+            error_kind=str(llm_meta.get("error_kind") or "").strip() or ("auth" if missing_api_key else None),
+            llm_meta=llm_meta,
         )
 
     try:
@@ -603,6 +538,7 @@ async def step_llm_digest(
             llm_max_output_tokens=llm_max_output_tokens,
             reason="llm_output_invalid_json",
             error=f"llm_output_invalid_json:{exc}",
+            llm_meta=llm_meta,
         )
 
     if not digest_is_chinese(parsed):
@@ -625,6 +561,7 @@ async def step_llm_digest(
                 llm_max_output_tokens=llm_max_output_tokens,
                 reason="llm_translation_failed",
                 error="llm_translation_failed:digest",
+                llm_meta=llm_meta,
             )
         try:
             parsed = DigestPayload.model_validate(translated_payload).model_dump()
@@ -638,6 +575,7 @@ async def step_llm_digest(
                 llm_max_output_tokens=llm_max_output_tokens,
                 reason="llm_translation_failed",
                 error=f"llm_translation_failed:digest:{exc}",
+                llm_meta=llm_meta,
             )
         if not digest_is_chinese(parsed):
             return _llm_failure_result(
@@ -649,6 +587,7 @@ async def step_llm_digest(
                 llm_max_output_tokens=llm_max_output_tokens,
                 reason="llm_output_not_chinese",
                 error="llm_output_not_chinese:digest",
+                llm_meta=llm_meta,
             )
 
     if not _digest_quality_ok(parsed):
@@ -661,6 +600,7 @@ async def step_llm_digest(
             llm_max_output_tokens=llm_max_output_tokens,
             reason="llm_quality_insufficient",
             error="llm_quality_insufficient:digest",
+            llm_meta=llm_meta,
         )
 
     digest = normalize_digest_payload(parsed, state)

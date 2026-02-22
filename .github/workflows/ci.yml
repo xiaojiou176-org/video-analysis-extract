@@ -44,6 +44,32 @@ jobs:
       - name: Env contract strict check
         run: python3 scripts/check_env_contract.py --strict
 
+      - name: computer_use smoke contract check
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          contract = json.loads(Path("infra/config/env.contract.json").read_text(encoding="utf-8"))
+          variables = {item["name"]: item for item in contract.get("variables", [])}
+          required = {
+              "GEMINI_COMPUTER_USE_ENABLED",
+              "GEMINI_COMPUTER_USE_REQUIRE_CONFIRMATION",
+              "GEMINI_COMPUTER_USE_MAX_STEPS",
+              "GEMINI_COMPUTER_USE_TIMEOUT_SECONDS",
+              "LIVE_SMOKE_COMPUTER_USE_STRICT",
+              "LIVE_SMOKE_COMPUTER_USE_SKIP",
+              "LIVE_SMOKE_COMPUTER_USE_SKIP_REASON",
+              "LIVE_SMOKE_COMPUTER_USE_CMD",
+          }
+          missing = sorted(name for name in required if name not in variables)
+          if missing:
+              raise SystemExit(f"missing computer_use smoke env contract vars: {', '.join(missing)}")
+          if str(variables["LIVE_SMOKE_COMPUTER_USE_STRICT"].get("default")) != "1":
+              raise SystemExit("LIVE_SMOKE_COMPUTER_USE_STRICT default must be '1'")
+          print("computer_use smoke contract check passed")
+          PY
+
       - name: Docs env canonical check
         run: |
           ! rg -n 'cp \.env\.local\.example \.env\.local|source \.env\.local|自动加载 `?\.env\.local' README.md docs/runbook-local.md
@@ -184,6 +210,9 @@ jobs:
       RESEND_FROM_EMAIL: ${{ secrets.RESEND_FROM_EMAIL }}
       YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
       LIVE_SMOKE_REQUIRE_API: "1"
+      LIVE_SMOKE_COMPUTER_USE_STRICT: "1"
+      LIVE_SMOKE_COMPUTER_USE_SKIP: "1"
+      LIVE_SMOKE_COMPUTER_USE_SKIP_REASON: "CI runner has no computer_use harness configured"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
