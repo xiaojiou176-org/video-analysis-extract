@@ -11,7 +11,10 @@ RESEND_API_URL = "https://api.resend.com/emails"
 SENSITIVE_QUERY_KEY_MARKERS = ("key", "token", "secret", "password", "auth", "signature")
 SENSITIVE_TEXT_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"Bearer\s+[A-Za-z0-9._\-]+", re.IGNORECASE), "Bearer ***REDACTED***"),
-    (re.compile(r"(sk-[A-Za-z0-9]{20,})"), "sk-***REDACTED***"),
+    (
+        re.compile(r"\b([A-Za-z][A-Za-z0-9]{1,15})-([A-Za-z0-9]{20,})\b"),
+        r"\1-***REDACTED***",
+    ),
     (re.compile(r"(ghp_[A-Za-z0-9]{20,})"), "ghp_***REDACTED***"),
     (re.compile(r"(AKIA[0-9A-Z]{16})"), "AKIA***REDACTED***"),
 )

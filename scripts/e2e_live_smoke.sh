@@ -9,7 +9,8 @@ load_repo_env "$ROOT_DIR" "$SCRIPT_NAME"
 
 VD_API_BASE_URL="${VD_API_BASE_URL:-http://127.0.0.1:8000}"
 LIVE_SMOKE_TIMEOUT_SECONDS="${LIVE_SMOKE_TIMEOUT_SECONDS:-60}"
-LIVE_SMOKE_REQUIRE_API="${LIVE_SMOKE_REQUIRE_API:-0}"
+LIVE_SMOKE_REQUIRE_API="${LIVE_SMOKE_REQUIRE_API:-1}"
+LIVE_SMOKE_POLL_INTERVAL_SECONDS="${LIVE_SMOKE_POLL_INTERVAL_SECONDS:-3}"
 YOUTUBE_SMOKE_URL="${YOUTUBE_SMOKE_URL:-https://www.youtube.com/watch?v=dQw4w9WgXcQ}"
 BILIBILI_SMOKE_URL="${BILIBILI_SMOKE_URL:-https://www.bilibili.com/video/BV1xx411c7mD}"
 
@@ -133,6 +134,58 @@ PY
   )"
   [[ -z "$job_id" ]] && fail "${label} missing job_id: body=${body}"
   log "${label}: queued job_id=${job_id}"
+  printf '%s\n' "$job_id"
+}
+
+wait_for_terminal_status() {
+  local job_id="$1"
+  local label="$2"
+  local deadline=$((SECONDS + LIVE_SMOKE_TIMEOUT_SECONDS))
+  local status=""
+  local pipeline_final_status=""
+  local effective_final_status=""
+  local error_message=""
+
+  while (( SECONDS < deadline )); do
+    local response http_status body parsed
+    response="$(api_get "/api/v1/jobs/${job_id}")"
+    http_status="${response%%$'\n'*}"
+    body="${response#*$'\n'}"
+    [[ "$http_status" == "200" ]] || fail "${label}: query failed for job_id=${job_id}, status=${http_status}, body=${body}"
+
+    parsed="$(
+      BODY="$body" python3 - <<'PY'
+import json
+import os
+
+obj = json.loads(os.environ["BODY"])
+status = str(obj.get("status") or "")
+pipeline_final_status = str(obj.get("pipeline_final_status") or "")
+error_message = str(obj.get("error_message") or "")
+print("\t".join((status, pipeline_final_status, error_message)))
+PY
+    )"
+    status="${parsed%%$'\t'*}"
+    parsed="${parsed#*$'\t'}"
+    pipeline_final_status="${parsed%%$'\t'*}"
+    error_message="${parsed#*$'\t'}"
+    effective_final_status="$status"
+    if [[ -n "$pipeline_final_status" ]]; then
+      effective_final_status="$pipeline_final_status"
+    fi
+
+    if [[ "$status" != "queued" && "$status" != "running" ]]; then
+      if [[ "$effective_final_status" == "failed" ]]; then
+        fail "${label}: terminal status failed for job_id=${job_id}, status=${status}, pipeline_final_status=${pipeline_final_status:-null}, error=${error_message:-null}"
+      fi
+      log "${label}: terminal status reached for job_id=${job_id}, status=${status}, pipeline_final_status=${pipeline_final_status:-null}"
+      return 0
+    fi
+
+    sleep "$LIVE_SMOKE_POLL_INTERVAL_SECONDS"
+  done
+
+  fail "${label}: timeout waiting terminal status for job_id=${job_id}, last_status=${status:-unknown}, last_pipeline_final_status=${pipeline_final_status:-null}"
 }
 
 run_worker_workflow_once() {
@@ -152,15 +205,20 @@ run_worker_workflow_once() {
 
 main() {
   check_prerequisites
+  local -a submitted_jobs=()
 
   log "Scenario: YouTube full"
-  process_video "youtube" "$YOUTUBE_SMOKE_URL" "full" "youtube_full"
+  submitted_jobs+=("$(process_video "youtube" "$YOUTUBE_SMOKE_URL" "full" "youtube_full")")
 
   log "Scenario: Bilibili full"
-  process_video "bilibili" "$BILIBILI_SMOKE_URL" "full" "bilibili_full"
+  submitted_jobs+=("$(process_video "bilibili" "$BILIBILI_SMOKE_URL" "full" "bilibili_full")")
 
   log "Scenario: Gemini degrade(text_only fallback path)"
-  process_video "youtube" "$YOUTUBE_SMOKE_URL" "text_only" "gemini_degrade"
+  submitted_jobs+=("$(process_video "youtube" "$YOUTUBE_SMOKE_URL" "text_only" "gemini_degrade")")
+
+  for job_id in "${submitted_jobs[@]}"; do
+    wait_for_terminal_status "$job_id" "video_process"
+  done
 
   log "Scenario: video_digest retry recovery"
   run_worker_workflow_once "start-notification-retry-workflow" --retry-batch-limit 20

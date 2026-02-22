@@ -38,6 +38,40 @@ from worker.pipeline.steps.llm_schema import (
 )
 
 
+def _semantic_len(text: str) -> int:
+    content = "".join(ch for ch in str(text or "").strip() if ch.isalnum() or ("\u4e00" <= ch <= "\u9fff"))
+    return len(content)
+
+
+def _has_meaningful_line(items: list[str], *, min_len: int) -> bool:
+    return any(_semantic_len(item) >= min_len for item in items)
+
+
+def _outline_quality_ok(payload: dict[str, Any]) -> bool:
+    highlights = [str(item) for item in payload.get("highlights") or [] if str(item).strip()]
+    if not _has_meaningful_line(highlights, min_len=8):
+        return False
+    chapters = payload.get("chapters")
+    if not isinstance(chapters, list) or not chapters:
+        return False
+    for chapter in chapters:
+        if not isinstance(chapter, dict):
+            continue
+        summary_len = _semantic_len(str(chapter.get("summary") or ""))
+        bullets = [str(item) for item in chapter.get("bullets") or [] if str(item).strip()]
+        if summary_len >= 10 or _has_meaningful_line(bullets, min_len=8):
+            return True
+    return False
+
+
+def _digest_quality_ok(payload: dict[str, Any]) -> bool:
+    summary = str(payload.get("summary") or "")
+    if _semantic_len(summary) < 20:
+        return False
+    highlights = [str(item) for item in payload.get("highlights") or [] if str(item).strip()]
+    return _has_meaningful_line(highlights, min_len=8)
+
+
 def _translate_payload_to_chinese(
     settings: Settings,
     payload: dict[str, Any],
@@ -354,11 +388,53 @@ async def step_llm_outline(
             schema_label="outline",
             thinking_level=_thinking_level_from_policy(llm_policy),
         )
-        if isinstance(translated_payload, dict):
-            try:
-                parsed = OutlinePayload.model_validate(translated_payload).model_dump()
-            except ValidationError:
-                pass
+        if not isinstance(translated_payload, dict):
+            return _llm_failure_result(
+                include_frame_context=include_frame_context,
+                media_input=media_input,
+                llm_input_mode=llm_input_mode,
+                llm_model=llm_model,
+                llm_temperature=llm_temperature,
+                llm_max_output_tokens=llm_max_output_tokens,
+                reason="llm_translation_failed",
+                error="llm_translation_failed:outline",
+            )
+        try:
+            parsed = OutlinePayload.model_validate(translated_payload).model_dump()
+        except ValidationError as exc:
+            return _llm_failure_result(
+                include_frame_context=include_frame_context,
+                media_input=media_input,
+                llm_input_mode=llm_input_mode,
+                llm_model=llm_model,
+                llm_temperature=llm_temperature,
+                llm_max_output_tokens=llm_max_output_tokens,
+                reason="llm_translation_failed",
+                error=f"llm_translation_failed:outline:{exc}",
+            )
+        if not outline_is_chinese(parsed):
+            return _llm_failure_result(
+                include_frame_context=include_frame_context,
+                media_input=media_input,
+                llm_input_mode=llm_input_mode,
+                llm_model=llm_model,
+                llm_temperature=llm_temperature,
+                llm_max_output_tokens=llm_max_output_tokens,
+                reason="llm_output_not_chinese",
+                error="llm_output_not_chinese:outline",
+            )
+
+    if not _outline_quality_ok(parsed):
+        return _llm_failure_result(
+            include_frame_context=include_frame_context,
+            media_input=media_input,
+            llm_input_mode=llm_input_mode,
+            llm_model=llm_model,
+            llm_temperature=llm_temperature,
+            llm_max_output_tokens=llm_max_output_tokens,
+            reason="llm_quality_insufficient",
+            error="llm_quality_insufficient:outline",
+        )
 
     outline = normalize_outline_payload(parsed, state)
     outline["generated_by"] = "gemini"
@@ -473,11 +549,53 @@ async def step_llm_digest(
             schema_label="digest",
             thinking_level=_thinking_level_from_policy(llm_policy),
         )
-        if isinstance(translated_payload, dict):
-            try:
-                parsed = DigestPayload.model_validate(translated_payload).model_dump()
-            except ValidationError:
-                pass
+        if not isinstance(translated_payload, dict):
+            return _llm_failure_result(
+                include_frame_context=include_frame_context,
+                media_input=media_input,
+                llm_input_mode=llm_input_mode,
+                llm_model=llm_model,
+                llm_temperature=llm_temperature,
+                llm_max_output_tokens=llm_max_output_tokens,
+                reason="llm_translation_failed",
+                error="llm_translation_failed:digest",
+            )
+        try:
+            parsed = DigestPayload.model_validate(translated_payload).model_dump()
+        except ValidationError as exc:
+            return _llm_failure_result(
+                include_frame_context=include_frame_context,
+                media_input=media_input,
+                llm_input_mode=llm_input_mode,
+                llm_model=llm_model,
+                llm_temperature=llm_temperature,
+                llm_max_output_tokens=llm_max_output_tokens,
+                reason="llm_translation_failed",
+                error=f"llm_translation_failed:digest:{exc}",
+            )
+        if not digest_is_chinese(parsed):
+            return _llm_failure_result(
+                include_frame_context=include_frame_context,
+                media_input=media_input,
+                llm_input_mode=llm_input_mode,
+                llm_model=llm_model,
+                llm_temperature=llm_temperature,
+                llm_max_output_tokens=llm_max_output_tokens,
+                reason="llm_output_not_chinese",
+                error="llm_output_not_chinese:digest",
+            )
+
+    if not _digest_quality_ok(parsed):
+        return _llm_failure_result(
+            include_frame_context=include_frame_context,
+            media_input=media_input,
+            llm_input_mode=llm_input_mode,
+            llm_model=llm_model,
+            llm_temperature=llm_temperature,
+            llm_max_output_tokens=llm_max_output_tokens,
+            reason="llm_quality_insufficient",
+            error="llm_quality_insufficient:digest",
+        )
 
     digest = normalize_digest_payload(parsed, state)
     digest["generated_by"] = "gemini"

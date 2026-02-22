@@ -159,7 +159,7 @@ def test_step_llm_outline_applies_overrides(monkeypatch: Any, tmp_path: Path) ->
             }
         )
         return (
-            '{"title":"Demo","tldr":[],"highlights":[],"recommended_actions":[],"risk_or_pitfalls":[],"chapters":[],"timestamp_references":[]}',
+            '{"title":"演示视频","tldr":["梳理了接口调用链与关键异常点。"],"highlights":["通过链路追踪定位到超时根因并给出修复方向。"],"recommended_actions":["先收敛重试策略，再补充慢查询索引。"],"risk_or_pitfalls":["盲目增加重试会放大下游压力。"],"chapters":[{"chapter_no":1,"title":"问题定位","anchor":"chapter-01","start_s":0,"end_s":59,"summary":"本章说明如何通过日志与指标定位超时瓶颈。","bullets":["先看错误分布，再看下游耗时。"],"key_terms":["超时","重试"],"code_snippets":[]}],"timestamp_references":[{"ts_s":18,"label":"关键转折","reason":"开始出现稳定超时信号"}]}',
             "text",
         )
 

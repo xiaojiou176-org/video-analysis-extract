@@ -6,6 +6,7 @@ from typing import Any
 
 from worker.config import Settings
 from worker.pipeline import runner
+from worker.pipeline.steps import llm_steps
 
 
 class _FakeSQLiteStore:
@@ -262,3 +263,133 @@ def test_execute_step_uses_pipeline_llm_max_retries(monkeypatch: Any, tmp_path: 
     assert step_record["status"] == "succeeded"
     assert step_record["retry_meta"]["attempts"] == 2
     assert step_record["retry_meta"]["retries_configured"] == 1
+
+
+def test_step_llm_outline_fails_when_quality_is_insufficient(monkeypatch: Any, tmp_path: Path) -> None:
+    def _fake_gemini_generate(*_: Any, **__: Any) -> tuple[str | None, str]:
+        return (
+            '{"title":"演示视频","tldr":["短"],"highlights":["短"],"recommended_actions":[],"risk_or_pitfalls":[],"chapters":[{"chapter_no":1,"title":"第一章","anchor":"chapter-01","start_s":0,"end_s":60,"summary":"短","bullets":["短"],"key_terms":[],"code_snippets":[]}],"timestamp_references":[]}',
+            "text",
+        )
+
+    monkeypatch.setattr(runner, "_gemini_generate", _fake_gemini_generate)
+    ctx = _build_ctx(tmp_path)
+    state = {
+        "metadata": {"title": "Demo"},
+        "title": "Demo",
+        "transcript": "hello",
+        "comments": {"top_comments": []},
+        "frames": [],
+        "media_path": "",
+        "source_url": "https://www.youtube.com/watch?v=demo",
+        "llm_input_mode": "text",
+        "llm_policy": {},
+    }
+
+    execution = asyncio.run(runner._step_llm_outline(ctx, state))
+
+    assert execution.status == "failed"
+    assert execution.reason == "llm_quality_insufficient"
+    assert execution.output["provider"] == "gemini"
+    assert execution.output["llm_gate_passed"] is False
+
+
+def test_step_llm_digest_fails_when_quality_is_insufficient(monkeypatch: Any, tmp_path: Path) -> None:
+    def _fake_gemini_generate(*_: Any, **__: Any) -> tuple[str | None, str]:
+        return (
+            '{"title":"演示视频","summary":"太短","tldr":["短"],"highlights":["短"],"action_items":[],"code_blocks":[],"timestamp_references":[],"fallback_notes":[]}',
+            "text",
+        )
+
+    monkeypatch.setattr(runner, "_gemini_generate", _fake_gemini_generate)
+    ctx = _build_ctx(tmp_path)
+    state = {
+        "metadata": {"title": "Demo"},
+        "title": "Demo",
+        "transcript": "hello",
+        "comments": {"top_comments": []},
+        "frames": [],
+        "media_path": "",
+        "source_url": "https://www.youtube.com/watch?v=demo",
+        "llm_input_mode": "text",
+        "llm_policy": {},
+        "outline": {
+            "title": "演示视频",
+            "highlights": ["定位耗时根因并给出修复方案。"],
+            "chapters": [
+                {
+                    "chapter_no": 1,
+                    "title": "背景",
+                    "anchor": "chapter-01",
+                    "start_s": 0,
+                    "end_s": 60,
+                    "summary": "介绍问题背景与观测信号。",
+                    "bullets": ["先确认告警范围，再定位慢点。"],
+                }
+            ],
+        },
+    }
+
+    execution = asyncio.run(runner._step_llm_digest(ctx, state))
+
+    assert execution.status == "failed"
+    assert execution.reason == "llm_quality_insufficient"
+    assert execution.output["provider"] == "gemini"
+    assert execution.output["llm_gate_passed"] is False
+
+
+def test_step_llm_outline_fails_when_translation_fails(monkeypatch: Any, tmp_path: Path) -> None:
+    def _fake_gemini_generate(*_: Any, **__: Any) -> tuple[str | None, str]:
+        return (
+            '{"title":"Demo video","tldr":["This section explains timeout and retry interactions."],"highlights":["The request waterfall exposes upstream saturation and queue buildup."],"recommended_actions":[],"risk_or_pitfalls":[],"chapters":[{"chapter_no":1,"title":"Root cause","anchor":"chapter-01","start_s":0,"end_s":60,"summary":"We identify root cause by correlating traces with queue latency spikes.","bullets":["Measure queue depth and retry amplification first."],"key_terms":[],"code_snippets":[]}],"timestamp_references":[]}',
+            "text",
+        )
+
+    monkeypatch.setattr(runner, "_gemini_generate", _fake_gemini_generate)
+    monkeypatch.setattr(llm_steps, "_translate_payload_to_chinese", lambda *args, **kwargs: None)
+    ctx = _build_ctx(tmp_path)
+    state = {
+        "metadata": {"title": "Demo"},
+        "title": "Demo",
+        "transcript": "hello",
+        "comments": {"top_comments": []},
+        "frames": [],
+        "media_path": "",
+        "source_url": "https://www.youtube.com/watch?v=demo",
+        "llm_input_mode": "text",
+        "llm_policy": {},
+    }
+
+    execution = asyncio.run(runner._step_llm_outline(ctx, state))
+
+    assert execution.status == "failed"
+    assert execution.reason == "llm_translation_failed"
+    assert execution.output["provider"] == "gemini"
+    assert execution.output["llm_gate_passed"] is False
+
+
+def test_step_llm_outline_fails_when_schema_contains_extra_fields(monkeypatch: Any, tmp_path: Path) -> None:
+    def _fake_gemini_generate(*_: Any, **__: Any) -> tuple[str | None, str]:
+        return (
+            '{"title":"演示视频","tldr":["梳理关键问题。"],"highlights":["明确了错误放大的触发条件与影响路径。"],"recommended_actions":[],"risk_or_pitfalls":[],"chapters":[{"chapter_no":1,"title":"第一章","anchor":"chapter-01","start_s":0,"end_s":60,"summary":"介绍关键链路与异常扩散机制。","bullets":["优先确认上游超时门限与重试策略。"],"key_terms":[],"code_snippets":[]}],"timestamp_references":[],"unexpected":"nope"}',
+            "text",
+        )
+
+    monkeypatch.setattr(runner, "_gemini_generate", _fake_gemini_generate)
+    ctx = _build_ctx(tmp_path)
+    state = {
+        "metadata": {"title": "Demo"},
+        "title": "Demo",
+        "transcript": "hello",
+        "comments": {"top_comments": []},
+        "frames": [],
+        "media_path": "",
+        "source_url": "https://www.youtube.com/watch?v=demo",
+        "llm_input_mode": "text",
+        "llm_policy": {},
+    }
+
+    execution = asyncio.run(runner._step_llm_outline(ctx, state))
+
+    assert execution.status == "failed"
+    assert execution.reason == "llm_output_invalid_json"

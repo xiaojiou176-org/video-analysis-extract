@@ -71,6 +71,7 @@ Startup validation fails when:
 
 - `DIGEST_*`
 - `FAILURE_*`
+- `LIVE_SMOKE_*`
 - `API_*`, `WORKER_*`, `MCP_*`, `OUTPUT_PATH`, `INIT_ENV_FORCE`
 
 ## Local Setup
