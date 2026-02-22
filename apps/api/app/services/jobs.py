@@ -31,16 +31,42 @@ class JobsService:
     def get_job(self, job_id: uuid.UUID):
         return self.repo.get(job_id)
 
+    def resolve_llm_gate_fields(
+        self,
+        *,
+        llm_required: bool | None,
+        llm_gate_passed: bool | None,
+        hard_fail_reason: str | None,
+        steps: list[dict[str, object]],
+    ) -> tuple[bool, bool | None, str | None]:
+        required = True if llm_required is None else llm_required
+        if llm_gate_passed is not None:
+            reason = hard_fail_reason if llm_gate_passed is False else None
+            return required, llm_gate_passed, reason
+
+        llm_steps = [item for item in steps if item.get("name") in {"llm_outline", "llm_digest"}]
+        if not llm_steps:
+            return required, None, hard_fail_reason
+
+        failed = next((item for item in llm_steps if item.get("status") == "failed"), None)
+        if failed is not None:
+            error = failed.get("error")
+            reason = None
+            if isinstance(error, dict):
+                raw = error.get("reason") or error.get("error")
+                if isinstance(raw, str) and raw.strip():
+                    reason = raw.strip()
+            return required, False, reason or hard_fail_reason or "llm_step_failed"
+
+        all_ok = all(item.get("status") in {"succeeded", "skipped"} for item in llm_steps)
+        return required, (True if all_ok else None), (None if all_ok else hard_fail_reason)
+
     def get_pipeline_final_status(self, job_id: uuid.UUID, *, fallback_status: str) -> str | None:
         status = self.repo.get_pipeline_final_status(job_id=job_id)
         if status in {"succeeded", "degraded", "failed"}:
             return status
-        if status == "partial":
-            return "degraded"
         if fallback_status in {"succeeded", "degraded", "failed"}:
             return fallback_status
-        if fallback_status == "partial":
-            return "degraded"
         return None
 
     def get_steps(self, job_id: uuid.UUID) -> list[dict[str, object]]:

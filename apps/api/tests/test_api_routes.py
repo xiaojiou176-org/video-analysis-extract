@@ -207,6 +207,150 @@ def test_job_get_returns_mode_and_pipeline_fields(
     assert payload["notification_retry"]["attempt_count"] == 2
 
 
+def test_job_get_infers_llm_gate_fields_from_steps_when_legacy_fields_are_null(
+    api_client: TestClient,
+    monkeypatch,
+) -> None:
+    job_id = uuid.uuid4()
+    now = datetime.now(timezone.utc)
+
+    monkeypatch.setattr(
+        "apps.api.app.services.jobs.JobsService.get_job",
+        lambda self, query_job_id: SimpleNamespace(
+            id=query_job_id,
+            video_id=uuid.uuid4(),
+            kind="video_digest_v1",
+            status="failed",
+            mode="refresh_llm",
+            idempotency_key="idem-legacy",
+            error_message="failed",
+            artifact_digest_md=None,
+            artifact_root=None,
+            llm_required=None,
+            llm_gate_passed=None,
+            hard_fail_reason=None,
+            created_at=now,
+            updated_at=now,
+        ),
+    )
+    monkeypatch.setattr(
+        "apps.api.app.services.jobs.JobsService.get_steps",
+        lambda self, _job_id: [
+            {
+                "name": "llm_outline",
+                "status": "succeeded",
+                "attempt": 1,
+                "started_at": now.isoformat(),
+                "finished_at": now.isoformat(),
+                "error": None,
+                "error_kind": None,
+                "retry_meta": None,
+                "result": None,
+                "cache_key": None,
+            },
+            {
+                "name": "llm_digest",
+                "status": "failed",
+                "attempt": 1,
+                "started_at": now.isoformat(),
+                "finished_at": now.isoformat(),
+                "error": {"reason": "provider_unavailable"},
+                "error_kind": "upstream_error",
+                "retry_meta": {"max_attempts": 2},
+                "result": None,
+                "cache_key": None,
+            },
+        ],
+    )
+    monkeypatch.setattr("apps.api.app.services.jobs.JobsService.get_degradations", lambda self, **kwargs: [])
+    monkeypatch.setattr("apps.api.app.services.jobs.JobsService.get_artifacts_index", lambda self, **kwargs: {})
+    monkeypatch.setattr(
+        "apps.api.app.services.jobs.JobsService.get_pipeline_final_status",
+        lambda self, _job_id, fallback_status: "failed",
+    )
+    monkeypatch.setattr("apps.api.app.services.jobs.JobsService.get_notification_retry", lambda self, _job_id: None)
+
+    response = api_client.get(f"/api/v1/jobs/{job_id}")
+    payload = response.json()
+
+    assert response.status_code == 200
+    assert payload["llm_required"] is True
+    assert payload["llm_gate_passed"] is False
+    assert payload["hard_fail_reason"] == "provider_unavailable"
+
+
+def test_job_get_infers_llm_gate_passed_true_when_llm_steps_succeed(
+    api_client: TestClient,
+    monkeypatch,
+) -> None:
+    job_id = uuid.uuid4()
+    now = datetime.now(timezone.utc)
+
+    monkeypatch.setattr(
+        "apps.api.app.services.jobs.JobsService.get_job",
+        lambda self, query_job_id: SimpleNamespace(
+            id=query_job_id,
+            video_id=uuid.uuid4(),
+            kind="video_digest_v1",
+            status="succeeded",
+            mode="full",
+            idempotency_key="idem-legacy-ok",
+            error_message=None,
+            artifact_digest_md=None,
+            artifact_root=None,
+            llm_required=None,
+            llm_gate_passed=None,
+            hard_fail_reason="legacy_reason_should_clear",
+            created_at=now,
+            updated_at=now,
+        ),
+    )
+    monkeypatch.setattr(
+        "apps.api.app.services.jobs.JobsService.get_steps",
+        lambda self, _job_id: [
+            {
+                "name": "llm_outline",
+                "status": "succeeded",
+                "attempt": 1,
+                "started_at": now.isoformat(),
+                "finished_at": now.isoformat(),
+                "error": None,
+                "error_kind": None,
+                "retry_meta": None,
+                "result": None,
+                "cache_key": None,
+            },
+            {
+                "name": "llm_digest",
+                "status": "skipped",
+                "attempt": 1,
+                "started_at": now.isoformat(),
+                "finished_at": now.isoformat(),
+                "error": None,
+                "error_kind": None,
+                "retry_meta": None,
+                "result": {"degraded": False},
+                "cache_key": None,
+            },
+        ],
+    )
+    monkeypatch.setattr("apps.api.app.services.jobs.JobsService.get_degradations", lambda self, **kwargs: [])
+    monkeypatch.setattr("apps.api.app.services.jobs.JobsService.get_artifacts_index", lambda self, **kwargs: {})
+    monkeypatch.setattr(
+        "apps.api.app.services.jobs.JobsService.get_pipeline_final_status",
+        lambda self, _job_id, fallback_status: "succeeded",
+    )
+    monkeypatch.setattr("apps.api.app.services.jobs.JobsService.get_notification_retry", lambda self, _job_id: None)
+
+    response = api_client.get(f"/api/v1/jobs/{job_id}")
+    payload = response.json()
+
+    assert response.status_code == 200
+    assert payload["llm_required"] is True
+    assert payload["llm_gate_passed"] is True
+    assert payload["hard_fail_reason"] is None
+
+
 def test_health_providers_returns_rollup(api_client: TestClient, monkeypatch) -> None:
     now = datetime.now(timezone.utc)
     monkeypatch.setattr(

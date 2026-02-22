@@ -321,6 +321,9 @@ class PostgresBusinessStore:
         pipeline_final_status: str | None = None,
         degradation_count: int | None = None,
         last_error_code: str | None = None,
+        llm_required: bool | None = None,
+        llm_gate_passed: bool | None = None,
+        hard_fail_reason: str | None = None,
     ) -> dict[str, Any]:
         if status not in {"succeeded"}:
             raise ValueError(f"invalid succeeded status: {status}")
@@ -338,6 +341,9 @@ class PostgresBusinessStore:
             pipeline_final_status=final_status,
             degradation_count=degradation_count,
             last_error_code=last_error_code,
+            llm_required=llm_required,
+            llm_gate_passed=llm_gate_passed,
+            hard_fail_reason=hard_fail_reason,
         )
 
     def mark_job_failed(
@@ -348,6 +354,9 @@ class PostgresBusinessStore:
         pipeline_final_status: str | None = None,
         degradation_count: int | None = None,
         last_error_code: str | None = None,
+        llm_required: bool | None = None,
+        llm_gate_passed: bool | None = None,
+        hard_fail_reason: str | None = None,
     ) -> dict[str, Any]:
         final_status = pipeline_final_status or "failed"
         if final_status not in {"succeeded", "degraded", "failed"}:
@@ -363,6 +372,9 @@ class PostgresBusinessStore:
             pipeline_final_status=final_status,
             degradation_count=degradation_count,
             last_error_code=last_error_code,
+            llm_required=llm_required,
+            llm_gate_passed=llm_gate_passed,
+            hard_fail_reason=hard_fail_reason,
         )
 
     def _mark_job_status(
@@ -376,6 +388,9 @@ class PostgresBusinessStore:
         pipeline_final_status: str | None,
         degradation_count: int | None,
         last_error_code: str | None,
+        llm_required: bool | None,
+        llm_gate_passed: bool | None,
+        hard_fail_reason: str | None,
     ) -> dict[str, Any]:
         with self._engine.begin() as conn:
             row = conn.execute(
@@ -389,6 +404,9 @@ class PostgresBusinessStore:
                         pipeline_final_status = :pipeline_final_status,
                         degradation_count = :degradation_count,
                         last_error_code = :last_error_code,
+                        llm_required = COALESCE(:llm_required, llm_required),
+                        llm_gate_passed = :llm_gate_passed,
+                        hard_fail_reason = :hard_fail_reason,
                         updated_at = NOW()
                     WHERE id = CAST(:job_id AS UUID)
                     RETURNING
@@ -396,7 +414,10 @@ class PostgresBusinessStore:
                         status,
                         pipeline_final_status,
                         degradation_count,
-                        last_error_code
+                        last_error_code,
+                        llm_required,
+                        llm_gate_passed,
+                        hard_fail_reason
                     """
                 ),
                 {
@@ -408,6 +429,9 @@ class PostgresBusinessStore:
                     "pipeline_final_status": pipeline_final_status,
                     "degradation_count": degradation_count,
                     "last_error_code": last_error_code,
+                    "llm_required": llm_required,
+                    "llm_gate_passed": llm_gate_passed,
+                    "hard_fail_reason": hard_fail_reason,
                 },
             ).mappings().first()
             if row is None:

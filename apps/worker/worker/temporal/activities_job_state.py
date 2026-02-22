@@ -28,8 +28,6 @@ def _to_pipeline_final_status(value: Any, *, fallback: str | None) -> str | None
         if not isinstance(candidate, str):
             continue
         normalized = candidate.strip().lower()
-        if normalized == "partial":
-            return "degraded"
         if normalized in PIPELINE_FINAL_STATUSES:
             return normalized
     return None
@@ -174,6 +172,15 @@ async def mark_succeeded_activity(payload: dict[str, Any]) -> dict[str, Any]:
     ) or "succeeded"
     degradation_count = _resolve_degradation_count(payload)
     last_error_code = _resolve_last_error_code(payload)
+    llm_required = payload.get("llm_required")
+    if not isinstance(llm_required, bool):
+        llm_required = None
+    llm_gate_passed = payload.get("llm_gate_passed")
+    if not isinstance(llm_gate_passed, bool):
+        llm_gate_passed = None
+    hard_fail_reason = payload.get("hard_fail_reason")
+    if not isinstance(hard_fail_reason, str) or not hard_fail_reason.strip():
+        hard_fail_reason = None
     step_name = "mark_succeeded"
 
     sqlite_store.mark_step_running(job_id=job_id, step_name=step_name, attempt=attempt)
@@ -185,6 +192,9 @@ async def mark_succeeded_activity(payload: dict[str, Any]) -> dict[str, Any]:
         pipeline_final_status=pipeline_final_status,
         degradation_count=degradation_count,
         last_error_code=last_error_code,
+        llm_required=llm_required,
+        llm_gate_passed=llm_gate_passed,
+        hard_fail_reason=hard_fail_reason,
     )
     sqlite_store.mark_step_finished(
         job_id=job_id,
@@ -201,6 +211,9 @@ async def mark_succeeded_activity(payload: dict[str, Any]) -> dict[str, Any]:
         "pipeline_final_status": job.get("pipeline_final_status"),
         "degradation_count": job.get("degradation_count"),
         "last_error_code": job.get("last_error_code"),
+        "llm_required": job.get("llm_required"),
+        "llm_gate_passed": job.get("llm_gate_passed"),
+        "hard_fail_reason": job.get("hard_fail_reason"),
     }
 
 
@@ -218,6 +231,15 @@ async def mark_failed_activity(payload: dict[str, Any]) -> dict[str, Any]:
     ) or "failed"
     degradation_count = _resolve_degradation_count(payload)
     last_error_code = _resolve_last_error_code(payload)
+    llm_required = payload.get("llm_required")
+    if not isinstance(llm_required, bool):
+        llm_required = True
+    llm_gate_passed = payload.get("llm_gate_passed")
+    if not isinstance(llm_gate_passed, bool):
+        llm_gate_passed = False
+    hard_fail_reason = payload.get("hard_fail_reason")
+    if not isinstance(hard_fail_reason, str) or not hard_fail_reason.strip():
+        hard_fail_reason = _derive_error_code(error) or "pipeline_failed"
     step_name = "mark_failed"
 
     sqlite_store.mark_step_running(job_id=job_id, step_name=step_name, attempt=attempt)
@@ -227,6 +249,9 @@ async def mark_failed_activity(payload: dict[str, Any]) -> dict[str, Any]:
         pipeline_final_status=pipeline_final_status,
         degradation_count=degradation_count,
         last_error_code=last_error_code,
+        llm_required=llm_required,
+        llm_gate_passed=llm_gate_passed,
+        hard_fail_reason=hard_fail_reason,
     )
     sqlite_store.mark_step_finished(
         job_id=job_id,
@@ -241,4 +266,7 @@ async def mark_failed_activity(payload: dict[str, Any]) -> dict[str, Any]:
         "attempt": attempt,
         "status": job["status"],
         "last_error_code": job.get("last_error_code"),
+        "llm_required": job.get("llm_required"),
+        "llm_gate_passed": job.get("llm_gate_passed"),
+        "hard_fail_reason": job.get("hard_fail_reason"),
     }

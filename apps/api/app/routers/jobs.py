@@ -94,6 +94,13 @@ def get_job(job_id: uuid.UUID, db: Session = Depends(get_db)):
         artifact_digest_md=row.artifact_digest_md,
         steps=steps,
     )
+    pipeline_final_status = service.get_pipeline_final_status(job_id, fallback_status=row.status)
+    llm_required, llm_gate_passed, hard_fail_reason = service.resolve_llm_gate_fields(
+        llm_required=getattr(row, "llm_required", None),
+        llm_gate_passed=getattr(row, "llm_gate_passed", None),
+        hard_fail_reason=getattr(row, "hard_fail_reason", None),
+        steps=steps,
+    )
     artifacts_index = service.get_artifacts_index(
         artifact_root=row.artifact_root,
         artifact_digest_md=row.artifact_digest_md,
@@ -110,15 +117,15 @@ def get_job(job_id: uuid.UUID, db: Session = Depends(get_db)):
         error_message=row.error_message,
         artifact_digest_md=row.artifact_digest_md,
         artifact_root=row.artifact_root,
-        llm_required=getattr(row, "llm_required", None),
-        llm_gate_passed=getattr(row, "llm_gate_passed", None),
-        hard_fail_reason=getattr(row, "hard_fail_reason", None),
+        llm_required=llm_required,
+        llm_gate_passed=llm_gate_passed,
+        hard_fail_reason=hard_fail_reason,
         created_at=row.created_at,
         updated_at=row.updated_at,
         step_summary=step_summary,
         steps=[JobStepDetail(**item) for item in steps],
         degradations=[JobDegradation(**item) for item in degradations],
-        pipeline_final_status=service.get_pipeline_final_status(job_id, fallback_status=row.status),
+        pipeline_final_status=pipeline_final_status,
         artifacts_index=artifacts_index,
         notification_retry=service.get_notification_retry(job_id),
     )

@@ -102,6 +102,11 @@ class ProcessJobWorkflow:
                             pipeline_result.get("fatal_error")
                             or "pipeline_failed"
                         ),
+                        "pipeline_final_status": final_status,
+                        "degradations": pipeline_result.get("degradations", []),
+                        "llm_required": pipeline_result.get("llm_required"),
+                        "llm_gate_passed": pipeline_result.get("llm_gate_passed"),
+                        "hard_fail_reason": pipeline_result.get("hard_fail_reason"),
                     },
                     start_to_close_timeout=timedelta(minutes=2),
                     retry_policy=RetryPolicy(maximum_attempts=1),
@@ -122,6 +127,11 @@ class ProcessJobWorkflow:
                 {
                     **payload,
                     "final_status": final_status,
+                    "pipeline_final_status": final_status,
+                    "degradations": pipeline_result.get("degradations", []),
+                    "llm_required": pipeline_result.get("llm_required"),
+                    "llm_gate_passed": pipeline_result.get("llm_gate_passed"),
+                    "hard_fail_reason": pipeline_result.get("hard_fail_reason"),
                     "artifacts": pipeline_result.get("artifacts", {}),
                     "artifact_dir": pipeline_result.get("artifact_dir"),
                 },
@@ -157,7 +167,14 @@ class ProcessJobWorkflow:
         except Exception as exc:
             failed = await workflow.execute_activity(
                 mark_failed_activity,
-                {**payload, "error": str(exc)},
+                {
+                    **payload,
+                    "error": str(exc),
+                    "pipeline_final_status": "failed",
+                    "llm_required": True,
+                    "llm_gate_passed": False,
+                    "hard_fail_reason": "workflow_exception",
+                },
                 start_to_close_timeout=timedelta(minutes=2),
                 retry_policy=RetryPolicy(maximum_attempts=1),
             )
