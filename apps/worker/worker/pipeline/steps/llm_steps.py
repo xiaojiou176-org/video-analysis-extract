@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import re
 from typing import Any, Callable
 
 from pydantic import ValidationError
@@ -12,7 +11,6 @@ from worker.pipeline.policies import (
     coerce_float,
     coerce_int,
     coerce_str_list,
-    dedupe_keep_order,
     digest_is_chinese,
     extract_json_object,
     frame_paths_from_frames,
@@ -20,9 +18,7 @@ from worker.pipeline.policies import (
     outline_is_chinese,
 )
 from worker.pipeline.runner_rendering import (
-    collect_code_blocks,
     estimate_duration_seconds,
-    extract_code_snippets,
     should_include_frame_prompt,
     timestamp_link,
 )
@@ -40,14 +36,6 @@ from worker.pipeline.steps.llm_schema import (
     digest_response_schema,
     outline_response_schema,
 )
-
-
-def collect_key_points_from_text(text: str, limit: int = 5) -> list[str]:
-    if not text:
-        return []
-    parts = re.split(r"(?<=[。！？.!?])\s+", text)
-    cleaned = [part.strip() for part in parts if part.strip()]
-    return cleaned[:limit]
 
 
 def _translate_payload_to_chinese(
@@ -80,108 +68,22 @@ def _translate_payload_to_chinese(
     return parsed if isinstance(parsed, dict) else None
 
 
-def _build_local_outline(state: dict[str, Any]) -> dict[str, Any]:
-    metadata = dict(state.get("metadata") or {})
-    title = str(metadata.get("title") or state.get("title") or "Untitled Video")
-    transcript = str(state.get("transcript") or "")
-    comments = dict(state.get("comments") or {})
-    frames = list(state.get("frames") or [])
-    source_url = str(state.get("source_url") or metadata.get("webpage_url") or "")
-
-    key_points = collect_key_points_from_text(transcript, limit=10)
-    comment_points: list[str] = []
-    top_comments = comments.get("top_comments")
-    if isinstance(top_comments, list):
-        for item in top_comments[:3]:
-            if isinstance(item, dict):
-                content = str(item.get("content") or "").strip()
-                if content:
-                    comment_points.append(f"评论观点：{content}")
-
-    merged_points = dedupe_keep_order(key_points + comment_points, limit=12)
-    if not merged_points:
-        merged_points = [
-            f"本期核心主题：{title}",
-            "字幕缺失，以下导读基于元信息与评论区自动补齐。",
-        ]
-
-    chapter_count = min(4, max(2, (len(merged_points) + 2) // 3))
-    duration_s = estimate_duration_seconds(metadata, frames, len(merged_points))
-    chapter_span = max(1, duration_s // chapter_count)
-
-    snippets = extract_code_snippets(transcript, limit=4)
-    chapters: list[dict[str, Any]] = []
-    for idx in range(chapter_count):
-        chapter_no = idx + 1
-        start_s = idx * chapter_span
-        end_s = duration_s if chapter_no == chapter_count else max(start_s, (idx + 1) * chapter_span - 1)
-        bullets = merged_points[idx * 3 : idx * 3 + 3] or [f"第 {chapter_no} 章承接主线内容展开。"]
-        summary = bullets[0]
-        title_hint = re.sub(r"[。.!?！？].*$", "", summary).strip()[:48]
-        chapter_title = title_hint or f"Chapter {chapter_no}"
-        key_terms = re.findall(r"[A-Za-z][A-Za-z0-9_+-]{2,}", " ".join(bullets))[:5]
-        chapter_snippets = [snippets[idx]] if idx < len(snippets) else []
-        if chapter_snippets:
-            chapter_snippets[0]["range_start_s"] = start_s
-            chapter_snippets[0]["range_end_s"] = end_s
-
-        chapters.append(
-            {
-                "chapter_no": chapter_no,
-                "title": chapter_title,
-                "anchor": f"chapter-{chapter_no:02d}",
-                "start_s": start_s,
-                "end_s": end_s,
-                "start_link": timestamp_link(source_url, start_s),
-                "end_link": timestamp_link(source_url, end_s),
-                "summary": summary,
-                "bullets": bullets,
-                "key_terms": key_terms,
-                "code_snippets": chapter_snippets,
-            }
-        )
-
-    timestamp_references: list[dict[str, Any]] = []
-    for chapter in chapters:
-        timestamp_references.append(
-            {
-                "ts_s": coerce_int(chapter.get("start_s"), 0),
-                "label": str(chapter.get("title") or "Chapter"),
-                "reason": "chapter_start",
-            }
-        )
-
-    return {
-        "title": title,
-        "tldr": merged_points[:4],
-        "highlights": merged_points[:6],
-        "recommended_actions": [f"回看章节 {idx + 1} 并整理关键证据。" for idx in range(min(3, len(chapters)))],
-        "risk_or_pitfalls": ["关注上下文信息缺失导致的误解风险。"] if not transcript.strip() else [],
-        "chapters": chapters,
-        "timestamp_references": timestamp_references,
-        "generated_by": "gemini",
-        "generated_at": utc_now_iso(),
-    }
-
-
 def normalize_outline_payload(payload: dict[str, Any], state: dict[str, Any]) -> dict[str, Any]:
     metadata = dict(state.get("metadata") or {})
     frames = list(state.get("frames") or [])
     source_url = str(state.get("source_url") or metadata.get("webpage_url") or "")
-    fallback = _build_local_outline(state)
-
-    title = str(payload.get("title") or fallback.get("title") or "Untitled Video")
-    tldr = coerce_str_list(payload.get("tldr") or fallback.get("tldr"), limit=8)
-    highlights = coerce_str_list(payload.get("highlights") or fallback.get("highlights"), limit=12)
+    title = str(payload.get("title") or metadata.get("title") or state.get("title") or "Untitled Video")
+    tldr = coerce_str_list(payload.get("tldr"), limit=8)
+    highlights = coerce_str_list(payload.get("highlights"), limit=12)
     actions = coerce_str_list(
-        payload.get("recommended_actions") or payload.get("action_items") or fallback.get("recommended_actions"),
+        payload.get("recommended_actions") or payload.get("action_items"),
         limit=12,
     )
-    pitfalls = coerce_str_list(payload.get("risk_or_pitfalls") or fallback.get("risk_or_pitfalls"), limit=12)
+    pitfalls = coerce_str_list(payload.get("risk_or_pitfalls"), limit=12)
 
     raw_chapters = payload.get("chapters")
-    if not isinstance(raw_chapters, list) or not raw_chapters:
-        raw_chapters = fallback.get("chapters") or []
+    if not isinstance(raw_chapters, list):
+        raw_chapters = []
 
     duration_s = estimate_duration_seconds(metadata, frames, max(1, len(raw_chapters)))
     chapter_span = max(1, duration_s // max(1, len(raw_chapters)))
@@ -250,14 +152,11 @@ def normalize_outline_payload(payload: dict[str, Any], state: dict[str, Any]) ->
                         "reason": str(ref.get("reason") or ""),
                     }
                 )
-    if not timestamp_references:
-        timestamp_references = list(fallback.get("timestamp_references") or [])
-
     return {
         "title": title,
-        "tldr": tldr or coerce_str_list(fallback.get("tldr"), limit=4),
-        "highlights": highlights or coerce_str_list(fallback.get("highlights"), limit=8),
-        "recommended_actions": actions or coerce_str_list(fallback.get("recommended_actions"), limit=8),
+        "tldr": tldr,
+        "highlights": highlights,
+        "recommended_actions": actions,
         "risk_or_pitfalls": pitfalls,
         "chapters": chapters,
         "timestamp_references": timestamp_references,
@@ -266,47 +165,17 @@ def normalize_outline_payload(payload: dict[str, Any], state: dict[str, Any]) ->
     }
 
 
-def _local_digest(state: dict[str, Any]) -> dict[str, Any]:
-    metadata = state.get("metadata", {})
-    title = str(metadata.get("title") or state.get("title") or "Untitled Video")
-    transcript = str(state.get("transcript") or "")
-    outline = normalize_outline_payload(dict(state.get("outline") or {}), state)
-    highlights = coerce_str_list(outline.get("highlights"), limit=8) or collect_key_points_from_text(transcript, limit=6)
-    if not highlights:
-        highlights = ["未获取到有效字幕，以下内容基于标题、简介与评论区自动补齐。"]
-
-    tldr = coerce_str_list(outline.get("tldr"), limit=6) or highlights[:4]
-    actions = coerce_str_list(outline.get("recommended_actions"), limit=8) or [f"复盘 {item}" for item in tldr[:3]]
-
-    summary = transcript.strip()[:320] if transcript.strip() else f"该摘要基于视频元信息自动补齐：{title}"
-    code_blocks = collect_code_blocks(outline, {})
-    timestamp_refs = outline.get("timestamp_references") if isinstance(outline.get("timestamp_references"), list) else []
-
-    return {
-        "title": title,
-        "summary": summary,
-        "tldr": tldr,
-        "highlights": highlights[:8],
-        "action_items": actions,
-        "code_blocks": code_blocks,
-        "timestamp_references": timestamp_refs,
-        "fallback_notes": ["模型输出字段不完整，已自动补齐。"],
-        "generated_by": "gemini",
-        "generated_at": utc_now_iso(),
-    }
-
-
 def normalize_digest_payload(payload: dict[str, Any], state: dict[str, Any]) -> dict[str, Any]:
-    fallback = _local_digest(state)
-    title = str(payload.get("title") or fallback.get("title") or "Untitled Video")
-    summary = str(payload.get("summary") or fallback.get("summary") or "").strip()
-    tldr = coerce_str_list(payload.get("tldr") or fallback.get("tldr"), limit=8)
-    highlights = coerce_str_list(payload.get("highlights") or fallback.get("highlights"), limit=12)
+    metadata = dict(state.get("metadata") or {})
+    title = str(payload.get("title") or metadata.get("title") or state.get("title") or "Untitled Video")
+    summary = str(payload.get("summary") or "").strip()
+    tldr = coerce_str_list(payload.get("tldr"), limit=8)
+    highlights = coerce_str_list(payload.get("highlights"), limit=12)
     action_items = coerce_str_list(
-        payload.get("action_items") or payload.get("recommended_actions") or fallback.get("action_items"),
+        payload.get("action_items") or payload.get("recommended_actions"),
         limit=12,
     )
-    fallback_notes = coerce_str_list(payload.get("fallback_notes") or fallback.get("fallback_notes"), limit=8)
+    fallback_notes = coerce_str_list(payload.get("fallback_notes"), limit=8)
 
     code_blocks_raw = payload.get("code_blocks")
     code_blocks: list[dict[str, Any]] = []
@@ -324,11 +193,6 @@ def normalize_digest_payload(payload: dict[str, Any], state: dict[str, Any]) -> 
                             "range_end_s": coerce_int(item.get("range_end_s"), coerce_int(item.get("range_start_s"), 0)),
                         }
                     )
-    if not code_blocks:
-        fallback_blocks = fallback.get("code_blocks")
-        if isinstance(fallback_blocks, list):
-            code_blocks = [dict(item) for item in fallback_blocks if isinstance(item, dict)]
-
     refs_raw = payload.get("timestamp_references")
     timestamp_references: list[dict[str, Any]] = []
     if isinstance(refs_raw, list):
@@ -341,17 +205,12 @@ def normalize_digest_payload(payload: dict[str, Any], state: dict[str, Any]) -> 
                         "reason": str(ref.get("reason") or ""),
                     }
                 )
-    if not timestamp_references:
-        fallback_refs = fallback.get("timestamp_references")
-        if isinstance(fallback_refs, list):
-            timestamp_references = [dict(item) for item in fallback_refs if isinstance(item, dict)]
-
     return {
         "title": title,
-        "summary": summary or "未生成摘要。",
-        "tldr": tldr or coerce_str_list(fallback.get("tldr"), limit=4),
-        "highlights": highlights or coerce_str_list(fallback.get("highlights"), limit=8),
-        "action_items": action_items or coerce_str_list(fallback.get("action_items"), limit=8),
+        "summary": summary,
+        "tldr": tldr,
+        "highlights": highlights,
+        "action_items": action_items,
         "code_blocks": code_blocks,
         "timestamp_references": timestamp_references,
         "fallback_notes": fallback_notes,

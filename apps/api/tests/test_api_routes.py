@@ -145,7 +145,7 @@ def test_job_get_returns_mode_and_pipeline_fields(
             artifact_root=None,
             llm_required=True,
             llm_gate_passed=False,
-            hard_fail_reason="llm_gate_blocked",
+            hard_fail_reason="llm_provider_unavailable",
             created_at=now,
             updated_at=now,
         )
@@ -160,7 +160,7 @@ def test_job_get_returns_mode_and_pipeline_fields(
                 "attempt": 1,
                 "started_at": now.isoformat(),
                 "finished_at": now.isoformat(),
-                "error": {"reason": "fallback"},
+                "error": {"reason": "llm_provider_unavailable"},
                 "error_kind": None,
                 "retry_meta": None,
                 "result": None,
@@ -199,7 +199,7 @@ def test_job_get_returns_mode_and_pipeline_fields(
     assert payload["mode"] == "refresh_llm"
     assert payload["llm_required"] is True
     assert payload["llm_gate_passed"] is False
-    assert payload["hard_fail_reason"] == "llm_gate_blocked"
+    assert payload["hard_fail_reason"] == "llm_provider_unavailable"
     assert payload["steps"][0]["name"] == "write_artifacts"
     assert payload["degradations"][0]["step"] == "write_artifacts"
     assert payload["pipeline_final_status"] == "degraded"

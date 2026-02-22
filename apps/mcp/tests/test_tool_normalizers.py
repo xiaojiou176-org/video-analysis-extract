@@ -59,7 +59,7 @@ def test_job_normalizer_keeps_extended_pipeline_fields() -> None:
             "pipeline_final_status": "degraded",
             "llm_required": True,
             "llm_gate_passed": False,
-            "hard_fail_reason": "llm_gate_blocked",
+            "hard_fail_reason": "llm_provider_unavailable",
             "artifacts_index": {
                 "digest_markdown": "/tmp/artifacts/digest.md",
                 "step_json": "/tmp/artifacts/steps.json",
@@ -83,7 +83,7 @@ def test_job_normalizer_keeps_extended_pipeline_fields() -> None:
                     "error": {"detail": "upstream timeout"},
                     "error_kind": "timeout",
                     "retry_meta": {"max_attempts": 2},
-                    "result": {"fallback_used": True},
+                    "result": {"degraded": True, "provider": "gemini"},
                     "cache_key": "llm_digest:v1",
                 }
             ],
@@ -91,7 +91,7 @@ def test_job_normalizer_keeps_extended_pipeline_fields() -> None:
                 {
                     "step": "llm_digest",
                     "status": "failed",
-                    "reason": "fallback_to_local_template",
+                    "reason": "llm_provider_unavailable",
                     "error": {"detail": "upstream timeout"},
                     "error_kind": "timeout",
                     "retry_meta": {"attempt": 2},
@@ -114,14 +114,14 @@ def test_job_normalizer_keeps_extended_pipeline_fields() -> None:
     assert normalized["pipeline_final_status"] == "degraded"
     assert normalized["llm_required"] is True
     assert normalized["llm_gate_passed"] is False
-    assert normalized["hard_fail_reason"] == "llm_gate_blocked"
+    assert normalized["hard_fail_reason"] == "llm_provider_unavailable"
     assert normalized["artifacts_index"]["digest_markdown"] == "/tmp/artifacts/digest.md"
     assert normalized["step_summary"][0]["name"] == "fetch_metadata"
     assert normalized["step_summary"][0]["attempt"] == 1
     assert normalized["steps"][0]["name"] == "llm_digest"
     assert normalized["steps"][0]["error_kind"] == "timeout"
     assert normalized["steps"][0]["retry_meta"] == {"max_attempts": 2}
-    assert normalized["degradations"][0]["reason"] == "fallback_to_local_template"
+    assert normalized["degradations"][0]["reason"] == "llm_provider_unavailable"
     assert normalized["degradations"][0]["cache_meta"] == {"hit": False}
     assert normalized["notification_retry"]["status"] == "failed"
     assert normalized["notification_retry"]["attempt_count"] == 3

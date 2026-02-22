@@ -70,9 +70,6 @@ from worker.pipeline.steps.artifacts import step_write_artifacts as _step_write_
 from worker.pipeline.steps.comments import step_collect_comments as _step_collect_comments_impl
 from worker.pipeline.steps.frames import step_extract_frames as _step_extract_frames_impl
 from worker.pipeline.steps.llm import (
-    _build_local_outline as _build_local_outline,
-    _local_digest as _local_digest,
-    collect_key_points_from_text as _collect_key_points_from_text,
     gemini_generate as _gemini_generate,
     normalize_digest_payload as _normalize_digest_payload,
     normalize_outline_payload as _normalize_outline_payload,
