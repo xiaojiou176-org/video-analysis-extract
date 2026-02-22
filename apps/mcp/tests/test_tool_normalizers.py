@@ -18,6 +18,7 @@ from apps.mcp.tools.notifications import (
     _normalize_set_config_payload,
     register_notification_tools,
 )
+from apps.mcp.tools.retrieval import register_retrieval_tools
 from apps.mcp.tools.workflows import register_workflow_tools
 
 
@@ -84,6 +85,7 @@ def test_job_normalizer_keeps_extended_pipeline_fields() -> None:
                     "error_kind": "timeout",
                     "retry_meta": {"max_attempts": 2},
                     "result": {"degraded": True, "provider": "gemini"},
+                    "thought_metadata": {"provider": "gemini", "thought_tokens": 32},
                     "cache_key": "llm_digest:v1",
                 }
             ],
@@ -121,6 +123,7 @@ def test_job_normalizer_keeps_extended_pipeline_fields() -> None:
     assert normalized["steps"][0]["name"] == "llm_digest"
     assert normalized["steps"][0]["error_kind"] == "timeout"
     assert normalized["steps"][0]["retry_meta"] == {"max_attempts": 2}
+    assert normalized["steps"][0]["thought_metadata"] == {"provider": "gemini", "thought_tokens": 32}
     assert normalized["degradations"][0]["reason"] == "llm_provider_unavailable"
     assert normalized["degradations"][0]["cache_meta"] == {"hit": False}
     assert normalized["notification_retry"]["status"] == "failed"
@@ -250,6 +253,49 @@ def test_artifacts_get_asset_tool_exposes_asset_url_and_base64() -> None:
     assert payload["mime_type"] == "image/jpeg"
     assert payload["base64"] == "dGVzdA=="
     assert payload["size_bytes"] == 4
+
+
+def test_retrieval_search_tool_normalizes_payload() -> None:
+    mcp = _FakeMCP()
+
+    def fake_api_call(method: str, path: str, **kwargs: Any) -> dict[str, Any]:
+        assert method == "POST"
+        assert path == "/api/v1/retrieval/search"
+        assert kwargs["json_body"]["query"] == "timeout"
+        assert kwargs["json_body"]["top_k"] == 3
+        return {
+            "query": "timeout",
+            "top_k": 3,
+            "filters": {"platform": "youtube"},
+            "items": [
+                {
+                    "job_id": "job-1",
+                    "video_id": "video-1",
+                    "platform": "youtube",
+                    "video_uid": "abc123",
+                    "source_url": "https://www.youtube.com/watch?v=abc123",
+                    "title": "Demo",
+                    "kind": "video_digest_v1",
+                    "mode": "full",
+                    "source": "digest",
+                    "snippet": "provider timeout",
+                    "score": 2.2,
+                }
+            ],
+        }
+
+    register_retrieval_tools(mcp, fake_api_call)
+    payload = mcp.tools["vd.retrieval.search"](
+        query="timeout",
+        top_k=3,
+        filters={"platform": "youtube"},
+    )
+
+    assert payload["query"] == "timeout"
+    assert payload["top_k"] == 3
+    assert payload["filters"] == {"platform": "youtube"}
+    assert payload["items"][0]["source"] == "digest"
+    assert payload["items"][0]["score"] == 2.2
 
 
 def test_notifications_get_config_tool_normalizes_payload() -> None:

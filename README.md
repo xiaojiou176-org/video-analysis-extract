@@ -25,6 +25,28 @@
 
 状态机细节见 `docs/state-machine.md`。
 
+## 模型策略（Gemini-only）
+
+- Provider 固定为 `gemini`，`llm_outline`/`llm_digest` 不支持其他 provider。
+- 结构化输出固定为 JSON：`response_mime_type=application/json` + schema 校验（严格 `extra=forbid`）。
+- Function calling：
+  - `llm_outline` / `llm_digest` 启用工具（证据引用与帧选择）。
+  - 翻译回退路径关闭 function calling。
+- Thinking 策略：
+  - 默认由 `GEMINI_THINKING_LEVEL` 控制。
+  - 请求级可通过 `overrides.llm.thinking_level` 覆盖。
+- Context cache：
+  - 由 `GEMINI_CONTEXT_CACHE_ENABLED/TTL_SECONDS/MIN_CHARS` 控制。
+- Media resolution 入口：
+  - `PIPELINE_LLM_INPUT_MODE`（`auto|text|video_text|frames_text`）
+  - `PIPELINE_MAX_FRAMES` 与 `overrides.frames.max_frames`
+  - 运行态 `llm_media_input`（`video_available`, `frame_count`）
+
+### Embedding / Retrieval 入口
+
+- Embedding 配置入口：`GEMINI_EMBEDDING_MODEL`
+- Retrieval 入口（当前阶段）：`GET /api/v1/jobs/{job_id}` 的 `artifacts_index`（MCP `vd.jobs.get` 同步暴露）
+
 ## 本地运行（标准 6 步）
 
 ### 1) 安装依赖
@@ -45,12 +67,12 @@ temporal server start-dev --ip 127.0.0.1 --port 7233
 ### 3) 初始化环境变量
 ```bash
 ./scripts/init_env_example.sh
-cp .env.local.example .env.local
+cp .env.example .env
 python scripts/check_env_contract.py --strict
-set -a; source .env.local; set +a
+set -a; source .env; set +a
 ```
 
-说明：`scripts/dev_*.sh` 和 `scripts/run_*.sh` 会自动加载仓库根目录 `.env.local`。
+说明：`scripts/dev_*.sh` 和 `scripts/run_*.sh` 会优先自动加载仓库根目录 `.env`；仅当 `.env` 缺失时才回退 `.env.local`。
 
 ### 4) 初始化数据库
 ```bash

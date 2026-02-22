@@ -182,6 +182,7 @@
         "error_kind",
         "retry_meta",
         "result",
+        "thought_metadata",
         "cache_key"
       ],
       "properties": {
@@ -226,6 +227,13 @@
           "additionalProperties": true
         },
         "result": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": true
+        },
+        "thought_metadata": {
           "type": [
             "object",
             "null"
@@ -455,6 +463,103 @@
             "null"
           ],
           "format": "uuid"
+        }
+      }
+    },
+    "retrievalHit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "job_id",
+        "video_id",
+        "platform",
+        "video_uid",
+        "source_url",
+        "title",
+        "kind",
+        "mode",
+        "source",
+        "snippet",
+        "score"
+      ],
+      "properties": {
+        "job_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "uuid"
+        },
+        "video_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "uuid"
+        },
+        "platform": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "bilibili",
+            "youtube",
+            null
+          ]
+        },
+        "video_uid": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "source_url": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "title": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "kind": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "mode": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "source": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "digest",
+            "transcript",
+            "outline",
+            "comments",
+            "meta",
+            null
+          ]
+        },
+        "snippet": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "score": {
+          "type": "number"
         }
       }
     }
@@ -877,6 +982,73 @@
                     "type": "null"
                   }
                 ]
+              }
+            }
+          },
+          {
+            "$ref": "#/$defs/errorPayload"
+          }
+        ]
+      }
+    },
+    {
+      "name": "vd.retrieval.search",
+      "http": {
+        "method": "POST",
+        "path": "/api/v1/retrieval/search"
+      },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "query"
+        ],
+        "properties": {
+          "query": {
+            "type": "string",
+            "minLength": 1
+          },
+          "top_k": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50,
+            "default": 10
+          },
+          "filters": {
+            "type": "object",
+            "additionalProperties": true,
+            "default": {}
+          }
+        }
+      },
+      "outputSchema": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "query",
+              "top_k",
+              "filters",
+              "items"
+            ],
+            "properties": {
+              "query": {
+                "type": "string"
+              },
+              "top_k": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "filters": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "items": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/retrievalHit"
+                }
               }
             }
           },

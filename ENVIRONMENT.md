@@ -10,7 +10,7 @@ This repository uses a contract-first environment model:
 ## Loading Order
 
 1. Process environment variables
-2. `.env` (auto-loaded by `scripts/dev_*.sh` and `scripts/run_*.sh`, when present)
+2. `.env` (canonical local source, auto-loaded by `scripts/dev_*.sh` and `scripts/run_*.sh`)
 3. `.env.local` (legacy fallback only when `.env` is absent)
 4. Code defaults (only for optional values; required variables must come from environment)
 
@@ -62,6 +62,26 @@ Startup validation fails when:
 - `GEMINI_THINKING_LEVEL`, `GEMINI_INCLUDE_THOUGHTS`
 - `GEMINI_CONTEXT_CACHE_ENABLED`, `GEMINI_CONTEXT_CACHE_TTL_SECONDS`, `GEMINI_CONTEXT_CACHE_MIN_CHARS`
 
+## Gemini-Only Model Strategy
+
+LLM generation is Gemini-only in this repository:
+
+1. Provider: `gemini`
+2. Structured output: `response_mime_type=application/json` + strict Pydantic schema validation
+3. Function calling: enabled for `llm_outline` and `llm_digest`; disabled in translation fallback
+4. Thinking control: `GEMINI_THINKING_LEVEL` plus per-request override `overrides.llm.thinking_level`
+5. Context cache: `GEMINI_CONTEXT_CACHE_*` controls cached prompt reuse in text mode
+6. Media resolution: final multimodal input shape is resolved by
+   - `PIPELINE_LLM_INPUT_MODE` (`auto|text|video_text|frames_text`)
+   - `PIPELINE_MAX_FRAMES` and `overrides.frames.max_frames`
+   - runtime `llm_media_input` (`video_available`, `frame_count`)
+
+### Embedding / Retrieval Entry
+
+- Embedding model entry: `GEMINI_EMBEDDING_MODEL` (env contract + worker settings).
+- Retrieval entry today: artifact-level retrieval via `jobs.artifacts_index` (API/MCP/Web).
+- Vector retrieval API is not yet exposed as a public runtime endpoint in this phase.
+
 ### API / MCP / Web
 
 - `VD_API_BASE_URL`, `VD_API_TIMEOUT_SEC`, `VD_API_KEY`
@@ -78,7 +98,7 @@ Startup validation fails when:
 
 ```bash
 ./scripts/init_env_example.sh
-cp .env.local.example .env
+cp .env.example .env
 # edit .env
 # optional legacy fallback:
 # cp .env .env.local

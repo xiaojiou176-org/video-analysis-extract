@@ -33,6 +33,7 @@ def _normalize_step_detail(item: Any) -> dict[str, Any]:
     step["error_kind"] = to_optional_str(source.get("error_kind"))
     step["retry_meta"] = to_optional_dict(source.get("retry_meta"))
     step["result"] = to_optional_dict(source.get("result"))
+    step["thought_metadata"] = to_optional_dict(source.get("thought_metadata"))
     step["cache_key"] = to_optional_str(source.get("cache_key"))
     return step
 

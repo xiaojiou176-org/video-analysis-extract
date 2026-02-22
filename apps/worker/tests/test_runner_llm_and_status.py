@@ -145,6 +145,9 @@ def test_run_pipeline_marks_degraded_when_non_llm_step_degraded(monkeypatch: Any
             state_updates={"artifact_dir": str((tmp_path / "artifacts").resolve())},
         )
 
+    async def _embedding(_: runner.PipelineContext, __: dict[str, Any]) -> runner.StepExecution:
+        return runner.StepExecution(status="succeeded")
+
     monkeypatch.setattr(runner, "_step_fetch_metadata", _ok)
     monkeypatch.setattr(runner, "_step_download_media", _ok)
     monkeypatch.setattr(runner, "_step_collect_subtitles", _degraded)
@@ -152,6 +155,7 @@ def test_run_pipeline_marks_degraded_when_non_llm_step_degraded(monkeypatch: Any
     monkeypatch.setattr(runner, "_step_extract_frames", _ok)
     monkeypatch.setattr(runner, "_step_llm_outline", _ok)
     monkeypatch.setattr(runner, "_step_llm_digest", _ok)
+    monkeypatch.setattr(runner, "_step_build_embeddings", _embedding)
     monkeypatch.setattr(runner, "_step_write_artifacts", _write)
 
     result = asyncio.run(
@@ -195,6 +199,9 @@ def test_run_pipeline_marks_failed_when_llm_step_failed(monkeypatch: Any, tmp_pa
             state_updates={"artifact_dir": str((tmp_path / "artifacts").resolve())},
         )
 
+    async def _embedding(_: runner.PipelineContext, __: dict[str, Any]) -> runner.StepExecution:
+        return runner.StepExecution(status="succeeded")
+
     monkeypatch.setattr(runner, "_step_fetch_metadata", _ok)
     monkeypatch.setattr(runner, "_step_download_media", _ok)
     monkeypatch.setattr(runner, "_step_collect_subtitles", _ok)
@@ -202,6 +209,7 @@ def test_run_pipeline_marks_failed_when_llm_step_failed(monkeypatch: Any, tmp_pa
     monkeypatch.setattr(runner, "_step_extract_frames", _ok)
     monkeypatch.setattr(runner, "_step_llm_outline", _llm_failed)
     monkeypatch.setattr(runner, "_step_llm_digest", _ok)
+    monkeypatch.setattr(runner, "_step_build_embeddings", _embedding)
     monkeypatch.setattr(runner, "_step_write_artifacts", _write)
 
     result = asyncio.run(
@@ -221,6 +229,63 @@ def test_run_pipeline_marks_failed_when_llm_step_failed(monkeypatch: Any, tmp_pa
     assert result["llm_required"] is True
     assert result["llm_gate_passed"] is False
     assert result["hard_fail_reason"] == "llm_provider_unavailable"
+
+
+def test_run_pipeline_embedding_degraded_does_not_fail_llm_gate(
+    monkeypatch: Any,
+    tmp_path: Path,
+) -> None:
+    async def _ok(_: runner.PipelineContext, __: dict[str, Any]) -> runner.StepExecution:
+        return runner.StepExecution(status="succeeded")
+
+    async def _embedding_degraded(_: runner.PipelineContext, __: dict[str, Any]) -> runner.StepExecution:
+        return runner.StepExecution(
+            status="succeeded",
+            degraded=True,
+            reason="embedding_provider_unavailable",
+            error="embedding_provider_unavailable",
+            state_updates={
+                "embeddings": {
+                    "provider": "gemini",
+                    "stored_count": 0,
+                    "retrievable": False,
+                }
+            },
+        )
+
+    async def _write(_: runner.PipelineContext, __: dict[str, Any]) -> runner.StepExecution:
+        return runner.StepExecution(
+            status="succeeded",
+            state_updates={"artifact_dir": str((tmp_path / "artifacts").resolve())},
+        )
+
+    monkeypatch.setattr(runner, "_step_fetch_metadata", _ok)
+    monkeypatch.setattr(runner, "_step_download_media", _ok)
+    monkeypatch.setattr(runner, "_step_collect_subtitles", _ok)
+    monkeypatch.setattr(runner, "_step_collect_comments", _ok)
+    monkeypatch.setattr(runner, "_step_extract_frames", _ok)
+    monkeypatch.setattr(runner, "_step_llm_outline", _ok)
+    monkeypatch.setattr(runner, "_step_llm_digest", _ok)
+    monkeypatch.setattr(runner, "_step_build_embeddings", _embedding_degraded)
+    monkeypatch.setattr(runner, "_step_write_artifacts", _write)
+
+    result = asyncio.run(
+        runner.run_pipeline(
+            _make_settings(tmp_path),
+            _FakeSQLiteStore(),  # type: ignore[arg-type]
+            _FakePGStore(),  # type: ignore[arg-type]
+            job_id="job-embedding-degraded",
+            attempt=1,
+            mode="full",
+        )
+    )
+
+    assert result["final_status"] == "degraded"
+    assert result["steps"]["build_embeddings"]["status"] == "succeeded"
+    assert result["steps"]["build_embeddings"]["degraded"] is True
+    assert result["llm_required"] is True
+    assert result["llm_gate_passed"] is True
+    assert result["hard_fail_reason"] is None
 
 
 def test_execute_step_uses_pipeline_llm_max_retries(monkeypatch: Any, tmp_path: Path) -> None:

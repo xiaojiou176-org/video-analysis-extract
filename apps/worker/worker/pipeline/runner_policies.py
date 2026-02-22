@@ -7,6 +7,7 @@ from worker.config import Settings
 
 PipelineMode = Literal["full", "text_only", "refresh_comments", "refresh_llm"]
 LLMInputMode = Literal["auto", "text", "video_text", "frames_text"]
+MediaResolution = Literal["low", "medium", "high"]
 
 
 def coerce_bool(value: Any, default: bool = False) -> bool:
@@ -34,6 +35,31 @@ def coerce_float(value: Any, default: float | None = None) -> float | None:
         return float(value)
     except (TypeError, ValueError):
         return default
+
+
+def _normalize_media_resolution(value: Any, *, default: MediaResolution = "medium") -> MediaResolution:
+    text = str(value or "").strip().lower()
+    if text in {"low", "medium", "high"}:
+        return text  # type: ignore[return-value]
+    return default
+
+
+def _normalize_media_resolution_policy(
+    value: Any,
+    *,
+    default: MediaResolution = "medium",
+) -> dict[str, MediaResolution]:
+    if isinstance(value, dict):
+        base = _normalize_media_resolution(value.get("default"), default=default)
+        return {
+            "default": base,
+            "frame": _normalize_media_resolution(value.get("frame"), default=base),
+            "image": _normalize_media_resolution(value.get("image"), default=base),
+            "pdf": _normalize_media_resolution(value.get("pdf"), default=base),
+        }
+
+    base = _normalize_media_resolution(value, default=default)
+    return {"default": base, "frame": base, "image": base, "pdf": base}
 
 
 def normalize_overrides_payload(value: Any) -> dict[str, Any]:
@@ -94,10 +120,16 @@ def build_llm_policy_section(default_model: str, section: dict[str, Any]) -> dic
         parsed = coerce_int(max_output_tokens_raw, 0)
         if parsed > 0:
             max_output_tokens = parsed
+    max_function_call_rounds = max(0, coerce_int(section.get("max_function_call_rounds"), 2))
+    include_thoughts = coerce_bool(section.get("include_thoughts"), default=False)
+    media_resolution = _normalize_media_resolution_policy(section.get("media_resolution"), default="medium")
     return {
         "model": model,
         "temperature": temperature,
         "max_output_tokens": max_output_tokens,
+        "max_function_call_rounds": max_function_call_rounds,
+        "include_thoughts": include_thoughts,
+        "media_resolution": media_resolution,
     }
 
 
@@ -107,6 +139,16 @@ def build_llm_policy(settings: Settings, overrides: dict[str, Any]) -> dict[str,
     thinking_level = str(section.get("thinking_level") or "").strip().lower()
     if thinking_level not in {"minimal", "low", "medium", "high"}:
         thinking_level = "low" if speed_priority else "high"
+    include_thoughts = coerce_bool(
+        section.get("include_thoughts"),
+        default=bool(settings.gemini_include_thoughts),
+    )
+    media_resolution = _normalize_media_resolution_policy(section.get("media_resolution"), default="medium")
+    section = {
+        **section,
+        "include_thoughts": include_thoughts,
+        "media_resolution": media_resolution,
+    }
 
     default_model = settings.gemini_model
     if speed_priority and "model" not in section:
@@ -134,12 +176,16 @@ def build_llm_policy(settings: Settings, overrides: dict[str, Any]) -> dict[str,
         parsed = coerce_int(max_output_tokens_raw, 0)
         if parsed > 0:
             max_output_tokens = parsed
+    max_function_call_rounds = max(0, coerce_int(section.get("max_function_call_rounds"), 2))
     return {
         "model": model,
         "temperature": temperature,
         "max_output_tokens": max_output_tokens,
+        "max_function_call_rounds": max_function_call_rounds,
         "speed_priority": speed_priority,
         "thinking_level": thinking_level,
+        "include_thoughts": include_thoughts,
+        "media_resolution": media_resolution,
         "outline": outline,
         "digest": digest,
     }

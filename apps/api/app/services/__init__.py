@@ -1,7 +1,8 @@
 from .health import HealthService
 from .ingest import IngestService
 from .jobs import JobsService
+from .retrieval import RetrievalService
 from .subscriptions import SubscriptionsService
 from .videos import VideosService
 
-__all__ = ["SubscriptionsService", "IngestService", "JobsService", "VideosService", "HealthService"]
+__all__ = ["SubscriptionsService", "IngestService", "JobsService", "VideosService", "HealthService", "RetrievalService"]

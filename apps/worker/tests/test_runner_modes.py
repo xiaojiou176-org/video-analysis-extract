@@ -142,6 +142,19 @@ def _patch_stub_steps(monkeypatch: Any, tmp_path: Path) -> None:
             },
         )
 
+    async def _embeddings(_: runner.PipelineContext, __: dict[str, Any]) -> runner.StepExecution:
+        return runner.StepExecution(
+            status="succeeded",
+            output={"provider": "stub", "stored_count": 2},
+            state_updates={
+                "embeddings": {
+                    "provider": "stub",
+                    "stored_count": 2,
+                    "retrievable": True,
+                }
+            },
+        )
+
     monkeypatch.setattr(runner, "_step_fetch_metadata", _fetch)
     monkeypatch.setattr(runner, "_step_download_media", _download)
     monkeypatch.setattr(runner, "_step_collect_subtitles", _subtitles)
@@ -149,6 +162,7 @@ def _patch_stub_steps(monkeypatch: Any, tmp_path: Path) -> None:
     monkeypatch.setattr(runner, "_step_extract_frames", _frames)
     monkeypatch.setattr(runner, "_step_llm_outline", _outline)
     monkeypatch.setattr(runner, "_step_llm_digest", _digest)
+    monkeypatch.setattr(runner, "_step_build_embeddings", _embeddings)
     monkeypatch.setattr(runner, "_step_write_artifacts", _write)
 
 

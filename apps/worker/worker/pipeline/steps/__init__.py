@@ -1,5 +1,6 @@
 from worker.pipeline.steps.artifacts import step_write_artifacts
 from worker.pipeline.steps.comments import step_collect_comments
+from worker.pipeline.steps.embedding import step_build_embeddings
 from worker.pipeline.steps.frames import step_extract_frames
 from worker.pipeline.steps.llm import step_llm_digest, step_llm_outline
 from worker.pipeline.steps.media import step_download_media
@@ -12,6 +13,7 @@ __all__ = [
     "step_collect_subtitles",
     "step_collect_comments",
     "step_extract_frames",
+    "step_build_embeddings",
     "step_llm_outline",
     "step_llm_digest",
     "step_write_artifacts",

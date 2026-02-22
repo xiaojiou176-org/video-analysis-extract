@@ -41,6 +41,13 @@ jobs:
       - name: Sync Python deps (locked)
         run: uv sync --frozen --extra dev --extra e2e
 
+      - name: Env contract strict check
+        run: python3 scripts/check_env_contract.py --strict
+
+      - name: Docs env canonical check
+        run: |
+          ! rg -n 'cp \.env\.local\.example \.env\.local|source \.env\.local|自动加载 `?\.env\.local' README.md docs/runbook-local.md
+
       - name: Worker file line limits (pipeline/steps + temporal <= 700)
         run: python3 scripts/check_worker_line_limits.py
 

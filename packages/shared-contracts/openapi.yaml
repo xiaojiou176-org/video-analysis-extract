@@ -96,6 +96,23 @@ paths:
         '404':
           description: Not found
 
+  /api/v1/retrieval/search:
+    post:
+      operationId: retrievalSearch
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RetrievalSearchRequest'
+      responses:
+        '200':
+          description: Retrieval search results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RetrievalSearchResponse'
+
   /api/v1/health/providers:
     get:
       operationId: getProviderHealth
@@ -422,9 +439,79 @@ components:
           type: object
           nullable: true
           additionalProperties: true
+        thought_metadata:
+          type: object
+          nullable: true
+          additionalProperties: true
         cache_key:
           type: string
           nullable: true
+
+    RetrievalSearchRequest:
+      type: object
+      required: [query]
+      properties:
+        query:
+          type: string
+          minLength: 1
+        top_k:
+          type: integer
+          minimum: 1
+          maximum: 50
+          default: 10
+        filters:
+          type: object
+          default: {}
+          additionalProperties: true
+
+    RetrievalHit:
+      type: object
+      required: [job_id, video_id, platform, video_uid, source_url, kind, source, snippet, score]
+      properties:
+        job_id:
+          type: string
+          format: uuid
+        video_id:
+          type: string
+          format: uuid
+        platform:
+          $ref: '#/components/schemas/Platform'
+        video_uid:
+          type: string
+        source_url:
+          type: string
+        title:
+          type: string
+          nullable: true
+        kind:
+          type: string
+        mode:
+          type: string
+          nullable: true
+        source:
+          type: string
+          enum: [digest, transcript, outline, comments, meta]
+        snippet:
+          type: string
+        score:
+          type: number
+
+    RetrievalSearchResponse:
+      type: object
+      required: [query, top_k, filters, items]
+      properties:
+        query:
+          type: string
+        top_k:
+          type: integer
+          minimum: 1
+        filters:
+          type: object
+          additionalProperties: true
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/RetrievalHit'
 
     JobDegradation:
       type: object

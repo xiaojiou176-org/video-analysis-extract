@@ -106,6 +106,7 @@ class JobsService:
             error_value = self._json_loads(row["error_json"])
             retry_meta = self._json_loads(row["retry_meta_json"])
             result_payload = self._json_loads(row["result_json"])
+            thought_metadata = self._extract_thought_metadata(result_payload)
 
             result.append(
                 {
@@ -118,11 +119,21 @@ class JobsService:
                     "error_kind": row["error_kind"],
                     "retry_meta": retry_meta if isinstance(retry_meta, dict) else None,
                     "result": result_payload if isinstance(result_payload, dict) else None,
+                    "thought_metadata": thought_metadata,
                     "cache_key": row["cache_key"],
                 }
             )
 
         return result
+
+    def _extract_thought_metadata(self, result_payload: Any) -> dict[str, Any] | None:
+        if not isinstance(result_payload, dict):
+            return None
+        for key in ("thought_metadata", "thinking_metadata", "thoughts_metadata", "thoughts"):
+            value = result_payload.get(key)
+            if isinstance(value, dict):
+                return value
+        return None
 
     def get_step_summary(self, job_id: uuid.UUID) -> list[dict[str, object]]:
         return [

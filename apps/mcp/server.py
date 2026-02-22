@@ -14,6 +14,7 @@ from .tools.health import register_health_tools
 from .tools.ingest import register_ingest_tools
 from .tools.jobs import register_job_tools
 from .tools.notifications import register_notification_tools
+from .tools.retrieval import register_retrieval_tools
 from .tools.reports import register_report_tools
 from .tools.subscriptions import register_subscription_tools
 from .tools.workflows import register_workflow_tools
@@ -240,6 +241,7 @@ def create_server() -> FastMCP:
     register_report_tools(mcp, api_call)
     register_health_tools(mcp, api_call)
     register_workflow_tools(mcp, api_call)
+    register_retrieval_tools(mcp, api_call)
     return mcp
 
 

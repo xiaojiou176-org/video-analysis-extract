@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+import json
 from typing import Any
 
 from sqlalchemy import create_engine, text
@@ -310,6 +311,126 @@ class PostgresBusinessStore:
             if row is None:
                 raise ValueError(f"job not found: {job_id}")
         return dict(row)
+
+    @staticmethod
+    def _to_vector_literal(values: list[float]) -> str:
+        if not values:
+            raise ValueError("embedding vector is empty")
+        return "[" + ",".join(f"{float(value):.10f}" for value in values) + "]"
+
+    def upsert_video_embeddings(
+        self,
+        *,
+        video_id: str,
+        job_id: str,
+        model: str,
+        items: list[dict[str, Any]],
+    ) -> int:
+        if not items:
+            return 0
+
+        with self._engine.begin() as conn:
+            conn.execute(
+                text(
+                    """
+                    DELETE FROM video_embeddings
+                    WHERE job_id = CAST(:job_id AS UUID)
+                    """
+                ),
+                {"job_id": job_id},
+            )
+
+            for item in items:
+                content_type = str(item.get("content_type") or "").strip().lower()
+                if content_type not in {"transcript", "outline"}:
+                    raise ValueError(f"invalid embedding content_type: {content_type}")
+                embedding = item.get("embedding")
+                if not isinstance(embedding, list) or not embedding:
+                    raise ValueError("embedding payload missing numeric vector")
+                conn.execute(
+                    text(
+                        """
+                        INSERT INTO video_embeddings (
+                            video_id,
+                            job_id,
+                            content_type,
+                            chunk_index,
+                            chunk_text,
+                            embedding_model,
+                            embedding,
+                            metadata_json,
+                            created_at,
+                            updated_at
+                        )
+                        VALUES (
+                            CAST(:video_id AS UUID),
+                            CAST(:job_id AS UUID),
+                            :content_type,
+                            :chunk_index,
+                            :chunk_text,
+                            :embedding_model,
+                            CAST(:embedding AS vector(768)),
+                            CAST(:metadata_json AS JSONB),
+                            NOW(),
+                            NOW()
+                        )
+                        """
+                    ),
+                    {
+                        "video_id": video_id,
+                        "job_id": job_id,
+                        "content_type": content_type,
+                        "chunk_index": int(item.get("chunk_index") or 0),
+                        "chunk_text": str(item.get("chunk_text") or ""),
+                        "embedding_model": model,
+                        "embedding": self._to_vector_literal([float(v) for v in embedding]),
+                        "metadata_json": json.dumps(item.get("metadata") or {}, ensure_ascii=False),
+                    },
+                )
+        return len(items)
+
+    def search_video_embeddings(
+        self,
+        *,
+        query_embedding: list[float],
+        limit: int = 8,
+        video_id: str | None = None,
+        content_type: str | None = None,
+    ) -> list[dict[str, Any]]:
+        if not query_embedding:
+            return []
+
+        normalized_limit = max(1, int(limit))
+        normalized_content_type = str(content_type or "").strip().lower() or None
+        with self._engine.begin() as conn:
+            rows = conn.execute(
+                text(
+                    """
+                    SELECT
+                        id::text AS id,
+                        video_id::text AS video_id,
+                        job_id::text AS job_id,
+                        content_type,
+                        chunk_index,
+                        chunk_text,
+                        embedding_model,
+                        metadata_json,
+                        1 - (embedding <=> CAST(:query_embedding AS vector(768))) AS score
+                    FROM video_embeddings
+                    WHERE (:video_id IS NULL OR video_id = CAST(:video_id AS UUID))
+                      AND (:content_type IS NULL OR content_type = :content_type)
+                    ORDER BY embedding <=> CAST(:query_embedding AS vector(768)) ASC
+                    LIMIT :limit
+                    """
+                ),
+                {
+                    "query_embedding": self._to_vector_literal([float(v) for v in query_embedding]),
+                    "video_id": video_id,
+                    "content_type": normalized_content_type,
+                    "limit": normalized_limit,
+                },
+            ).mappings().all()
+        return [dict(row) for row in rows]
 
     def mark_job_succeeded(
         self,

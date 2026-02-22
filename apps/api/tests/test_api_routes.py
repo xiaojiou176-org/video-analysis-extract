@@ -164,6 +164,7 @@ def test_job_get_returns_mode_and_pipeline_fields(
                 "error_kind": None,
                 "retry_meta": None,
                 "result": None,
+                "thought_metadata": {"provider": "gemini", "thought_tokens": 42},
                 "cache_key": None,
             }
         ],
@@ -201,10 +202,53 @@ def test_job_get_returns_mode_and_pipeline_fields(
     assert payload["llm_gate_passed"] is False
     assert payload["hard_fail_reason"] == "llm_provider_unavailable"
     assert payload["steps"][0]["name"] == "write_artifacts"
+    assert payload["steps"][0]["thought_metadata"] == {"provider": "gemini", "thought_tokens": 42}
     assert payload["degradations"][0]["step"] == "write_artifacts"
     assert payload["pipeline_final_status"] == "degraded"
     assert payload["notification_retry"]["status"] == "failed"
     assert payload["notification_retry"]["attempt_count"] == 2
+
+
+def test_retrieval_search_returns_items(api_client: TestClient, monkeypatch) -> None:
+    def fake_search(self, *, query, top_k, filters):
+        assert query == "timeout"
+        assert top_k == 2
+        assert filters == {"platform": "youtube"}
+        return {
+            "query": query,
+            "top_k": top_k,
+            "filters": filters,
+            "items": [
+                {
+                    "job_id": "00000000-0000-0000-0000-000000000001",
+                    "video_id": "00000000-0000-0000-0000-000000000010",
+                    "platform": "youtube",
+                    "video_uid": "abc123",
+                    "source_url": "https://www.youtube.com/watch?v=abc123",
+                    "title": "Demo",
+                    "kind": "video_digest_v1",
+                    "mode": "full",
+                    "source": "digest",
+                    "snippet": "timeout happened in provider step",
+                    "score": 2.5,
+                }
+            ],
+        }
+
+    monkeypatch.setattr("apps.api.app.services.retrieval.RetrievalService.search", fake_search)
+
+    response = api_client.post(
+        "/api/v1/retrieval/search",
+        json={"query": "timeout", "top_k": 2, "filters": {"platform": "youtube"}},
+    )
+    payload = response.json()
+
+    assert response.status_code == 200
+    assert payload["query"] == "timeout"
+    assert payload["top_k"] == 2
+    assert payload["filters"] == {"platform": "youtube"}
+    assert payload["items"][0]["source"] == "digest"
+    assert payload["items"][0]["score"] == 2.5
 
 
 def test_job_get_infers_llm_gate_fields_from_steps_when_legacy_fields_are_null(

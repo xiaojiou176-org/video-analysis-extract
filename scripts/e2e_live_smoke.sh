@@ -36,6 +36,20 @@ is_truthy() {
   esac
 }
 
+require_enum() {
+  local name="$1"
+  local value="$2"
+  shift 2
+  local allowed=("$@")
+  local candidate
+  for candidate in "${allowed[@]}"; do
+    if [[ "$value" == "$candidate" ]]; then
+      return 0
+    fi
+  done
+  fail "invalid ${name}=${value}; allowed: ${allowed[*]}"
+}
+
 api_post() {
   local path="$1"
   local payload="$2"
@@ -85,6 +99,15 @@ check_prerequisites() {
     log "SKIP: missing secrets: ${missing[*]}"
     exit 0
   fi
+
+  local llm_input_mode
+  llm_input_mode="$(printf '%s' "${PIPELINE_LLM_INPUT_MODE:-auto}" | tr '[:upper:]' '[:lower:]')"
+  require_enum "PIPELINE_LLM_INPUT_MODE" "$llm_input_mode" auto text video_text frames_text
+
+  local thinking_level
+  thinking_level="$(printf '%s' "${GEMINI_THINKING_LEVEL:-high}" | tr '[:upper:]' '[:lower:]')"
+  require_enum "GEMINI_THINKING_LEVEL" "$thinking_level" minimal low medium high
+  log "LLM strategy: provider=gemini model=${GEMINI_MODEL:-gemini-3.1-pro-preview} fast_model=${GEMINI_FAST_MODEL:-gemini-3-flash-preview} thinking=${thinking_level} input_mode=${llm_input_mode} cache=${GEMINI_CONTEXT_CACHE_ENABLED:-true}"
 
   local status body response
   response="$(api_get "/healthz")"

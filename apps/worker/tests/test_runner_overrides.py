@@ -141,6 +141,8 @@ def test_step_llm_outline_applies_overrides(monkeypatch: Any, tmp_path: Path) ->
         include_thoughts: bool | None = None,
         use_context_cache: bool = True,
         enable_function_calling: bool = True,
+        media_resolution: dict[str, Any] | str | None = None,
+        max_function_call_rounds: int = 2,
     ) -> tuple[str | None, str]:
         calls.append(
             {
@@ -156,6 +158,8 @@ def test_step_llm_outline_applies_overrides(monkeypatch: Any, tmp_path: Path) ->
                 "include_thoughts": include_thoughts,
                 "use_context_cache": use_context_cache,
                 "enable_function_calling": enable_function_calling,
+                "media_resolution": media_resolution,
+                "max_function_call_rounds": max_function_call_rounds,
             }
         )
         return (
@@ -178,6 +182,9 @@ def test_step_llm_outline_applies_overrides(monkeypatch: Any, tmp_path: Path) ->
             "model": "gemini-2.0-flash",
             "temperature": 0.2,
             "max_output_tokens": 1024,
+            "include_thoughts": True,
+            "media_resolution": {"frame": "high", "image": "medium", "pdf": "low"},
+            "max_function_call_rounds": 3,
         },
     }
 
@@ -189,6 +196,9 @@ def test_step_llm_outline_applies_overrides(monkeypatch: Any, tmp_path: Path) ->
     assert first["model"] == "gemini-2.0-flash"
     assert first["temperature"] == 0.2
     assert first["max_output_tokens"] == 1024
+    assert first["include_thoughts"] is True
+    assert first["max_function_call_rounds"] == 3
+    assert first["media_resolution"] == {"frame": "high", "image": "medium", "pdf": "low"}
 
 
 def test_cache_signature_includes_override_policies(tmp_path: Path) -> None:
@@ -232,3 +242,36 @@ def test_cache_signature_includes_override_policies(tmp_path: Path) -> None:
     }
     llm_sig_2 = runner._build_step_cache_info(ctx, changed_llm, "llm_outline")["signature"]
     assert llm_sig_1 != llm_sig_2
+
+
+def test_build_llm_policy_supports_thoughts_media_and_function_rounds(tmp_path: Path) -> None:
+    settings = Settings(
+        pipeline_workspace_dir=str((tmp_path / "workspace").resolve()),
+        pipeline_artifact_root=str((tmp_path / "artifacts").resolve()),
+        gemini_include_thoughts=False,
+    )
+
+    policy = runner._build_llm_policy(
+        settings,
+        {
+            "llm": {
+                "include_thoughts": True,
+                "media_resolution": {"default": "low", "frame": "high"},
+                "max_function_call_rounds": 4,
+            },
+            "llm_outline": {
+                "include_thoughts": False,
+                "media_resolution": {"image": "medium"},
+                "max_function_call_rounds": 1,
+            },
+        },
+    )
+
+    assert policy["include_thoughts"] is True
+    assert policy["max_function_call_rounds"] == 4
+    assert policy["media_resolution"]["default"] == "low"
+    assert policy["media_resolution"]["frame"] == "high"
+    assert policy["outline"]["include_thoughts"] is False
+    assert policy["outline"]["max_function_call_rounds"] == 1
+    assert policy["outline"]["media_resolution"]["image"] == "medium"
+    assert policy["digest"]["include_thoughts"] is True

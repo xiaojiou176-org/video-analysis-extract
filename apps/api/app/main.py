@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import FastAPI
 
 from .config import settings
-from .routers import artifacts, health, ingest, jobs, notifications, subscriptions, videos, workflows
+from .routers import artifacts, health, ingest, jobs, notifications, retrieval, subscriptions, videos, workflows
 
 app = FastAPI(title=settings.app_name, version=settings.app_version)
 
@@ -22,3 +22,4 @@ app.include_router(notifications.reports_router)
 app.include_router(artifacts.router)
 app.include_router(health.router)
 app.include_router(workflows.router)
+app.include_router(retrieval.router)

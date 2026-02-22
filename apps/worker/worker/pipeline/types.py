@@ -22,6 +22,7 @@ PIPELINE_STEPS: list[str] = [
     "extract_frames",
     "llm_outline",
     "llm_digest",
+    "build_embeddings",
     "write_artifacts",
 ]
 
@@ -29,8 +30,9 @@ STEP_VERSIONS: dict[str, str] = {step: "v1" for step in PIPELINE_STEPS}
 STEP_VERSIONS["download_media"] = "v2"
 STEP_VERSIONS["collect_subtitles"] = "v2"
 STEP_VERSIONS["collect_comments"] = "v4"
-STEP_VERSIONS["llm_outline"] = "v4"
-STEP_VERSIONS["llm_digest"] = "v5"
+STEP_VERSIONS["llm_outline"] = "v5"
+STEP_VERSIONS["llm_digest"] = "v6"
+STEP_VERSIONS["build_embeddings"] = "v1"
 STEP_VERSIONS["write_artifacts"] = "v2"
 
 NON_DEGRADING_SKIP_REASONS = {
@@ -50,8 +52,8 @@ PIPELINE_MODE_SKIP_STEPS: dict[PipelineMode, set[str]] = {
 PIPELINE_MODE_FORCE_STEPS: dict[PipelineMode, set[str]] = {
     "full": set(),
     "text_only": set(),
-    "refresh_comments": {"collect_comments", "llm_outline", "llm_digest", "write_artifacts"},
-    "refresh_llm": {"llm_outline", "llm_digest", "write_artifacts"},
+    "refresh_comments": {"collect_comments", "llm_outline", "llm_digest", "build_embeddings", "write_artifacts"},
+    "refresh_llm": {"llm_outline", "llm_digest", "build_embeddings", "write_artifacts"},
 }
 
 PIPELINE_MODE_SKIP_UPDATES: dict[str, dict[str, Any]] = {
@@ -88,6 +90,11 @@ STEP_INPUT_KEYS: dict[str, tuple[str, ...]] = {
         "llm_input_mode",
         "llm_media_input",
         "llm_policy",
+    ),
+    "build_embeddings": (
+        "video_uid",
+        "transcript",
+        "outline",
     ),
     "write_artifacts": (
         "source_url",
@@ -147,6 +154,9 @@ STEP_SETTING_KEYS: dict[str, tuple[str, ...]] = {
         "gemini_context_cache_min_chars",
         "pipeline_max_frames",
         "pipeline_llm_input_mode",
+    ),
+    "build_embeddings": (
+        "gemini_embedding_model",
     ),
     "write_artifacts": ("digest_template_path",),
 }

@@ -22,7 +22,7 @@ from worker.pipeline.runner_rendering import (
     should_include_frame_prompt,
     timestamp_link,
 )
-from worker.pipeline.step_executor import jsonable, utc_now_iso
+from worker.pipeline.step_executor import utc_now_iso
 from worker.pipeline.types import PipelineContext, StepExecution
 from worker.pipeline.steps.llm_client import gemini_generate
 from worker.pipeline.steps.llm_prompts import (
@@ -35,6 +35,12 @@ from worker.pipeline.steps.llm_schema import (
     OutlinePayload,
     digest_response_schema,
     outline_response_schema,
+)
+
+
+GeminiGenerateReturn = (
+    tuple[str | None, str]
+    | tuple[str | None, str, dict[str, Any]]
 )
 
 
@@ -81,7 +87,7 @@ def _translate_payload_to_chinese(
     schema_label: str,
     thinking_level: str,
 ) -> dict[str, Any] | None:
-    translated_raw, _ = gemini_generate(
+    translated_result = gemini_generate(
         settings,
         build_translation_prompt(payload, schema_label=schema_label),
         llm_input_mode="text",
@@ -93,6 +99,7 @@ def _translate_payload_to_chinese(
         use_context_cache=False,
         enable_function_calling=False,
     )
+    translated_raw, _, _ = _unpack_gemini_result(translated_result)
     if not translated_raw:
         return None
     try:
@@ -296,11 +303,63 @@ def _thinking_level_from_policy(llm_policy: dict[str, Any]) -> str:
     return raw
 
 
+def _coerce_bool(value: Any, default: bool) -> bool:
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return default
+    text = str(value).strip().lower()
+    if text in {"1", "true", "yes", "on", "y"}:
+        return True
+    if text in {"0", "false", "no", "off", "n"}:
+        return False
+    return default
+
+
+def _max_function_call_rounds(llm_policy: dict[str, Any], section_policy: dict[str, Any]) -> int:
+    raw = section_policy.get("max_function_call_rounds", llm_policy.get("max_function_call_rounds", 2))
+    parsed = coerce_int(raw, 2)
+    return max(0, parsed)
+
+
+def _include_thoughts_from_policy(
+    ctx: PipelineContext,
+    llm_policy: dict[str, Any],
+    section_policy: dict[str, Any],
+) -> bool:
+    default_value = bool(ctx.settings.gemini_include_thoughts)
+    if "include_thoughts" in section_policy:
+        return _coerce_bool(section_policy.get("include_thoughts"), default=default_value)
+    if "include_thoughts" in llm_policy:
+        return _coerce_bool(llm_policy.get("include_thoughts"), default=default_value)
+    return default_value
+
+
+def _media_resolution_from_policy(
+    llm_policy: dict[str, Any],
+    section_policy: dict[str, Any],
+) -> dict[str, Any]:
+    raw = section_policy.get("media_resolution", llm_policy.get("media_resolution"))
+    if isinstance(raw, dict):
+        return dict(raw)
+    if isinstance(raw, str) and raw.strip():
+        return {"default": raw.strip().lower()}
+    return {}
+
+
+def _unpack_gemini_result(result: GeminiGenerateReturn) -> tuple[str | None, str, dict[str, Any]]:
+    if len(result) == 2:
+        text, media_input = result
+        return text, media_input, {}
+    text, media_input, metadata = result
+    return text, media_input, dict(metadata or {})
+
+
 async def step_llm_outline(
     ctx: PipelineContext,
     state: dict[str, Any],
     *,
-    gemini_generate_fn: Callable[..., tuple[str | None, str]] = gemini_generate,
+    gemini_generate_fn: Callable[..., GeminiGenerateReturn] = gemini_generate,
 ) -> StepExecution:
     metadata = dict(state.get("metadata") or {})
     transcript = str(state.get("transcript") or "")
@@ -328,7 +387,7 @@ async def step_llm_outline(
         include_frame_context=include_frame_context,
     )
 
-    generated, media_input = await asyncio.to_thread(
+    generated_result = await asyncio.to_thread(
         gemini_generate_fn,
         ctx.settings,
         prompt,
@@ -341,10 +400,13 @@ async def step_llm_outline(
         response_schema=outline_response_schema(),
         response_mime_type="application/json",
         thinking_level=_thinking_level_from_policy(llm_policy),
-        include_thoughts=False,
+        include_thoughts=_include_thoughts_from_policy(ctx, llm_policy, llm_outline_policy),
         use_context_cache=True,
         enable_function_calling=True,
+        media_resolution=_media_resolution_from_policy(llm_policy, llm_outline_policy),
+        max_function_call_rounds=_max_function_call_rounds(llm_policy, llm_outline_policy),
     )
+    generated, media_input, llm_meta = _unpack_gemini_result(generated_result)
 
     if not generated:
         missing_api_key = not str(ctx.settings.gemini_api_key or "").strip()
@@ -452,6 +514,7 @@ async def step_llm_outline(
             "llm_required": True,
             "llm_gate_passed": True,
             "hard_fail_reason": None,
+            "llm_meta": llm_meta,
         },
         state_updates={"outline": outline},
     )
@@ -461,7 +524,7 @@ async def step_llm_digest(
     ctx: PipelineContext,
     state: dict[str, Any],
     *,
-    gemini_generate_fn: Callable[..., tuple[str | None, str]] = gemini_generate,
+    gemini_generate_fn: Callable[..., GeminiGenerateReturn] = gemini_generate,
 ) -> StepExecution:
     metadata = dict(state.get("metadata") or {})
     comments = dict(state.get("comments") or {})
@@ -489,7 +552,7 @@ async def step_llm_digest(
         include_frame_context=include_frame_context,
     )
 
-    generated, media_input = await asyncio.to_thread(
+    generated_result = await asyncio.to_thread(
         gemini_generate_fn,
         ctx.settings,
         prompt,
@@ -502,10 +565,13 @@ async def step_llm_digest(
         response_schema=digest_response_schema(),
         response_mime_type="application/json",
         thinking_level=_thinking_level_from_policy(llm_policy),
-        include_thoughts=False,
+        include_thoughts=_include_thoughts_from_policy(ctx, llm_policy, llm_digest_policy),
         use_context_cache=True,
         enable_function_calling=True,
+        media_resolution=_media_resolution_from_policy(llm_policy, llm_digest_policy),
+        max_function_call_rounds=_max_function_call_rounds(llm_policy, llm_digest_policy),
     )
+    generated, media_input, llm_meta = _unpack_gemini_result(generated_result)
 
     if not generated:
         missing_api_key = not str(ctx.settings.gemini_api_key or "").strip()
@@ -613,6 +679,7 @@ async def step_llm_digest(
             "llm_required": True,
             "llm_gate_passed": True,
             "hard_fail_reason": None,
+            "llm_meta": llm_meta,
         },
         state_updates={"digest": digest},
     )

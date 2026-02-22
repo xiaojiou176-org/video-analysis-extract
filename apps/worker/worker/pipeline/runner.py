@@ -68,6 +68,7 @@ from worker.pipeline.step_executor import (
 )
 from worker.pipeline.steps.artifacts import step_write_artifacts as _step_write_artifacts_impl
 from worker.pipeline.steps.comments import step_collect_comments as _step_collect_comments_impl
+from worker.pipeline.steps.embedding import step_build_embeddings as _step_build_embeddings_impl
 from worker.pipeline.steps.frames import step_extract_frames as _step_extract_frames_impl
 from worker.pipeline.steps.llm import (
     gemini_generate as _gemini_generate,
@@ -161,6 +162,10 @@ async def _step_write_artifacts(ctx: PipelineContext, state: dict[str, Any]) -> 
     return await _step_write_artifacts_impl(ctx, state)
 
 
+async def _step_build_embeddings(ctx: PipelineContext, state: dict[str, Any]) -> StepExecution:
+    return await _step_build_embeddings_impl(ctx, state)
+
+
 async def run_pipeline(
     settings: Settings,
     sqlite_store: SQLiteStateStore,
@@ -179,6 +184,7 @@ async def run_pipeline(
         ("extract_frames", _step_extract_frames, False),
         ("llm_outline", _step_llm_outline, False),
         ("llm_digest", _step_llm_digest, False),
+        ("build_embeddings", _step_build_embeddings, False),
         ("write_artifacts", _step_write_artifacts, True),
     ]
     return await orchestrator.run_pipeline(

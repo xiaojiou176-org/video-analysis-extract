@@ -27,6 +27,7 @@ class JobStepDetail(JobStepSummary):
     error_kind: str | None = None
     retry_meta: dict[str, Any] | None = None
     result: dict[str, Any] | None = None
+    thought_metadata: dict[str, Any] | None = None
     cache_key: str | None = None
 
 
