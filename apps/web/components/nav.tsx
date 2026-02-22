@@ -15,19 +15,21 @@ export function AppNav() {
   const pathname = usePathname();
 
   return (
-    <nav aria-label="Main navigation" className="app-nav">
-      {NAV_ITEMS.map((item) => {
-        const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
-        return (
-          <Link
-            key={item.href}
-            href={item.href}
-            className={active ? "nav-link nav-link-active" : "nav-link"}
-          >
-            {item.label}
-          </Link>
-        );
-      })}
-    </nav>
+    <div className="app-nav-shell">
+      <nav aria-label="Main navigation" className="app-nav">
+        {NAV_ITEMS.map((item) => {
+          const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={active ? "nav-link nav-link-active" : "nav-link"}
+            >
+              {item.label}
+            </Link>
+          );
+        })}
+      </nav>
+    </div>
   );
 }
