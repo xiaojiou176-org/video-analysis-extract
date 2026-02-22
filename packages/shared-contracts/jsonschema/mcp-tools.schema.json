@@ -601,6 +601,208 @@
           ]
         }
       }
+    },
+    "uiAuditSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "artifact_count",
+        "finding_count",
+        "severity_counts"
+      ],
+      "properties": {
+        "artifact_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "finding_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "severity_counts": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      }
+    },
+    "uiAuditFinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "severity",
+        "title",
+        "message",
+        "rule",
+        "artifact_key"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "severity": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "rule": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "artifact_key": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "uiAuditArtifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "key",
+        "path",
+        "mime_type",
+        "size_bytes",
+        "category"
+      ],
+      "properties": {
+        "key": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "mime_type": {
+          "type": "string"
+        },
+        "size_bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "category": {
+          "type": "string"
+        }
+      }
+    },
+    "uiAuditRun": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "run_id",
+        "job_id",
+        "artifact_root",
+        "status",
+        "created_at",
+        "summary"
+      ],
+      "properties": {
+        "run_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "uuid"
+        },
+        "job_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "uuid"
+        },
+        "artifact_root": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "status": {
+          "type": "string"
+        },
+        "created_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "summary": {
+          "$ref": "#/$defs/uiAuditSummary"
+        }
+      }
+    },
+    "uiAuditAutofixSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "finding_count",
+        "high_or_worse_count"
+      ],
+      "properties": {
+        "finding_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "high_or_worse_count": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "uiAuditAutofix": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "run_id",
+        "mode",
+        "autofix_applied",
+        "summary",
+        "guardrails",
+        "suggested_actions"
+      ],
+      "properties": {
+        "run_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "uuid"
+        },
+        "mode": {
+          "type": "string",
+          "enum": [
+            "dry-run",
+            "apply"
+          ]
+        },
+        "autofix_applied": {
+          "type": "boolean"
+        },
+        "summary": {
+          "$ref": "#/$defs/uiAuditAutofixSummary"
+        },
+        "guardrails": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "suggested_actions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
     }
   },
   "tools": [
@@ -1949,6 +2151,262 @@
                 "additionalProperties": true
               }
             }
+          },
+          {
+            "$ref": "#/$defs/errorPayload"
+          }
+        ]
+      }
+    },
+    {
+      "name": "vd.ui_audit.run",
+      "http": {
+        "method": "POST",
+        "path": "/api/v1/ui-audit/run"
+      },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "job_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "artifact_root": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "anyOf": [
+          {
+            "required": [
+              "job_id"
+            ]
+          },
+          {
+            "required": [
+              "artifact_root"
+            ]
+          }
+        ]
+      },
+      "outputSchema": {
+        "oneOf": [
+          {
+            "$ref": "#/$defs/uiAuditRun"
+          },
+          {
+            "$ref": "#/$defs/errorPayload"
+          }
+        ]
+      }
+    },
+    {
+      "name": "vd.ui_audit.get",
+      "http": {
+        "method": "GET",
+        "path": "/api/v1/ui-audit/{run_id}"
+      },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "run_id"
+        ],
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "outputSchema": {
+        "oneOf": [
+          {
+            "$ref": "#/$defs/uiAuditRun"
+          },
+          {
+            "$ref": "#/$defs/errorPayload"
+          }
+        ]
+      }
+    },
+    {
+      "name": "vd.ui_audit.list_findings",
+      "http": {
+        "method": "GET",
+        "path": "/api/v1/ui-audit/{run_id}/findings"
+      },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "run_id"
+        ],
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "severity": {
+            "type": "string"
+          }
+        }
+      },
+      "outputSchema": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "run_id",
+              "severity",
+              "items"
+            ],
+            "properties": {
+              "run_id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "severity": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "items": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/uiAuditFinding"
+                }
+              }
+            }
+          },
+          {
+            "$ref": "#/$defs/errorPayload"
+          }
+        ]
+      }
+    },
+    {
+      "name": "vd.ui_audit.get_artifact",
+      "http": {
+        "method": "GET",
+        "path": "/api/v1/ui-audit/{run_id}/artifact"
+      },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "run_id",
+          "key"
+        ],
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "key": {
+            "type": "string",
+            "minLength": 1
+          },
+          "include_base64": {
+            "type": "boolean",
+            "default": false
+          }
+        }
+      },
+      "outputSchema": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "key",
+              "path",
+              "mime_type",
+              "size_bytes",
+              "category",
+              "exists",
+              "base64"
+            ],
+            "properties": {
+              "key": {
+                "type": "string"
+              },
+              "path": {
+                "type": "string"
+              },
+              "mime_type": {
+                "type": "string"
+              },
+              "size_bytes": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "category": {
+                "type": "string"
+              },
+              "exists": {
+                "type": "boolean"
+              },
+              "base64": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          },
+          {
+            "$ref": "#/$defs/errorPayload"
+          }
+        ]
+      }
+    },
+    {
+      "name": "vd.ui_audit.autofix",
+      "http": {
+        "method": "POST",
+        "path": "/api/v1/ui-audit/{run_id}/autofix"
+      },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "run_id"
+        ],
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "dry-run",
+              "apply"
+            ],
+            "default": "dry-run"
+          },
+          "max_files": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 20,
+            "default": 3
+          },
+          "max_changed_lines": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2000,
+            "default": 120
+          }
+        }
+      },
+      "outputSchema": {
+        "oneOf": [
+          {
+            "$ref": "#/$defs/uiAuditAutofix"
           },
           {
             "$ref": "#/$defs/errorPayload"

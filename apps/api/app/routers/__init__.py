@@ -1,4 +1,4 @@
-from . import artifacts, computer_use, health, ingest, jobs, notifications, retrieval, subscriptions, videos, workflows
+from . import artifacts, computer_use, health, ingest, jobs, notifications, retrieval, subscriptions, ui_audit, videos, workflows
 
 __all__ = [
     "subscriptions",
@@ -11,4 +11,5 @@ __all__ = [
     "workflows",
     "retrieval",
     "computer_use",
+    "ui_audit",
 ]

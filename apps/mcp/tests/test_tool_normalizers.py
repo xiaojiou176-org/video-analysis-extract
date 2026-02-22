@@ -20,6 +20,7 @@ from apps.mcp.tools.notifications import (
     register_notification_tools,
 )
 from apps.mcp.tools.retrieval import register_retrieval_tools
+from apps.mcp.tools.ui_audit import register_ui_audit_tools
 from apps.mcp.tools.workflows import register_workflow_tools
 
 
@@ -430,3 +431,112 @@ def test_computer_use_run_tool_posts_expected_body_and_normalizes_result() -> No
     assert payload["blocked_actions"] == ["submit"]
     assert payload["final_text"] == "Need confirmation."
     assert payload["thought_metadata"] == {"planner": "rule_based"}
+
+
+def test_ui_audit_tools_post_and_normalize_payloads() -> None:
+    mcp = _FakeMCP()
+    calls: list[dict[str, Any]] = []
+
+    def fake_api_call(method: str, path: str, **kwargs: Any) -> dict[str, Any]:
+        calls.append({"method": method, "path": path, "kwargs": kwargs})
+        if path == "/api/v1/ui-audit/run":
+            return {
+                "run_id": "run-1",
+                "job_id": "00000000-0000-0000-0000-000000000001",
+                "artifact_root": "/tmp/artifacts",
+                "status": "completed",
+                "created_at": "2026-02-22T08:00:00Z",
+                "summary": {
+                    "artifact_count": 2,
+                    "finding_count": 1,
+                    "severity_counts": {"high": 1},
+                },
+            }
+        if path == "/api/v1/ui-audit/run-1/findings":
+            return {
+                "items": [
+                    {
+                        "id": "f-1",
+                        "severity": "high",
+                        "title": "Color contrast",
+                        "message": "Insufficient contrast",
+                        "rule": "color-contrast",
+                        "artifact_key": "axe.json",
+                    }
+                ]
+            }
+        if path == "/api/v1/ui-audit/run-1/artifact":
+            return {
+                "key": "axe.json",
+                "path": "/tmp/artifacts/axe.json",
+                "mime_type": "application/json",
+                "size_bytes": 200,
+                "category": "playwright",
+                "exists": True,
+                "base64": "e30=",
+            }
+        if path == "/api/v1/ui-audit/run-1/autofix":
+            return {
+                "run_id": "run-1",
+                "mode": "dry-run",
+                "autofix_applied": False,
+                "summary": {
+                    "finding_count": 1,
+                    "high_or_worse_count": 1,
+                },
+                "guardrails": {
+                    "max_files": 2,
+                    "max_changed_lines": 80,
+                },
+                "suggested_actions": ["Fix high-severity UI issues first and rerun focused E2E."],
+            }
+        return {
+            "run_id": "run-1",
+            "job_id": "00000000-0000-0000-0000-000000000001",
+            "artifact_root": "/tmp/artifacts",
+            "status": "completed",
+            "created_at": "2026-02-22T08:00:00Z",
+            "summary": {
+                "artifact_count": 2,
+                "finding_count": 1,
+                "severity_counts": {"high": 1},
+            },
+        }
+
+    register_ui_audit_tools(mcp, fake_api_call)
+    run_payload = mcp.tools["vd.ui_audit.run"](artifact_root="/tmp/artifacts")
+    get_payload = mcp.tools["vd.ui_audit.get"](run_id="run-1")
+    findings_payload = mcp.tools["vd.ui_audit.list_findings"](run_id="run-1", severity="high")
+    artifact_payload = mcp.tools["vd.ui_audit.get_artifact"](
+        run_id="run-1",
+        key="axe.json",
+        include_base64=True,
+    )
+    autofix_payload = mcp.tools["vd.ui_audit.autofix"](
+        run_id="run-1",
+        mode="dry-run",
+        max_files=2,
+        max_changed_lines=80,
+    )
+
+    assert calls[0]["method"] == "POST"
+    assert calls[0]["path"] == "/api/v1/ui-audit/run"
+    assert run_payload["summary"]["finding_count"] == 1
+    assert get_payload["run_id"] == "run-1"
+    assert findings_payload["items"][0]["rule"] == "color-contrast"
+    assert artifact_payload["exists"] is True
+    assert artifact_payload["base64"] == "e30="
+    assert calls[4]["method"] == "POST"
+    assert calls[4]["path"] == "/api/v1/ui-audit/run-1/autofix"
+    assert calls[4]["kwargs"]["json_body"] == {
+        "mode": "dry-run",
+        "max_files": 2,
+        "max_changed_lines": 80,
+    }
+    assert autofix_payload["run_id"] == "run-1"
+    assert autofix_payload["summary"]["finding_count"] == 1
+    assert autofix_payload["summary"]["high_or_worse_count"] == 1
+    assert autofix_payload["guardrails"]["max_files"] == 2
+    assert autofix_payload["suggested_actions"] == [
+        "Fix high-severity UI issues first and rerun focused E2E."
+    ]

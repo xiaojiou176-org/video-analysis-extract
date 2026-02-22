@@ -18,6 +18,7 @@ from .tools.notifications import register_notification_tools
 from .tools.retrieval import register_retrieval_tools
 from .tools.reports import register_report_tools
 from .tools.subscriptions import register_subscription_tools
+from .tools.ui_audit import register_ui_audit_tools
 from .tools.workflows import register_workflow_tools
 
 
@@ -244,6 +245,7 @@ def create_server() -> FastMCP:
     register_workflow_tools(mcp, api_call)
     register_retrieval_tools(mcp, api_call)
     register_computer_use_tools(mcp, api_call)
+    register_ui_audit_tools(mcp, api_call)
     return mcp
 
 

@@ -4,6 +4,7 @@ from .ingest import IngestService
 from .jobs import JobsService
 from .retrieval import RetrievalService
 from .subscriptions import SubscriptionsService
+from .ui_audit import UiAuditService
 from .videos import VideosService
 
 __all__ = [
@@ -14,4 +15,5 @@ __all__ = [
     "HealthService",
     "RetrievalService",
     "ComputerUseService",
+    "UiAuditService",
 ]

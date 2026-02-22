@@ -567,10 +567,30 @@ def test_artifact_assets_allows_frame_image(api_client: TestClient, monkeypatch,
 
 
 def test_workflows_run_returns_503_when_temporal_unavailable(api_client: TestClient, monkeypatch) -> None:
+    import sys
+    import types
+
     async def fake_connect(*args, **kwargs):
         raise RuntimeError("connection refused")
 
-    monkeypatch.setattr("temporalio.client.Client.connect", fake_connect)
+    fake_temporalio = types.ModuleType("temporalio")
+    fake_client_module = types.ModuleType("temporalio.client")
+    fake_exceptions_module = types.ModuleType("temporalio.exceptions")
+
+    class FakeClient:
+        connect = staticmethod(fake_connect)
+
+    class FakeWorkflowAlreadyStartedError(Exception):
+        pass
+
+    fake_client_module.Client = FakeClient
+    fake_exceptions_module.WorkflowAlreadyStartedError = FakeWorkflowAlreadyStartedError
+    fake_temporalio.client = fake_client_module  # type: ignore[attr-defined]
+    fake_temporalio.exceptions = fake_exceptions_module  # type: ignore[attr-defined]
+
+    monkeypatch.setitem(sys.modules, "temporalio", fake_temporalio)
+    monkeypatch.setitem(sys.modules, "temporalio.client", fake_client_module)
+    monkeypatch.setitem(sys.modules, "temporalio.exceptions", fake_exceptions_module)
 
     response = api_client.post(
         "/api/v1/workflows/run",
@@ -593,3 +613,96 @@ def test_notification_html_renderer_supports_markdown() -> None:
     assert "<h1>标题</h1>" in html
     assert "<li>一</li>" in html
     assert "<a href=\"https://example.com\">链接</a>" in html
+
+
+def test_ui_audit_run_and_get_endpoints(api_client: TestClient, tmp_path) -> None:
+    artifact_root = tmp_path / "ui-audit-artifacts"
+    artifact_root.mkdir(parents=True, exist_ok=True)
+    report_path = artifact_root / "playwright-axe-report.json"
+    report_path.write_text(
+        '{"violations":[{"id":"color-contrast","impact":"serious","help":"Color contrast","description":"Insufficient contrast"}]}',
+        encoding="utf-8",
+    )
+
+    run_response = api_client.post("/api/v1/ui-audit/run", json={"artifact_root": str(artifact_root)})
+    assert run_response.status_code == 200
+    run_payload = run_response.json()
+    assert run_payload["status"] == "completed"
+    assert run_payload["summary"]["artifact_count"] >= 1
+    assert run_payload["summary"]["finding_count"] == 1
+    assert run_payload["summary"]["severity_counts"]["high"] == 1
+
+    run_id = run_payload["run_id"]
+    get_response = api_client.get(f"/api/v1/ui-audit/{run_id}")
+    assert get_response.status_code == 200
+    assert get_response.json()["run_id"] == run_id
+
+    findings_response = api_client.get(f"/api/v1/ui-audit/{run_id}/findings")
+    assert findings_response.status_code == 200
+    findings_payload = findings_response.json()
+    assert findings_payload["items"][0]["rule"] == "color-contrast"
+    assert findings_payload["items"][0]["severity"] == "high"
+
+    artifacts_response = api_client.get(f"/api/v1/ui-audit/{run_id}/artifacts")
+    assert artifacts_response.status_code == 200
+    artifacts_payload = artifacts_response.json()
+    assert artifacts_payload["items"][0]["key"] == "playwright-axe-report.json"
+
+
+def test_ui_audit_get_artifact_returns_base64(api_client: TestClient, tmp_path) -> None:
+    artifact_root = tmp_path / "ui-audit-artifacts"
+    artifact_root.mkdir(parents=True, exist_ok=True)
+    report_path = artifact_root / "playwright-log.json"
+    report_path.write_text('{"findings":[{"id":"f-1","severity":"low","title":"Sample","message":"ok"}]}', encoding="utf-8")
+
+    run_response = api_client.post("/api/v1/ui-audit/run", json={"artifact_root": str(artifact_root)})
+    run_id = run_response.json()["run_id"]
+
+    response = api_client.get(
+        f"/api/v1/ui-audit/{run_id}/artifact",
+        params={"key": "playwright-log.json", "include_base64": True},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["exists"] is True
+    assert isinstance(payload["base64"], str)
+
+
+def test_ui_audit_autofix_endpoint_returns_summary(api_client: TestClient, tmp_path) -> None:
+    artifact_root = tmp_path / "ui-audit-artifacts"
+    artifact_root.mkdir(parents=True, exist_ok=True)
+    report_path = artifact_root / "playwright-axe-report.json"
+    report_path.write_text(
+        '{"violations":[{"id":"color-contrast","impact":"serious","help":"Color contrast","description":"Insufficient contrast"}]}',
+        encoding="utf-8",
+    )
+
+    run_response = api_client.post("/api/v1/ui-audit/run", json={"artifact_root": str(artifact_root)})
+    run_id = run_response.json()["run_id"]
+
+    response = api_client.post(
+        f"/api/v1/ui-audit/{run_id}/autofix",
+        json={"mode": "dry-run", "max_files": 2, "max_changed_lines": 80},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["run_id"] == run_id
+    assert payload["mode"] == "dry-run"
+    assert payload["autofix_applied"] is False
+    assert payload["summary"]["finding_count"] == 1
+    assert payload["summary"]["high_or_worse_count"] == 1
+    assert payload["guardrails"]["max_files"] == 2
+    assert payload["guardrails"]["max_changed_lines"] == 80
+    assert isinstance(payload["suggested_actions"], list)
+
+
+def test_ui_audit_autofix_endpoint_returns_404_for_missing_run(api_client: TestClient) -> None:
+    response = api_client.post(
+        "/api/v1/ui-audit/missing-run/autofix",
+        json={"mode": "dry-run", "max_files": 3, "max_changed_lines": 120},
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "ui audit run not found"
