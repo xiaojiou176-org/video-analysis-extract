@@ -1,22 +1,15 @@
 from __future__ import annotations
 
-from typing import Any, Callable
+from urllib.parse import urlencode
+from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
-ApiCall = Callable[..., dict[str, Any]]
-
-
-def _is_error_payload(payload: dict[str, Any]) -> bool:
-    return {"code", "message", "details"}.issubset(payload.keys())
-
-
-def _to_optional_str(value: Any) -> str | None:
-    return value if isinstance(value, str) else None
+from apps.mcp.tools._common import ApiCall, is_error_payload, to_optional_str
 
 
 def _normalize_markdown_payload(payload: dict[str, Any]) -> dict[str, Any]:
-    if _is_error_payload(payload):
+    if is_error_payload(payload):
         return payload
 
     markdown = payload.get("markdown")
@@ -26,8 +19,8 @@ def _normalize_markdown_payload(payload: dict[str, Any]) -> dict[str, Any]:
 
     return {
         "markdown": markdown,
-        "job_id": _to_optional_str(payload.get("job_id")),
-        "video_url": _to_optional_str(payload.get("video_url")),
+        "job_id": to_optional_str(payload.get("job_id")),
+        "video_url": to_optional_str(payload.get("video_url")),
         "found": bool(markdown),
     }
 
@@ -47,3 +40,36 @@ def register_artifact_tools(mcp: FastMCP, api_call: ApiCall) -> None:
             },
         )
         return _normalize_markdown_payload(response)
+
+    @mcp.tool(
+        name="vd.artifacts.get_asset",
+        description="Get artifact asset URL and optionally inline base64 bytes.",
+    )
+    def get_artifact_asset(
+        job_id: str,
+        path: str,
+        include_base64: bool = False,
+    ) -> dict[str, Any]:
+        response = api_call(
+            "GET",
+            "/api/v1/artifacts/assets",
+            params={"job_id": job_id, "path": path},
+            return_bytes_base64=include_base64,
+        )
+        if is_error_payload(response):
+            return {
+                **response,
+                "exists": False,
+                "asset_url": None,
+                "mime_type": None,
+                "base64": None,
+                "size_bytes": None,
+            }
+        query = urlencode({"job_id": job_id, "path": path})
+        return {
+            "exists": True,
+            "asset_url": f"/api/v1/artifacts/assets?{query}",
+            "mime_type": to_optional_str(response.get("mime_type")) or "application/octet-stream",
+            "base64": to_optional_str(response.get("base64")) if include_base64 else None,
+            "size_bytes": response.get("size_bytes") if include_base64 else None,
+        }

@@ -15,7 +15,9 @@ DEFAULT_HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
         "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
-    )
+    ),
+    "Referer": "https://www.bilibili.com/",
+    "Origin": "https://www.bilibili.com",
 }
 
 
@@ -63,6 +65,7 @@ class BilibiliCommentCollector:
         retry_attempts: int = 2,
         retry_backoff_seconds: float = 0.5,
         min_request_interval_seconds: float = 0.2,
+        cookie: str | None = None,
     ) -> None:
         self._top_n = max(1, int(top_n))
         self._replies_per_comment = max(1, int(replies_per_comment))
@@ -70,6 +73,7 @@ class BilibiliCommentCollector:
         self._retry_attempts = max(0, int(retry_attempts))
         self._retry_backoff_seconds = max(0.0, float(retry_backoff_seconds))
         self._min_request_interval_seconds = max(0.0, float(min_request_interval_seconds))
+        self._cookie = str(cookie or "").strip()
         self._lock = asyncio.Lock()
         self._last_request_at = 0.0
 
@@ -80,10 +84,14 @@ class BilibiliCommentCollector:
         video_uid: str | None,
     ) -> dict[str, Any]:
         timeout = httpx.Timeout(self._request_timeout_seconds)
+        headers = dict(DEFAULT_HEADERS)
+        if self._cookie:
+            headers["Cookie"] = self._cookie
+
         async with httpx.AsyncClient(
             base_url=BILIBILI_API_BASE,
             timeout=timeout,
-            headers=DEFAULT_HEADERS,
+            headers=headers,
             follow_redirects=True,
         ) as client:
             aid = await self._resolve_aid(client=client, source_url=source_url, video_uid=video_uid)

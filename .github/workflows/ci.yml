@@ -1,0 +1,221 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - codex/**
+
+jobs:
+  offline-gate:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: video_analysis_ci
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d video_analysis_ci"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Setup uv
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install uv
+
+      - name: Sync Python deps (locked)
+        run: uv sync --frozen --extra dev --extra e2e
+
+      - name: Env contract strict check
+        run: python3 scripts/check_env_contract.py --strict
+
+      - name: computer_use smoke contract check
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          contract = json.loads(Path("infra/config/env.contract.json").read_text(encoding="utf-8"))
+          variables = {item["name"]: item for item in contract.get("variables", [])}
+          required = {
+              "GEMINI_COMPUTER_USE_ENABLED",
+              "GEMINI_COMPUTER_USE_REQUIRE_CONFIRMATION",
+              "GEMINI_COMPUTER_USE_MAX_STEPS",
+              "GEMINI_COMPUTER_USE_TIMEOUT_SECONDS",
+              "LIVE_SMOKE_COMPUTER_USE_STRICT",
+              "LIVE_SMOKE_COMPUTER_USE_SKIP",
+              "LIVE_SMOKE_COMPUTER_USE_SKIP_REASON",
+              "LIVE_SMOKE_COMPUTER_USE_CMD",
+          }
+          missing = sorted(name for name in required if name not in variables)
+          if missing:
+              raise SystemExit(f"missing computer_use smoke env contract vars: {', '.join(missing)}")
+          if str(variables["LIVE_SMOKE_COMPUTER_USE_STRICT"].get("default")) != "1":
+              raise SystemExit("LIVE_SMOKE_COMPUTER_USE_STRICT default must be '1'")
+          print("computer_use smoke contract check passed")
+          PY
+
+      - name: Docs env canonical check
+        run: |
+          ! rg -n 'cp \.env\.local\.example \.env\.local|source \.env\.local|自动加载 `?\.env\.local' README.md docs/runbook-local.md
+
+      - name: Worker file line limits (pipeline/steps + temporal <= 700)
+        run: python3 scripts/check_worker_line_limits.py
+
+      - name: Schema parity check (apps/mcp vs shared-contracts)
+        run: |
+          python - <<'PY'
+          import difflib
+          import json
+          from pathlib import Path
+
+          source_path = Path("apps/mcp/schemas/tools.json")
+          shared_path = Path("packages/shared-contracts/jsonschema/mcp-tools.schema.json")
+
+          source = json.loads(source_path.read_text(encoding="utf-8"))
+          shared = json.loads(shared_path.read_text(encoding="utf-8"))
+
+          if source != shared:
+              source_pretty = json.dumps(source, ensure_ascii=False, indent=2, sort_keys=True).splitlines()
+              shared_pretty = json.dumps(shared, ensure_ascii=False, indent=2, sort_keys=True).splitlines()
+              print("Schema parity check failed:")
+              for line in difflib.unified_diff(
+                  source_pretty,
+                  shared_pretty,
+                  fromfile=str(source_path),
+                  tofile=str(shared_path),
+                  lineterm="",
+              ):
+                  print(line)
+              raise SystemExit(1)
+          print("Schema parity check passed.")
+          PY
+
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+
+      - name: Migration smoke
+        env:
+          PGPASSWORD: postgres
+        run: |
+          for _ in $(seq 1 30); do
+            if pg_isready -h 127.0.0.1 -p 5432 -U postgres -d video_analysis_ci >/dev/null 2>&1; then
+              break
+            fi
+            sleep 1
+          done
+          for migration in $(ls infra/migrations/*.sql | sort); do
+            psql "postgresql://postgres:postgres@127.0.0.1:5432/video_analysis_ci" -v ON_ERROR_STOP=1 -f "$migration"
+          done
+
+      - name: Pipeline smoke
+        env:
+          PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/apps/worker
+          DATABASE_URL: sqlite+pysqlite:///:memory:
+          TEMPORAL_TARGET_HOST: 127.0.0.1:7233
+          TEMPORAL_NAMESPACE: default
+          TEMPORAL_TASK_QUEUE: video-analysis-worker
+          SQLITE_PATH: /tmp/video-digestor-worker-smoke.db
+          PIPELINE_WORKSPACE_DIR: /tmp/video-digestor-workspace-smoke
+          PIPELINE_ARTIFACT_ROOT: /tmp/video-digestor-artifacts-smoke
+        run: |
+          uv run pytest \
+            apps/worker/tests/test_runner_modes.py::test_run_pipeline_text_only_mode_skips_media_steps \
+            apps/worker/tests/test_runner_modes.py::test_run_pipeline_refresh_llm_forces_only_llm_steps \
+            -q
+
+      - name: Run Python tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/apps/worker
+          DATABASE_URL: sqlite+pysqlite:///:memory:
+          TEMPORAL_TARGET_HOST: 127.0.0.1:7233
+          TEMPORAL_NAMESPACE: default
+          TEMPORAL_TASK_QUEUE: video-analysis-worker
+          SQLITE_STATE_PATH: /tmp/video-digestor-api-tests.db
+          SQLITE_PATH: /tmp/video-digestor-worker-tests.db
+          PIPELINE_WORKSPACE_DIR: /tmp/video-digestor-workspace-tests
+          PIPELINE_ARTIFACT_ROOT: /tmp/video-digestor-artifacts-tests
+        run: uv run pytest apps/worker/tests apps/api/tests apps/mcp/tests -q
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: apps/web/package-lock.json
+
+      - name: Install web deps
+        run: npm --prefix apps/web ci
+
+      - name: Web lint
+        run: npm --prefix apps/web run lint
+
+      - name: Web build
+        run: npm --prefix apps/web run build
+
+      - name: Install Playwright browser (chromium)
+        run: uv run --with playwright python -m playwright install --with-deps chromium
+
+      - name: Web E2E gate (no silent skip)
+        run: |
+          mkdir -p .runtime-cache
+
+          uv run --with pytest --with playwright \
+            pytest apps/web/tests/e2e -q --junitxml=.runtime-cache/web-e2e-junit.xml -rA
+
+          python - <<'PY'
+          import xml.etree.ElementTree as ET
+          from pathlib import Path
+
+          report = Path(".runtime-cache/web-e2e-junit.xml")
+          if not report.is_file():
+              raise SystemExit("web e2e gate failed: junit report missing")
+
+          root = ET.parse(report).getroot()
+          suites = [root] if root.tag == "testsuite" else root.findall("testsuite")
+          tests = sum(int(suite.attrib.get("tests", "0")) for suite in suites)
+          skipped = sum(int(suite.attrib.get("skipped", "0")) for suite in suites)
+
+          if tests == 0:
+              raise SystemExit("web e2e gate failed: collected 0 tests")
+          if skipped > 0:
+              raise SystemExit(f"web e2e gate failed: skipped={skipped} (no silent skip allowed)")
+          print(f"web e2e gate passed: tests={tests}, skipped={skipped}")
+          PY
+
+  live-smoke:
+    if: ${{ secrets.GEMINI_API_KEY != '' && secrets.RESEND_API_KEY != '' && secrets.RESEND_FROM_EMAIL != '' && secrets.YOUTUBE_API_KEY != '' }}
+    needs: offline-gate
+    runs-on: ubuntu-latest
+    env:
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+      RESEND_FROM_EMAIL: ${{ secrets.RESEND_FROM_EMAIL }}
+      YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+      LIVE_SMOKE_REQUIRE_API: "1"
+      LIVE_SMOKE_COMPUTER_USE_STRICT: "1"
+      LIVE_SMOKE_COMPUTER_USE_SKIP: "1"
+      LIVE_SMOKE_COMPUTER_USE_SKIP_REASON: "CI runner has no computer_use harness configured"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run live smoke
+        run: scripts/e2e_live_smoke.sh

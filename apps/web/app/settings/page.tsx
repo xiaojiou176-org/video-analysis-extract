@@ -1,15 +1,14 @@
 import { sendTestNotificationAction, updateNotificationConfigAction } from "@/app/settings/actions";
 import { apiClient } from "@/lib/api/client";
 import { formatDateTime } from "@/lib/format";
+import { resolveSearchParams, type SearchParamsInput } from "@/lib/search-params";
 
 type SettingsPageProps = {
-  searchParams?: {
-    status?: string;
-    message?: string;
-  };
+  searchParams?: SearchParamsInput;
 };
 
 export default async function SettingsPage({ searchParams }: SettingsPageProps) {
+  const { status, message } = await resolveSearchParams(searchParams, ["status", "message"] as const);
   const configResult = await apiClient
     .getNotificationConfig()
     .then((config) => ({ config, error: null as string | null }))
@@ -20,8 +19,8 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
   const { config, error: loadError } = configResult;
 
   const alert =
-    searchParams?.status && searchParams?.message ? (
-      <p className={searchParams.status === "error" ? "alert error" : "alert success"}>{searchParams.message}</p>
+    status && message ? (
+      <p className={status === "error" ? "alert error" : "alert success"}>{message}</p>
     ) : null;
 
   return (

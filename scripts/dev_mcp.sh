@@ -2,6 +2,10 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=./scripts/lib/load_env.sh
+source "$ROOT_DIR/scripts/lib/load_env.sh"
+load_repo_env "$ROOT_DIR" "dev_mcp"
+
 MCP_DIR="${MCP_DIR:-$ROOT_DIR/apps/mcp}"
 MCP_ENTRY="${MCP_ENTRY:-apps.mcp.server}"
 

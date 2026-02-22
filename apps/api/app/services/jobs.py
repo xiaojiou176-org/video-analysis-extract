@@ -6,10 +6,22 @@ import uuid
 from pathlib import Path
 from typing import Any
 
+from sqlalchemy import text
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session
 
 from ..config import settings
 from ..repositories import JobsRepository
+
+_ARTIFACT_ALIAS_TO_FILE = {
+    "meta": "meta.json",
+    "comments": "comments.json",
+    "outline": "outline.json",
+    "transcript": "transcript.txt",
+    "digest": "digest.md",
+}
+_ARTIFACT_ALLOWED_FILENAMES = set(_ARTIFACT_ALIAS_TO_FILE.values())
+_ARTIFACT_ALLOWED_FRAME_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
 
 
 class JobsService:
@@ -19,11 +31,41 @@ class JobsService:
     def get_job(self, job_id: uuid.UUID):
         return self.repo.get(job_id)
 
+    def resolve_llm_gate_fields(
+        self,
+        *,
+        llm_required: bool | None,
+        llm_gate_passed: bool | None,
+        hard_fail_reason: str | None,
+        steps: list[dict[str, object]],
+    ) -> tuple[bool, bool | None, str | None]:
+        required = True if llm_required is None else llm_required
+        if llm_gate_passed is not None:
+            reason = hard_fail_reason if llm_gate_passed is False else None
+            return required, llm_gate_passed, reason
+
+        llm_steps = [item for item in steps if item.get("name") in {"llm_outline", "llm_digest"}]
+        if not llm_steps:
+            return required, None, hard_fail_reason
+
+        failed = next((item for item in llm_steps if item.get("status") == "failed"), None)
+        if failed is not None:
+            error = failed.get("error")
+            reason = None
+            if isinstance(error, dict):
+                raw = error.get("reason") or error.get("error")
+                if isinstance(raw, str) and raw.strip():
+                    reason = raw.strip()
+            return required, False, reason or hard_fail_reason or "llm_step_failed"
+
+        all_ok = all(item.get("status") in {"succeeded", "skipped"} for item in llm_steps)
+        return required, (True if all_ok else None), (None if all_ok else hard_fail_reason)
+
     def get_pipeline_final_status(self, job_id: uuid.UUID, *, fallback_status: str) -> str | None:
         status = self.repo.get_pipeline_final_status(job_id=job_id)
-        if status in {"succeeded", "partial", "failed"}:
+        if status in {"succeeded", "degraded", "failed"}:
             return status
-        if fallback_status in {"succeeded", "partial", "failed"}:
+        if fallback_status in {"succeeded", "degraded", "failed"}:
             return fallback_status
         return None
 
@@ -64,6 +106,7 @@ class JobsService:
             error_value = self._json_loads(row["error_json"])
             retry_meta = self._json_loads(row["retry_meta_json"])
             result_payload = self._json_loads(row["result_json"])
+            thought_metadata = self._extract_thought_metadata(result_payload)
 
             result.append(
                 {
@@ -76,11 +119,21 @@ class JobsService:
                     "error_kind": row["error_kind"],
                     "retry_meta": retry_meta if isinstance(retry_meta, dict) else None,
                     "result": result_payload if isinstance(result_payload, dict) else None,
+                    "thought_metadata": thought_metadata,
                     "cache_key": row["cache_key"],
                 }
             )
 
         return result
+
+    def _extract_thought_metadata(self, result_payload: Any) -> dict[str, Any] | None:
+        if not isinstance(result_payload, dict):
+            return None
+        for key in ("thought_metadata", "thinking_metadata", "thoughts_metadata", "thoughts"):
+            value = result_payload.get(key)
+            if isinstance(value, dict):
+                return value
+        return None
 
     def get_step_summary(self, job_id: uuid.UUID) -> list[dict[str, object]]:
         return [
@@ -94,6 +147,37 @@ class JobsService:
             }
             for item in self.get_steps(job_id)
         ]
+
+    def get_notification_retry(self, job_id: uuid.UUID) -> dict[str, object] | None:
+        query = text(
+            """
+            SELECT
+                id::text AS delivery_id,
+                status,
+                attempt_count,
+                next_retry_at,
+                last_error_kind
+            FROM notification_deliveries
+            WHERE kind = 'video_digest'
+              AND job_id = CAST(:job_id AS UUID)
+            ORDER BY created_at DESC
+            LIMIT 1
+            """
+        )
+        try:
+            row = self.repo.db.execute(query, {"job_id": str(job_id)}).mappings().first()
+        except DBAPIError:
+            self.repo.db.rollback()
+            return None
+        if row is None:
+            return None
+        return {
+            "delivery_id": row.get("delivery_id"),
+            "status": row.get("status"),
+            "attempt_count": int(row.get("attempt_count") or 0),
+            "next_retry_at": row.get("next_retry_at"),
+            "last_error_kind": row.get("last_error_kind"),
+        }
 
     def get_degradations(
         self,
@@ -209,6 +293,43 @@ class JobsService:
             "meta": self._read_artifact_meta(artifact_root=None, digest_path=str(path)),
         }
 
+    def get_artifact_asset(self, *, job_id: uuid.UUID, path: str) -> Path | None:
+        row = self.get_job(job_id)
+        if row is None:
+            return None
+
+        artifact_root = self._resolve_artifact_root(
+            artifact_root=getattr(row, "artifact_root", None),
+            digest_path=getattr(row, "artifact_digest_md", None),
+        )
+        if artifact_root is None:
+            return None
+
+        normalized_path = self._normalize_artifact_asset_path(path)
+        if not normalized_path:
+            return None
+
+        requested = Path(normalized_path).expanduser()
+        target = requested if requested.is_absolute() else artifact_root / requested
+
+        try:
+            resolved_root = artifact_root.resolve(strict=True)
+            resolved_target = target.resolve(strict=True)
+        except OSError:
+            return None
+
+        if not resolved_target.is_file():
+            return None
+
+        try:
+            relative_path = resolved_target.relative_to(resolved_root).as_posix()
+        except ValueError:
+            return None
+
+        if not self._is_allowed_artifact_asset(relative_path):
+            return None
+        return resolved_target
+
     def get_artifact_digest_md(self, *, job_id: uuid.UUID | None, video_url: str | None) -> str | None:
         payload = self.get_artifact_payload(job_id=job_id, video_url=video_url)
         if payload is None:
@@ -261,6 +382,46 @@ class JobsService:
             if index:
                 return index
         return {}
+
+    def _normalize_artifact_asset_path(self, path: str) -> str:
+        normalized = path.strip()
+        if not normalized:
+            return ""
+        alias = _ARTIFACT_ALIAS_TO_FILE.get(normalized.lower())
+        return alias or normalized
+
+    def _resolve_artifact_root(self, *, artifact_root: str | None, digest_path: str | None) -> Path | None:
+        if artifact_root:
+            root_path = Path(artifact_root).expanduser()
+            try:
+                resolved_root = root_path.resolve(strict=True)
+            except OSError:
+                resolved_root = None
+            if resolved_root is not None and resolved_root.is_dir():
+                return resolved_root
+
+        if digest_path:
+            digest_file = Path(digest_path).expanduser()
+            try:
+                resolved_digest = digest_file.resolve(strict=True)
+            except OSError:
+                return None
+            if resolved_digest.is_file() and resolved_digest.parent.is_dir():
+                return resolved_digest.parent
+
+        return None
+
+    def _is_allowed_artifact_asset(self, relative_path: str) -> bool:
+        normalized = relative_path.strip("/")
+        if not normalized:
+            return False
+
+        rel_file = Path(normalized)
+        filename = rel_file.name.lower()
+        if "/" not in normalized and filename in _ARTIFACT_ALLOWED_FILENAMES:
+            return True
+
+        return filename.startswith("frame_") and rel_file.suffix.lower() in _ARTIFACT_ALLOWED_FRAME_EXTENSIONS
 
     def _json_loads(self, payload: str | None) -> Any:
         if not payload:

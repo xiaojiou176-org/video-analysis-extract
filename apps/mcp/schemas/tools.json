@@ -1,47 +1,89 @@
 {
-  "version": "phase3",
-  "description": "MCP tool manifest for video ingestion phase 3.",
+  "version": "phase4",
+  "description": "MCP tool manifest for video ingestion phase 4.",
   "apiBaseEnv": "VD_API_BASE_URL",
   "$defs": {
     "errorPayload": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["code", "message", "details"],
+      "required": [
+        "code",
+        "message",
+        "details"
+      ],
       "properties": {
-        "code": { "type": "string" },
-        "message": { "type": "string" },
+        "code": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
         "details": {
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "method": { "type": "string" },
-            "path": { "type": "string" },
-            "status_code": { "type": "integer" },
-            "error": { "type": "string" },
-            "body": { "type": "string" }
+            "method": {
+              "type": "string"
+            },
+            "path": {
+              "type": "string"
+            },
+            "status_code": {
+              "type": "integer"
+            },
+            "error": {
+              "type": "string"
+            },
+            "body": {
+              "type": "string"
+            },
+            "body_preview": {
+              "type": "string"
+            }
           }
         }
       }
     },
     "platform": {
       "type": "string",
-      "enum": ["bilibili", "youtube"]
+      "enum": [
+        "bilibili",
+        "youtube"
+      ]
     },
     "jobStatus": {
       "type": "string",
-      "enum": ["queued", "running", "succeeded", "failed", "partial"]
+      "enum": [
+        "queued",
+        "running",
+        "succeeded",
+        "failed"
+      ]
     },
     "pipelineFinalStatus": {
       "type": "string",
-      "enum": ["succeeded", "partial", "failed"]
+      "enum": [
+        "succeeded",
+        "degraded",
+        "failed"
+      ]
     },
     "videoProcessMode": {
       "type": "string",
-      "enum": ["full", "text_only", "refresh_comments", "refresh_llm"]
+      "enum": [
+        "full",
+        "text_only",
+        "refresh_comments",
+        "refresh_llm"
+      ]
     },
     "sourceType": {
       "type": "string",
-      "enum": ["bilibili_uid", "youtube_channel_id", "url"]
+      "enum": [
+        "bilibili_uid",
+        "youtube_channel_id",
+        "url"
+      ]
     },
     "subscription": {
       "type": "object",
@@ -57,27 +99,74 @@
         "updated_at"
       ],
       "properties": {
-        "id": { "type": "string", "format": "uuid" },
-        "platform": { "$ref": "#/$defs/platform" },
-        "source_type": { "$ref": "#/$defs/sourceType" },
-        "source_value": { "type": "string" },
-        "rsshub_route": { "type": "string" },
-        "enabled": { "type": "boolean" },
-        "created_at": { "type": "string", "format": "date-time" },
-        "updated_at": { "type": "string", "format": "date-time" }
+        "id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "platform": {
+          "$ref": "#/$defs/platform"
+        },
+        "source_type": {
+          "$ref": "#/$defs/sourceType"
+        },
+        "source_value": {
+          "type": "string"
+        },
+        "rsshub_route": {
+          "type": "string"
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time"
+        }
       }
     },
     "jobStep": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["name", "status", "attempt", "started_at", "finished_at", "error"],
+      "required": [
+        "name",
+        "status",
+        "attempt",
+        "started_at",
+        "finished_at",
+        "error"
+      ],
       "properties": {
-        "name": { "type": "string" },
-        "status": { "type": "string" },
-        "attempt": { "type": "integer" },
-        "started_at": { "type": ["string", "null"] },
-        "finished_at": { "type": ["string", "null"] },
-        "error": { "type": ["string", "null"] }
+        "name": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "attempt": {
+          "type": "integer"
+        },
+        "started_at": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "finished_at": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "error": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
       }
     },
     "jobStepDetail": {
@@ -93,19 +182,70 @@
         "error_kind",
         "retry_meta",
         "result",
+        "thought_metadata",
         "cache_key"
       ],
       "properties": {
-        "name": { "type": "string" },
-        "status": { "type": "string" },
-        "attempt": { "type": "integer" },
-        "started_at": { "type": ["string", "null"] },
-        "finished_at": { "type": ["string", "null"] },
-        "error": { "type": ["string", "null"] },
-        "error_kind": { "type": ["string", "null"] },
-        "retry_meta": { "type": ["object", "null"], "additionalProperties": true },
-        "result": { "type": ["object", "null"], "additionalProperties": true },
-        "cache_key": { "type": ["string", "null"] }
+        "name": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "attempt": {
+          "type": "integer"
+        },
+        "started_at": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "finished_at": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "error": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "error_kind": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "retry_meta": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": true
+        },
+        "result": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": true
+        },
+        "thought_metadata": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": true
+        },
+        "cache_key": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
       }
     },
     "jobDegradation": {
@@ -121,43 +261,366 @@
         "cache_meta"
       ],
       "properties": {
-        "step": { "type": ["string", "null"] },
-        "status": { "type": ["string", "null"] },
-        "reason": { "type": ["string", "null"] },
+        "step": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "status": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "reason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "error": {},
-        "error_kind": { "type": ["string", "null"] },
-        "retry_meta": { "type": ["object", "null"], "additionalProperties": true },
-        "cache_meta": { "type": ["object", "null"], "additionalProperties": true }
+        "error_kind": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "retry_meta": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": true
+        },
+        "cache_meta": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": true
+        }
+      }
+    },
+    "notificationRetry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "delivery_id",
+        "status",
+        "attempt_count",
+        "next_retry_at",
+        "last_error_kind"
+      ],
+      "properties": {
+        "delivery_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "uuid"
+        },
+        "status": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "attempt_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "next_retry_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "last_error_kind": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "providerHealthSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "provider",
+        "ok",
+        "warn",
+        "fail",
+        "last_status",
+        "last_checked_at",
+        "last_error_kind",
+        "last_message"
+      ],
+      "properties": {
+        "provider": {
+          "type": "string"
+        },
+        "ok": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "warn": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "fail": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "last_status": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "last_checked_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "last_error_kind": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "last_message": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
       }
     },
     "video": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "platform", "video_uid", "source_url", "first_seen_at", "last_seen_at"],
+      "required": [
+        "id",
+        "platform",
+        "video_uid",
+        "source_url",
+        "first_seen_at",
+        "last_seen_at"
+      ],
       "properties": {
-        "id": { "type": "string", "format": "uuid" },
-        "platform": { "$ref": "#/$defs/platform" },
-        "video_uid": { "type": "string" },
-        "source_url": { "type": "string" },
-        "title": { "type": ["string", "null"] },
-        "published_at": { "type": ["string", "null"], "format": "date-time" },
-        "first_seen_at": { "type": "string", "format": "date-time" },
-        "last_seen_at": { "type": "string", "format": "date-time" },
-        "status": { "anyOf": [{ "$ref": "#/$defs/jobStatus" }, { "type": "null" }] },
-        "last_job_id": { "type": ["string", "null"], "format": "uuid" }
+        "id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "platform": {
+          "$ref": "#/$defs/platform"
+        },
+        "video_uid": {
+          "type": "string"
+        },
+        "source_url": {
+          "type": "string"
+        },
+        "title": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "published_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "first_seen_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "last_seen_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "status": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/jobStatus"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "last_job_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "uuid"
+        }
+      }
+    },
+    "retrievalHit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "job_id",
+        "video_id",
+        "platform",
+        "video_uid",
+        "source_url",
+        "title",
+        "kind",
+        "mode",
+        "source",
+        "snippet",
+        "score"
+      ],
+      "properties": {
+        "job_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "uuid"
+        },
+        "video_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "uuid"
+        },
+        "platform": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "bilibili",
+            "youtube",
+            null
+          ]
+        },
+        "video_uid": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "source_url": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "title": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "kind": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "mode": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "source": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "digest",
+            "transcript",
+            "outline",
+            "comments",
+            "meta",
+            null
+          ]
+        },
+        "snippet": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "score": {
+          "type": "number"
+        }
+      }
+    },
+    "computerUseAction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "step",
+        "action",
+        "target",
+        "input_text",
+        "reasoning"
+      ],
+      "properties": {
+        "step": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "action": {
+          "type": "string",
+          "minLength": 1
+        },
+        "target": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "input_text": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "reasoning": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
       }
     }
   },
   "tools": [
     {
       "name": "vd.subscriptions.list",
-      "http": { "method": "GET", "path": "/api/v1/subscriptions" },
+      "http": {
+        "method": "GET",
+        "path": "/api/v1/subscriptions"
+      },
       "inputSchema": {
         "type": "object",
         "additionalProperties": false,
         "properties": {
-          "platform": { "$ref": "#/$defs/platform" },
-          "enabled_only": { "type": "boolean", "default": false }
+          "platform": {
+            "$ref": "#/$defs/platform"
+          },
+          "enabled_only": {
+            "type": "boolean",
+            "default": false
+          }
         }
       },
       "outputSchema": {
@@ -165,31 +628,56 @@
           {
             "type": "object",
             "additionalProperties": false,
-            "required": ["items"],
+            "required": [
+              "items"
+            ],
             "properties": {
               "items": {
                 "type": "array",
-                "items": { "$ref": "#/$defs/subscription" }
+                "items": {
+                  "$ref": "#/$defs/subscription"
+                }
               }
             }
           },
-          { "$ref": "#/$defs/errorPayload" }
+          {
+            "$ref": "#/$defs/errorPayload"
+          }
         ]
       }
     },
     {
       "name": "vd.subscriptions.upsert",
-      "http": { "method": "POST", "path": "/api/v1/subscriptions" },
+      "http": {
+        "method": "POST",
+        "path": "/api/v1/subscriptions"
+      },
       "inputSchema": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["platform", "source_type", "source_value"],
+        "required": [
+          "platform",
+          "source_type",
+          "source_value"
+        ],
         "properties": {
-          "platform": { "$ref": "#/$defs/platform" },
-          "source_type": { "$ref": "#/$defs/sourceType" },
-          "source_value": { "type": "string", "minLength": 1 },
-          "rsshub_route": { "type": "string" },
-          "enabled": { "type": "boolean", "default": true }
+          "platform": {
+            "$ref": "#/$defs/platform"
+          },
+          "source_type": {
+            "$ref": "#/$defs/sourceType"
+          },
+          "source_value": {
+            "type": "string",
+            "minLength": 1
+          },
+          "rsshub_route": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean",
+            "default": true
+          }
         }
       },
       "outputSchema": {
@@ -197,25 +685,42 @@
           {
             "type": "object",
             "additionalProperties": false,
-            "required": ["subscription", "created"],
+            "required": [
+              "subscription",
+              "created"
+            ],
             "properties": {
-              "subscription": { "$ref": "#/$defs/subscription" },
-              "created": { "type": "boolean" }
+              "subscription": {
+                "$ref": "#/$defs/subscription"
+              },
+              "created": {
+                "type": "boolean"
+              }
             }
           },
-          { "$ref": "#/$defs/errorPayload" }
+          {
+            "$ref": "#/$defs/errorPayload"
+          }
         ]
       }
     },
     {
       "name": "vd.subscriptions.remove",
-      "http": { "method": "DELETE", "path": "/api/v1/subscriptions/{id}" },
+      "http": {
+        "method": "DELETE",
+        "path": "/api/v1/subscriptions/{id}"
+      },
       "inputSchema": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["id"],
+        "required": [
+          "id"
+        ],
         "properties": {
-          "id": { "type": "string", "format": "uuid" }
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          }
         }
       },
       "outputSchema": {
@@ -223,25 +728,43 @@
           {
             "type": "object",
             "additionalProperties": false,
-            "required": ["ok"],
+            "required": [
+              "ok"
+            ],
             "properties": {
-              "ok": { "type": "boolean" }
+              "ok": {
+                "type": "boolean"
+              }
             }
           },
-          { "$ref": "#/$defs/errorPayload" }
+          {
+            "$ref": "#/$defs/errorPayload"
+          }
         ]
       }
     },
     {
       "name": "vd.ingest.poll",
-      "http": { "method": "POST", "path": "/api/v1/ingest/poll" },
+      "http": {
+        "method": "POST",
+        "path": "/api/v1/ingest/poll"
+      },
       "inputSchema": {
         "type": "object",
         "additionalProperties": false,
         "properties": {
-          "subscription_id": { "type": "string", "format": "uuid" },
-          "platform": { "$ref": "#/$defs/platform" },
-          "max_new_videos": { "type": "integer", "minimum": 1, "default": 50 }
+          "subscription_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "platform": {
+            "$ref": "#/$defs/platform"
+          },
+          "max_new_videos": {
+            "type": "integer",
+            "minimum": 1,
+            "default": 50
+          }
         }
       },
       "outputSchema": {
@@ -249,41 +772,86 @@
           {
             "type": "object",
             "additionalProperties": false,
-            "required": ["enqueued", "candidates"],
+            "required": [
+              "enqueued",
+              "candidates"
+            ],
             "properties": {
-              "enqueued": { "type": "integer", "minimum": 0 },
+              "enqueued": {
+                "type": "integer",
+                "minimum": 0
+              },
               "candidates": {
                 "type": "array",
                 "items": {
                   "type": "object",
                   "additionalProperties": false,
-                  "required": ["video_id", "platform", "video_uid", "source_url", "job_id"],
+                  "required": [
+                    "video_id",
+                    "platform",
+                    "video_uid",
+                    "source_url",
+                    "job_id"
+                  ],
                   "properties": {
-                    "video_id": { "type": "string", "format": "uuid" },
-                    "platform": { "$ref": "#/$defs/platform" },
-                    "video_uid": { "type": "string" },
-                    "source_url": { "type": "string" },
-                    "title": { "type": ["string", "null"] },
-                    "published_at": { "type": ["string", "null"], "format": "date-time" },
-                    "job_id": { "type": "string", "format": "uuid" }
+                    "video_id": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "platform": {
+                      "$ref": "#/$defs/platform"
+                    },
+                    "video_uid": {
+                      "type": "string"
+                    },
+                    "source_url": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "published_at": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "format": "date-time"
+                    },
+                    "job_id": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
                   }
                 }
               }
             }
           },
-          { "$ref": "#/$defs/errorPayload" }
+          {
+            "$ref": "#/$defs/errorPayload"
+          }
         ]
       }
     },
     {
       "name": "vd.jobs.get",
-      "http": { "method": "GET", "path": "/api/v1/jobs/{job_id}" },
+      "http": {
+        "method": "GET",
+        "path": "/api/v1/jobs/{job_id}"
+      },
       "inputSchema": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["job_id"],
+        "required": [
+          "job_id"
+        ],
         "properties": {
-          "job_id": { "type": "string", "format": "uuid" }
+          "job_id": {
+            "type": "string",
+            "format": "uuid"
+          }
         }
       },
       "outputSchema": {
@@ -300,6 +868,9 @@
               "error_message",
               "artifact_digest_md",
               "artifact_root",
+              "llm_required",
+              "llm_gate_passed",
+              "hard_fail_reason",
               "created_at",
               "updated_at",
               "step_summary",
@@ -307,57 +878,186 @@
               "degradations",
               "pipeline_final_status",
               "artifacts_index",
-              "mode"
+              "mode",
+              "notification_retry"
             ],
             "properties": {
-              "id": { "type": ["string", "null"], "format": "uuid" },
-              "video_id": { "type": ["string", "null"], "format": "uuid" },
-              "kind": { "type": ["string", "null"] },
-              "status": { "type": ["string", "null"] },
-              "idempotency_key": { "type": ["string", "null"] },
-              "error_message": { "type": ["string", "null"] },
-              "artifact_digest_md": { "type": ["string", "null"] },
-              "artifact_root": { "type": ["string", "null"] },
-              "created_at": { "type": ["string", "null"], "format": "date-time" },
-              "updated_at": { "type": ["string", "null"], "format": "date-time" },
+              "id": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid"
+              },
+              "video_id": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid"
+              },
+              "kind": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "status": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/jobStatus"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "idempotency_key": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "error_message": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "artifact_digest_md": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "artifact_root": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "llm_required": {
+                "type": [
+                  "boolean",
+                  "null"
+                ]
+              },
+              "llm_gate_passed": {
+                "type": [
+                  "boolean",
+                  "null"
+                ]
+              },
+              "hard_fail_reason": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "created_at": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time"
+              },
+              "updated_at": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time"
+              },
               "step_summary": {
                 "type": "array",
-                "items": { "$ref": "#/$defs/jobStep" }
+                "items": {
+                  "$ref": "#/$defs/jobStep"
+                }
               },
               "steps": {
                 "type": "array",
-                "items": { "$ref": "#/$defs/jobStepDetail" }
+                "items": {
+                  "$ref": "#/$defs/jobStepDetail"
+                }
               },
               "degradations": {
                 "type": "array",
-                "items": { "$ref": "#/$defs/jobDegradation" }
+                "items": {
+                  "$ref": "#/$defs/jobDegradation"
+                }
               },
               "pipeline_final_status": {
-                "anyOf": [{ "$ref": "#/$defs/pipelineFinalStatus" }, { "type": "null" }]
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/pipelineFinalStatus"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
               },
               "artifacts_index": {
                 "type": "object",
-                "additionalProperties": { "type": "string" }
+                "additionalProperties": {
+                  "type": "string"
+                }
               },
               "mode": {
-                "anyOf": [{ "$ref": "#/$defs/videoProcessMode" }, { "type": "null" }]
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/videoProcessMode"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "notification_retry": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/notificationRetry"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
               }
             }
           },
-          { "$ref": "#/$defs/errorPayload" }
+          {
+            "$ref": "#/$defs/errorPayload"
+          }
         ]
       }
     },
     {
-      "name": "vd.videos.list",
-      "http": { "method": "GET", "path": "/api/v1/videos" },
+      "name": "vd.retrieval.search",
+      "http": {
+        "method": "POST",
+        "path": "/api/v1/retrieval/search"
+      },
       "inputSchema": {
         "type": "object",
         "additionalProperties": false,
+        "required": [
+          "query"
+        ],
         "properties": {
-          "platform": { "$ref": "#/$defs/platform" },
-          "status": { "$ref": "#/$defs/jobStatus" },
-          "limit": { "type": "integer", "minimum": 1, "default": 50 }
+          "query": {
+            "type": "string",
+            "minLength": 1
+          },
+          "top_k": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50,
+            "default": 10
+          },
+          "filters": {
+            "type": "object",
+            "additionalProperties": true,
+            "default": {}
+          }
         }
       },
       "outputSchema": {
@@ -365,34 +1065,116 @@
           {
             "type": "object",
             "additionalProperties": false,
-            "required": ["items"],
+            "required": [
+              "query",
+              "top_k",
+              "filters",
+              "items"
+            ],
             "properties": {
+              "query": {
+                "type": "string"
+              },
+              "top_k": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "filters": {
+                "type": "object",
+                "additionalProperties": true
+              },
               "items": {
                 "type": "array",
-                "items": { "$ref": "#/$defs/video" }
+                "items": {
+                  "$ref": "#/$defs/retrievalHit"
+                }
               }
             }
           },
-          { "$ref": "#/$defs/errorPayload" }
+          {
+            "$ref": "#/$defs/errorPayload"
+          }
+        ]
+      }
+    },
+    {
+      "name": "vd.videos.list",
+      "http": {
+        "method": "GET",
+        "path": "/api/v1/videos"
+      },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "platform": {
+            "$ref": "#/$defs/platform"
+          },
+          "status": {
+            "$ref": "#/$defs/jobStatus"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "default": 50
+          }
+        }
+      },
+      "outputSchema": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "items"
+            ],
+            "properties": {
+              "items": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/video"
+                }
+              }
+            }
+          },
+          {
+            "$ref": "#/$defs/errorPayload"
+          }
         ]
       }
     },
     {
       "name": "vd.videos.process",
-      "http": { "method": "POST", "path": "/api/v1/videos/process" },
+      "http": {
+        "method": "POST",
+        "path": "/api/v1/videos/process"
+      },
       "inputSchema": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["video"],
+        "required": [
+          "video"
+        ],
         "properties": {
           "video": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["platform", "url"],
+            "required": [
+              "platform",
+              "url"
+            ],
             "properties": {
-              "platform": { "$ref": "#/$defs/platform" },
-              "url": { "type": "string", "minLength": 1 },
-              "video_id": { "type": "string", "minLength": 1 }
+              "platform": {
+                "$ref": "#/$defs/platform"
+              },
+              "url": {
+                "type": "string",
+                "minLength": 1
+              },
+              "video_id": {
+                "type": "string",
+                "minLength": 1
+              }
             }
           },
           "mode": {
@@ -404,7 +1186,10 @@
             "additionalProperties": true,
             "default": {}
           },
-          "force": { "type": "boolean", "default": false }
+          "force": {
+            "type": "boolean",
+            "default": false
+          }
         }
       },
       "outputSchema": {
@@ -425,38 +1210,126 @@
               "workflow_id"
             ],
             "properties": {
-              "job_id": { "type": "string", "format": "uuid" },
-              "video_db_id": { "type": "string", "format": "uuid" },
-              "video_uid": { "type": "string" },
-              "status": { "$ref": "#/$defs/jobStatus" },
-              "idempotency_key": { "type": "string" },
-              "mode": { "$ref": "#/$defs/videoProcessMode" },
+              "job_id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "video_db_id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "video_uid": {
+                "type": "string"
+              },
+              "status": {
+                "$ref": "#/$defs/jobStatus"
+              },
+              "idempotency_key": {
+                "type": "string"
+              },
+              "mode": {
+                "$ref": "#/$defs/videoProcessMode"
+              },
               "overrides": {
                 "type": "object",
                 "additionalProperties": true
               },
-              "force": { "type": "boolean" },
-              "reused": { "type": "boolean" },
-              "workflow_id": { "type": ["string", "null"] }
+              "force": {
+                "type": "boolean"
+              },
+              "reused": {
+                "type": "boolean"
+              },
+              "workflow_id": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
             }
           },
-          { "$ref": "#/$defs/errorPayload" }
+          {
+            "$ref": "#/$defs/errorPayload"
+          }
+        ]
+      }
+    },
+    {
+      "name": "vd.health.providers",
+      "http": {
+        "method": "GET",
+        "path": "/api/v1/health/providers"
+      },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "window_hours": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 168,
+            "default": 24
+          }
+        }
+      },
+      "outputSchema": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "window_hours",
+              "providers"
+            ],
+            "properties": {
+              "window_hours": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "providers": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/providerHealthSummary"
+                }
+              }
+            }
+          },
+          {
+            "$ref": "#/$defs/errorPayload"
+          }
         ]
       }
     },
     {
       "name": "vd.artifacts.get_markdown",
-      "http": { "method": "GET", "path": "/api/v1/artifacts/markdown" },
+      "http": {
+        "method": "GET",
+        "path": "/api/v1/artifacts/markdown"
+      },
       "inputSchema": {
         "type": "object",
         "additionalProperties": false,
         "properties": {
-          "job_id": { "type": "string", "format": "uuid" },
-          "video_url": { "type": "string", "minLength": 1 }
+          "job_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "video_url": {
+            "type": "string",
+            "minLength": 1
+          }
         },
         "anyOf": [
-          { "required": ["job_id"] },
-          { "required": ["video_url"] }
+          {
+            "required": [
+              "job_id"
+            ]
+          },
+          {
+            "required": [
+              "video_url"
+            ]
+          }
         ]
       },
       "outputSchema": {
@@ -464,28 +1337,62 @@
           {
             "type": "object",
             "additionalProperties": false,
-            "required": ["markdown", "job_id", "video_url", "found"],
+            "required": [
+              "markdown",
+              "job_id",
+              "video_url",
+              "found"
+            ],
             "properties": {
-              "markdown": { "type": "string" },
-              "job_id": { "type": ["string", "null"], "format": "uuid" },
-              "video_url": { "type": ["string", "null"] },
-              "found": { "type": "boolean" }
+              "markdown": {
+                "type": "string"
+              },
+              "job_id": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid"
+              },
+              "video_url": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "found": {
+                "type": "boolean"
+              }
             }
           },
-          { "$ref": "#/$defs/errorPayload" }
+          {
+            "$ref": "#/$defs/errorPayload"
+          }
         ]
       }
     },
     {
       "name": "vd.notifications.send_test",
-      "http": { "method": "POST", "path": "/api/v1/notifications/test" },
+      "http": {
+        "method": "POST",
+        "path": "/api/v1/notifications/test"
+      },
       "inputSchema": {
         "type": "object",
         "additionalProperties": false,
         "properties": {
-          "to_email": { "type": "string", "minLength": 1 },
-          "subject": { "type": "string", "minLength": 1 },
-          "body": { "type": "string", "minLength": 1 }
+          "to_email": {
+            "type": "string",
+            "minLength": 1
+          },
+          "subject": {
+            "type": "string",
+            "minLength": 1
+          },
+          "body": {
+            "type": "string",
+            "minLength": 1
+          }
         }
       },
       "outputSchema": {
@@ -504,33 +1411,98 @@
               "created_at"
             ],
             "properties": {
-              "delivery_id": { "type": ["string", "null"], "format": "uuid" },
-              "status": { "type": ["string", "null"] },
-              "provider_message_id": { "type": ["string", "null"] },
-              "error_message": { "type": ["string", "null"] },
-              "recipient_email": { "type": ["string", "null"] },
-              "subject": { "type": ["string", "null"] },
-              "sent_at": { "type": ["string", "null"], "format": "date-time" },
-              "created_at": { "type": ["string", "null"], "format": "date-time" }
+              "delivery_id": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid"
+              },
+              "status": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "provider_message_id": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "error_message": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "recipient_email": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "subject": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "sent_at": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time"
+              },
+              "created_at": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time"
+              }
             }
           },
-          { "$ref": "#/$defs/errorPayload" }
+          {
+            "$ref": "#/$defs/errorPayload"
+          }
         ]
       }
     },
     {
       "name": "vd.notifications.set_config",
-      "http": { "method": "PUT", "path": "/api/v1/notifications/config" },
+      "http": {
+        "method": "PUT",
+        "path": "/api/v1/notifications/config"
+      },
       "inputSchema": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["enabled"],
+        "required": [
+          "enabled"
+        ],
         "properties": {
-          "enabled": { "type": "boolean" },
-          "to_email": { "type": "string", "minLength": 1 },
-          "daily_digest_enabled": { "type": "boolean", "default": false },
-          "daily_digest_hour_utc": { "type": "integer", "minimum": 0, "maximum": 23 },
-          "failure_alert_enabled": { "type": "boolean", "default": true }
+          "enabled": {
+            "type": "boolean"
+          },
+          "to_email": {
+            "type": "string",
+            "minLength": 1
+          },
+          "daily_digest_enabled": {
+            "type": "boolean",
+            "default": false
+          },
+          "daily_digest_hour_utc": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 23
+          },
+          "failure_alert_enabled": {
+            "type": "boolean",
+            "default": true
+          }
         }
       },
       "outputSchema": {
@@ -548,30 +1520,84 @@
               "updated_at"
             ],
             "properties": {
-              "enabled": { "type": ["boolean", "null"] },
-              "to_email": { "type": ["string", "null"] },
-              "daily_digest_enabled": { "type": ["boolean", "null"] },
-              "daily_digest_hour_utc": { "type": ["integer", "null"] },
-              "failure_alert_enabled": { "type": ["boolean", "null"] },
-              "created_at": { "type": ["string", "null"], "format": "date-time" },
-              "updated_at": { "type": ["string", "null"], "format": "date-time" }
+              "enabled": {
+                "type": [
+                  "boolean",
+                  "null"
+                ]
+              },
+              "to_email": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "daily_digest_enabled": {
+                "type": [
+                  "boolean",
+                  "null"
+                ]
+              },
+              "daily_digest_hour_utc": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "failure_alert_enabled": {
+                "type": [
+                  "boolean",
+                  "null"
+                ]
+              },
+              "created_at": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time"
+              },
+              "updated_at": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time"
+              }
             }
           },
-          { "$ref": "#/$defs/errorPayload" }
+          {
+            "$ref": "#/$defs/errorPayload"
+          }
         ]
       }
     },
     {
       "name": "vd.reports.daily_send",
-      "http": { "method": "POST", "path": "/api/v1/reports/daily/send" },
+      "http": {
+        "method": "POST",
+        "path": "/api/v1/reports/daily/send"
+      },
       "inputSchema": {
         "type": "object",
         "additionalProperties": false,
         "properties": {
-          "date": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" },
-          "to_email": { "type": "string", "minLength": 1 },
-          "subject": { "type": "string", "minLength": 1 },
-          "body": { "type": "string", "minLength": 1 }
+          "date": {
+            "type": "string",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+          },
+          "to_email": {
+            "type": "string",
+            "minLength": 1
+          },
+          "subject": {
+            "type": "string",
+            "minLength": 1
+          },
+          "body": {
+            "type": "string",
+            "minLength": 1
+          }
         }
       },
       "outputSchema": {
@@ -591,18 +1617,452 @@
               "created_at"
             ],
             "properties": {
-              "sent": { "type": "boolean" },
-              "status": { "type": ["string", "null"] },
-              "delivery_id": { "type": ["string", "null"], "format": "uuid" },
-              "date": { "type": ["string", "null"], "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" },
-              "recipient_email": { "type": ["string", "null"] },
-              "subject": { "type": ["string", "null"] },
-              "error_message": { "type": ["string", "null"] },
-              "sent_at": { "type": ["string", "null"], "format": "date-time" },
-              "created_at": { "type": ["string", "null"], "format": "date-time" }
+              "sent": {
+                "type": "boolean"
+              },
+              "status": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "delivery_id": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid"
+              },
+              "date": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+              },
+              "recipient_email": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "subject": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "error_message": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "sent_at": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time"
+              },
+              "created_at": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time"
+              }
             }
           },
-          { "$ref": "#/$defs/errorPayload" }
+          {
+            "$ref": "#/$defs/errorPayload"
+          }
+        ]
+      }
+    },
+    {
+      "name": "vd.notifications.get_config",
+      "http": {
+        "method": "GET",
+        "path": "/api/v1/notifications/config"
+      },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "outputSchema": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "enabled",
+              "to_email",
+              "daily_digest_enabled",
+              "daily_digest_hour_utc",
+              "failure_alert_enabled",
+              "created_at",
+              "updated_at"
+            ],
+            "properties": {
+              "enabled": {
+                "type": [
+                  "boolean",
+                  "null"
+                ]
+              },
+              "to_email": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "daily_digest_enabled": {
+                "type": [
+                  "boolean",
+                  "null"
+                ]
+              },
+              "daily_digest_hour_utc": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "failure_alert_enabled": {
+                "type": [
+                  "boolean",
+                  "null"
+                ]
+              },
+              "created_at": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time"
+              },
+              "updated_at": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time"
+              }
+            }
+          },
+          {
+            "$ref": "#/$defs/errorPayload"
+          }
+        ]
+      }
+    },
+    {
+      "name": "vd.artifacts.get_asset",
+      "http": {
+        "method": "GET",
+        "path": "/api/v1/artifacts/assets"
+      },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "job_id",
+          "path"
+        ],
+        "properties": {
+          "job_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "path": {
+            "type": "string",
+            "minLength": 1
+          },
+          "include_base64": {
+            "type": "boolean",
+            "default": false
+          }
+        }
+      },
+      "outputSchema": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "exists",
+              "asset_url",
+              "mime_type",
+              "base64",
+              "size_bytes"
+            ],
+            "properties": {
+              "exists": {
+                "type": "boolean"
+              },
+              "asset_url": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "mime_type": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "base64": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "size_bytes": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              }
+            }
+          },
+          {
+            "$ref": "#/$defs/errorPayload"
+          }
+        ]
+      }
+    },
+    {
+      "name": "vd.health.system",
+      "http": {
+        "method": "GET",
+        "path": "/healthz"
+      },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "outputSchema": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "status"
+            ],
+            "properties": {
+              "status": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "$ref": "#/$defs/errorPayload"
+          }
+        ]
+      }
+    },
+    {
+      "name": "vd.computer_use.run",
+      "http": {
+        "method": "POST",
+        "path": "/api/v1/computer-use/run"
+      },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "instruction",
+          "screenshot_base64"
+        ],
+        "properties": {
+          "instruction": {
+            "type": "string",
+            "minLength": 1
+          },
+          "screenshot_base64": {
+            "type": "string",
+            "minLength": 1
+          },
+          "safety": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "confirm_before_execute": {
+                "type": "boolean",
+                "default": true
+              },
+              "blocked_actions": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "default": []
+              },
+              "max_actions": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 20,
+                "default": 8
+              }
+            },
+            "default": {}
+          }
+        }
+      },
+      "outputSchema": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "actions",
+              "require_confirmation",
+              "blocked_actions",
+              "final_text",
+              "thought_metadata"
+            ],
+            "properties": {
+              "actions": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/computerUseAction"
+                }
+              },
+              "require_confirmation": {
+                "type": "boolean"
+              },
+              "blocked_actions": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "final_text": {
+                "type": "string"
+              },
+              "thought_metadata": {
+                "type": "object",
+                "additionalProperties": true
+              }
+            }
+          },
+          {
+            "$ref": "#/$defs/errorPayload"
+          }
+        ]
+      }
+    },
+    {
+      "name": "vd.workflows.run",
+      "http": {
+        "method": "POST",
+        "path": "/api/v1/workflows/run"
+      },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "workflow"
+        ],
+        "properties": {
+          "workflow": {
+            "type": "string",
+            "enum": [
+              "poll_feeds",
+              "daily_digest",
+              "notification_retry",
+              "cleanup",
+              "provider_canary"
+            ]
+          },
+          "run_once": {
+            "type": "boolean",
+            "default": true
+          },
+          "wait_for_result": {
+            "type": "boolean",
+            "default": false
+          },
+          "workflow_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "payload": {
+            "type": "object",
+            "default": {},
+            "additionalProperties": true
+          }
+        }
+      },
+      "outputSchema": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "workflow",
+              "workflow_name",
+              "workflow_id",
+              "run_id",
+              "status",
+              "started_at",
+              "result"
+            ],
+            "properties": {
+              "workflow": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "workflow_name": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "workflow_id": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "run_id": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "status": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "started_at": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "result": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "additionalProperties": true
+              }
+            }
+          },
+          {
+            "$ref": "#/$defs/errorPayload"
+          }
         ]
       }
     }

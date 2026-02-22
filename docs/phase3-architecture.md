@@ -28,12 +28,15 @@
   - `steps`
   - `degradations`
   - `pipeline_final_status`
+  - `llm_required`
+  - `llm_gate_passed`
+  - `hard_fail_reason`
   - `artifacts_index`
   - `mode`
 - `mode` 来源于 `POST /api/v1/videos/process` 的入参，要求在读取链路中保持透传。
 
 ## Failure Model
-- 可降级步骤失败不会直接终止 workflow，最终可能标记 `partial`。
+- 可降级步骤失败不会直接终止 workflow，最终会标记 `pipeline_final_status=degraded`。
 - 只有关键路径失败（无法写产物等）才标记 `failed`。
 - `mark_failed_activity` 统一收口错误写库，保证状态可追踪。
 
@@ -49,4 +52,4 @@
 - `vd.videos.process` -> `/api/v1/videos/process`
 - `vd.artifacts.get_markdown` -> `/api/v1/artifacts/markdown`
 
-`vd.jobs.get` 规范化输出必须保留 `steps/degradations/pipeline_final_status/artifacts_index/mode`，不能裁剪为仅 `step_summary`。
+`vd.jobs.get` 规范化输出必须保留 `steps/degradations/pipeline_final_status/llm_required/llm_gate_passed/hard_fail_reason/artifacts_index/mode`，不能裁剪为仅 `step_summary`。

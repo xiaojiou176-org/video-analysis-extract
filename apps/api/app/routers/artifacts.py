@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import mimetypes
 import uuid
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from fastapi.responses import JSONResponse, PlainTextResponse
+from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -47,3 +48,18 @@ def get_markdown_artifact(
         return JSONResponse(body.model_dump())
 
     return PlainTextResponse(markdown, media_type="text/markdown")
+
+
+@router.get("/assets")
+def get_artifact_asset(
+    job_id: uuid.UUID = Query(...),
+    path: str = Query(..., min_length=1),
+    db: Session = Depends(get_db),
+):
+    service = JobsService(db)
+    asset_path = service.get_artifact_asset(job_id=job_id, path=path)
+    if asset_path is None:
+        raise HTTPException(status_code=404, detail="artifact asset not found")
+
+    media_type, _ = mimetypes.guess_type(asset_path.name)
+    return FileResponse(asset_path, media_type=media_type or "application/octet-stream")

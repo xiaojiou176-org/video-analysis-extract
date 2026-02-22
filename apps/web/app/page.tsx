@@ -1,16 +1,13 @@
 import { pollIngestAction, processVideoAction } from "@/app/actions";
+import { toDisplayStatus } from "@/app/status";
 import { apiClient } from "@/lib/api/client";
+import { resolveSearchParams, type SearchParamsInput } from "@/lib/search-params";
 
 type DashboardProps = {
-  searchParams?: {
-    status?: string;
-    message?: string;
-  };
+  searchParams?: SearchParamsInput;
 };
 
-function renderAlert(searchParams: DashboardProps["searchParams"]) {
-  const status = searchParams?.status;
-  const message = searchParams?.message;
+function renderAlert(status: string, message: string) {
   if (!status || !message) {
     return null;
   }
@@ -20,17 +17,18 @@ function renderAlert(searchParams: DashboardProps["searchParams"]) {
 }
 
 export default async function DashboardPage({ searchParams }: DashboardProps) {
+  const { status, message } = await resolveSearchParams(searchParams, ["status", "message"] as const);
   const [subscriptions, videos] = await Promise.all([
     apiClient.listSubscriptions().catch(() => []),
     apiClient.listVideos({ limit: 200 }).catch(() => []),
   ]);
 
   const runningJobs = videos.filter((video) => video.status === "running" || video.status === "queued").length;
-  const failedJobs = videos.filter((video) => video.status === "failed" || video.status === "partial").length;
+  const failedJobs = videos.filter((video) => video.status === "failed").length;
 
   return (
     <div className="stack">
-      {renderAlert(searchParams)}
+      {renderAlert(status, message)}
 
       <section className="grid grid-cols-2">
         <div className="card metric">
@@ -46,7 +44,7 @@ export default async function DashboardPage({ searchParams }: DashboardProps) {
           <span className="metric-value">{runningJobs}</span>
         </div>
         <div className="card metric">
-          <span className="metric-label">Failed or partial</span>
+          <span className="metric-label">Failed jobs</span>
           <span className="metric-value">{failedJobs}</span>
         </div>
       </section>
@@ -128,16 +126,19 @@ export default async function DashboardPage({ searchParams }: DashboardProps) {
               </tr>
             </thead>
             <tbody>
-              {videos.slice(0, 10).map((video) => (
-                <tr key={video.id}>
-                  <td>{video.title ?? video.video_uid}</td>
-                  <td>{video.platform}</td>
-                  <td>
-                    <span className={`status-chip status-${video.status ?? "queued"}`}>{video.status ?? "-"}</span>
-                  </td>
-                  <td>{video.last_job_id ?? "-"}</td>
-                </tr>
-              ))}
+              {videos.slice(0, 10).map((video) => {
+                const status = toDisplayStatus(video.status);
+                return (
+                  <tr key={video.id}>
+                    <td>{video.title ?? video.video_uid}</td>
+                    <td>{video.platform}</td>
+                    <td>
+                      <span className={`status-chip status-${status.css}`}>{status.label}</span>
+                    </td>
+                    <td>{video.last_job_id ?? "-"}</td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         )}

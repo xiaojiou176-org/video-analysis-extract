@@ -34,6 +34,10 @@ class NotificationDelivery(Base):
     provider: Mapped[str] = mapped_column(String(32), nullable=False, default="resend")
     provider_message_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    attempt_count: Mapped[int] = mapped_column(nullable=False, default=0)
+    last_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    next_retry_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_error_kind: Mapped[str | None] = mapped_column(String(32), nullable=True)
     payload_json: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     job_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),

@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from ..models import Job
 
 
-ACTIVE_JOB_STATUSES = {"queued", "running", "succeeded", "partial"}
+ACTIVE_JOB_STATUSES = {"queued", "running", "succeeded"}
 
 
 class JobsRepository:

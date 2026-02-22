@@ -49,6 +49,9 @@ uv run \
 - `steps`
 - `degradations`
 - `pipeline_final_status`
+- `llm_required`
+- `llm_gate_passed`
+- `hard_fail_reason`
 - `artifacts_index`
 - `mode`
 
@@ -57,10 +60,12 @@ uv run \
 ```bash
 uv run --with playwright playwright install chromium
 
-WEB_BASE_URL='http://127.0.0.1:8000/healthz' \
-WEB_E2E_EXPECT_TEXT='ok' \
 uv run --with pytest --with playwright pytest apps/web/tests/e2e -q
 ```
+
+说明：
+- E2E 用例会自动启动本地 Next.js Web（`apps/web`）并注入本地 mock API，不依赖真实后端或外部 API。
+- 运行前需确保 `apps/web/node_modules` 已安装（例如先执行 `cd apps/web && npm ci`）。
 
 ### 3) Web 静态检查
 
@@ -71,6 +76,7 @@ npm run lint
 
 ## Notes
 
-- `apps/web/tests/e2e/test_smoke_playwright.py` 在 `WEB_BASE_URL` 未配置或不可访问时会自动 skip。
+- `apps/web/tests/e2e/test_smoke_playwright.py` 覆盖关键按钮链路（dashboard / subscriptions / settings / jobs->artifacts），并对重定向提示与请求负载做强断言。
+- 由于当前 Web 代码尚未完成 Next.js 16 `searchParams` 异步迁移，`jobs -> artifacts` 用例会先断言查询跳转与页面占位状态（`No artifact loaded yet.`）；迁移后可升级为 markdown/screenshot 区块可见性断言。
 - API 路由测试会通过 `monkeypatch` 隔离 Temporal/数据库外部依赖，验证路由层映射行为。
 - 需要访问真实依赖（Postgres/Temporal）的端到端链路，可在后续补专门的 integration 套件。

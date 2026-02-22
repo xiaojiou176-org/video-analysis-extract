@@ -11,6 +11,19 @@ from worker.temporal.activities import _build_daily_digest_markdown, cleanup_wor
 from worker import main as worker_main
 
 
+def _ensure_required_worker_env() -> None:
+    os.environ.setdefault("SQLITE_PATH", "/tmp/video-analysis-test.db")
+    os.environ.setdefault(
+        "DATABASE_URL",
+        "postgresql+psycopg://postgres:postgres@localhost:5432/video_analysis",
+    )
+    os.environ.setdefault("TEMPORAL_TARGET_HOST", "localhost:7233")
+    os.environ.setdefault("TEMPORAL_NAMESPACE", "default")
+    os.environ.setdefault("TEMPORAL_TASK_QUEUE", "video-analysis-worker")
+    os.environ.setdefault("PIPELINE_WORKSPACE_DIR", "/tmp/video-analysis-workspace")
+    os.environ.setdefault("PIPELINE_ARTIFACT_ROOT", "/tmp/video-analysis-artifacts")
+
+
 def _set_mtime(path: Path, dt: datetime) -> None:
     ts = dt.timestamp()
     os.utime(path, (ts, ts))
@@ -56,13 +69,15 @@ def test_build_daily_digest_markdown_contains_counts_and_rows() -> None:
         {
             "job_id": "job-1",
             "status": "succeeded",
+            "pipeline_final_status": "succeeded",
             "updated_at": datetime(2026, 2, 21, 8, 0, tzinfo=timezone.utc),
             "platform": "youtube",
             "title": "Video A",
         },
         {
             "job_id": "job-2",
-            "status": "partial",
+            "status": "succeeded",
+            "pipeline_final_status": "degraded",
             "updated_at": datetime(2026, 2, 21, 9, 0, tzinfo=timezone.utc),
             "platform": "bilibili",
             "title": "Video B",
@@ -77,9 +92,16 @@ def test_build_daily_digest_markdown_contains_counts_and_rows() -> None:
 
     assert "# Daily Digest 2026-02-21" in markdown
     assert "- Succeeded: 1" in markdown
-    assert "- Partial: 1" in markdown
+    assert "- Degraded: 1" in markdown
     assert "| job-1 | succeeded | youtube | Video A |" in markdown
-    assert "| job-2 | partial | bilibili | Video B |" in markdown
+    assert "| job-2 | succeeded | bilibili | Video B |" in markdown
+
+
+def test_to_html_renders_markdown_elements() -> None:
+    html = temporal_activities._to_html("# 标题\n\n- 一\n- 二\n\n[链接](https://example.com)")
+    assert "<h1>标题</h1>" in html
+    assert "<li>一</li>" in html
+    assert "<a href=\"https://example.com\">链接</a>" in html
 
 
 class _FakeMappingsResult:
@@ -172,7 +194,14 @@ def test_send_video_digest_activity_duplicate_job_skips_second_send(monkeypatch)
     monkeypatch.setattr(
         temporal_activities.Settings,
         "from_env",
-        staticmethod(lambda: types.SimpleNamespace(database_url="postgresql://example.invalid/db")),
+        staticmethod(
+            lambda: types.SimpleNamespace(
+                database_url="postgresql://example.invalid/db",
+                notification_enabled=True,
+                resend_api_key=None,
+                resend_from_email=None,
+            )
+        ),
     )
     monkeypatch.setattr(
         temporal_activities,
@@ -217,7 +246,16 @@ def test_send_video_digest_activity_duplicate_job_skips_second_send(monkeypatch)
         lambda _conn, *, job_id: {"delivery_id": "delivery-1", "status": "sent"},
     )
 
-    def _fake_send_with_resend(*, to_email: str, subject: str, text_body: str) -> str:
+    def _fake_send_with_resend(
+        *,
+        to_email: str,
+        subject: str,
+        text_body: str,
+        resend_api_key: str | None,
+        resend_from_email: str | None,
+    ) -> str:
+        assert resend_api_key is None
+        assert resend_from_email is None
         state["send_calls"] += 1
         return f"msg-{state['send_calls']}"
 
@@ -231,6 +269,10 @@ def test_send_video_digest_activity_duplicate_job_skips_second_send(monkeypatch)
         error_message: str | None = None,
         provider_message_id: str | None = None,
         sent: bool = False,
+        record_attempt: bool = False,
+        last_error_kind: str | None = None,
+        next_retry_at: datetime | None = None,
+        clear_retry_meta: bool = False,
     ) -> dict:
         return {
             "delivery_id": delivery_id,
@@ -238,6 +280,9 @@ def test_send_video_digest_activity_duplicate_job_skips_second_send(monkeypatch)
             "provider_message_id": provider_message_id,
             "error_message": error_message,
             "sent_at": datetime(2026, 2, 21, 12, 0, tzinfo=timezone.utc) if sent else None,
+            "attempt_count": 1 if record_attempt else 0,
+            "last_error_kind": last_error_kind,
+            "next_retry_at": next_retry_at,
         }
 
     monkeypatch.setattr(temporal_activities, "_mark_delivery_state", _fake_mark_delivery_state)
@@ -251,6 +296,103 @@ def test_send_video_digest_activity_duplicate_job_skips_second_send(monkeypatch)
     assert second["skipped"] is True
     assert second["reason"] == "duplicate_delivery"
     assert state["send_calls"] == 1
+
+
+def test_send_video_digest_ignores_daily_digest_switch(monkeypatch) -> None:
+    import asyncio
+
+    class _DummyBegin:
+        def __enter__(self):
+            return object()
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    class _DummyEngine:
+        def begin(self):
+            return _DummyBegin()
+
+    class _DummyPostgresStore:
+        def __init__(self, _database_url: str):
+            self._engine = _DummyEngine()
+
+    monkeypatch.setattr(temporal_activities, "PostgresBusinessStore", _DummyPostgresStore)
+    monkeypatch.setattr(
+        temporal_activities.Settings,
+        "from_env",
+        staticmethod(
+            lambda: types.SimpleNamespace(
+                database_url="postgresql://example.invalid/db",
+                notification_enabled=True,
+                resend_api_key=None,
+                resend_from_email=None,
+            )
+        ),
+    )
+    monkeypatch.setattr(
+        temporal_activities,
+        "_fetch_job_digest_record",
+        lambda _conn, *, job_id: {
+            "job_id": job_id,
+            "title": "Demo",
+            "video_uid": "demo-uid",
+            "status": "succeeded",
+            "pipeline_final_status": "succeeded",
+            "artifact_digest_md": "",
+            "platform": "youtube",
+            "source_url": "https://example.com/video",
+        },
+    )
+    monkeypatch.setattr(
+        temporal_activities,
+        "_get_or_init_notification_config",
+        lambda _conn: {
+            "enabled": True,
+            "daily_digest_enabled": False,
+            "to_email": "notify@example.com",
+        },
+    )
+    monkeypatch.setattr(
+        temporal_activities,
+        "_insert_video_digest_delivery",
+        lambda _conn, *, job, recipient_email, subject, payload_json: {
+            "delivery_id": "delivery-1",
+            "status": "queued",
+            "recipient_email": recipient_email,
+            "subject": subject,
+        },
+    )
+    monkeypatch.setattr(
+        temporal_activities,
+        "_safe_read_text",
+        lambda _path: "digest content",
+    )
+    monkeypatch.setattr(
+        temporal_activities,
+        "_send_with_resend",
+        lambda **_: "msg-1",
+    )
+    monkeypatch.setattr(
+        temporal_activities,
+        "_mark_delivery_state",
+        lambda _pg_store, **kwargs: {
+            "delivery_id": kwargs["delivery_id"],
+            "status": kwargs["status"],
+            "provider_message_id": kwargs.get("provider_message_id"),
+            "error_message": kwargs.get("error_message"),
+            "sent_at": datetime(2026, 2, 21, 12, 0, tzinfo=timezone.utc),
+            "attempt_count": 1,
+        },
+    )
+
+    result = asyncio.run(
+        temporal_activities.send_video_digest_activity(
+            {"job_id": "00000000-0000-0000-0000-000000000001"}
+        )
+    )
+
+    assert result["ok"] is True
+    assert result["status"] == "sent"
 
 
 class _FakeHandle:
@@ -314,6 +456,7 @@ def _install_temporal_stubs() -> type[Exception]:
 
 async def _run_start_daily_for_test(*, run_once: bool) -> tuple[dict, _FakeClient]:
     _install_temporal_stubs()
+    _ensure_required_worker_env()
     handle = _FakeHandle(
         workflow_id="daily-id",
         run_id="daily-run",
@@ -360,6 +503,7 @@ def test_start_cleanup_workflow_waits_result():
     import asyncio
 
     _install_temporal_stubs()
+    _ensure_required_worker_env()
     handle = _FakeHandle(
         workflow_id="cleanup-id",
         run_id="cleanup-run",

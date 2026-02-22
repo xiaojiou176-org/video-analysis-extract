@@ -27,6 +27,7 @@ class JobStepDetail(JobStepSummary):
     error_kind: str | None = None
     retry_meta: dict[str, Any] | None = None
     result: dict[str, Any] | None = None
+    thought_metadata: dict[str, Any] | None = None
     cache_key: str | None = None
 
 
@@ -40,23 +41,35 @@ class JobDegradation(BaseModel):
     cache_meta: dict[str, Any] | None = None
 
 
+class NotificationRetrySummary(BaseModel):
+    delivery_id: uuid.UUID
+    status: str
+    attempt_count: int
+    next_retry_at: datetime | None = None
+    last_error_kind: str | None = None
+
+
 class JobResponse(BaseModel):
     id: uuid.UUID
     video_id: uuid.UUID
-    kind: Literal["phase2_ingest_stub"]
-    status: Literal["queued", "running", "succeeded", "failed", "partial"]
+    kind: Literal["video_digest_v1", "phase2_ingest_stub"]
+    status: Literal["queued", "running", "succeeded", "failed"]
     mode: str | None = None
     idempotency_key: str
     error_message: str | None
     artifact_digest_md: str | None
     artifact_root: str | None
+    llm_required: bool | None = None
+    llm_gate_passed: bool | None = None
+    hard_fail_reason: str | None = None
     created_at: datetime
     updated_at: datetime
     step_summary: list[JobStepSummary]
     steps: list[JobStepDetail]
     degradations: list[JobDegradation]
-    pipeline_final_status: Literal["succeeded", "partial", "failed"] | None = None
+    pipeline_final_status: Literal["succeeded", "degraded", "failed"] | None = None
     artifacts_index: dict[str, str]
+    notification_retry: NotificationRetrySummary | None = None
 
 
 @router.get("/{job_id}", response_model=JobResponse)
@@ -82,6 +95,13 @@ def get_job(job_id: uuid.UUID, db: Session = Depends(get_db)):
         artifact_digest_md=row.artifact_digest_md,
         steps=steps,
     )
+    pipeline_final_status = service.get_pipeline_final_status(job_id, fallback_status=row.status)
+    llm_required, llm_gate_passed, hard_fail_reason = service.resolve_llm_gate_fields(
+        llm_required=getattr(row, "llm_required", None),
+        llm_gate_passed=getattr(row, "llm_gate_passed", None),
+        hard_fail_reason=getattr(row, "hard_fail_reason", None),
+        steps=steps,
+    )
     artifacts_index = service.get_artifacts_index(
         artifact_root=row.artifact_root,
         artifact_digest_md=row.artifact_digest_md,
@@ -98,11 +118,15 @@ def get_job(job_id: uuid.UUID, db: Session = Depends(get_db)):
         error_message=row.error_message,
         artifact_digest_md=row.artifact_digest_md,
         artifact_root=row.artifact_root,
+        llm_required=llm_required,
+        llm_gate_passed=llm_gate_passed,
+        hard_fail_reason=hard_fail_reason,
         created_at=row.created_at,
         updated_at=row.updated_at,
         step_summary=step_summary,
         steps=[JobStepDetail(**item) for item in steps],
         degradations=[JobDegradation(**item) for item in degradations],
-        pipeline_final_status=service.get_pipeline_final_status(job_id, fallback_status=row.status),
+        pipeline_final_status=pipeline_final_status,
         artifacts_index=artifacts_index,
+        notification_retry=service.get_notification_retry(job_id),
     )

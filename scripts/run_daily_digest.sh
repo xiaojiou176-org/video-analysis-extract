@@ -3,6 +3,11 @@ set -euo pipefail
 
 SCRIPT_NAME="run_daily_digest"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=./scripts/lib/load_env.sh
+source "$ROOT_DIR/scripts/lib/load_env.sh"
+# shellcheck source=./scripts/lib/http_api.sh
+source "$ROOT_DIR/scripts/lib/http_api.sh"
+load_repo_env "$ROOT_DIR" "$SCRIPT_NAME"
 
 VD_API_BASE_URL="${VD_API_BASE_URL:-http://127.0.0.1:8000}"
 DIGEST_DATE="${DIGEST_DATE:-$(date -u +%F)}"
@@ -45,57 +50,6 @@ json_bool() {
   fi
 }
 
-api_get() {
-  local path="$1"
-  local tmp_body
-  tmp_body="$(mktemp)"
-
-  local status
-  if ! status="$(
-    curl -sS -o "$tmp_body" -w '%{http_code}' \
-      -H 'Accept: application/json' \
-      "${VD_API_BASE_URL}${path}"
-  )"; then
-    rm -f "$tmp_body"
-    fail "GET ${path} failed (network error)"
-  fi
-
-  HTTP_STATUS="$status"
-  HTTP_BODY="$(cat "$tmp_body")"
-  rm -f "$tmp_body"
-}
-
-api_post() {
-  local path="$1"
-  local payload="$2"
-  local tmp_body
-  tmp_body="$(mktemp)"
-
-  local status
-  if ! status="$(
-    curl -sS -o "$tmp_body" -w '%{http_code}' \
-      -H 'Accept: application/json' \
-      -H 'Content-Type: application/json' \
-      -X POST "${VD_API_BASE_URL}${path}" \
-      --data "$payload"
-  )"; then
-    rm -f "$tmp_body"
-    fail "POST ${path} failed (network error)"
-  fi
-
-  HTTP_STATUS="$status"
-  HTTP_BODY="$(cat "$tmp_body")"
-  rm -f "$tmp_body"
-}
-
-check_api_health() {
-  api_get "/healthz"
-  if [[ "$HTTP_STATUS" -lt 200 || "$HTTP_STATUS" -ge 300 ]]; then
-    fail "API health check failed: status=${HTTP_STATUS}, body=${HTTP_BODY}"
-  fi
-  log "API reachable: ${VD_API_BASE_URL}"
-}
-
 build_daily_payload() {
   local dry_run force
   dry_run="$(json_bool "$DIGEST_DRY_RUN")"
@@ -127,7 +81,7 @@ try_primary_route() {
 
   if [[ "$HTTP_STATUS" -ge 200 && "$HTTP_STATUS" -lt 300 ]]; then
     log "Primary route succeeded: /api/v1/reports/daily/send"
-    log "Response: ${HTTP_BODY}"
+    log "Response: $(safe_body_preview "$HTTP_BODY")"
     return 0
   fi
 
@@ -136,14 +90,14 @@ try_primary_route() {
     return 1
   fi
 
-  fail "Primary route failed: status=${HTTP_STATUS}, body=${HTTP_BODY}"
+  fail "Primary route failed: status=${HTTP_STATUS}, body=$(safe_body_preview "$HTTP_BODY")"
 }
 
 fallback_daily_send() {
   log "Fallback step 1/3: fetching latest succeeded video."
   api_get "/api/v1/videos?status=succeeded&limit=1"
   if [[ "$HTTP_STATUS" -lt 200 || "$HTTP_STATUS" -ge 300 ]]; then
-    fail "Failed to list succeeded videos: status=${HTTP_STATUS}, body=${HTTP_BODY}"
+    fail "Failed to list succeeded videos: status=${HTTP_STATUS}, body=$(safe_body_preview "$HTTP_BODY")"
   fi
 
   local latest_job_id
@@ -175,7 +129,7 @@ PY
   log "Fallback step 2/3: reading artifact markdown for job ${latest_job_id}."
   api_get "/api/v1/artifacts/markdown?job_id=${latest_job_id}"
   if [[ "$HTTP_STATUS" -lt 200 || "$HTTP_STATUS" -ge 300 ]]; then
-    fail "Failed to read digest artifact: status=${HTTP_STATUS}, body=${HTTP_BODY}"
+    fail "Failed to read digest artifact: status=${HTTP_STATUS}, body=$(safe_body_preview "$HTTP_BODY")"
   fi
   local markdown
   markdown="$HTTP_BODY"
@@ -216,11 +170,11 @@ PY
   api_post "/api/v1/notifications/test" "$payload"
   if [[ "$HTTP_STATUS" -ge 200 && "$HTTP_STATUS" -lt 300 ]]; then
     log "Fallback send succeeded."
-    log "Response: ${HTTP_BODY}"
+    log "Response: $(safe_body_preview "$HTTP_BODY")"
     return 0
   fi
 
-  fail "Fallback send failed: status=${HTTP_STATUS}, body=${HTTP_BODY}"
+  fail "Fallback send failed: status=${HTTP_STATUS}, body=$(safe_body_preview "$HTTP_BODY")"
 }
 
 main() {

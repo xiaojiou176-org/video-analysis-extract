@@ -18,11 +18,11 @@
     },
     "JobKind": {
       "type": "string",
-      "enum": ["phase2_ingest_stub"]
+      "enum": ["video_digest_v1", "phase2_ingest_stub"]
     },
     "JobStatus": {
       "type": "string",
-      "enum": ["queued", "running", "succeeded", "partial", "failed"]
+      "enum": ["queued", "running", "succeeded", "failed"]
     },
     "StepStatus": {
       "type": "string",
@@ -30,11 +30,11 @@
     },
     "PipelineFinalStatus": {
       "type": "string",
-      "enum": ["succeeded", "partial", "failed"]
+      "enum": ["succeeded", "degraded", "failed"]
     },
     "LLMMode": {
       "type": "string",
-      "enum": ["gemini", "local_rule"]
+      "enum": ["gemini"]
     },
     "PipelineMode": {
       "type": "string",
@@ -461,7 +461,18 @@
     },
     "PipelineResult": {
       "type": "object",
-      "required": ["job_id", "attempt", "final_status", "steps", "artifacts", "degradations", "completed_at"],
+      "required": [
+        "job_id",
+        "attempt",
+        "final_status",
+        "steps",
+        "artifacts",
+        "degradations",
+        "llm_required",
+        "llm_gate_passed",
+        "hard_fail_reason",
+        "completed_at"
+      ],
       "properties": {
         "job_id": {
           "$ref": "#/$defs/UUID"
@@ -530,6 +541,15 @@
               "type": "null"
             }
           ]
+        },
+        "llm_required": {
+          "type": "boolean"
+        },
+        "llm_gate_passed": {
+          "type": "boolean"
+        },
+        "hard_fail_reason": {
+          "type": ["string", "null"]
         },
         "retry": {
           "$ref": "#/$defs/RetryMeta"

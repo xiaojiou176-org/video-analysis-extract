@@ -1,28 +1,27 @@
 import { deleteSubscriptionAction, upsertSubscriptionAction } from "@/app/subscriptions/actions";
 import { apiClient } from "@/lib/api/client";
 import { formatDateTime } from "@/lib/format";
+import { resolveSearchParams, type SearchParamsInput } from "@/lib/search-params";
 
 type SubscriptionsPageProps = {
-  searchParams?: {
-    status?: string;
-    message?: string;
-  };
+  searchParams?: SearchParamsInput;
 };
 
-function renderAlert(searchParams: SubscriptionsPageProps["searchParams"]) {
-  if (!searchParams?.status || !searchParams?.message) {
+function renderAlert(status: string, message: string) {
+  if (!status || !message) {
     return null;
   }
-  const className = searchParams.status === "error" ? "alert error" : "alert success";
-  return <p className={className}>{searchParams.message}</p>;
+  const className = status === "error" ? "alert error" : "alert success";
+  return <p className={className}>{message}</p>;
 }
 
 export default async function SubscriptionsPage({ searchParams }: SubscriptionsPageProps) {
+  const { status, message } = await resolveSearchParams(searchParams, ["status", "message"] as const);
   const subscriptions = await apiClient.listSubscriptions().catch(() => []);
 
   return (
     <div className="stack">
-      {renderAlert(searchParams)}
+      {renderAlert(status, message)}
 
       <section className="card stack">
         <h2>Create or update subscription</h2>

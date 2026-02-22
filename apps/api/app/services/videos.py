@@ -3,7 +3,6 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-import uuid
 from urllib.parse import parse_qs, urlparse
 from uuid import uuid4
 
@@ -121,7 +120,7 @@ class VideosService:
         )
         job_row, created = self.jobs_repo.create_or_reuse(
             video_id=video_row.id,
-            kind="phase2_ingest_stub",
+            kind="video_digest_v1",
             mode=normalized_mode,
             overrides_json=normalized_overrides,
             idempotency_key=idempotency_key,

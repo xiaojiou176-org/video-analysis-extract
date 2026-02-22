@@ -2,6 +2,10 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=./scripts/lib/load_env.sh
+source "$ROOT_DIR/scripts/lib/load_env.sh"
+load_repo_env "$ROOT_DIR" "dev_worker"
+
 WORKER_DIR="${WORKER_DIR:-$ROOT_DIR/apps/worker}"
 WORKER_ENTRY="${WORKER_ENTRY:-worker.main}"
 WORKER_COMMAND="${WORKER_COMMAND:-run-worker}"
@@ -35,7 +39,16 @@ if [[ "$SHOW_HINTS" == "1" ]]; then
 [dev_worker]   PIPELINE_SUBPROCESS_TIMEOUT_SECONDS=${PIPELINE_SUBPROCESS_TIMEOUT_SECONDS:-180}
 [dev_worker]   PIPELINE_MAX_FRAMES=${PIPELINE_MAX_FRAMES:-6}
 [dev_worker]   PIPELINE_FRAME_INTERVAL_SECONDS=${PIPELINE_FRAME_INTERVAL_SECONDS:-30}
-[dev_worker]   GEMINI_MODEL=${GEMINI_MODEL:-gemini-1.5-flash}
+[dev_worker]   GEMINI_MODEL=${GEMINI_MODEL:-gemini-3.1-pro-preview}
+[dev_worker]   GEMINI_FAST_MODEL=${GEMINI_FAST_MODEL:-gemini-3-flash-preview}
+[dev_worker]   GEMINI_EMBEDDING_MODEL=${GEMINI_EMBEDDING_MODEL:-gemini-embedding-001}
+[dev_worker]   GEMINI_THINKING_LEVEL=${GEMINI_THINKING_LEVEL:-high}
+[dev_worker]   GEMINI_INCLUDE_THOUGHTS=${GEMINI_INCLUDE_THOUGHTS:-false}
+[dev_worker]   GEMINI_CONTEXT_CACHE_ENABLED=${GEMINI_CONTEXT_CACHE_ENABLED:-true}
+[dev_worker]   GEMINI_CONTEXT_CACHE_TTL_SECONDS=${GEMINI_CONTEXT_CACHE_TTL_SECONDS:-21600}
+[dev_worker]   GEMINI_CONTEXT_CACHE_MIN_CHARS=${GEMINI_CONTEXT_CACHE_MIN_CHARS:-4096}
+[dev_worker]   DIGEST_LOCAL_TIMEZONE=${DIGEST_LOCAL_TIMEZONE:-system-local}
+[dev_worker]   DIGEST_DAILY_LOCAL_HOUR=${DIGEST_DAILY_LOCAL_HOUR:-9}
 [dev_worker] Set DEV_WORKER_SHOW_HINTS=0 to hide this block.
 EOF
 fi

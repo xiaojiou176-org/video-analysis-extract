@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import date, datetime
+from datetime import date as date_type, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
@@ -55,7 +55,7 @@ class NotificationSendResponse(BaseModel):
 
 
 class DailyReportSendRequest(BaseModel):
-    date: date | None = None
+    date: date_type | None = None
     to_email: str | None = None
     subject: str | None = None
     body: str | None = None
@@ -65,7 +65,7 @@ class DailyReportSendResponse(BaseModel):
     sent: bool
     status: str
     delivery_id: uuid.UUID
-    date: date
+    date: date_type
     recipient_email: str
     subject: str
     error_message: str | None
@@ -158,7 +158,7 @@ def post_daily_report_send(payload: DailyReportSendRequest, db: Session = Depend
         payload_date = row.payload_json.get("digest_date")
         if isinstance(payload_date, str):
             try:
-                digest_date = date.fromisoformat(payload_date)
+                digest_date = date_type.fromisoformat(payload_date)
             except ValueError:
                 digest_date = None
 
@@ -166,7 +166,7 @@ def post_daily_report_send(payload: DailyReportSendRequest, db: Session = Depend
         sent=row.status == "sent",
         status=row.status,
         delivery_id=row.id,
-        date=digest_date or date.today(),
+        date=digest_date or date_type.today(),
         recipient_email=row.recipient_email,
         subject=row.subject,
         error_message=row.error_message,

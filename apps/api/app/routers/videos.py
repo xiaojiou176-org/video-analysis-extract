@@ -23,7 +23,7 @@ class VideoResponse(BaseModel):
     published_at: datetime | None
     first_seen_at: datetime
     last_seen_at: datetime
-    status: Literal["queued", "running", "succeeded", "failed", "partial"] | None = None
+    status: Literal["queued", "running", "succeeded", "failed"] | None = None
     last_job_id: uuid.UUID | None = None
 
 
@@ -44,7 +44,7 @@ class VideoProcessResponse(BaseModel):
     job_id: uuid.UUID
     video_db_id: uuid.UUID
     video_uid: str
-    status: Literal["queued", "running", "succeeded", "failed", "partial"]
+    status: Literal["queued", "running", "succeeded", "failed"]
     idempotency_key: str
     mode: str
     overrides: dict[str, Any]
@@ -56,7 +56,7 @@ class VideoProcessResponse(BaseModel):
 @router.get("", response_model=list[VideoResponse])
 def list_videos(
     platform: Literal["bilibili", "youtube"] | None = None,
-    status: Literal["queued", "running", "succeeded", "failed", "partial"] | None = None,
+    status: Literal["queued", "running", "succeeded", "failed"] | None = None,
     limit: int = Query(default=50, ge=1, le=500),
     db: Session = Depends(get_db),
 ):

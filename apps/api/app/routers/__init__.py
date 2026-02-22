@@ -1,3 +1,14 @@
-from . import artifacts, ingest, jobs, notifications, subscriptions, videos
+from . import artifacts, computer_use, health, ingest, jobs, notifications, retrieval, subscriptions, videos, workflows
 
-__all__ = ["subscriptions", "ingest", "jobs", "videos", "artifacts", "notifications"]
+__all__ = [
+    "subscriptions",
+    "ingest",
+    "jobs",
+    "videos",
+    "artifacts",
+    "notifications",
+    "health",
+    "workflows",
+    "retrieval",
+    "computer_use",
+]

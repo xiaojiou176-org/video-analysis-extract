@@ -119,7 +119,7 @@ def test_normalize_error_details_keeps_expected_fields_only() -> None:
             "path": "/x",
             "status_code": 503,
             "error": {"reason": "timeout"},
-            "body": {"detail": "bad"},
+            "body_preview": {"detail": "bad"},
             "ignored": "x",
         }
     )
@@ -127,5 +127,5 @@ def test_normalize_error_details_keeps_expected_fields_only() -> None:
     assert normalized["method"] == "GET"
     assert normalized["status_code"] == 503
     assert "timeout" in normalized["error"]
-    assert "bad" in normalized["body"]
+    assert "bad" in normalized["body_preview"]
     assert "ignored" not in normalized

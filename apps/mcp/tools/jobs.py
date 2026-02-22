@@ -1,42 +1,28 @@
 from __future__ import annotations
 
-from typing import Any, Callable
+from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
-ApiCall = Callable[..., dict[str, Any]]
-
-
-def _is_error_payload(payload: dict[str, Any]) -> bool:
-    return {"code", "message", "details"}.issubset(payload.keys())
-
-
-def _to_optional_str(value: Any) -> str | None:
-    return value if isinstance(value, str) else None
-
-
-def _to_int(value: Any, default: int = 0) -> int:
-    if isinstance(value, int):
-        return value
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return default
-
-
-def _to_optional_dict(value: Any) -> dict[str, Any] | None:
-    return value if isinstance(value, dict) else None
+from apps.mcp.tools._common import (
+    ApiCall,
+    is_error_payload,
+    to_int,
+    to_optional_bool,
+    to_optional_dict,
+    to_optional_str,
+)
 
 
 def _normalize_step(item: Any) -> dict[str, Any]:
     step = item if isinstance(item, dict) else {}
     error_value = step.get("error")
     return {
-        "name": _to_optional_str(step.get("name")) or "",
-        "status": _to_optional_str(step.get("status")) or "unknown",
-        "attempt": _to_int(step.get("attempt"), default=0),
-        "started_at": _to_optional_str(step.get("started_at")),
-        "finished_at": _to_optional_str(step.get("finished_at")),
+        "name": to_optional_str(step.get("name")) or "",
+        "status": to_optional_str(step.get("status")) or "unknown",
+        "attempt": to_int(step.get("attempt"), default=0),
+        "started_at": to_optional_str(step.get("started_at")),
+        "finished_at": to_optional_str(step.get("finished_at")),
         "error": None if error_value is None else str(error_value),
     }
 
@@ -44,23 +30,24 @@ def _normalize_step(item: Any) -> dict[str, Any]:
 def _normalize_step_detail(item: Any) -> dict[str, Any]:
     step = _normalize_step(item)
     source = item if isinstance(item, dict) else {}
-    step["error_kind"] = _to_optional_str(source.get("error_kind"))
-    step["retry_meta"] = _to_optional_dict(source.get("retry_meta"))
-    step["result"] = _to_optional_dict(source.get("result"))
-    step["cache_key"] = _to_optional_str(source.get("cache_key"))
+    step["error_kind"] = to_optional_str(source.get("error_kind"))
+    step["retry_meta"] = to_optional_dict(source.get("retry_meta"))
+    step["result"] = to_optional_dict(source.get("result"))
+    step["thought_metadata"] = to_optional_dict(source.get("thought_metadata"))
+    step["cache_key"] = to_optional_str(source.get("cache_key"))
     return step
 
 
 def _normalize_degradation(item: Any) -> dict[str, Any]:
     source = item if isinstance(item, dict) else {}
     return {
-        "step": _to_optional_str(source.get("step")),
-        "status": _to_optional_str(source.get("status")),
-        "reason": _to_optional_str(source.get("reason")),
+        "step": to_optional_str(source.get("step")),
+        "status": to_optional_str(source.get("status")),
+        "reason": to_optional_str(source.get("reason")),
         "error": source.get("error"),
-        "error_kind": _to_optional_str(source.get("error_kind")),
-        "retry_meta": _to_optional_dict(source.get("retry_meta")),
-        "cache_meta": _to_optional_dict(source.get("cache_meta")),
+        "error_kind": to_optional_str(source.get("error_kind")),
+        "retry_meta": to_optional_dict(source.get("retry_meta")),
+        "cache_meta": to_optional_dict(source.get("cache_meta")),
     }
 
 
@@ -75,8 +62,21 @@ def _normalize_artifacts_index(value: Any) -> dict[str, str]:
     return normalized
 
 
+def _normalize_notification_retry(value: Any) -> dict[str, Any] | None:
+    source = value if isinstance(value, dict) else None
+    if source is None:
+        return None
+    return {
+        "delivery_id": to_optional_str(source.get("delivery_id")),
+        "status": to_optional_str(source.get("status")),
+        "attempt_count": to_int(source.get("attempt_count"), default=0),
+        "next_retry_at": to_optional_str(source.get("next_retry_at")),
+        "last_error_kind": to_optional_str(source.get("last_error_kind")),
+    }
+
+
 def _normalize_job_payload(payload: dict[str, Any]) -> dict[str, Any]:
-    if _is_error_payload(payload):
+    if is_error_payload(payload):
         return payload
 
     job = payload.get("job")
@@ -89,22 +89,26 @@ def _normalize_job_payload(payload: dict[str, Any]) -> dict[str, Any]:
     degradation_items = degradations if isinstance(degradations, list) else []
 
     return {
-        "id": _to_optional_str(source.get("id")),
-        "video_id": _to_optional_str(source.get("video_id")),
-        "kind": _to_optional_str(source.get("kind")),
-        "status": _to_optional_str(source.get("status")),
-        "idempotency_key": _to_optional_str(source.get("idempotency_key")),
-        "error_message": _to_optional_str(source.get("error_message")),
-        "artifact_digest_md": _to_optional_str(source.get("artifact_digest_md")),
-        "artifact_root": _to_optional_str(source.get("artifact_root")),
-        "created_at": _to_optional_str(source.get("created_at")),
-        "updated_at": _to_optional_str(source.get("updated_at")),
+        "id": to_optional_str(source.get("id")),
+        "video_id": to_optional_str(source.get("video_id")),
+        "kind": to_optional_str(source.get("kind")),
+        "status": to_optional_str(source.get("status")),
+        "idempotency_key": to_optional_str(source.get("idempotency_key")),
+        "error_message": to_optional_str(source.get("error_message")),
+        "artifact_digest_md": to_optional_str(source.get("artifact_digest_md")),
+        "artifact_root": to_optional_str(source.get("artifact_root")),
+        "llm_required": to_optional_bool(source.get("llm_required")),
+        "llm_gate_passed": to_optional_bool(source.get("llm_gate_passed")),
+        "hard_fail_reason": to_optional_str(source.get("hard_fail_reason")),
+        "created_at": to_optional_str(source.get("created_at")),
+        "updated_at": to_optional_str(source.get("updated_at")),
         "step_summary": [_normalize_step(item) for item in step_summary_items],
         "steps": [_normalize_step_detail(item) for item in step_items],
         "degradations": [_normalize_degradation(item) for item in degradation_items],
-        "pipeline_final_status": _to_optional_str(source.get("pipeline_final_status")),
+        "pipeline_final_status": to_optional_str(source.get("pipeline_final_status")),
         "artifacts_index": _normalize_artifacts_index(source.get("artifacts_index")),
-        "mode": _to_optional_str(source.get("mode")),
+        "mode": to_optional_str(source.get("mode")),
+        "notification_retry": _normalize_notification_retry(source.get("notification_retry")),
     }
 
 
@@ -143,7 +147,7 @@ def register_job_tools(mcp: FastMCP, api_call: ApiCall) -> None:
             json_body={
                 "video": video,
                 "mode": mode,
-                "overrides": overrides,
+                "overrides": overrides or {},
                 "force": force,
             },
         )
