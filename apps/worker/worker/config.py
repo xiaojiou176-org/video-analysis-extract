@@ -75,9 +75,11 @@ class Settings:
     pipeline_frame_interval_seconds: int = 30
     pipeline_llm_input_mode: str = "auto"
     gemini_api_key: str | None = None
-    gemini_model: str = "gemini-1.5-flash"
-    gemini_outline_model: str = "gemini-1.5-flash"
-    gemini_digest_model: str = "gemini-1.5-flash"
+    gemini_model: str = "gemini-3.1-pro-preview"
+    gemini_outline_model: str = "gemini-3.1-pro-preview"
+    gemini_digest_model: str = "gemini-3.1-pro-preview"
+    gemini_fast_model: str = "gemini-3-flash-preview"
+    gemini_embedding_model: str = "gemini-embedding-001"
     youtube_api_key: str | None = None
     notification_enabled: bool = False
     resend_api_key: str | None = None
@@ -150,14 +152,19 @@ class Settings:
             ),
             pipeline_llm_input_mode=os.getenv("PIPELINE_LLM_INPUT_MODE", "auto"),
             gemini_api_key=os.getenv("GEMINI_API_KEY"),
-            gemini_model=os.getenv("GEMINI_MODEL", "gemini-1.5-flash"),
+            gemini_model=os.getenv("GEMINI_MODEL", "gemini-3.1-pro-preview"),
             gemini_outline_model=os.getenv(
                 "GEMINI_OUTLINE_MODEL",
-                os.getenv("GEMINI_MODEL", "gemini-1.5-flash"),
+                os.getenv("GEMINI_MODEL", "gemini-3.1-pro-preview"),
             ),
             gemini_digest_model=os.getenv(
                 "GEMINI_DIGEST_MODEL",
-                os.getenv("GEMINI_MODEL", "gemini-1.5-flash"),
+                os.getenv("GEMINI_MODEL", "gemini-3.1-pro-preview"),
+            ),
+            gemini_fast_model=os.getenv("GEMINI_FAST_MODEL", "gemini-3-flash-preview"),
+            gemini_embedding_model=os.getenv(
+                "GEMINI_EMBEDDING_MODEL",
+                "gemini-embedding-001",
             ),
             youtube_api_key=os.getenv("YOUTUBE_API_KEY"),
             notification_enabled=_parse_bool(
