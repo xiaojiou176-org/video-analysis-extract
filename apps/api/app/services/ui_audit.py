@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import json
 import mimetypes
+import os
 import threading
 import uuid
 from datetime import datetime, timezone
@@ -37,6 +38,42 @@ _FINDING_SEVERITY_MAP = {
 
 _JSON_SUFFIXES = {".json", ".ndjson"}
 _MAX_SCAN_FILES = 400
+_MAX_GEMINI_IMAGE_BYTES = 5 * 1024 * 1024
+_MAX_GEMINI_TEXT_CHARS = 2_000
+_MAX_GEMINI_IMAGES = 4
+_MAX_GEMINI_TEXT_SNIPPETS = 4
+_TEXT_SUFFIXES = {".md", ".txt", ".json", ".ndjson", ".log"}
+
+_GEMINI_UI_AUDIT_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["overall_assessment", "findings", "suggested_actions"],
+    "properties": {
+        "overall_assessment": {"type": "string", "minLength": 1},
+        "findings": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "required": ["severity", "title", "message"],
+                "properties": {
+                    "severity": {
+                        "type": "string",
+                        "enum": ["critical", "high", "medium", "low", "info"],
+                    },
+                    "title": {"type": "string", "minLength": 1},
+                    "message": {"type": "string", "minLength": 1},
+                    "artifact_key": {"type": ["string", "null"]},
+                    "rule": {"type": ["string", "null"]},
+                },
+            },
+        },
+        "suggested_actions": {
+            "type": "array",
+            "items": {"type": "string", "minLength": 1},
+        },
+    },
+}
 
 
 class UiAuditService:
@@ -76,6 +113,23 @@ class UiAuditService:
 
         artifacts = self._collect_artifacts(resolved_root)
         findings = self._collect_findings(artifacts)
+        gemini_suggested_actions: list[str] = []
+        gemini_review = self._run_gemini_review(artifacts)
+        if gemini_review is not None:
+            findings.extend(gemini_review.get("findings", []))
+            gemini_suggested_actions = gemini_review.get("suggested_actions", [])
+            overall = str(gemini_review.get("overall_assessment") or "").strip()
+            if overall:
+                findings.append(
+                    {
+                        "id": "gemini-overall-assessment",
+                        "severity": "info",
+                        "title": "Gemini UI/UX Overall Assessment",
+                        "message": overall,
+                        "rule": "gemini-overall-assessment",
+                        "artifact_key": None,
+                    }
+                )
         severity_counts = self._build_severity_counts(findings)
 
         payload = {
@@ -91,6 +145,7 @@ class UiAuditService:
             },
             "findings": findings,
             "artifacts": artifacts,
+            "gemini_suggested_actions": gemini_suggested_actions,
         }
         self._save_run(payload)
         return payload
@@ -197,11 +252,14 @@ class UiAuditService:
                 high_or_worse += 1
 
         suggested_actions: list[str] = []
+        gemini_suggestions = payload.get("gemini_suggested_actions")
+        if isinstance(gemini_suggestions, list):
+            suggested_actions.extend(str(item).strip() for item in gemini_suggestions if str(item).strip())
         if high_or_worse > 0:
             suggested_actions.append("Fix high-severity UI issues first and rerun focused E2E.")
         if finding_items:
             suggested_actions.append("Apply minimal patches and rerun failed tests before full suite.")
-        else:
+        if not finding_items:
             suggested_actions.append("No findings detected; no code changes recommended.")
 
         return {
@@ -219,6 +277,90 @@ class UiAuditService:
             },
             "suggested_actions": suggested_actions,
         }
+
+    def _run_gemini_review(self, artifacts: list[dict[str, Any]]) -> dict[str, Any] | None:
+        if not self._is_gemini_ui_audit_enabled():
+            return None
+        api_key = (os.getenv("GEMINI_API_KEY") or "").strip()
+        if not api_key:
+            return None
+
+        try:
+            from google import genai  # type: ignore
+            from google.genai import types as genai_types  # type: ignore
+        except Exception:
+            return None
+
+        image_artifacts = self._select_gemini_image_artifacts(artifacts)
+        text_snippets = self._select_gemini_text_snippets(artifacts)
+        if not image_artifacts and not text_snippets:
+            return None
+
+        model = (os.getenv("GEMINI_MODEL") or "gemini-3.1-pro-preview").strip()
+        thinking_level = (os.getenv("GEMINI_THINKING_LEVEL") or "high").strip().upper()
+        prompt = self._build_gemini_ui_prompt(text_snippets=text_snippets, image_artifacts=image_artifacts)
+        contents: list[Any] = [prompt]
+        for item in image_artifacts:
+            path = Path(str(item.get("path") or ""))
+            if not path.exists() or not path.is_file():
+                continue
+            mime_type = str(item.get("mime_type") or "image/png")
+            try:
+                contents.append(genai_types.Part.from_bytes(data=path.read_bytes(), mime_type=mime_type))
+            except OSError:
+                continue
+
+        try:
+            client = genai.Client(api_key=api_key)
+            response = client.models.generate_content(
+                model=model,
+                contents=contents,
+                config=genai_types.GenerateContentConfig(
+                    temperature=1.0,
+                    response_mime_type="application/json",
+                    response_json_schema=_GEMINI_UI_AUDIT_SCHEMA,
+                    thinking_config=genai_types.ThinkingConfig(
+                        thinking_level=thinking_level,
+                    ),
+                ),
+            )
+        except Exception as exc:
+            return {
+                "overall_assessment": "",
+                "findings": [
+                    {
+                        "id": "gemini-ui-review-provider-error",
+                        "severity": "info",
+                        "title": "Gemini UI review unavailable",
+                        "message": f"Gemini UI review skipped due to provider error: {exc}",
+                        "rule": "gemini-ui-review-provider-error",
+                        "artifact_key": None,
+                    }
+                ],
+                "suggested_actions": [],
+            }
+
+        raw_text = str(getattr(response, "text", "") or "").strip()
+        if not raw_text:
+            return None
+        try:
+            parsed = json.loads(raw_text)
+        except json.JSONDecodeError:
+            return {
+                "overall_assessment": "",
+                "findings": [
+                    {
+                        "id": "gemini-ui-review-invalid-json",
+                        "severity": "info",
+                        "title": "Gemini UI review parse fallback",
+                        "message": "Gemini returned non-JSON output; review result ignored.",
+                        "rule": "gemini-ui-review-invalid-json",
+                        "artifact_key": None,
+                    }
+                ],
+                "suggested_actions": [],
+            }
+        return self._normalize_gemini_review(parsed)
 
     def _resolve_artifact_root(
         self,
@@ -278,6 +420,112 @@ class UiAuditService:
                 }
             )
         return payload
+
+    def _is_gemini_ui_audit_enabled(self) -> bool:
+        raw = (os.getenv("UI_AUDIT_GEMINI_ENABLED") or "true").strip().lower()
+        return raw in {"1", "true", "yes", "on"}
+
+    def _select_gemini_image_artifacts(self, artifacts: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        selected: list[dict[str, Any]] = []
+        for item in artifacts:
+            mime_type = str(item.get("mime_type") or "").lower()
+            if not mime_type.startswith("image/"):
+                continue
+            size_bytes = int(item.get("size_bytes") or 0)
+            if size_bytes <= 0 or size_bytes > _MAX_GEMINI_IMAGE_BYTES:
+                continue
+            selected.append(item)
+            if len(selected) >= _MAX_GEMINI_IMAGES:
+                break
+        return selected
+
+    def _select_gemini_text_snippets(self, artifacts: list[dict[str, Any]]) -> list[dict[str, str]]:
+        snippets: list[dict[str, str]] = []
+        for item in artifacts:
+            key = str(item.get("key") or "")
+            path_value = str(item.get("path") or "")
+            path = Path(path_value)
+            if not key or not path.exists() or not path.is_file():
+                continue
+            if path.suffix.lower() not in _TEXT_SUFFIXES:
+                continue
+            try:
+                text = path.read_text(encoding="utf-8")
+            except (UnicodeDecodeError, OSError):
+                continue
+            normalized = text.strip()
+            if not normalized:
+                continue
+            snippets.append(
+                {
+                    "key": key,
+                    "snippet": normalized[:_MAX_GEMINI_TEXT_CHARS],
+                }
+            )
+            if len(snippets) >= _MAX_GEMINI_TEXT_SNIPPETS:
+                break
+        return snippets
+
+    def _build_gemini_ui_prompt(
+        self,
+        *,
+        text_snippets: list[dict[str, str]],
+        image_artifacts: list[dict[str, Any]],
+    ) -> str:
+        snippet_lines = []
+        for item in text_snippets:
+            snippet_lines.append(f"- {item['key']}: {item['snippet']}")
+        image_lines = [f"- {str(item.get('key') or '')}" for item in image_artifacts if str(item.get("key") or "").strip()]
+        evidence_text = "\n".join(snippet_lines) if snippet_lines else "- none"
+        evidence_images = "\n".join(image_lines) if image_lines else "- none"
+        return (
+            "You are a strict UI/UX quality reviewer. Analyze screenshots and Playwright evidence. "
+            "Return ONLY JSON that follows the provided schema.\n"
+            "Rules:\n"
+            "1) Focus on concrete, user-visible defects.\n"
+            "2) Severity must be one of critical/high/medium/low/info.\n"
+            "3) Every finding should reference artifact_key when possible.\n"
+            "4) Keep suggested_actions short, actionable, and test-oriented.\n"
+            f"Text evidence snippets:\n{evidence_text}\n"
+            f"Image evidence keys:\n{evidence_images}\n"
+        )
+
+    def _normalize_gemini_review(self, payload: Any) -> dict[str, Any]:
+        source = payload if isinstance(payload, dict) else {}
+        overall = str(source.get("overall_assessment") or "").strip()
+        suggested = source.get("suggested_actions")
+        raw_suggested = suggested if isinstance(suggested, list) else []
+        suggested_actions = [str(item).strip() for item in raw_suggested if str(item).strip()]
+        findings_source = source.get("findings")
+        raw_findings = findings_source if isinstance(findings_source, list) else []
+        findings: list[dict[str, Any]] = []
+        for index, item in enumerate(raw_findings):
+            if not isinstance(item, dict):
+                continue
+            severity = str(item.get("severity") or "medium").strip().lower()
+            if severity not in {"critical", "high", "medium", "low", "info"}:
+                severity = "medium"
+            title = str(item.get("title") or "").strip() or "Gemini UI review finding"
+            message = str(item.get("message") or "").strip()
+            if not message:
+                continue
+            rule = str(item.get("rule") or "").strip() or None
+            artifact_key = str(item.get("artifact_key") or "").strip() or None
+            findings.append(
+                {
+                    "id": f"gemini-finding-{index + 1}",
+                    "severity": severity,
+                    "title": title,
+                    "message": message,
+                    "rule": rule,
+                    "artifact_key": artifact_key,
+                }
+            )
+        return {
+            "overall_assessment": overall,
+            "findings": findings,
+            "suggested_actions": suggested_actions,
+        }
 
     def _collect_findings(self, artifacts: list[dict[str, Any]]) -> list[dict[str, Any]]:
         findings: list[dict[str, Any]] = []

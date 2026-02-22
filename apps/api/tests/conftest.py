@@ -32,6 +32,7 @@ def _isolated_api_test_env(
     monkeypatch.setenv("TEMPORAL_NAMESPACE", "default")
     monkeypatch.setenv("TEMPORAL_TASK_QUEUE", "video-analysis-worker")
     monkeypatch.setenv("SQLITE_STATE_PATH", str((env_root / "state.db").resolve()))
+    monkeypatch.setenv("UI_AUDIT_GEMINI_ENABLED", "false")
 
 
 @pytest.fixture

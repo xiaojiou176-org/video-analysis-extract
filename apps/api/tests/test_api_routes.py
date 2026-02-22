@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import base64
+import sys
+import types
 import uuid
 from datetime import datetime, timezone
 from types import SimpleNamespace
@@ -667,6 +669,79 @@ def test_ui_audit_get_artifact_returns_base64(api_client: TestClient, tmp_path) 
     payload = response.json()
     assert payload["exists"] is True
     assert isinstance(payload["base64"], str)
+
+
+def test_ui_audit_run_includes_gemini_review_findings(api_client: TestClient, monkeypatch, tmp_path) -> None:
+    artifact_root = tmp_path / "ui-audit-artifacts"
+    artifact_root.mkdir(parents=True, exist_ok=True)
+    (artifact_root / "playwright-axe-report.json").write_text(
+        '{"violations":[{"id":"color-contrast","impact":"serious","help":"Color contrast","description":"Insufficient contrast"}]}',
+        encoding="utf-8",
+    )
+    (artifact_root / "ui-home.png").write_bytes(b"\x89PNG\r\n\x1a\n")
+
+    monkeypatch.setenv("UI_AUDIT_GEMINI_ENABLED", "true")
+    monkeypatch.setenv("GEMINI_API_KEY", "fake-key")
+    monkeypatch.setenv("GEMINI_MODEL", "gemini-3.1-pro-preview")
+    monkeypatch.setenv("GEMINI_THINKING_LEVEL", "high")
+
+    class _FakeModels:
+        def generate_content(self, **kwargs):
+            del kwargs
+            return types.SimpleNamespace(
+                text='{"overall_assessment":"Buttons are usable but spacing is inconsistent.","findings":[{"severity":"medium","title":"Inconsistent spacing","message":"Primary CTA spacing differs across panels.","artifact_key":"ui-home.png","rule":"layout-consistency"}],"suggested_actions":["Align spacing tokens for CTA containers."]}'
+            )
+
+    class _FakeClient:
+        def __init__(self, api_key: str):
+            self.api_key = api_key
+            self.models = _FakeModels()
+
+    class _FakePart:
+        @staticmethod
+        def from_bytes(*, data, mime_type):
+            return {"mime_type": mime_type, "size": len(data)}
+
+    class _FakeTypes:
+        Part = _FakePart
+
+        class GenerateContentConfig:
+            def __init__(self, **kwargs):
+                self.kwargs = kwargs
+
+        class ThinkingConfig:
+            def __init__(self, **kwargs):
+                self.kwargs = kwargs
+
+    fake_genai_module = types.ModuleType("google.genai")
+    fake_genai_module.Client = _FakeClient
+    fake_genai_module.types = _FakeTypes
+
+    fake_google_module = types.ModuleType("google")
+    fake_google_module.genai = fake_genai_module
+
+    monkeypatch.setitem(sys.modules, "google", fake_google_module)
+    monkeypatch.setitem(sys.modules, "google.genai", fake_genai_module)
+
+    run_response = api_client.post("/api/v1/ui-audit/run", json={"artifact_root": str(artifact_root)})
+    assert run_response.status_code == 200
+    run_payload = run_response.json()
+    assert run_payload["status"] == "completed"
+    assert run_payload["summary"]["finding_count"] >= 2
+
+    run_id = run_payload["run_id"]
+    findings_response = api_client.get(f"/api/v1/ui-audit/{run_id}/findings")
+    assert findings_response.status_code == 200
+    findings = findings_response.json()["items"]
+    assert any(item["rule"] == "layout-consistency" for item in findings)
+    assert any(item["rule"] == "gemini-overall-assessment" for item in findings)
+
+    autofix_response = api_client.post(
+        f"/api/v1/ui-audit/{run_id}/autofix",
+        json={"mode": "dry-run", "max_files": 2, "max_changed_lines": 80},
+    )
+    assert autofix_response.status_code == 200
+    assert "Align spacing tokens for CTA containers." in autofix_response.json()["suggested_actions"]
 
 
 def test_ui_audit_autofix_endpoint_returns_summary(api_client: TestClient, tmp_path) -> None:
