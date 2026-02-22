@@ -51,7 +51,7 @@ function inferImageMime(path: string): string {
   if (lower.endsWith(".webp")) {
     return "image/webp";
   }
-  if (lower.endsWith(".jpeg")) {
+  if (lower.endsWith(".jpeg") || lower.endsWith(".jpg")) {
     return "image/jpeg";
   }
   return "image/jpeg";
@@ -134,6 +134,7 @@ export default async function ArtifactsPage({ searchParams }: ArtifactsPageProps
                   <li key={`${item.path}-${index}`} className="stack">
                     {item.assetUrl ? (
                       <object
+                        aria-label={`Screenshot ${index + 1}: ${item.path}`}
                         data={item.assetUrl}
                         type={item.mimeType}
                         style={{ width: "100%", minHeight: "120px", borderRadius: "8px" }}
@@ -174,7 +175,7 @@ export default async function ArtifactsPage({ searchParams }: ArtifactsPageProps
           </section>
         </>
       ) : !hasLookupParams ? (
-        <p className="small">No artifact loaded yet.</p>
+        <p className="small">Enter a job ID or video URL to load artifact markdown and screenshots.</p>
       ) : !error ? (
         <p className="small">Artifact request completed but no markdown payload was returned.</p>
       ) : (

@@ -1,4 +1,5 @@
 import { pollIngestAction, processVideoAction } from "@/app/actions";
+import { toDisplayStatus } from "@/app/status";
 import { apiClient } from "@/lib/api/client";
 import { resolveSearchParams, type SearchParamsInput } from "@/lib/search-params";
 
@@ -125,16 +126,19 @@ export default async function DashboardPage({ searchParams }: DashboardProps) {
               </tr>
             </thead>
             <tbody>
-              {videos.slice(0, 10).map((video) => (
-                <tr key={video.id}>
-                  <td>{video.title ?? video.video_uid}</td>
-                  <td>{video.platform}</td>
-                  <td>
-                    <span className={`status-chip status-${video.status ?? "queued"}`}>{video.status ?? "-"}</span>
-                  </td>
-                  <td>{video.last_job_id ?? "-"}</td>
-                </tr>
-              ))}
+              {videos.slice(0, 10).map((video) => {
+                const status = toDisplayStatus(video.status);
+                return (
+                  <tr key={video.id}>
+                    <td>{video.title ?? video.video_uid}</td>
+                    <td>{video.platform}</td>
+                    <td>
+                      <span className={`status-chip status-${status.css}`}>{status.label}</span>
+                    </td>
+                    <td>{video.last_job_id ?? "-"}</td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         )}

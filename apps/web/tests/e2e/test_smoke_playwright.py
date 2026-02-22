@@ -486,6 +486,34 @@ def _wait_for_call_count(state: MockApiState, key: str, expected: int, timeout_s
     )
 
 
+def _wait_for_http_path(state: MockApiState, path: str, timeout_sec: float = 5.0) -> None:
+    deadline = time.time() + timeout_sec
+    while time.time() < deadline:
+        with state.lock:
+            if any(item.get("path") == path for item in state.calls["http"]):
+                return
+        time.sleep(0.05)
+    raise AssertionError(f"Timed out waiting for HTTP path call: {path}")
+
+
+def _wait_for_http_query_fragment(
+    state: MockApiState,
+    path: str,
+    query_fragment: str,
+    timeout_sec: float = 5.0,
+) -> None:
+    deadline = time.time() + timeout_sec
+    while time.time() < deadline:
+        with state.lock:
+            if any(
+                item.get("path") == path and query_fragment in item.get("query", "")
+                for item in state.calls["http"]
+            ):
+                return
+        time.sleep(0.05)
+    raise AssertionError(f"Timed out waiting for HTTP query fragment: {path}?...{query_fragment}")
+
+
 def _seed_subscription(state: MockApiState, subscription_id: str, source_value: str) -> None:
     now = _utc_now()
     with state.lock:
@@ -598,10 +626,14 @@ def test_jobs_to_artifacts_query_navigation(page: Page, mock_api_state: MockApiS
     expect(page.get_by_role("heading", name="Job lookup")).to_be_visible()
 
     page.goto("/artifacts", wait_until="domcontentloaded")
+    expect(page.get_by_text("Enter a job ID or video URL to load artifact markdown and screenshots.")).to_be_visible()
     page.get_by_label("Job ID").fill(mock_api_state.job_id)
     page.get_by_role("button", name="Load artifact markdown").click()
 
     _wait_for_call_count(mock_api_state, "get_artifact_markdown", 1)
+    _wait_for_http_path(mock_api_state, "/api/v1/artifacts/assets")
+    _wait_for_http_query_fragment(mock_api_state, "/api/v1/artifacts/assets", "path=screenshots%2Fframe_0001.png")
+    _wait_for_http_query_fragment(mock_api_state, "/api/v1/artifacts/assets", "path=screenshots%2Fframe_0002.png")
     artifact_payload = mock_api_state.last_call("get_artifact_markdown")
     assert artifact_payload["job_id"] == mock_api_state.job_id
     assert artifact_payload["include_meta"] == "true"
@@ -609,5 +641,12 @@ def test_jobs_to_artifacts_query_navigation(page: Page, mock_api_state: MockApiS
     expect(page).to_have_url(re.compile(r"/artifacts\?job_id=job-e2e-001"))
     expect(page.get_by_role("heading", name="Artifact lookup")).to_be_visible()
     expect(page.get_by_role("heading", name="Embedded screenshots")).to_be_visible()
+    expect(page.get_by_role("heading", name="Screenshot index (fallback)")).to_be_visible()
+    screenshot_index = page.locator(
+        "section",
+        has=page.get_by_role("heading", name="Screenshot index (fallback)"),
+    )
+    expect(screenshot_index.locator("code", has_text="screenshots/frame_0001.png")).to_be_visible()
+    expect(screenshot_index.locator("code", has_text="screenshots/frame_0002.png")).to_be_visible()
     expect(page.get_by_role("heading", name="Markdown preview")).to_be_visible()
     expect(page.get_by_text("Key finding A")).to_be_visible()

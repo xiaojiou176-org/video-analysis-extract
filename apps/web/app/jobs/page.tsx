@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { toDisplayStatus } from "@/app/status";
 import { apiClient } from "@/lib/api/client";
 import { formatDateTime } from "@/lib/format";
 import { resolveSearchParams, type SearchParamsInput } from "@/lib/search-params";
@@ -20,6 +21,7 @@ export default async function JobsPage({ searchParams }: JobsPageProps) {
           return null;
         })
     : null;
+  const jobStatus = job ? toDisplayStatus(job.status) : null;
 
   return (
     <div className="stack">
@@ -60,7 +62,7 @@ export default async function JobsPage({ searchParams }: JobsPageProps) {
               </div>
               <div>
                 <div className="small">Status</div>
-                <span className={`status-chip status-${job.status}`}>{job.status}</span>
+                <span className={`status-chip status-${jobStatus?.css ?? "queued"}`}>{jobStatus?.label ?? "-"}</span>
               </div>
               <div>
                 <div className="small">Pipeline final</div>
@@ -96,15 +98,18 @@ export default async function JobsPage({ searchParams }: JobsPageProps) {
                   </tr>
                 </thead>
                 <tbody>
-                  {job.step_summary.map((step, index) => (
-                    <tr key={`${step.name}-${index}`}>
-                      <td>{step.name}</td>
-                      <td>{step.status}</td>
-                      <td>{step.attempt}</td>
-                      <td>{formatDateTime(step.started_at)}</td>
-                      <td>{formatDateTime(step.finished_at)}</td>
-                    </tr>
-                  ))}
+                  {job.step_summary.map((step, index) => {
+                    const stepStatus = toDisplayStatus(step.status);
+                    return (
+                      <tr key={`${step.name}-${index}`}>
+                        <td>{step.name}</td>
+                        <td>{stepStatus.label}</td>
+                        <td>{step.attempt}</td>
+                        <td>{formatDateTime(step.started_at)}</td>
+                        <td>{formatDateTime(step.finished_at)}</td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             )}
@@ -117,11 +122,15 @@ export default async function JobsPage({ searchParams }: JobsPageProps) {
                 <p className="small">No degradations recorded.</p>
               ) : (
                 <ul>
-                  {job.degradations.map((item, index) => (
-                    <li key={`${item.step ?? "unknown"}-${index}`}>
-                      <strong>{item.step ?? "unknown"}</strong>: {item.reason ?? item.status ?? "n/a"}
-                    </li>
-                  ))}
+                  {job.degradations.map((item, index) => {
+                    const degradationStatus =
+                      typeof item.status === "string" ? toDisplayStatus(item.status).label : "n/a";
+                    return (
+                      <li key={`${item.step ?? "unknown"}-${index}`}>
+                        <strong>{item.step ?? "unknown"}</strong>: {item.reason ?? degradationStatus}
+                      </li>
+                    );
+                  })}
                 </ul>
               )}
             </div>
