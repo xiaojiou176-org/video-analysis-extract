@@ -1,19 +1,12 @@
 import { MarkdownPreview } from "@/components/markdown-preview";
 import { apiClient } from "@/lib/api/client";
+import { buildArtifactAssetUrl } from "@/lib/api/url";
 import type { ArtifactMarkdownWithMeta } from "@/lib/api/types";
 import { resolveSearchParams, type SearchParamsInput } from "@/lib/search-params";
 
 type ArtifactsPageProps = {
   searchParams?: SearchParamsInput;
 };
-
-function getApiBaseUrl(): string {
-  const base =
-    process.env.NEXT_PUBLIC_API_BASE_URL ??
-    process.env.VD_API_BASE_URL ??
-    "http://127.0.0.1:8000";
-  return base.replace(/\/$/, "");
-}
 
 function extractFrameFiles(meta: Record<string, unknown> | null): string[] {
   if (!meta) {
@@ -43,11 +36,18 @@ function extractArtifactJobId(jobId: string, meta: Record<string, unknown> | nul
   return typeof rawJobId === "string" ? rawJobId : "";
 }
 
-function buildArtifactAssetUrl(jobId: string, path: string): string {
-  const target = new URL("/api/v1/artifacts/assets", getApiBaseUrl());
-  target.searchParams.set("job_id", jobId);
-  target.searchParams.set("path", path);
-  return target.toString();
+function inferImageMime(path: string): string {
+  const lower = path.toLowerCase();
+  if (lower.endsWith(".png")) {
+    return "image/png";
+  }
+  if (lower.endsWith(".webp")) {
+    return "image/webp";
+  }
+  if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) {
+    return "image/jpeg";
+  }
+  return "application/octet-stream";
 }
 
 export default async function ArtifactsPage({ searchParams }: ArtifactsPageProps) {
@@ -78,6 +78,7 @@ export default async function ArtifactsPage({ searchParams }: ArtifactsPageProps
   const artifactJobId = payload ? extractArtifactJobId(jobId, payload.meta) : "";
   const embeddedScreenshots = screenshotIndex.map((path) => ({
     path,
+    mimeType: inferImageMime(path),
     assetUrl: artifactJobId ? buildArtifactAssetUrl(artifactJobId, path) : null,
   }));
 
@@ -137,35 +138,26 @@ export default async function ArtifactsPage({ searchParams }: ArtifactsPageProps
                   <li key={`${item.path}-${index}`} className="stack">
                     {item.assetUrl ? (
                       <>
-                        <object
-                          aria-hidden="true"
-                          data={item.assetUrl}
-                          type="image/png"
-                          style={{ width: "1px", height: "1px", opacity: 0, position: "absolute", left: "-9999px" }}
-                        />
                         <a className="screenshot-link" href={item.assetUrl} target="_blank" rel="noreferrer">
                           Open screenshot {index + 1}
                         </a>
-                        <details>
-                          <summary className="small screenshot-preview-toggle">Preview</summary>
-                          <object
-                            aria-label={`Screenshot ${index + 1}: ${item.path}`}
-                            data={item.assetUrl}
-                            type="image/png"
-                            style={{
-                              width: "100%",
-                              minHeight: "120px",
-                              maxHeight: "320px",
-                              borderRadius: "8px",
-                              border: "1px solid var(--color-border)",
-                              background: "#f8fafc",
-                            }}
-                          >
-                            <p className="small">
-                              Unable to load screenshot, fallback path: <code>{item.path}</code>
-                            </p>
-                          </object>
-                        </details>
+                        <object
+                          aria-label={`Screenshot ${index + 1}: ${item.path}`}
+                          data={item.assetUrl}
+                          type={item.mimeType}
+                          style={{
+                            width: "100%",
+                            minHeight: "120px",
+                            maxHeight: "320px",
+                            borderRadius: "8px",
+                            border: "1px solid var(--color-border)",
+                            background: "#f8fafc",
+                          }}
+                        >
+                          <p className="small">
+                            Unable to load screenshot, fallback path: <code>{item.path}</code>
+                          </p>
+                        </object>
                       </>
                     ) : (
                       <p className="small">
