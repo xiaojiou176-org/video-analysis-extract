@@ -25,6 +25,7 @@ from worker.pipeline.runner_rendering import (
 from worker.pipeline.step_executor import utc_now_iso
 from worker.pipeline.types import PipelineContext, StepExecution
 from worker.pipeline.steps.llm_client import gemini_generate
+from worker.pipeline.steps.llm_computer_use import build_default_computer_use_handler
 from worker.pipeline.steps.llm_step_gates import (
     _digest_quality_ok,
     _include_thoughts_from_policy,
@@ -48,6 +49,22 @@ from worker.pipeline.steps.llm_schema import (
 
 
 GeminiGenerateReturn = tuple[str | None, str] | tuple[str | None, str, dict[str, Any]]
+
+
+def _computer_use_options(
+    ctx: PipelineContext,
+    state: dict[str, Any],
+    llm_policy: dict[str, Any],
+    section_policy: dict[str, Any],
+) -> dict[str, Any]:
+    options = build_computer_use_options(ctx, llm_policy, section_policy)
+    if options.get("enable_computer_use") and not options.get("computer_use_handler"):
+        options["computer_use_handler"] = build_default_computer_use_handler(
+            state=state,
+            llm_policy=llm_policy,
+            section_policy=section_policy,
+        )
+    return options
 
 
 def _translate_payload_to_chinese(
@@ -325,7 +342,7 @@ async def step_llm_outline(
         enable_function_calling=True,
         media_resolution=_media_resolution_from_policy(llm_policy, llm_outline_policy),
         max_function_call_rounds=_max_function_call_rounds(llm_policy, llm_outline_policy),
-        **build_computer_use_options(ctx, llm_policy, llm_outline_policy),
+        **_computer_use_options(ctx, state, llm_policy, llm_outline_policy),
     )
     generated, media_input, llm_meta = _unpack_gemini_result(generated_result)
 
@@ -500,7 +517,7 @@ async def step_llm_digest(
         enable_function_calling=True,
         media_resolution=_media_resolution_from_policy(llm_policy, llm_digest_policy),
         max_function_call_rounds=_max_function_call_rounds(llm_policy, llm_digest_policy),
-        **build_computer_use_options(ctx, llm_policy, llm_digest_policy),
+        **_computer_use_options(ctx, state, llm_policy, llm_digest_policy),
     )
     generated, media_input, llm_meta = _unpack_gemini_result(generated_result)
 

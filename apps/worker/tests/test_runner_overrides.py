@@ -215,10 +215,16 @@ def test_step_llm_outline_applies_overrides(monkeypatch: Any, tmp_path: Path) ->
     assert first["include_thoughts"] is True
     assert first["max_function_call_rounds"] == 3
     assert first["enable_computer_use"] is True
+    assert callable(first["computer_use_handler"])
     assert first["computer_use_require_confirmation"] is False
     assert first["computer_use_max_steps"] == 5
     assert first["computer_use_timeout_seconds"] == 8.0
     assert first["media_resolution"] == {"frame": "high", "image": "medium", "pdf": "low"}
+    computer_use_result = first["computer_use_handler"](action="click")
+    assert computer_use_result["status"] == "ok"
+    assert computer_use_result["ok"] is True
+    assert computer_use_result["executor"] == "no_op"
+    assert computer_use_result["target"]["url"] == "https://www.youtube.com/watch?v=demo"
 
 
 def test_cache_signature_includes_override_policies(tmp_path: Path) -> None:

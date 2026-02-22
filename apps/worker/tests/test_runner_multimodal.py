@@ -9,6 +9,7 @@ from typing import Any
 from worker.config import Settings
 from worker.pipeline import runner
 from worker.pipeline.steps import llm_client
+from worker.pipeline.steps.llm_computer_use import build_default_computer_use_handler
 
 
 def test_gemini_multimodal_falls_back_from_video_to_frames(monkeypatch: Any, tmp_path: Path) -> None:
@@ -405,6 +406,85 @@ def test_gemini_computer_use_requires_confirmation(monkeypatch: Any) -> None:
     assert call_meta[0]["name"] == "computer_use"
     assert call_meta[0]["status"] == "blocked"
     assert meta["computer_use"]["steps_used"] == 0
+
+
+def test_gemini_computer_use_default_handler_avoids_handler_missing(monkeypatch: Any) -> None:
+    class _FunctionCall:
+        def __init__(self, name: str, args: dict[str, Any]):
+            self.name = name
+            self.args = args
+
+    class _Part:
+        def __init__(self, *, text: str | None = None, function_call: Any = None):
+            self.text = text
+            self.function_call = function_call
+
+    class _FakeModels:
+        def __init__(self) -> None:
+            self.round = 0
+
+        def generate_content(self, *, model: str, contents: Any, config: Any) -> Any:
+            self.round += 1
+            if self.round == 1:
+                content = types.SimpleNamespace(
+                    parts=[_Part(function_call=_FunctionCall("computer_use", {"action": "click"}))]
+                )
+                return types.SimpleNamespace(text=None, candidates=[types.SimpleNamespace(content=content)])
+            content = types.SimpleNamespace(parts=[_Part(text='{"ok":true}')])
+            return types.SimpleNamespace(text='{"ok":true}', candidates=[types.SimpleNamespace(content=content)])
+
+    class _FakeClient:
+        def __init__(self, *, api_key: str):
+            self.api_key = api_key
+            self.models = _FakeModels()
+            self.files = object()
+            self.caches = object()
+
+    class _FakeThinkingConfig:
+        def __init__(self, **kwargs: Any):
+            self.kwargs = kwargs
+
+    class _FakeGenerateContentConfig:
+        def __init__(self, **kwargs: Any):
+            self.kwargs = kwargs
+
+    fake_types = types.SimpleNamespace(
+        ThinkingConfig=_FakeThinkingConfig,
+        GenerateContentConfig=_FakeGenerateContentConfig,
+        Content=lambda **kwargs: dict(kwargs),
+    )
+    fake_genai = types.ModuleType("google.genai")
+    fake_genai.Client = _FakeClient  # type: ignore[attr-defined]
+    fake_genai.types = fake_types  # type: ignore[attr-defined]
+
+    fake_google = types.ModuleType("google")
+    fake_google.genai = fake_genai  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "google", fake_google)
+    monkeypatch.setitem(sys.modules, "google.genai", fake_genai)
+
+    handler = build_default_computer_use_handler(
+        state={"source_url": "https://www.youtube.com/watch?v=demo"},
+        llm_policy={},
+        section_policy={},
+    )
+    settings = Settings(gemini_api_key="key")
+    text, media_input, meta = llm_client.gemini_generate(
+        settings,
+        "prompt",
+        llm_input_mode="text",
+        use_context_cache=False,
+        enable_function_calling=False,
+        enable_computer_use=True,
+        computer_use_handler=handler,
+        computer_use_require_confirmation=False,
+        computer_use_confirmed=True,
+    )
+
+    assert text == '{"ok":true}'
+    assert media_input == "text"
+    call_meta = meta["function_calling"]["calls"]
+    assert call_meta[0]["name"] == "computer_use"
+    assert call_meta[0]["status"] == "ok"
 
 
 def test_gemini_computer_use_honors_max_steps(monkeypatch: Any) -> None:
