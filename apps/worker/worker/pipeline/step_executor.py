@@ -409,7 +409,8 @@ async def execute_step(
         )
 
     skip_is_degrade = execution.status == "skipped" and execution.reason not in NON_DEGRADING_SKIP_REASONS
-    if execution.status == "failed" or execution.degraded or skip_is_degrade:
+    llm_hard_failed = step_name in {"llm_outline", "llm_digest"} and execution.status == "failed"
+    if (execution.status == "failed" and not llm_hard_failed) or execution.degraded or skip_is_degrade:
         append_degradation(
             state,
             step_name,

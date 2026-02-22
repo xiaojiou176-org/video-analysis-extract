@@ -96,7 +96,7 @@ def test_step_llm_outline_fails_when_provider_unavailable_by_default(tmp_path: P
     assert execution.reason == "gemini_api_key_missing"
 
 
-def test_step_llm_outline_allows_local_fallback_when_strict_flags_disabled(
+def test_step_llm_outline_still_fails_when_flags_disable_provider_soft_fail(
     monkeypatch: Any,
     tmp_path: Path,
 ) -> None:
@@ -118,9 +118,12 @@ def test_step_llm_outline_allows_local_fallback_when_strict_flags_disabled(
 
     execution = asyncio.run(runner._step_llm_outline(ctx, state))
 
-    assert execution.status == "succeeded"
-    assert execution.degraded is True
-    assert execution.output["provider"] == "local_rule"
+    assert execution.status == "failed"
+    assert execution.degraded is False
+    assert execution.output["provider"] == "gemini"
+    assert execution.output["llm_required"] is True
+    assert execution.output["llm_gate_passed"] is False
+    assert execution.output["hard_fail_reason"] == "gemini_api_key_missing"
 
 
 def test_run_pipeline_marks_degraded_when_non_llm_step_degraded(monkeypatch: Any, tmp_path: Path) -> None:
@@ -162,6 +165,9 @@ def test_run_pipeline_marks_degraded_when_non_llm_step_degraded(monkeypatch: Any
     )
 
     assert result["final_status"] == "degraded"
+    assert result["llm_required"] is True
+    assert result["llm_gate_passed"] is True
+    assert result["hard_fail_reason"] is None
 
 
 def test_run_pipeline_marks_failed_when_llm_step_failed(monkeypatch: Any, tmp_path: Path) -> None:
@@ -173,7 +179,13 @@ def test_run_pipeline_marks_failed_when_llm_step_failed(monkeypatch: Any, tmp_pa
             status="failed",
             reason="llm_provider_unavailable",
             error="llm_provider_unavailable",
-            degraded=True,
+            degraded=False,
+            output={
+                "provider": "gemini",
+                "llm_required": True,
+                "llm_gate_passed": False,
+                "hard_fail_reason": "llm_provider_unavailable",
+            },
         )
 
     async def _write(_: runner.PipelineContext, __: dict[str, Any]) -> runner.StepExecution:
@@ -204,6 +216,10 @@ def test_run_pipeline_marks_failed_when_llm_step_failed(monkeypatch: Any, tmp_pa
 
     assert result["final_status"] == "failed"
     assert result["steps"]["llm_outline"]["status"] == "failed"
+    assert result["steps"]["llm_outline"]["degraded"] is False
+    assert result["llm_required"] is True
+    assert result["llm_gate_passed"] is False
+    assert result["hard_fail_reason"] == "llm_provider_unavailable"
 
 
 def test_execute_step_uses_pipeline_llm_max_retries(monkeypatch: Any, tmp_path: Path) -> None:

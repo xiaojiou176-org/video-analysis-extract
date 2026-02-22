@@ -135,6 +135,12 @@ def test_step_llm_outline_applies_overrides(monkeypatch: Any, tmp_path: Path) ->
         model: str | None = None,
         temperature: float | None = None,
         max_output_tokens: int | None = None,
+        response_schema: dict[str, Any] | None = None,
+        response_mime_type: str | None = None,
+        thinking_level: str | None = None,
+        include_thoughts: bool | None = None,
+        use_context_cache: bool = True,
+        enable_function_calling: bool = True,
     ) -> tuple[str | None, str]:
         calls.append(
             {
@@ -144,6 +150,12 @@ def test_step_llm_outline_applies_overrides(monkeypatch: Any, tmp_path: Path) ->
                 "model": model,
                 "temperature": temperature,
                 "max_output_tokens": max_output_tokens,
+                "response_schema": response_schema,
+                "response_mime_type": response_mime_type,
+                "thinking_level": thinking_level,
+                "include_thoughts": include_thoughts,
+                "use_context_cache": use_context_cache,
+                "enable_function_calling": enable_function_calling,
             }
         )
         return (

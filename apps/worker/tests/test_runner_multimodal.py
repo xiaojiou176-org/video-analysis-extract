@@ -17,31 +17,58 @@ def test_gemini_multimodal_falls_back_from_video_to_frames(monkeypatch: Any, tmp
 
     calls: list[Any] = []
 
-    class _FakeModel:
-        def generate_content(self, content: Any) -> Any:
-            calls.append(content)
-            if isinstance(content, list) and any(
+    class _FakeModels:
+        def generate_content(self, *, model: str, contents: Any, config: Any) -> Any:
+            calls.append({"model": model, "contents": contents, "config": config})
+            if isinstance(contents, list) and any(
                 isinstance(item, dict) and item.get("kind") == "video"
-                for item in content
+                for item in contents
             ):
                 raise RuntimeError("video-input-failed")
-            if isinstance(content, list) and any(
+            if isinstance(contents, list) and any(
                 isinstance(item, dict) and str(item.get("mime_type", "")).startswith("image/")
-                for item in content
+                for item in contents
             ):
                 return types.SimpleNamespace(text='{"ok":true}')
             return types.SimpleNamespace(text=None)
 
-    fake_model = _FakeModel()
-    fake_genai = types.ModuleType("google.generativeai")
-    fake_genai.configure = lambda **_: None  # type: ignore[attr-defined]
-    fake_genai.GenerativeModel = lambda _name: fake_model  # type: ignore[attr-defined]
-    fake_genai.upload_file = lambda *, path: {"kind": "video", "path": path}  # type: ignore[attr-defined]
+    class _FakeFiles:
+        @staticmethod
+        def upload(*, file: str) -> dict[str, str]:
+            return {"kind": "video", "path": file}
+
+    class _FakeClient:
+        def __init__(self, *, api_key: str):
+            self.api_key = api_key
+            self.models = _FakeModels()
+            self.files = _FakeFiles()
+
+    class _FakePart:
+        @staticmethod
+        def from_bytes(*, data: bytes, mime_type: str) -> dict[str, Any]:
+            return {"mime_type": mime_type, "size": len(data)}
+
+    class _FakeThinkingConfig:
+        def __init__(self, **kwargs: Any):
+            self.kwargs = kwargs
+
+    class _FakeGenerateContentConfig:
+        def __init__(self, **kwargs: Any):
+            self.kwargs = kwargs
+
+    fake_types = types.SimpleNamespace(
+        Part=_FakePart,
+        ThinkingConfig=_FakeThinkingConfig,
+        GenerateContentConfig=_FakeGenerateContentConfig,
+    )
+    fake_genai = types.ModuleType("google.genai")
+    fake_genai.Client = _FakeClient  # type: ignore[attr-defined]
+    fake_genai.types = fake_types  # type: ignore[attr-defined]
 
     fake_google = types.ModuleType("google")
-    fake_google.generativeai = fake_genai  # type: ignore[attr-defined]
+    fake_google.genai = fake_genai  # type: ignore[attr-defined]
     monkeypatch.setitem(sys.modules, "google", fake_google)
-    monkeypatch.setitem(sys.modules, "google.generativeai", fake_genai)
+    monkeypatch.setitem(sys.modules, "google.genai", fake_genai)
 
     settings = Settings(gemini_api_key="key", pipeline_max_frames=4)
     text, media_input = runner._gemini_generate(

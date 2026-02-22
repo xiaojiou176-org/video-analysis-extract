@@ -34,7 +34,7 @@
     },
     "LLMMode": {
       "type": "string",
-      "enum": ["gemini", "local_rule"]
+      "enum": ["gemini"]
     },
     "PipelineMode": {
       "type": "string",
@@ -461,7 +461,18 @@
     },
     "PipelineResult": {
       "type": "object",
-      "required": ["job_id", "attempt", "final_status", "steps", "artifacts", "degradations", "completed_at"],
+      "required": [
+        "job_id",
+        "attempt",
+        "final_status",
+        "steps",
+        "artifacts",
+        "degradations",
+        "llm_required",
+        "llm_gate_passed",
+        "hard_fail_reason",
+        "completed_at"
+      ],
       "properties": {
         "job_id": {
           "$ref": "#/$defs/UUID"
@@ -530,6 +541,15 @@
               "type": "null"
             }
           ]
+        },
+        "llm_required": {
+          "type": "boolean"
+        },
+        "llm_gate_passed": {
+          "type": "boolean"
+        },
+        "hard_fail_reason": {
+          "type": ["string", "null"]
         },
         "retry": {
           "$ref": "#/$defs/RetryMeta"

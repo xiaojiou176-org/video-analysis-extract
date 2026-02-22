@@ -80,6 +80,11 @@ class Settings:
     gemini_digest_model: str = "gemini-3.1-pro-preview"
     gemini_fast_model: str = "gemini-3-flash-preview"
     gemini_embedding_model: str = "gemini-embedding-001"
+    gemini_thinking_level: str = "high"
+    gemini_include_thoughts: bool = False
+    gemini_context_cache_enabled: bool = True
+    gemini_context_cache_ttl_seconds: int = 21600
+    gemini_context_cache_min_chars: int = 4096
     youtube_api_key: str | None = None
     notification_enabled: bool = False
     resend_api_key: str | None = None
@@ -166,6 +171,21 @@ class Settings:
                 "GEMINI_EMBEDDING_MODEL",
                 "gemini-embedding-001",
             ),
+            gemini_thinking_level=os.getenv("GEMINI_THINKING_LEVEL", "high"),
+            gemini_include_thoughts=_parse_bool(
+                os.getenv("GEMINI_INCLUDE_THOUGHTS"),
+                default=False,
+            ),
+            gemini_context_cache_enabled=_parse_bool(
+                os.getenv("GEMINI_CONTEXT_CACHE_ENABLED"),
+                default=True,
+            ),
+            gemini_context_cache_ttl_seconds=int(
+                os.getenv("GEMINI_CONTEXT_CACHE_TTL_SECONDS", "21600")
+            ),
+            gemini_context_cache_min_chars=int(
+                os.getenv("GEMINI_CONTEXT_CACHE_MIN_CHARS", "4096")
+            ),
             youtube_api_key=os.getenv("YOUTUBE_API_KEY"),
             notification_enabled=_parse_bool(
                 os.getenv("NOTIFICATION_ENABLED"),
@@ -212,4 +232,11 @@ class Settings:
             raise RuntimeError("GEMINI_OUTLINE_MODEL is not configured")
         if _is_blank(self.gemini_digest_model):
             raise RuntimeError("GEMINI_DIGEST_MODEL is not configured")
+        thinking_level = str(self.gemini_thinking_level or "").strip().lower()
+        if thinking_level not in {"minimal", "low", "medium", "high"}:
+            raise RuntimeError("GEMINI_THINKING_LEVEL must be one of: minimal, low, medium, high")
+        if self.gemini_context_cache_ttl_seconds < 60:
+            raise RuntimeError("GEMINI_CONTEXT_CACHE_TTL_SECONDS must be >= 60")
+        if self.gemini_context_cache_min_chars < 0:
+            raise RuntimeError("GEMINI_CONTEXT_CACHE_MIN_CHARS must be >= 0")
         return self

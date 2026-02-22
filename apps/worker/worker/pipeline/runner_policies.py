@@ -103,11 +103,28 @@ def build_llm_policy_section(default_model: str, section: dict[str, Any]) -> dic
 
 def build_llm_policy(settings: Settings, overrides: dict[str, Any]) -> dict[str, Any]:
     section = override_section(overrides, "llm")
+    speed_priority = coerce_bool(section.get("speed_priority"), default=False)
+    thinking_level = str(section.get("thinking_level") or "").strip().lower()
+    if thinking_level not in {"minimal", "low", "medium", "high"}:
+        thinking_level = "low" if speed_priority else "high"
+
+    default_model = settings.gemini_model
+    if speed_priority and "model" not in section:
+        default_model = settings.gemini_fast_model
+
     outline_section = {**section, **override_section(overrides, "llm_outline")}
     digest_section = {**section, **override_section(overrides, "llm_digest")}
-    outline = build_llm_policy_section(settings.gemini_outline_model, outline_section)
-    digest = build_llm_policy_section(settings.gemini_digest_model, digest_section)
-    model = str(section.get("model") or settings.gemini_model).strip() or settings.gemini_model
+
+    outline_default_model = settings.gemini_outline_model
+    if speed_priority and "model" not in outline_section:
+        outline_default_model = settings.gemini_fast_model
+    digest_default_model = settings.gemini_digest_model
+    if speed_priority and "model" not in digest_section:
+        digest_default_model = settings.gemini_fast_model
+
+    outline = build_llm_policy_section(outline_default_model, outline_section)
+    digest = build_llm_policy_section(digest_default_model, digest_section)
+    model = str(section.get("model") or default_model).strip() or default_model
     temperature = coerce_float(section.get("temperature"), None)
     if temperature is not None:
         temperature = min(2.0, max(0.0, temperature))
@@ -121,6 +138,8 @@ def build_llm_policy(settings: Settings, overrides: dict[str, Any]) -> dict[str,
         "model": model,
         "temperature": temperature,
         "max_output_tokens": max_output_tokens,
+        "speed_priority": speed_priority,
+        "thinking_level": thinking_level,
         "outline": outline,
         "digest": digest,
     }

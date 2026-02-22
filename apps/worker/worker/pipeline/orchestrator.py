@@ -104,6 +104,32 @@ def resolve_pipeline_status(
     return "succeeded"
 
 
+def resolve_llm_gate(step_records: dict[str, dict[str, Any]]) -> tuple[bool, bool, str | None]:
+    llm_steps = ("llm_outline", "llm_digest")
+    llm_required = True
+    hard_fail_reason: str | None = None
+
+    for step_name in llm_steps:
+        record = dict(step_records.get(step_name) or {})
+        status = str(record.get("status") or "").strip().lower()
+        if status == "failed":
+            hard_fail_reason = (
+                str(record.get("reason") or record.get("error") or "llm_step_failed").strip()
+                or "llm_step_failed"
+            )
+            return llm_required, False, hard_fail_reason
+
+    all_present = all(step_name in step_records for step_name in llm_steps)
+    all_passed = all(
+        str((step_records.get(step_name) or {}).get("status") or "").strip().lower()
+        in {"succeeded", "skipped"}
+        for step_name in llm_steps
+    )
+    if all_present and all_passed:
+        return llm_required, True, None
+    return llm_required, False, "llm_step_missing"
+
+
 async def run_pipeline(
     settings: Settings,
     sqlite_store: SQLiteStateStore,
@@ -208,12 +234,12 @@ async def run_pipeline(
             (
                 "llm_outline",
                 lambda ctx, state: step_llm_outline(ctx, state, gemini_generate_fn=gemini_generate),
-                False,
+                True,
             ),
             (
                 "llm_digest",
                 lambda ctx, state: step_llm_digest(ctx, state, gemini_generate_fn=gemini_generate),
-                False,
+                True,
             ),
             ("write_artifacts", step_write_artifacts, True),
         ]
@@ -238,6 +264,7 @@ async def run_pipeline(
         state["steps"],
         degradations=list(state.get("degradations") or []),
     )
+    llm_required, llm_gate_passed, hard_fail_reason = resolve_llm_gate(state["steps"])
 
     return {
         "job_id": job_id,
@@ -248,6 +275,9 @@ async def run_pipeline(
         "artifact_dir": state.get("artifact_dir"),
         "artifacts": state.get("artifacts", {}),
         "degradations": state.get("degradations", []),
+        "llm_required": llm_required,
+        "llm_gate_passed": llm_gate_passed,
+        "hard_fail_reason": hard_fail_reason,
         "llm_input_mode": state.get("llm_input_mode"),
         "llm_media_input": state.get("llm_media_input"),
         "resume": state.get("resume", {}),
