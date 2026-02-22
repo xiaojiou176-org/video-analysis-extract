@@ -30,6 +30,11 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
 
       <section className="card stack">
         <h2>Notification config</h2>
+        {config ? (
+          <p className="small">
+            Created: {formatDateTime(config.created_at)} | Updated: {formatDateTime(config.updated_at)}
+          </p>
+        ) : null}
         <form action={updateNotificationConfigAction} className="stack">
           <label className="inline">
             <input name="enabled" type="checkbox" defaultChecked={config?.enabled ?? true} />
@@ -37,7 +42,7 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
           </label>
 
           <label>
-            Recipient email
+            Recipient email *
             <input
               name="to_email"
               type="email"
@@ -63,6 +68,9 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
               min={0}
               max={23}
               defaultValue={config?.daily_digest_hour_utc ?? ""}
+              data-disabled-unless-checked="daily_digest_enabled"
+              data-field-kind="identifier"
+              disabled={!config?.daily_digest_enabled}
             />
           </label>
 
@@ -80,11 +88,6 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
           </button>
         </form>
 
-        {config ? (
-          <p className="small">
-            Created: {formatDateTime(config.created_at)} | Updated: {formatDateTime(config.updated_at)}
-          </p>
-        ) : null}
       </section>
 
       <section className="card stack">

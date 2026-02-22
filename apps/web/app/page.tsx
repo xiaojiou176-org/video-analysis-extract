@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import { pollIngestAction, processVideoAction } from "@/app/actions";
 import { toDisplayStatus } from "@/app/status";
 import { apiClient } from "@/lib/api/client";
@@ -14,6 +16,17 @@ function renderAlert(status: string, message: string) {
 
   const className = status === "error" ? "alert error" : "alert success";
   return <p className={className}>{message}</p>;
+}
+
+function toPlatformLabel(platform: string): string {
+  const normalized = platform.trim().toLowerCase();
+  if (normalized === "youtube") {
+    return "YouTube";
+  }
+  if (normalized === "bilibili") {
+    return "Bilibili";
+  }
+  return platform;
 }
 
 export default async function DashboardPage({ searchParams }: DashboardProps) {
@@ -52,61 +65,71 @@ export default async function DashboardPage({ searchParams }: DashboardProps) {
       <section className="grid grid-cols-2">
         <div className="card stack">
           <h2>Poll ingest</h2>
-          <form action={pollIngestAction} className="stack">
+          <form action={pollIngestAction} className="stack form-fill">
             <label>
               Platform (optional)
               <select name="platform" defaultValue="">
-                <option value="">all</option>
-                <option value="youtube">youtube</option>
-                <option value="bilibili">bilibili</option>
+                <option value="">All</option>
+                <option value="youtube">YouTube</option>
+                <option value="bilibili">Bilibili</option>
               </select>
             </label>
 
             <label>
-              Max new videos
+              Max new videos *
               <input name="max_new_videos" type="number" min={1} max={500} defaultValue={50} />
             </label>
 
-            <button className="primary" type="submit">
-              Trigger ingest poll
-            </button>
+            <div className="submit-row">
+              <button className="primary" type="submit">
+                Trigger ingest poll
+              </button>
+            </div>
           </form>
         </div>
 
         <div className="card stack">
           <h2>Process a video</h2>
-          <form action={processVideoAction} className="stack">
+          <form action={processVideoAction} className="stack form-fill" data-auto-disable-required="true">
             <label>
-              Platform
+              Platform *
               <select name="platform" defaultValue="youtube">
-                <option value="youtube">youtube</option>
-                <option value="bilibili">bilibili</option>
+                <option value="youtube">YouTube</option>
+                <option value="bilibili">Bilibili</option>
               </select>
             </label>
 
             <label>
-              Video URL
-              <input name="url" type="url" required placeholder="https://www.youtube.com/watch?v=..." />
+              Video URL *
+              <input
+                name="url"
+                type="url"
+                required
+                placeholder="https://www.youtube.com/watch?v=..."
+                data-field-kind="url"
+              />
             </label>
 
             <label>
-              Mode
+              Mode *
               <select name="mode" defaultValue="full">
-                <option value="full">full</option>
-                <option value="text_only">text_only</option>
-                <option value="refresh_comments">refresh_comments</option>
-                <option value="refresh_llm">refresh_llm</option>
+                <option value="full">Full</option>
+                <option value="text_only">Text Only</option>
+                <option value="refresh_comments">Refresh Comments</option>
+                <option value="refresh_llm">Refresh LLM</option>
               </select>
             </label>
 
-            <label className="inline">
-              <input name="force" type="checkbox" />
-              Force run
-            </label>
+            <div className="checkbox-row">
+              <input id="force-run" name="force" type="checkbox" />
+              <label htmlFor="force-run">Force run</label>
+            </div>
 
-            <button className="primary" type="submit">
-              Start processing
-            </button>
+            <div className="submit-row">
+              <button className="primary" type="submit">
+                Start processing
+              </button>
+            </div>
           </form>
         </div>
       </section>
@@ -114,7 +137,7 @@ export default async function DashboardPage({ searchParams }: DashboardProps) {
       <section className="card stack">
         <h2>Recent videos</h2>
         {videos.length === 0 ? (
-          <p className="small">No videos yet.</p>
+          <p className="small empty-state">No videos yet.</p>
         ) : (
           <table>
             <thead>
@@ -131,11 +154,17 @@ export default async function DashboardPage({ searchParams }: DashboardProps) {
                 return (
                   <tr key={video.id}>
                     <td>{video.title ?? video.video_uid}</td>
-                    <td>{video.platform}</td>
+                    <td>{toPlatformLabel(video.platform)}</td>
                     <td>
                       <span className={`status-chip status-${status.css}`}>{status.label}</span>
                     </td>
-                    <td>{video.last_job_id ?? "-"}</td>
+                    <td>
+                      {video.last_job_id ? (
+                        <Link href={`/jobs?job_id=${video.last_job_id}`}>{video.last_job_id}</Link>
+                      ) : (
+                        "-"
+                      )}
+                    </td>
                   </tr>
                 );
               })}
