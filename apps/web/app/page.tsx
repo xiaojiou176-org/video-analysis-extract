@@ -76,7 +76,7 @@ export default async function DashboardPage({ searchParams }: DashboardProps) {
             </label>
 
             <label>
-              Max new videos *
+              Max new videos
               <input name="max_new_videos" type="number" min={1} max={500} defaultValue={50} />
             </label>
 

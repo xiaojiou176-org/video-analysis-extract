@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { usePathname } from "next/navigation";
 
 function isBlank(value: string | null | undefined): boolean {
   return !value || value.trim().length === 0;
@@ -75,6 +76,8 @@ function evaluateAllForms(): void {
 }
 
 export function FormValidationController(): null {
+  const pathname = usePathname();
+
   useEffect(() => {
     const onInput = (event: Event) => {
       const target = event.target;
@@ -87,21 +90,15 @@ export function FormValidationController(): null {
       }
     };
 
-    const observer = new MutationObserver(() => {
-      evaluateAllForms();
-    });
-
     evaluateAllForms();
     document.addEventListener("input", onInput, true);
     document.addEventListener("change", onInput, true);
-    observer.observe(document.body, { childList: true, subtree: true });
 
     return () => {
       document.removeEventListener("input", onInput, true);
       document.removeEventListener("change", onInput, true);
-      observer.disconnect();
     };
-  }, []);
+  }, [pathname]);
 
   return null;
 }

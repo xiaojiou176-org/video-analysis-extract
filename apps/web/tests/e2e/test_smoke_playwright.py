@@ -92,6 +92,7 @@ class MockApiState:
     notification_config: dict[str, Any] = field(default_factory=dict)
     calls: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
     job_id: str = "job-e2e-001"
+    health_status: int = int(HTTPStatus.OK)
 
     def __post_init__(self) -> None:
         self.reset()
@@ -120,6 +121,7 @@ class MockApiState:
                 "get_job": [],
                 "get_artifact_markdown": [],
             }
+            self.health_status = int(HTTPStatus.OK)
 
     def record(self, key: str, payload: dict[str, Any]) -> None:
         with self.lock:
@@ -178,7 +180,7 @@ class MockApiState:
         return {
             "markdown": "# Digest Summary\n\n- Key finding A\n- Key finding B\n",
             "meta": {
-                "frame_files": ["screenshots/frame_0001.png", "screenshots/frame_0002.png"],
+                "frame_files": ["screenshots/frame_0001.png", "screenshots/frame_0002.webp"],
                 "job": {"id": self.job_id},
             },
         }
@@ -245,6 +247,11 @@ def _mock_handler(state: MockApiState) -> type[BaseHTTPRequestHandler]:
                     self._send_json(HTTPStatus.OK, state.subscriptions)
                 return
 
+            if path == "/healthz":
+                status = HTTPStatus(state.health_status)
+                self._send_json(status, {"status": "ok" if status == HTTPStatus.OK else "degraded"})
+                return
+
             if path == "/api/v1/videos":
                 now = _utc_now()
                 videos = [
@@ -291,6 +298,13 @@ def _mock_handler(state: MockApiState) -> type[BaseHTTPRequestHandler]:
                 return
 
             if path == "/api/v1/artifacts/assets":
+                path_param = query.get("path", [""])[0].lower()
+                if path_param.endswith(".webp"):
+                    self._send_binary(HTTPStatus.OK, PING_IMAGE_BYTES, "image/webp")
+                    return
+                if path_param.endswith(".jpg") or path_param.endswith(".jpeg"):
+                    self._send_binary(HTTPStatus.OK, PING_IMAGE_BYTES, "image/jpeg")
+                    return
                 self._send_binary(HTTPStatus.OK, PING_IMAGE_BYTES, "image/png")
                 return
 
@@ -593,6 +607,7 @@ def test_external_web_base_url_env_parsing(monkeypatch: pytest.MonkeyPatch) -> N
 def test_dashboard_trigger_ingest_poll_button(page: Page, mock_api_state: MockApiState) -> None:
     page.goto("/", wait_until="domcontentloaded")
     expect(page.get_by_role("heading", name="Poll ingest")).to_be_visible()
+    expect(page.get_by_text("API health: Healthy")).to_be_visible()
     page.get_by_role("button", name="Trigger ingest poll").click()
 
     _wait_for_call_count(mock_api_state, "poll_ingest", 1)
@@ -601,12 +616,21 @@ def test_dashboard_trigger_ingest_poll_button(page: Page, mock_api_state: MockAp
     assert page.url.startswith("http://127.0.0.1:")
 
 
+def test_dashboard_health_chip_degraded_state(page: Page, mock_api_state: MockApiState) -> None:
+    mock_api_state.health_status = int(HTTPStatus.SERVICE_UNAVAILABLE)
+    page.goto("/", wait_until="domcontentloaded")
+    expect(page.get_by_text("API health: Degraded")).to_be_visible()
+
+
 def test_dashboard_start_processing_button(page: Page, mock_api_state: MockApiState) -> None:
     page.goto("/", wait_until="domcontentloaded")
+    start_button = page.get_by_role("button", name="Start processing")
+    expect(start_button).to_be_disabled()
     page.get_by_label("Video URL").fill("https://www.youtube.com/watch?v=e2e001")
+    expect(start_button).to_be_enabled()
     page.get_by_label("Mode").select_option("text_only")
     page.get_by_role("checkbox", name="Force run").check()
-    page.get_by_role("button", name="Start processing").click()
+    start_button.click()
 
     _wait_for_call_count(mock_api_state, "process_video", 1)
     process_payload = mock_api_state.last_call("process_video")
@@ -649,8 +673,11 @@ def test_subscriptions_delete_button(page: Page, mock_api_state: MockApiState) -
 
 def test_settings_save_config_button(page: Page, mock_api_state: MockApiState) -> None:
     page.goto("/settings", wait_until="domcontentloaded")
+    digest_hour = page.get_by_label("Daily digest hour (UTC)")
+    expect(digest_hour).to_be_disabled()
     page.get_by_label("Recipient email").fill("ops-e2e@example.com")
     page.get_by_label("Enable daily digest").check()
+    expect(digest_hour).to_be_enabled()
     page.get_by_label("Daily digest hour (UTC)").fill("7")
     page.get_by_role("button", name="Save config").click()
 
@@ -685,14 +712,14 @@ def test_jobs_to_artifacts_query_navigation(page: Page, mock_api_state: MockApiS
     expect(page.get_by_role("heading", name="Job lookup")).to_be_visible()
 
     page.goto("/artifacts", wait_until="domcontentloaded")
-    expect(page.get_by_text("Provide either")).to_be_visible()
+    expect(page.get_by_role("heading", name="Artifact lookup")).to_be_visible()
     page.get_by_label("Job ID").fill(mock_api_state.job_id)
     page.get_by_role("button", name="Load artifacts").click()
 
     _wait_for_call_count(mock_api_state, "get_artifact_markdown", 1)
     _wait_for_http_path(mock_api_state, "/api/v1/artifacts/assets")
     _wait_for_http_query_fragment(mock_api_state, "/api/v1/artifacts/assets", "path=screenshots%2Fframe_0001.png")
-    _wait_for_http_query_fragment(mock_api_state, "/api/v1/artifacts/assets", "path=screenshots%2Fframe_0002.png")
+    _wait_for_http_query_fragment(mock_api_state, "/api/v1/artifacts/assets", "path=screenshots%2Fframe_0002.webp")
     artifact_payload = mock_api_state.last_call("get_artifact_markdown")
     assert artifact_payload["job_id"] == mock_api_state.job_id
     assert artifact_payload["include_meta"] == "true"
@@ -706,6 +733,17 @@ def test_jobs_to_artifacts_query_navigation(page: Page, mock_api_state: MockApiS
         has=page.get_by_role("heading", name="Screenshot index (fallback)"),
     )
     expect(screenshot_index.locator("code", has_text="screenshots/frame_0001.png")).to_be_visible()
-    expect(screenshot_index.locator("code", has_text="screenshots/frame_0002.png")).to_be_visible()
+    expect(screenshot_index.locator("code", has_text="screenshots/frame_0002.webp")).to_be_visible()
     expect(page.get_by_role("heading", name="Markdown preview")).to_be_visible()
     expect(page.get_by_text("Key finding A")).to_be_visible()
+
+
+def test_artifacts_lookup_form_requires_single_field(page: Page) -> None:
+    page.goto("/artifacts", wait_until="domcontentloaded")
+    submit = page.get_by_role("button", name="Load artifacts")
+
+    expect(submit).to_be_disabled()
+    page.get_by_label("Job ID").fill("job-e2e-001")
+    expect(submit).to_be_enabled()
+    page.get_by_label("Video URL").fill("https://www.youtube.com/watch?v=e2e001")
+    expect(submit).to_be_disabled()

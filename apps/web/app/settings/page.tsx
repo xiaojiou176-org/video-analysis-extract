@@ -42,7 +42,7 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
           </label>
 
           <label>
-            Recipient email *
+            Recipient email
             <input
               name="to_email"
               type="email"
