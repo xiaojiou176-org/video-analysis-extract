@@ -3,6 +3,7 @@ import Link from "next/link";
 
 import { FormValidationController } from "@/components/form-validation-controller";
 import { AppNav } from "@/components/nav";
+import { buildApiUrl } from "@/lib/api/url";
 
 import "./globals.css";
 
@@ -13,26 +14,29 @@ export const metadata: Metadata = {
 
 type ApiHealthState = "healthy" | "unhealthy" | "unknown";
 
-function resolveApiBaseUrl(): string {
-  const base =
-    process.env.NEXT_PUBLIC_API_BASE_URL ??
-    process.env.VD_API_BASE_URL ??
-    "http://127.0.0.1:8000";
-  return base.replace(/\/$/, "");
-}
+const HEALTH_TIMEOUT_MS = 1000;
 
 async function fetchApiHealthState(): Promise<ApiHealthState> {
-  const endpoint = `${resolveApiBaseUrl()}/healthz`;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), HEALTH_TIMEOUT_MS);
   try {
-    const response = await fetch(endpoint, { cache: "no-store" });
+    const response = await fetch(buildApiUrl("/healthz"), {
+      cache: "no-store",
+      signal: controller.signal,
+    });
     return response.ok ? "healthy" : "unhealthy";
   } catch {
     return "unknown";
+  } finally {
+    clearTimeout(timeout);
   }
 }
 
-export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  const healthPromise = fetchApiHealthState();
+export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  const healthUrl = buildApiUrl("/healthz");
+  const healthState = await fetchApiHealthState();
+  const healthLabel =
+    healthState === "healthy" ? "Healthy" : healthState === "unhealthy" ? "Degraded" : "Unknown";
   return (
     <html lang="en">
       <body>
@@ -47,8 +51,11 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
               <h1 className="site-title">Operations Console</h1>
             </div>
             <div className="header-links">
-              <Link href={`${resolveApiBaseUrl()}/healthz`} target="_blank" rel="noreferrer">
-                <ApiHealthChip healthPromise={healthPromise} />
+              <Link href={healthUrl} target="_blank" rel="noreferrer">
+                <span className="api-health-chip" aria-live="polite">
+                  <span className={`api-health-dot api-health-dot-${healthState}`} aria-hidden="true" />
+                  API health: {healthLabel}
+                </span>
               </Link>
             </div>
           </header>
@@ -61,16 +68,5 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         </div>
       </body>
     </html>
-  );
-}
-
-async function ApiHealthChip({ healthPromise }: { healthPromise: Promise<ApiHealthState> }) {
-  const status = await healthPromise;
-  const label = status === "healthy" ? "Healthy" : status === "unhealthy" ? "Degraded" : "Unknown";
-  return (
-    <span className="api-health-chip" aria-live="polite">
-      <span className={`api-health-dot api-health-dot-${status}`} aria-hidden="true" />
-      API health: {label}
-    </span>
   );
 }

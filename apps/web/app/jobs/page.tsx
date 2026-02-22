@@ -2,27 +2,11 @@ import Link from "next/link";
 
 import { toDisplayStatus } from "@/app/status";
 import { apiClient } from "@/lib/api/client";
+import { buildArtifactAssetUrl } from "@/lib/api/url";
 import { formatDateTime, formatDateTimeWithSeconds } from "@/lib/format";
 import { resolveSearchParams, type SearchParamsInput } from "@/lib/search-params";
 
-type JobsPageProps = {
-  searchParams?: SearchParamsInput;
-};
-
-function getApiBaseUrl(): string {
-  const base =
-    process.env.NEXT_PUBLIC_API_BASE_URL ??
-    process.env.VD_API_BASE_URL ??
-    "http://127.0.0.1:8000";
-  return base.replace(/\/$/, "");
-}
-
-function buildArtifactAssetUrl(jobId: string, path: string): string {
-  const target = new URL("/api/v1/artifacts/assets", getApiBaseUrl());
-  target.searchParams.set("job_id", jobId);
-  target.searchParams.set("path", path);
-  return target.toString();
-}
+type JobsPageProps = { searchParams?: SearchParamsInput };
 
 export default async function JobsPage({ searchParams }: JobsPageProps) {
   const { job_id: jobId } = await resolveSearchParams(searchParams, ["job_id"] as const);

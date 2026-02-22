@@ -16,6 +16,7 @@ import type {
   VideoProcessRequest,
   VideoProcessResponse,
 } from "@/lib/api/types";
+import { resolveApiBaseUrl } from "@/lib/api/url";
 
 type RequestOptions = Omit<RequestInit, "body"> & {
   body?: unknown;
@@ -47,35 +48,8 @@ function normalizeJob(job: Job): Job {
   };
 }
 
-function getApiBaseUrl(): string {
-  const rawBase = process.env.NEXT_PUBLIC_API_BASE_URL ?? process.env.VD_API_BASE_URL;
-  const base = rawBase?.trim();
-  if (!base) {
-    throw new Error(
-      "API base URL is not configured. Set NEXT_PUBLIC_API_BASE_URL (preferred) or VD_API_BASE_URL.",
-    );
-  }
-
-  let parsed: URL;
-  try {
-    parsed = new URL(base);
-  } catch {
-    throw new Error(
-      `Invalid API base URL '${base}'. NEXT_PUBLIC_API_BASE_URL or VD_API_BASE_URL must be an absolute http(s) URL.`,
-    );
-  }
-
-  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-    throw new Error(
-      `Invalid API base URL protocol '${parsed.protocol}'. Use http:// or https://.`,
-    );
-  }
-
-  return base.replace(/\/$/, "");
-}
-
 function buildUrl(path: string, query?: Record<string, string | number | boolean | null | undefined>): string {
-  const target = new URL(path, getApiBaseUrl());
+  const target = new URL(path, resolveApiBaseUrl());
   if (!query) {
     return target.toString();
   }
@@ -99,7 +73,7 @@ async function parseError(response: Response): Promise<string> {
     if (payload && typeof payload === "object") {
       const detail = payload["detail"];
       if (typeof detail === "string") {
-        detailMessage = detail;
+        return detail;
       }
       const message = payload["message"];
       if (typeof message === "string") {
