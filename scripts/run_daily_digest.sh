@@ -7,7 +7,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$ROOT_DIR/scripts/lib/load_env.sh"
 # shellcheck source=./scripts/lib/http_api.sh
 source "$ROOT_DIR/scripts/lib/http_api.sh"
-load_env_file "$ROOT_DIR/.env.local" "$SCRIPT_NAME"
+load_repo_env "$ROOT_DIR" "$SCRIPT_NAME"
 
 VD_API_BASE_URL="${VD_API_BASE_URL:-http://127.0.0.1:8000}"
 DIGEST_DATE="${DIGEST_DATE:-$(date -u +%F)}"

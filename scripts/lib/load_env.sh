@@ -21,3 +21,29 @@ load_env_file() {
 
   printf '[%s] Env file not found, continuing with current shell env: %s\n' "$caller" "$env_path" >&2
 }
+
+load_env_files() {
+  local caller="${1:-env_loader}"
+  shift || true
+  local env_path
+  for env_path in "$@"; do
+    load_env_file "$env_path" "$caller"
+  done
+}
+
+load_repo_env() {
+  local root_dir="${1:-}"
+  local caller="${2:-env_loader}"
+  if [[ -z "$root_dir" ]]; then
+    printf '[%s] root_dir is empty, skipping repo env load.\n' "$caller" >&2
+    return 0
+  fi
+  if [[ -f "$root_dir/.env" ]]; then
+    load_env_file "$root_dir/.env" "$caller"
+    if [[ -f "$root_dir/.env.local" ]]; then
+      printf '[%s] .env is present; skip loading .env.local to avoid overriding canonical local config.\n' "$caller" >&2
+    fi
+    return 0
+  fi
+  load_env_file "$root_dir/.env.local" "$caller"
+}

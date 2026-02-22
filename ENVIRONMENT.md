@@ -3,15 +3,16 @@
 This repository uses a contract-first environment model:
 
 1. Source of truth: `infra/config/env.contract.json`
-2. Local template: `.env.example` (copied to `.env.local`)
+2. Local template: `.env.example` (copied to `.env`)
 3. Runtime access: configuration modules (`apps/api/app/config.py`, `apps/worker/worker/config.py`, `apps/mcp/server.py`)
 4. Gate: `python scripts/check_env_contract.py --strict`
 
 ## Loading Order
 
 1. Process environment variables
-2. `.env.local` (auto-loaded by `scripts/dev_*.sh` and `scripts/run_*.sh`, when present)
-3. Code defaults (only for optional values; required variables must come from environment)
+2. `.env` (auto-loaded by `scripts/dev_*.sh` and `scripts/run_*.sh`, when present)
+3. `.env.local` (legacy fallback only when `.env` is absent)
+4. Code defaults (only for optional values; required variables must come from environment)
 
 ## Fail-Fast Rules
 
@@ -56,7 +57,8 @@ Startup validation fails when:
 - `COMMENTS_TOP_N`, `COMMENTS_REPLIES_PER_COMMENT`, `COMMENTS_REQUEST_TIMEOUT_SECONDS`
 - `PIPELINE_LLM_INPUT_MODE`, `PIPELINE_LLM_INCLUDE_FRAMES`
 - `PIPELINE_LLM_HARD_REQUIRED`, `PIPELINE_LLM_FAIL_ON_PROVIDER_ERROR`, `PIPELINE_LLM_MAX_RETRIES`
-- `GEMINI_API_KEY`, `GEMINI_MODEL`, `YOUTUBE_API_KEY`
+- `GEMINI_API_KEY`, `GEMINI_MODEL`, `GEMINI_OUTLINE_MODEL`, `GEMINI_DIGEST_MODEL`
+- `GEMINI_FAST_MODEL`, `GEMINI_EMBEDDING_MODEL`, `YOUTUBE_API_KEY`
 
 ### API / MCP / Web
 
@@ -73,8 +75,11 @@ Startup validation fails when:
 
 ```bash
 ./scripts/init_env_example.sh
-cp .env.local.example .env.local
-# edit .env.local
+cp .env.local.example .env
+# edit .env
+# optional legacy fallback:
+# cp .env .env.local
+# (only used when .env is missing)
 ```
 
 ## CI Gate

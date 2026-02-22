@@ -42,10 +42,11 @@ write_example_env() {
 print_next_steps() {
   cat <<EOF
 [${SCRIPT_NAME}] Next steps:
-[${SCRIPT_NAME}]   1) cp "$OUTPUT_PATH" "$ROOT_DIR/.env.local"
-[${SCRIPT_NAME}]   2) edit "$ROOT_DIR/.env.local" and fill RESEND_* values
-[${SCRIPT_NAME}]   3) source "$ROOT_DIR/.env.local"
-[${SCRIPT_NAME}]   4) run scripts/run_daily_digest.sh or scripts/run_failure_alerts.sh
+[${SCRIPT_NAME}]   1) cp "$OUTPUT_PATH" "$ROOT_DIR/.env"
+[${SCRIPT_NAME}]   2) edit "$ROOT_DIR/.env" and fill RESEND_* values
+[${SCRIPT_NAME}]   3) source "$ROOT_DIR/.env"
+[${SCRIPT_NAME}]   4) optional legacy fallback: copy .env to .env.local (used only when .env is missing)
+[${SCRIPT_NAME}]   5) run scripts/run_daily_digest.sh or scripts/run_failure_alerts.sh
 EOF
 }
 
