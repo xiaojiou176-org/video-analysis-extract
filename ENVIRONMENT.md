@@ -95,6 +95,7 @@ LLM generation is Gemini-only in this repository:
 - `FAILURE_*`
 - `LIVE_SMOKE_*`
 - `API_*`, `WORKER_*`, `MCP_*`, `OUTPUT_PATH`, `INIT_ENV_FORCE`
+- `WEB_BASE_URL` (web e2e target override)
 
 `LIVE_SMOKE_*` includes strict computer-use controls:
 
@@ -103,6 +104,11 @@ LLM generation is Gemini-only in this repository:
 - `LIVE_SMOKE_COMPUTER_USE_STRICT`: defaults to strict mode (`1`) so missing/failing computer-use smoke command fails the run.
 - `LIVE_SMOKE_COMPUTER_USE_SKIP`: optional explicit skip switch; when `1`, `LIVE_SMOKE_COMPUTER_USE_SKIP_REASON` must be non-empty.
 - `LIVE_SMOKE_COMPUTER_USE_CMD`: optional shell command override for computer-use smoke. By default, the script runs `scripts/smoke_computer_use_local.sh`.
+
+`WEB_BASE_URL` controls web e2e target mode:
+
+- unset/empty: pytest starts local Next.js (`npm run dev`) and injects mock API base URL.
+- set to absolute `http(s)://...`: pytest reuses the external web instance and skips local web boot.
 
 ## Local Setup
 
@@ -120,10 +126,31 @@ cp .env.example .env
 GitHub Actions workflow: `.github/workflows/env-governance.yml`
 
 1. Environment contract check:
-   - `python scripts/check_env_contract.py --strict`
+   - `python scripts/check_env_contract.py --strict --env-file .env.example`
    - Validates:
      - all referenced env vars are registered in `infra/config/env.contract.json`
      - every `required=true` contract variable has `default=null`
      - `.env.example` covers all required vars and web e2e critical vars
+     - env-file keys (default `.env`, CI uses `.env.example`) have no unregistered variables
 2. Secret scanning:
    - `gitleaks detect --source . --verbose --redact`
+
+## CI Autofix Dry-Run
+
+- Workflow `ci.yml` includes `autofix-dry-run` job.
+- Trigger: runs only when test steps fail in `offline-gate`.
+- Input artifacts: junit/log files from `.runtime-cache/`.
+- Output artifact: `autofix-dry-run-report-<run_id>-<run_attempt>` containing `.runtime-cache/autofix-report.json`.
+- Safety: dry-run only, no code mutation.
+
+## CI Job Topology and Cache Policy (`.github/workflows/ci.yml`)
+
+- Job topology:
+  - `offline-gate` is the primary gate.
+  - `autofix-dry-run` depends on `offline-gate` and runs only when `tests_failed == true`.
+  - `live-smoke` depends on `offline-gate` and runs only when required secrets are present.
+  - `autofix-dry-run` and `live-smoke` are independent after `offline-gate` and can run in parallel.
+- Cache and artifacts:
+  - Node deps: `actions/setup-node@v4` with `cache: npm` and `apps/web/package-lock.json`.
+  - Python deps: deterministic `uv sync --frozen --extra dev --extra e2e` (no explicit `actions/cache` layer in this workflow).
+  - Test diagnostics: `.runtime-cache/*.xml` and `.runtime-cache/*.log` are uploaded as CI artifacts; web e2e traces/videos are uploaded from `.runtime-cache/web-e2e-artifacts`.

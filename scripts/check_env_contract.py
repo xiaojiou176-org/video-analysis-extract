@@ -32,6 +32,7 @@ PY_ENV_GET_RE = re.compile(r'os\.environ\.get\(\s*["\']([A-Z][A-Z0-9_]*)["\']')
 TS_PROCESS_ENV_RE = re.compile(r"process\.env\.([A-Z][A-Z0-9_]*)")
 SH_DEFAULT_ENV_RE = re.compile(r"\$\{([A-Z][A-Z0-9_]*)[:-][^}]*\}")
 ENV_EXAMPLE_EXPORT_RE = re.compile(r"^\s*(?:#\s*)?export\s+([A-Z][A-Z0-9_]*)\s*=", re.MULTILINE)
+ENV_FILE_KEY_RE = re.compile(r"^\s*(?:export\s+)?([A-Z][A-Z0-9_]*)\s*=", re.MULTILINE)
 
 
 def _repo_root() -> Path:
@@ -129,6 +130,13 @@ def _web_e2e_critical_vars(contract: dict) -> set[str]:
     return names
 
 
+def _load_env_file_vars(path: Path) -> set[str]:
+    if not path.is_file():
+        return set()
+    content = path.read_text(encoding="utf-8")
+    return set(ENV_FILE_KEY_RE.findall(content))
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Validate env references against env.contract.json")
     parser.add_argument(
@@ -140,6 +148,11 @@ def main() -> int:
         "--strict",
         action="store_true",
         help="Exit with non-zero status when unregistered references are found.",
+    )
+    parser.add_argument(
+        "--env-file",
+        default=".env",
+        help="Env file path (relative to repo root) to check for unregistered keys. Use empty value to disable.",
     )
     args = parser.parse_args()
 
@@ -194,7 +207,25 @@ def main() -> int:
     else:
         print("[env-contract] .env.example covers required + web e2e critical vars")
 
-    if args.strict and (missing_refs or missing_in_example):
+    unregistered_env_keys: list[str] = []
+    if args.env_file.strip():
+        env_file_path = root / args.env_file
+        if env_file_path.is_file():
+            env_file_vars = _load_env_file_vars(env_file_path)
+            unregistered_env_keys = sorted(var for var in env_file_vars if var not in registered)
+            print(f"[env-contract] vars in {args.env_file}: {len(env_file_vars)}")
+            if unregistered_env_keys:
+                print(
+                    f"[env-contract] unregistered vars in {args.env_file}: "
+                    f"{len(unregistered_env_keys)}"
+                )
+                print(f"  - vars: {', '.join(unregistered_env_keys)}")
+            else:
+                print(f"[env-contract] {args.env_file} has no unregistered vars")
+        else:
+            print(f"[env-contract] {args.env_file} not found; skip env-file key check")
+
+    if args.strict and (missing_refs or missing_in_example or unregistered_env_keys):
         return 1
     return 0
 

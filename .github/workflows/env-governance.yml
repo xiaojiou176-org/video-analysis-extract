@@ -20,7 +20,7 @@ jobs:
           python-version: "3.12"
 
       - name: Validate env contract
-        run: python scripts/check_env_contract.py --strict
+        run: python scripts/check_env_contract.py --strict --env-file .env.example
 
       - name: Validate schema contract parity (apps/mcp vs shared-contracts)
         run: |
