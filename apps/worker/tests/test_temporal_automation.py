@@ -11,17 +11,23 @@ from worker.temporal.activities import _build_daily_digest_markdown, cleanup_wor
 from worker import main as worker_main
 
 
-def _ensure_required_worker_env() -> None:
-    os.environ.setdefault("SQLITE_PATH", "/tmp/video-analysis-test.db")
-    os.environ.setdefault(
+def _ensure_required_worker_env(
+    monkeypatch,
+    *,
+    tmp_path_factory,
+) -> Path:
+    env_root = tmp_path_factory.mktemp("worker-temporal-tests")
+    monkeypatch.setenv("SQLITE_PATH", str((env_root / "state.db").resolve()))
+    monkeypatch.setenv(
         "DATABASE_URL",
         "postgresql+psycopg://postgres:postgres@localhost:5432/video_analysis",
     )
-    os.environ.setdefault("TEMPORAL_TARGET_HOST", "localhost:7233")
-    os.environ.setdefault("TEMPORAL_NAMESPACE", "default")
-    os.environ.setdefault("TEMPORAL_TASK_QUEUE", "video-analysis-worker")
-    os.environ.setdefault("PIPELINE_WORKSPACE_DIR", "/tmp/video-analysis-workspace")
-    os.environ.setdefault("PIPELINE_ARTIFACT_ROOT", "/tmp/video-analysis-artifacts")
+    monkeypatch.setenv("TEMPORAL_TARGET_HOST", "localhost:7233")
+    monkeypatch.setenv("TEMPORAL_NAMESPACE", "default")
+    monkeypatch.setenv("TEMPORAL_TASK_QUEUE", "video-analysis-worker")
+    monkeypatch.setenv("PIPELINE_WORKSPACE_DIR", str((env_root / "workspace").resolve()))
+    monkeypatch.setenv("PIPELINE_ARTIFACT_ROOT", str((env_root / "artifacts").resolve()))
+    return env_root
 
 
 def _set_mtime(path: Path, dt: datetime) -> None:
@@ -424,7 +430,7 @@ class _FakeClient:
         return self._handle
 
 
-def _install_temporal_stubs() -> type[Exception]:
+def _install_temporal_stubs(monkeypatch) -> type[Exception]:
     temporalio_mod = types.ModuleType("temporalio")
     exceptions_mod = types.ModuleType("temporalio.exceptions")
 
@@ -434,8 +440,8 @@ def _install_temporal_stubs() -> type[Exception]:
     exceptions_mod.WorkflowAlreadyStartedError = WorkflowAlreadyStartedError
     temporalio_mod.exceptions = exceptions_mod
 
-    sys.modules["temporalio"] = temporalio_mod
-    sys.modules["temporalio.exceptions"] = exceptions_mod
+    monkeypatch.setitem(sys.modules, "temporalio", temporalio_mod)
+    monkeypatch.setitem(sys.modules, "temporalio.exceptions", exceptions_mod)
 
     workflows_mod = types.ModuleType("worker.temporal.workflows")
 
@@ -449,14 +455,14 @@ def _install_temporal_stubs() -> type[Exception]:
 
     workflows_mod.DailyDigestWorkflow = DailyDigestWorkflow
     workflows_mod.CleanupWorkspaceWorkflow = CleanupWorkspaceWorkflow
-    sys.modules["worker.temporal.workflows"] = workflows_mod
+    monkeypatch.setitem(sys.modules, "worker.temporal.workflows", workflows_mod)
 
     return WorkflowAlreadyStartedError
 
 
-async def _run_start_daily_for_test(*, run_once: bool) -> tuple[dict, _FakeClient]:
-    _install_temporal_stubs()
-    _ensure_required_worker_env()
+async def _run_start_daily_for_test(*, run_once: bool, monkeypatch, tmp_path_factory) -> tuple[dict, _FakeClient]:
+    _install_temporal_stubs(monkeypatch)
+    _ensure_required_worker_env(monkeypatch, tmp_path_factory=tmp_path_factory)
     handle = _FakeHandle(
         workflow_id="daily-id",
         run_id="daily-run",
@@ -467,7 +473,7 @@ async def _run_start_daily_for_test(*, run_once: bool) -> tuple[dict, _FakeClien
     async def _fake_connect(_settings):
         return client
 
-    worker_main._connect_temporal = _fake_connect  # type: ignore[assignment]
+    monkeypatch.setattr(worker_main, "_connect_temporal", _fake_connect)
     settings = worker_main.Settings.from_env()
     result = await worker_main.start_daily_workflow(
         settings,
@@ -479,10 +485,16 @@ async def _run_start_daily_for_test(*, run_once: bool) -> tuple[dict, _FakeClien
     return result, client
 
 
-def test_start_daily_workflow_scheduler_mode_returns_started():
+def test_start_daily_workflow_scheduler_mode_returns_started(monkeypatch, tmp_path_factory):
     import asyncio
 
-    result, client = asyncio.run(_run_start_daily_for_test(run_once=False))
+    result, client = asyncio.run(
+        _run_start_daily_for_test(
+            run_once=False,
+            monkeypatch=monkeypatch,
+            tmp_path_factory=tmp_path_factory,
+        )
+    )
 
     assert result["ok"] is True
     assert result["status"] == "started"
@@ -491,19 +503,25 @@ def test_start_daily_workflow_scheduler_mode_returns_started():
     assert client.calls[0]["payload"]["timezone_offset_minutes"] == 480
 
 
-def test_start_daily_workflow_run_once_waits_result():
+def test_start_daily_workflow_run_once_waits_result(monkeypatch, tmp_path_factory):
     import asyncio
 
-    result, _client = asyncio.run(_run_start_daily_for_test(run_once=True))
+    result, _client = asyncio.run(
+        _run_start_daily_for_test(
+            run_once=True,
+            monkeypatch=monkeypatch,
+            tmp_path_factory=tmp_path_factory,
+        )
+    )
 
     assert result == {"ok": True, "status": "sent"}
 
 
-def test_start_cleanup_workflow_waits_result():
+def test_start_cleanup_workflow_waits_result(monkeypatch, tmp_path_factory, tmp_path: Path):
     import asyncio
 
-    _install_temporal_stubs()
-    _ensure_required_worker_env()
+    _install_temporal_stubs(monkeypatch)
+    _ensure_required_worker_env(monkeypatch, tmp_path_factory=tmp_path_factory)
     handle = _FakeHandle(
         workflow_id="cleanup-id",
         run_id="cleanup-run",
@@ -514,16 +532,17 @@ def test_start_cleanup_workflow_waits_result():
     async def _fake_connect(_settings):
         return client
 
-    worker_main._connect_temporal = _fake_connect  # type: ignore[assignment]
+    monkeypatch.setattr(worker_main, "_connect_temporal", _fake_connect)
     settings = worker_main.Settings.from_env()
+    workspace_dir = str((tmp_path / "demo").resolve())
     result = asyncio.run(
         worker_main.start_cleanup_workflow(
             settings,
             older_than_hours=24,
-            workspace_dir="/tmp/demo",
+            workspace_dir=workspace_dir,
         )
     )
 
     assert result == {"ok": True, "deleted_files": 3}
     assert client.calls[0]["payload"]["older_than_hours"] == 24
-    assert client.calls[0]["payload"]["workspace_dir"] == "/tmp/demo"
+    assert client.calls[0]["payload"]["workspace_dir"] == workspace_dir

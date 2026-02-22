@@ -1,36 +1,8 @@
 from __future__ import annotations
 
 import asyncio
-import sys
-import types
-from contextlib import nullcontext
 from pathlib import Path
 from typing import Any
-
-
-def _install_temporal_stubs() -> None:
-    if "temporalio" in sys.modules:
-        return
-
-    temporalio_mod = types.ModuleType("temporalio")
-    activity_mod = types.ModuleType("temporalio.activity")
-
-    def _defn(name: str | None = None):
-        def _decorator(target):
-            return target
-
-        return _decorator
-
-    activity_mod.defn = _defn  # type: ignore[attr-defined]
-    temporalio_mod.activity = activity_mod  # type: ignore[attr-defined]
-    temporalio_mod.workflow = types.SimpleNamespace(unsafe=types.SimpleNamespace(imports_passed_through=nullcontext))
-    temporalio_mod.common = types.SimpleNamespace()
-
-    sys.modules["temporalio"] = temporalio_mod
-    sys.modules["temporalio.activity"] = activity_mod
-
-
-_install_temporal_stubs()
 
 from worker.config import Settings
 from worker.temporal import activities_job_state

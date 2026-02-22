@@ -3,23 +3,39 @@ from __future__ import annotations
 import importlib
 import os
 import sys
+import tempfile
 import types
+import uuid
 
 import pytest
 from fastapi.testclient import TestClient
 
+_BOOTSTRAP_TAG = f"{os.getpid()}-{uuid.uuid4().hex}"
 os.environ.setdefault("DATABASE_URL", "sqlite+pysqlite:///:memory:")
 os.environ.setdefault("TEMPORAL_TARGET_HOST", "127.0.0.1:7233")
 os.environ.setdefault("TEMPORAL_NAMESPACE", "default")
 os.environ.setdefault("TEMPORAL_TASK_QUEUE", "video-analysis-worker")
-os.environ.setdefault("SQLITE_STATE_PATH", "/tmp/video-digestor-api-tests.db")
+os.environ.setdefault(
+    "SQLITE_STATE_PATH",
+    os.path.join(tempfile.gettempdir(), f"video-digestor-api-tests-{_BOOTSTRAP_TAG}.db"),
+)
+
+
+@pytest.fixture(autouse=True)
+def _isolated_api_test_env(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path_factory: pytest.TempPathFactory,
+) -> None:
+    env_root = tmp_path_factory.mktemp("api-tests-env")
+    monkeypatch.setenv("DATABASE_URL", "sqlite+pysqlite:///:memory:")
+    monkeypatch.setenv("TEMPORAL_TARGET_HOST", "127.0.0.1:7233")
+    monkeypatch.setenv("TEMPORAL_NAMESPACE", "default")
+    monkeypatch.setenv("TEMPORAL_TASK_QUEUE", "video-analysis-worker")
+    monkeypatch.setenv("SQLITE_STATE_PATH", str((env_root / "state.db").resolve()))
 
 
 @pytest.fixture
 def api_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
-    # Force sqlite in tests to avoid local Postgres dependency on import.
-    monkeypatch.setenv("DATABASE_URL", "sqlite+pysqlite:///:memory:")
-
     # notifications router currently has a type-annotation issue during module import.
     # Stub it here to keep API route tests focused on health/ingest/videos behavior.
     from fastapi import APIRouter
@@ -27,7 +43,7 @@ def api_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     notifications_stub = types.ModuleType("apps.api.app.routers.notifications")
     notifications_stub.router = APIRouter(prefix="/api/v1/notifications")
     notifications_stub.reports_router = APIRouter(prefix="/api/v1/reports")
-    sys.modules["apps.api.app.routers.notifications"] = notifications_stub
+    monkeypatch.setitem(sys.modules, "apps.api.app.routers.notifications", notifications_stub)
 
     module = importlib.import_module("apps.api.app.main")
     app = getattr(module, "app")

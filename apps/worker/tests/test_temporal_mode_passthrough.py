@@ -1,61 +1,8 @@
 from __future__ import annotations
 
 import asyncio
-import sys
-import types
-from contextlib import nullcontext
 from pathlib import Path
 from typing import Any
-
-
-def _install_temporal_stubs() -> None:
-    if "temporalio" in sys.modules:
-        return
-
-    temporalio_mod = types.ModuleType("temporalio")
-    activity_mod = types.ModuleType("temporalio.activity")
-    workflow_mod = types.ModuleType("temporalio.workflow")
-    common_mod = types.ModuleType("temporalio.common")
-
-    def _defn(name: str | None = None):
-        def _decorator(target):
-            return target
-
-        return _decorator
-
-    def _run(fn):
-        return fn
-
-    class _Unsafe:
-        @staticmethod
-        def imports_passed_through():
-            return nullcontext()
-
-    class RetryPolicy:
-        def __init__(self, maximum_attempts: int = 1):
-            self.maximum_attempts = maximum_attempts
-
-    async def _unsupported(*_: Any, **__: Any) -> Any:
-        raise RuntimeError("workflow activity executor is not patched")
-
-    activity_mod.defn = _defn  # type: ignore[attr-defined]
-    workflow_mod.defn = _defn  # type: ignore[attr-defined]
-    workflow_mod.run = _run  # type: ignore[attr-defined]
-    workflow_mod.unsafe = _Unsafe()  # type: ignore[attr-defined]
-    workflow_mod.execute_activity = _unsupported  # type: ignore[attr-defined]
-    common_mod.RetryPolicy = RetryPolicy  # type: ignore[attr-defined]
-
-    temporalio_mod.activity = activity_mod  # type: ignore[attr-defined]
-    temporalio_mod.workflow = workflow_mod  # type: ignore[attr-defined]
-    temporalio_mod.common = common_mod  # type: ignore[attr-defined]
-
-    sys.modules["temporalio"] = temporalio_mod
-    sys.modules["temporalio.activity"] = activity_mod
-    sys.modules["temporalio.workflow"] = workflow_mod
-    sys.modules["temporalio.common"] = common_mod
-
-
-_install_temporal_stubs()
 
 from worker.config import Settings
 from worker.temporal import activities, workflows

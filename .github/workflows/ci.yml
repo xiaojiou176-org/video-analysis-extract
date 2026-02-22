@@ -8,22 +8,8 @@ on:
       - codex/**
 
 jobs:
-  offline-gate:
+  preflight:
     runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_DB: video_analysis_ci
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U postgres -d video_analysis_ci"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 10
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -38,11 +24,19 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install uv
 
+      - name: Cache uv
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/uv
+          key: ${{ runner.os }}-uv-${{ hashFiles('uv.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-uv-
+
       - name: Sync Python deps (locked)
         run: uv sync --frozen --extra dev --extra e2e
 
       - name: Env contract strict check
-        run: python3 scripts/check_env_contract.py --strict
+        run: python3 scripts/check_env_contract.py --strict --env-file .env.example
 
       - name: computer_use smoke contract check
         run: |
@@ -106,6 +100,27 @@ jobs:
           print("Schema parity check passed.")
           PY
 
+  db-migration-smoke:
+    runs-on: ubuntu-latest
+    needs: preflight
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: video_analysis_ci
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d video_analysis_ci"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Install PostgreSQL client
         run: |
           sudo apt-get update
@@ -125,10 +140,38 @@ jobs:
             psql "postgresql://postgres:postgres@127.0.0.1:5432/video_analysis_ci" -v ON_ERROR_STOP=1 -f "$migration"
           done
 
+  python-tests:
+    runs-on: ubuntu-latest
+    needs: preflight
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Setup uv
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install uv
+
+      - name: Cache uv
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/uv
+          key: ${{ runner.os }}-uv-${{ hashFiles('uv.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-uv-
+
+      - name: Sync Python deps (locked)
+        run: uv sync --frozen --extra dev --extra e2e
+
       - name: Pipeline smoke
         env:
           PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/apps/worker
-          DATABASE_URL: sqlite+pysqlite:///:memory:
+          DATABASE_URL: "sqlite+pysqlite:///:memory:"
           TEMPORAL_TARGET_HOST: 127.0.0.1:7233
           TEMPORAL_NAMESPACE: default
           TEMPORAL_TASK_QUEUE: video-analysis-worker
@@ -144,7 +187,7 @@ jobs:
       - name: Run Python tests
         env:
           PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/apps/worker
-          DATABASE_URL: sqlite+pysqlite:///:memory:
+          DATABASE_URL: "sqlite+pysqlite:///:memory:"
           TEMPORAL_TARGET_HOST: 127.0.0.1:7233
           TEMPORAL_NAMESPACE: default
           TEMPORAL_TASK_QUEUE: video-analysis-worker
@@ -152,7 +195,29 @@ jobs:
           SQLITE_PATH: /tmp/video-digestor-worker-tests.db
           PIPELINE_WORKSPACE_DIR: /tmp/video-digestor-workspace-tests
           PIPELINE_ARTIFACT_ROOT: /tmp/video-digestor-artifacts-tests
-        run: uv run pytest apps/worker/tests apps/api/tests apps/mcp/tests -q
+        run: |
+          mkdir -p .runtime-cache
+          set -o pipefail
+          uv run pytest apps/worker/tests apps/api/tests apps/mcp/tests -q -rA -n 2 \
+            --junitxml=.runtime-cache/python-tests-junit.xml \
+            2>&1 | tee .runtime-cache/python-tests.log
+
+      - name: Upload CI failure diagnostics (python)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-failure-diagnostics-python-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: ignore
+          path: |
+            .runtime-cache/python-tests-junit.xml
+            .runtime-cache/python-tests.log
+
+  web-lint-build:
+    runs-on: ubuntu-latest
+    needs: preflight
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -170,6 +235,45 @@ jobs:
       - name: Web build
         run: npm --prefix apps/web run build
 
+      - name: Web button coverage check
+        run: python3 scripts/check_web_button_coverage.py --threshold 1.0
+
+  web-e2e:
+    runs-on: ubuntu-latest
+    needs: preflight
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Setup uv
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install uv
+
+      - name: Cache uv
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/uv
+          key: ${{ runner.os }}-uv-${{ hashFiles('uv.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-uv-
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('uv.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-playwright-
+
+      - name: Sync Python deps (locked)
+        run: uv sync --frozen --extra dev --extra e2e
+
       - name: Install Playwright browser (chromium)
         run: uv run --with playwright python -m playwright install --with-deps chromium
 
@@ -177,8 +281,10 @@ jobs:
         run: |
           mkdir -p .runtime-cache
 
+          set -o pipefail
           uv run --with pytest --with playwright \
-            pytest apps/web/tests/e2e -q --junitxml=.runtime-cache/web-e2e-junit.xml -rA
+            pytest apps/web/tests/e2e -q --junitxml=.runtime-cache/web-e2e-junit.xml -rA \
+            2>&1 | tee .runtime-cache/web-e2e.log
 
           python - <<'PY'
           import xml.etree.ElementTree as ET
@@ -200,9 +306,92 @@ jobs:
           print(f"web e2e gate passed: tests={tests}, skipped={skipped}")
           PY
 
+      - name: Upload web e2e artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-e2e-artifacts
+          path: |
+            .runtime-cache/web-e2e-artifacts
+            .runtime-cache/web-e2e-junit.xml
+          if-no-files-found: warn
+
+      - name: Upload CI failure diagnostics (web)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-failure-diagnostics-web-e2e-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: ignore
+          path: |
+            .runtime-cache/web-e2e-junit.xml
+            .runtime-cache/web-e2e.log
+
+  aggregate-gate:
+    runs-on: ubuntu-latest
+    if: always()
+    needs:
+      - preflight
+      - db-migration-smoke
+      - python-tests
+      - web-lint-build
+      - web-e2e
+    steps:
+      - name: Enforce aggregate gate
+        run: |
+          declare -A results
+          results[preflight]="${{ needs.preflight.result }}"
+          results[db_migration_smoke]="${{ needs.db-migration-smoke.result }}"
+          results[python_tests]="${{ needs.python-tests.result }}"
+          results[web_lint_build]="${{ needs.web-lint-build.result }}"
+          results[web_e2e]="${{ needs.web-e2e.result }}"
+
+          failed=0
+          for job in preflight db_migration_smoke python_tests web_lint_build web_e2e; do
+            result="${results[$job]}"
+            echo "$job=$result"
+            if [[ "$result" != "success" ]]; then
+              failed=1
+            fi
+          done
+
+          if [[ "$failed" -ne 0 ]]; then
+            echo "aggregate gate failed"
+            exit 1
+          fi
+          echo "aggregate gate passed"
+
+  autofix-dry-run:
+    name: autofix-dry-run
+    runs-on: ubuntu-latest
+    needs: [python-tests, web-e2e]
+    if: ${{ always() && (needs.python-tests.result == 'failure' || needs.web-e2e.result == 'failure') }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download CI diagnostics artifact
+        uses: actions/download-artifact@v4
+        with:
+          pattern: ci-failure-diagnostics-*
+          merge-multiple: true
+          path: .runtime-cache
+
+      - name: Generate autofix dry-run report
+        run: |
+          python3 scripts/ci_autofix.py \
+            --junit-glob ".runtime-cache/**/*.xml" \
+            --log-glob ".runtime-cache/**/*.log" \
+            --output .runtime-cache/autofix-report.json
+
+      - name: Upload autofix report
+        uses: actions/upload-artifact@v4
+        with:
+          name: autofix-dry-run-report-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .runtime-cache/autofix-report.json
+
   live-smoke:
     if: ${{ secrets.GEMINI_API_KEY != '' && secrets.RESEND_API_KEY != '' && secrets.RESEND_FROM_EMAIL != '' && secrets.YOUTUBE_API_KEY != '' }}
-    needs: offline-gate
+    needs: aggregate-gate
     runs-on: ubuntu-latest
     env:
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
