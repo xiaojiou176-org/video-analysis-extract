@@ -24,9 +24,28 @@ from playwright.sync_api import Browser, Page, expect, sync_playwright
 
 PROJECT_ROOT = Path(__file__).resolve().parents[4]
 WEB_DIR = PROJECT_ROOT / "apps" / "web"
+WEB_E2E_ARTIFACT_ROOT = PROJECT_ROOT / ".runtime-cache" / "web-e2e-artifacts"
+WEB_E2E_VIDEO_DIR = WEB_E2E_ARTIFACT_ROOT / "videos"
+WEB_E2E_TRACE_DIR = WEB_E2E_ARTIFACT_ROOT / "traces"
+WEB_E2E_SCREENSHOT_DIR = WEB_E2E_ARTIFACT_ROOT / "screenshots"
 PING_IMAGE_BYTES = base64.b64decode(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9sYfA8kAAAAASUVORK5CYII="
 )
+
+for artifact_dir in (WEB_E2E_VIDEO_DIR, WEB_E2E_TRACE_DIR, WEB_E2E_SCREENSHOT_DIR):
+    artifact_dir.mkdir(parents=True, exist_ok=True)
+
+
+def _slugify_nodeid(nodeid: str) -> str:
+    value = re.sub(r"[^A-Za-z0-9._-]+", "-", nodeid).strip("-")
+    return value or "unknown-test"
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo[object]):
+    outcome = yield
+    report = outcome.get_result()
+    setattr(item, f"rep_{report.when}", report)
 
 
 def _free_port() -> int:
@@ -51,6 +70,19 @@ def _wait_http_ok(url: str, timeout_sec: float = 90.0) -> None:
             last_error = exc
         time.sleep(0.5)
     raise RuntimeError(f"Timeout waiting for server readiness: {url}. Last error: {last_error}")
+
+
+def _external_web_base_url_from_env() -> str | None:
+    raw_value = os.getenv("WEB_BASE_URL")
+    if raw_value is None:
+        return None
+    candidate = raw_value.strip().rstrip("/")
+    if not candidate:
+        return None
+    parsed = urlparse(candidate)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise RuntimeError(f"WEB_BASE_URL must be an absolute http(s) URL, got: {raw_value!r}")
+    return candidate
 
 
 @dataclass
@@ -398,6 +430,12 @@ def mock_api_server() -> MockApiServer:
 
 @pytest.fixture(scope="session")
 def web_base_url(mock_api_server: MockApiServer) -> str:
+    external_base_url = _external_web_base_url_from_env()
+    if external_base_url is not None:
+        _wait_http_ok(f"{external_base_url}/")
+        yield external_base_url
+        return
+
     if shutil.which("npm") is None:
         raise RuntimeError("npm is required for web E2E. Install Node.js/npm in CI before running tests.")
     if not (WEB_DIR / "node_modules").exists():
@@ -467,11 +505,20 @@ def browser() -> Browser:
 
 
 @pytest.fixture
-def page(browser: Browser, web_base_url: str) -> Page:
-    context = browser.new_context(base_url=web_base_url)
+def page(browser: Browser, web_base_url: str, request: pytest.FixtureRequest) -> Page:
+    context = browser.new_context(
+        base_url=web_base_url,
+        record_video_dir=str(WEB_E2E_VIDEO_DIR),
+    )
+    context.tracing.start(screenshots=True, snapshots=True, sources=True)
     page = context.new_page()
     page.set_default_timeout(20_000)
     yield page
+    artifact_slug = _slugify_nodeid(request.node.nodeid)
+    call_report = getattr(request.node, "rep_call", None)
+    if call_report is not None and call_report.failed:
+        page.screenshot(path=str(WEB_E2E_SCREENSHOT_DIR / f"{artifact_slug}.png"), full_page=True)
+    context.tracing.stop(path=str(WEB_E2E_TRACE_DIR / f"{artifact_slug}.zip"))
     context.close()
 
 
@@ -529,6 +576,18 @@ def _seed_subscription(state: MockApiState, subscription_id: str, source_value: 
                 "updated_at": now,
             }
         ]
+
+
+def test_external_web_base_url_env_parsing(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("WEB_BASE_URL", raising=False)
+    assert _external_web_base_url_from_env() is None
+
+    monkeypatch.setenv("WEB_BASE_URL", "  http://127.0.0.1:3300/  ")
+    assert _external_web_base_url_from_env() == "http://127.0.0.1:3300"
+
+    monkeypatch.setenv("WEB_BASE_URL", "not-a-url")
+    with pytest.raises(RuntimeError, match="absolute http\\(s\\) URL"):
+        _external_web_base_url_from_env()
 
 
 def test_dashboard_trigger_ingest_poll_button(page: Page, mock_api_state: MockApiState) -> None:
