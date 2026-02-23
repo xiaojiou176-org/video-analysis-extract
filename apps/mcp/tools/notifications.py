@@ -43,45 +43,79 @@ def _normalize_set_config_payload(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 def register_notification_tools(mcp: FastMCP, api_call: ApiCall) -> None:
-    @mcp.tool(name="vd.notifications.get_config", description="Get notification config.")
-    def get_notification_config() -> dict[str, Any]:
-        response = api_call("GET", "/api/v1/notifications/config")
-        return _normalize_set_config_payload(response)
-
-    @mcp.tool(name="vd.notifications.send_test", description="Send a test notification.")
-    def send_test_notification(
+    @mcp.tool(
+        name="vd.notifications.manage",
+        description="Manage notifications. action=get_config|set_config|send_test|daily_send.",
+    )
+    def manage_notifications(
+        action: str,
+        date: str | None = None,
         to_email: str | None = None,
         subject: str | None = None,
         body: str | None = None,
-    ) -> dict[str, Any]:
-        response = api_call(
-            "POST",
-            "/api/v1/notifications/test",
-            json_body={
-                "to_email": to_email,
-                "subject": subject,
-                "body": body,
-            },
-        )
-        return _normalize_send_test_payload(response)
-
-    @mcp.tool(name="vd.notifications.set_config", description="Set notification config.")
-    def set_notification_config(
-        enabled: bool,
-        to_email: str | None = None,
+        enabled: bool = True,
         daily_digest_enabled: bool = False,
         daily_digest_hour_utc: int | None = None,
         failure_alert_enabled: bool = True,
     ) -> dict[str, Any]:
-        response = api_call(
-            "PUT",
-            "/api/v1/notifications/config",
-            json_body={
-                "enabled": enabled,
-                "to_email": to_email,
-                "daily_digest_enabled": daily_digest_enabled,
-                "daily_digest_hour_utc": daily_digest_hour_utc,
-                "failure_alert_enabled": failure_alert_enabled,
-            },
-        )
-        return _normalize_set_config_payload(response)
+        normalized_action = str(action or "").strip().lower()
+        if normalized_action == "get_config":
+            response = api_call("GET", "/api/v1/notifications/config")
+            return _normalize_set_config_payload(response)
+
+        if normalized_action == "set_config":
+            response = api_call(
+                "PUT",
+                "/api/v1/notifications/config",
+                json_body={
+                    "enabled": enabled,
+                    "to_email": to_email,
+                    "daily_digest_enabled": daily_digest_enabled,
+                    "daily_digest_hour_utc": daily_digest_hour_utc,
+                    "failure_alert_enabled": failure_alert_enabled,
+                },
+            )
+            return _normalize_set_config_payload(response)
+
+        if normalized_action == "send_test":
+            response = api_call(
+                "POST",
+                "/api/v1/notifications/test",
+                json_body={
+                    "to_email": to_email,
+                    "subject": subject,
+                    "body": body,
+                },
+            )
+            return _normalize_send_test_payload(response)
+
+        if normalized_action == "daily_send":
+            response = api_call(
+                "POST",
+                "/api/v1/reports/daily/send",
+                json_body={
+                    "date": date,
+                    "to_email": to_email,
+                    "subject": subject,
+                    "body": body,
+                },
+            )
+            if is_error_payload(response):
+                return response
+            return {
+                "sent": bool(response.get("sent", False)),
+                "status": to_optional_str(response.get("status")),
+                "delivery_id": to_optional_str(response.get("delivery_id")),
+                "date": to_optional_str(response.get("date")) or date,
+                "recipient_email": to_optional_str(response.get("recipient_email")),
+                "subject": to_optional_str(response.get("subject")),
+                "error_message": to_optional_str(response.get("error_message")),
+                "sent_at": to_optional_str(response.get("sent_at")),
+                "created_at": to_optional_str(response.get("created_at")),
+            }
+
+        return {
+            "code": "INVALID_ARGUMENT",
+            "message": "action must be one of: get_config, set_config, send_test, daily_send",
+            "details": {"method": "POST", "path": "vd.notifications.manage"},
+        }

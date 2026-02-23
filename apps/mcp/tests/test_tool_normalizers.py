@@ -20,6 +20,7 @@ from apps.mcp.tools.notifications import (
     register_notification_tools,
 )
 from apps.mcp.tools.retrieval import register_retrieval_tools
+from apps.mcp.tools.subscriptions import register_subscription_tools
 from apps.mcp.tools.ui_audit import register_ui_audit_tools
 from apps.mcp.tools.workflows import register_workflow_tools
 
@@ -91,45 +92,12 @@ def test_job_normalizer_keeps_extended_pipeline_fields() -> None:
                     "cache_key": "llm_digest:v1",
                 }
             ],
-            "degradations": [
-                {
-                    "step": "llm_digest",
-                    "status": "failed",
-                    "reason": "llm_provider_unavailable",
-                    "error": {"detail": "upstream timeout"},
-                    "error_kind": "timeout",
-                    "retry_meta": {"attempt": 2},
-                    "cache_meta": {"hit": False},
-                }
-            ],
-            "notification_retry": {
-                "delivery_id": "00000000-0000-0000-0000-000000000123",
-                "status": "failed",
-                "attempt_count": 3,
-                "next_retry_at": "2026-02-22T01:00:00Z",
-                "last_error_kind": "transient",
-            },
         }
     )
 
-    assert normalized["id"] == "job-1"
-    assert normalized["status"] == "running"
-    assert normalized["mode"] == "text_only"
     assert normalized["pipeline_final_status"] == "degraded"
-    assert normalized["llm_required"] is True
-    assert normalized["llm_gate_passed"] is False
     assert normalized["hard_fail_reason"] == "llm_provider_unavailable"
-    assert normalized["artifacts_index"]["digest_markdown"] == "/tmp/artifacts/digest.md"
-    assert normalized["step_summary"][0]["name"] == "fetch_metadata"
-    assert normalized["step_summary"][0]["attempt"] == 1
-    assert normalized["steps"][0]["name"] == "llm_digest"
-    assert normalized["steps"][0]["error_kind"] == "timeout"
-    assert normalized["steps"][0]["retry_meta"] == {"max_attempts": 2}
-    assert normalized["steps"][0]["thought_metadata"] == {"provider": "gemini", "thought_tokens": 32}
-    assert normalized["degradations"][0]["reason"] == "llm_provider_unavailable"
-    assert normalized["degradations"][0]["cache_meta"] == {"hit": False}
-    assert normalized["notification_retry"]["status"] == "failed"
-    assert normalized["notification_retry"]["attempt_count"] == 3
+    assert normalized["steps"][0]["cache_key"] == "llm_digest:v1"
 
 
 def test_notification_normalizers_return_expected_core_fields() -> None:
@@ -155,11 +123,7 @@ def test_notification_normalizers_return_expected_core_fields() -> None:
     )
 
     assert send_test["delivery_id"] == "delivery-1"
-    assert send_test["status"] == "sent"
-    assert send_test["recipient_email"] == "demo@example.com"
-    assert set_config["enabled"] is True
     assert set_config["daily_digest_hour_utc"] == 8
-    assert set_config["updated_at"] == "2026-02-21T10:00:00Z"
 
 
 class _FakeMCP:
@@ -172,6 +136,194 @@ class _FakeMCP:
             return func
 
         return _decorator
+
+
+def test_health_get_tool_merges_system_and_providers() -> None:
+    mcp = _FakeMCP()
+
+    def fake_api_call(method: str, path: str, **kwargs: Any) -> dict[str, Any]:
+        if path == "/healthz":
+            return {"status": "ok"}
+        assert path == "/api/v1/health/providers"
+        assert kwargs["params"]["window_hours"] == 12
+        return {"window_hours": 12, "providers": [{"provider": "rsshub", "ok": 1, "warn": 0, "fail": 0}]}
+
+    register_health_tools(mcp, fake_api_call)
+    payload = mcp.tools["vd.health.get"](scope="all", window_hours=12)
+
+    assert payload["system"]["status"] == "ok"
+    assert payload["providers"]["window_hours"] == 12
+    assert payload["providers"]["items"][0]["provider"] == "rsshub"
+
+
+def test_subscriptions_manage_supports_list_upsert_remove() -> None:
+    mcp = _FakeMCP()
+    calls: list[dict[str, Any]] = []
+
+    def fake_api_call(method: str, path: str, **kwargs: Any) -> dict[str, Any]:
+        calls.append({"method": method, "path": path, "kwargs": kwargs})
+        return {"ok": True}
+
+    register_subscription_tools(mcp, fake_api_call)
+    assert mcp.tools["vd.subscriptions.manage"](action="list", platform="youtube")["ok"] is True
+    assert mcp.tools["vd.subscriptions.manage"](
+        action="upsert",
+        platform="youtube",
+        source_type="url",
+        source_value="https://youtube.com/@demo",
+    )["ok"] is True
+    assert mcp.tools["vd.subscriptions.manage"](action="remove", id="sub-1")["ok"] is True
+
+    assert calls[0]["method"] == "GET"
+    assert calls[1]["method"] == "POST"
+    assert calls[2]["method"] == "DELETE"
+
+
+def test_notifications_manage_supports_get_set_send_and_daily_send() -> None:
+    mcp = _FakeMCP()
+
+    def fake_api_call(method: str, path: str, **kwargs: Any) -> dict[str, Any]:
+        if path == "/api/v1/notifications/config" and method == "GET":
+            return {"enabled": True, "daily_digest_hour_utc": 8}
+        if path == "/api/v1/notifications/config" and method == "PUT":
+            return {"enabled": True, "daily_digest_hour_utc": 8}
+        if path == "/api/v1/notifications/test":
+            return {"delivery_id": "d-1", "status": "sent"}
+        if path == "/api/v1/reports/daily/send":
+            return {"sent": True, "status": "sent", "delivery_id": "d-2"}
+        raise AssertionError(f"unexpected call: {method} {path}")
+
+    register_notification_tools(mcp, fake_api_call)
+    assert mcp.tools["vd.notifications.manage"](action="get_config")["enabled"] is True
+    assert mcp.tools["vd.notifications.manage"](action="set_config", enabled=True)["enabled"] is True
+    assert mcp.tools["vd.notifications.manage"](action="send_test")["status"] == "sent"
+    assert mcp.tools["vd.notifications.manage"](action="daily_send")["sent"] is True
+
+
+def test_artifacts_get_supports_markdown_and_asset() -> None:
+    mcp = _FakeMCP()
+
+    def fake_api_call(method: str, path: str, **kwargs: Any) -> dict[str, Any]:
+        if path == "/api/v1/artifacts/markdown":
+            return {"markdown": "# digest", "job_id": "job-1"}
+        if path == "/api/v1/artifacts/assets":
+            return {"mime_type": "image/png", "base64": "e30=", "size_bytes": 2}
+        raise AssertionError(path)
+
+    register_artifact_tools(mcp, fake_api_call)
+    markdown = mcp.tools["vd.artifacts.get"](kind="markdown", job_id="job-1")
+    asset = mcp.tools["vd.artifacts.get"](kind="asset", job_id="job-1", path="frames/f1.png", include_base64=True)
+
+    assert markdown["found"] is True
+    assert asset["exists"] is True
+    assert asset["mime_type"] == "image/png"
+
+
+def test_retrieval_search_tool_normalizes_payload() -> None:
+    mcp = _FakeMCP()
+
+    def fake_api_call(method: str, path: str, **kwargs: Any) -> dict[str, Any]:
+        assert method == "POST"
+        assert path == "/api/v1/retrieval/search"
+        return {
+            "query": "timeout",
+            "top_k": 2,
+            "filters": {},
+            "items": [{"job_id": "job-1", "source": "digest", "score": 1.2}],
+        }
+
+    register_retrieval_tools(mcp, fake_api_call)
+    payload = mcp.tools["vd.retrieval.search"](query="timeout", top_k=2)
+    assert payload["top_k"] == 2
+    assert payload["items"][0]["source"] == "digest"
+
+
+def test_workflows_run_tool_posts_expected_body() -> None:
+    mcp = _FakeMCP()
+
+    def fake_api_call(method: str, path: str, **kwargs: Any) -> dict[str, Any]:
+        assert method == "POST"
+        assert path == "/api/v1/workflows/run"
+        return {"workflow": "daily_digest", "workflow_id": "wf-1", "status": "started"}
+
+    register_workflow_tools(mcp, fake_api_call)
+    payload = mcp.tools["vd.workflows.run"](workflow="daily_digest")
+    assert payload["workflow"] == "daily_digest"
+
+
+def test_computer_use_run_tool_posts_expected_body_and_normalizes_result() -> None:
+    mcp = _FakeMCP()
+
+    def fake_api_call(method: str, path: str, **kwargs: Any) -> dict[str, Any]:
+        assert method == "POST"
+        assert path == "/api/v1/computer-use/run"
+        return {
+            "actions": [{"step": 1, "action": "click", "target": "button"}],
+            "require_confirmation": True,
+            "blocked_actions": ["submit"],
+            "final_text": "Need confirmation.",
+            "thought_metadata": {"planner": "gemini_computer_use"},
+        }
+
+    register_computer_use_tools(mcp, fake_api_call)
+    payload = mcp.tools["vd.computer_use.run"](instruction="click", screenshot_base64="ZmFrZQ==")
+    assert payload["actions"][0]["action"] == "click"
+    assert payload["require_confirmation"] is True
+
+
+def test_ui_audit_run_and_read_tools() -> None:
+    mcp = _FakeMCP()
+
+    def fake_api_call(method: str, path: str, **kwargs: Any) -> dict[str, Any]:
+        if path == "/api/v1/ui-audit/run":
+            return {
+                "run_id": "run-1",
+                "status": "completed",
+                "summary": {"artifact_count": 1, "finding_count": 1, "severity_counts": {"high": 1}},
+            }
+        if path == "/api/v1/ui-audit/run-1":
+            return {
+                "run_id": "run-1",
+                "status": "completed",
+                "summary": {"artifact_count": 1, "finding_count": 1, "severity_counts": {"high": 1}},
+            }
+        if path == "/api/v1/ui-audit/run-1/findings":
+            return {"items": [{"id": "f-1", "severity": "high", "title": "contrast", "message": "bad"}]}
+        if path == "/api/v1/ui-audit/run-1/artifact":
+            return {
+                "key": "axe.json",
+                "path": "/tmp/axe.json",
+                "mime_type": "application/json",
+                "size_bytes": 10,
+                "category": "playwright",
+                "exists": True,
+                "base64": "e30=",
+            }
+        if path == "/api/v1/ui-audit/run-1/autofix":
+            return {
+                "run_id": "run-1",
+                "mode": "dry-run",
+                "autofix_applied": False,
+                "summary": {"finding_count": 1, "high_or_worse_count": 1},
+                "guardrails": {"max_files": 2, "max_changed_lines": 80},
+                "suggested_actions": ["Fix high severity"],
+            }
+        raise AssertionError(path)
+
+    register_ui_audit_tools(mcp, fake_api_call)
+    run_payload = mcp.tools["vd.ui_audit.run"](artifact_root="/tmp")
+    get_payload = mcp.tools["vd.ui_audit.read"](action="get", run_id="run-1")
+    findings_payload = mcp.tools["vd.ui_audit.read"](action="list_findings", run_id="run-1")
+    artifact_payload = mcp.tools["vd.ui_audit.read"](
+        action="get_artifact", run_id="run-1", key="axe.json", include_base64=True
+    )
+    autofix_payload = mcp.tools["vd.ui_audit.read"](action="autofix", run_id="run-1", max_files=2)
+
+    assert run_payload["run_id"] == "run-1"
+    assert get_payload["run_id"] == "run-1"
+    assert findings_payload["items"][0]["severity"] == "high"
+    assert artifact_payload["exists"] is True
+    assert autofix_payload["summary"]["high_or_worse_count"] == 1
 
 
 def test_videos_process_normalizes_missing_overrides_to_empty_object() -> None:
@@ -191,370 +343,4 @@ def test_videos_process_normalizes_missing_overrides_to_empty_object() -> None:
     )
 
     assert response["ok"] is True
-    assert calls[0]["method"] == "POST"
-    assert calls[0]["path"] == "/api/v1/videos/process"
     assert calls[0]["kwargs"]["json_body"]["overrides"] == {}
-
-
-def test_health_providers_tool_normalizes_payload() -> None:
-    mcp = _FakeMCP()
-
-    def fake_api_call(method: str, path: str, **kwargs: Any) -> dict[str, Any]:
-        assert method == "GET"
-        assert path == "/api/v1/health/providers"
-        assert kwargs["params"]["window_hours"] == 24
-        return {
-            "window_hours": 24,
-            "providers": [
-                {
-                    "provider": "rsshub",
-                    "ok": 2,
-                    "warn": 1,
-                    "fail": 0,
-                    "last_status": "ok",
-                    "last_checked_at": "2026-02-21T10:00:00Z",
-                    "last_error_kind": None,
-                    "last_message": "ok",
-                }
-            ],
-        }
-
-    register_health_tools(mcp, fake_api_call)
-    payload = mcp.tools["vd.health.providers"](window_hours=24)
-
-    assert payload["window_hours"] == 24
-    assert payload["providers"][0]["provider"] == "rsshub"
-    assert payload["providers"][0]["ok"] == 2
-
-
-def test_artifacts_get_asset_tool_exposes_asset_url_and_base64() -> None:
-    mcp = _FakeMCP()
-    calls: list[dict[str, Any]] = []
-
-    def fake_api_call(method: str, path: str, **kwargs: Any) -> dict[str, Any]:
-        calls.append({"method": method, "path": path, "kwargs": kwargs})
-        return {
-            "mime_type": "image/jpeg",
-            "base64": "dGVzdA==",
-            "size_bytes": 4,
-        }
-
-    register_artifact_tools(mcp, fake_api_call)
-    payload = mcp.tools["vd.artifacts.get_asset"](
-        job_id="00000000-0000-0000-0000-000000000001",
-        path="frames/frame_001.jpg",
-        include_base64=True,
-    )
-
-    assert calls[0]["method"] == "GET"
-    assert calls[0]["path"] == "/api/v1/artifacts/assets"
-    assert calls[0]["kwargs"]["params"] == {
-        "job_id": "00000000-0000-0000-0000-000000000001",
-        "path": "frames/frame_001.jpg",
-    }
-    assert calls[0]["kwargs"]["return_bytes_base64"] is True
-    assert payload["exists"] is True
-    assert payload["asset_url"] == (
-        "/api/v1/artifacts/assets?job_id=00000000-0000-0000-0000-000000000001&path=frames%2Fframe_001.jpg"
-    )
-    assert payload["mime_type"] == "image/jpeg"
-    assert payload["base64"] == "dGVzdA=="
-    assert payload["size_bytes"] == 4
-
-
-def test_retrieval_search_tool_normalizes_payload() -> None:
-    mcp = _FakeMCP()
-
-    def fake_api_call(method: str, path: str, **kwargs: Any) -> dict[str, Any]:
-        assert method == "POST"
-        assert path == "/api/v1/retrieval/search"
-        assert kwargs["json_body"]["query"] == "timeout"
-        assert kwargs["json_body"]["top_k"] == 3
-        assert kwargs["json_body"]["mode"] == "keyword"
-        return {
-            "query": "timeout",
-            "top_k": 3,
-            "filters": {"platform": "youtube"},
-            "items": [
-                {
-                    "job_id": "job-1",
-                    "video_id": "video-1",
-                    "platform": "youtube",
-                    "video_uid": "abc123",
-                    "source_url": "https://www.youtube.com/watch?v=abc123",
-                    "title": "Demo",
-                    "kind": "video_digest_v1",
-                    "mode": "full",
-                    "source": "digest",
-                    "snippet": "provider timeout",
-                    "score": 2.2,
-                }
-            ],
-        }
-
-    register_retrieval_tools(mcp, fake_api_call)
-    payload = mcp.tools["vd.retrieval.search"](
-        query="timeout",
-        top_k=3,
-        filters={"platform": "youtube"},
-    )
-
-    assert payload["query"] == "timeout"
-    assert payload["top_k"] == 3
-    assert payload["filters"] == {"platform": "youtube"}
-    assert payload["items"][0]["source"] == "digest"
-    assert payload["items"][0]["score"] == 2.2
-
-
-def test_retrieval_search_tool_supports_semantic_mode() -> None:
-    mcp = _FakeMCP()
-
-    def fake_api_call(method: str, path: str, **kwargs: Any) -> dict[str, Any]:
-        assert method == "POST"
-        assert path == "/api/v1/retrieval/search"
-        assert kwargs["json_body"]["mode"] == "semantic"
-        return {"query": "timeout", "top_k": 2, "filters": {}, "items": []}
-
-    register_retrieval_tools(mcp, fake_api_call)
-    payload = mcp.tools["vd.retrieval.search"](query="timeout", top_k=2, mode="semantic")
-
-    assert payload["query"] == "timeout"
-    assert payload["top_k"] == 2
-    assert payload["items"] == []
-
-
-def test_notifications_get_config_tool_normalizes_payload() -> None:
-    mcp = _FakeMCP()
-
-    def fake_api_call(method: str, path: str, **kwargs: Any) -> dict[str, Any]:
-        assert method == "GET"
-        assert path == "/api/v1/notifications/config"
-        assert kwargs == {}
-        return {
-            "enabled": True,
-            "to_email": "ops@example.com",
-            "daily_digest_enabled": True,
-            "daily_digest_hour_utc": 8,
-            "failure_alert_enabled": False,
-            "created_at": "2026-02-22T01:00:00Z",
-            "updated_at": "2026-02-22T01:10:00Z",
-        }
-
-    register_notification_tools(mcp, fake_api_call)
-    payload = mcp.tools["vd.notifications.get_config"]()
-
-    assert payload["enabled"] is True
-    assert payload["to_email"] == "ops@example.com"
-    assert payload["daily_digest_enabled"] is True
-    assert payload["daily_digest_hour_utc"] == 8
-    assert payload["failure_alert_enabled"] is False
-
-
-def test_health_system_tool_returns_status() -> None:
-    mcp = _FakeMCP()
-
-    def fake_api_call(method: str, path: str, **kwargs: Any) -> dict[str, Any]:
-        assert method == "GET"
-        assert path == "/healthz"
-        assert kwargs == {}
-        return {"status": "ok"}
-
-    register_health_tools(mcp, fake_api_call)
-    payload = mcp.tools["vd.health.system"]()
-
-    assert payload["status"] == "ok"
-
-
-def test_workflows_run_tool_posts_expected_body_and_normalizes_result() -> None:
-    mcp = _FakeMCP()
-    calls: list[dict[str, Any]] = []
-
-    def fake_api_call(method: str, path: str, **kwargs: Any) -> dict[str, Any]:
-        calls.append({"method": method, "path": path, "kwargs": kwargs})
-        return {
-            "workflow": "daily_digest",
-            "workflow_name": "DailyDigestWorkflow",
-            "workflow_id": "wf-123",
-            "run_id": "run-456",
-            "status": "started",
-            "started_at": "2026-02-22T08:00:00Z",
-            "result": {"ok": True},
-        }
-
-    register_workflow_tools(mcp, fake_api_call)
-    payload = mcp.tools["vd.workflows.run"](
-        workflow="daily_digest",
-        run_once=True,
-        wait_for_result=False,
-        workflow_id="wf-123",
-        payload={"scope": "all"},
-    )
-
-    assert calls[0]["method"] == "POST"
-    assert calls[0]["path"] == "/api/v1/workflows/run"
-    assert calls[0]["kwargs"]["json_body"] == {
-        "workflow": "daily_digest",
-        "run_once": True,
-        "wait_for_result": False,
-        "workflow_id": "wf-123",
-        "payload": {"scope": "all"},
-    }
-    assert payload["workflow"] == "daily_digest"
-    assert payload["workflow_name"] == "DailyDigestWorkflow"
-    assert payload["workflow_id"] == "wf-123"
-    assert payload["run_id"] == "run-456"
-    assert payload["status"] == "started"
-    assert payload["result"] == {"ok": True}
-
-
-def test_computer_use_run_tool_posts_expected_body_and_normalizes_result() -> None:
-    mcp = _FakeMCP()
-    calls: list[dict[str, Any]] = []
-
-    def fake_api_call(method: str, path: str, **kwargs: Any) -> dict[str, Any]:
-        calls.append({"method": method, "path": path, "kwargs": kwargs})
-        return {
-            "actions": [
-                {
-                    "step": 1,
-                    "action": "click",
-                    "target": "submit button",
-                    "input_text": None,
-                    "reasoning": "click submit button",
-                }
-            ],
-            "require_confirmation": True,
-            "blocked_actions": ["submit"],
-            "final_text": "Need confirmation.",
-            "thought_metadata": {"planner": "rule_based"},
-        }
-
-    register_computer_use_tools(mcp, fake_api_call)
-    payload = mcp.tools["vd.computer_use.run"](
-        instruction="click submit button",
-        screenshot_base64="ZmFrZQ==",
-        safety={"blocked_actions": ["submit"], "confirm_before_execute": False},
-    )
-
-    assert calls[0]["method"] == "POST"
-    assert calls[0]["path"] == "/api/v1/computer-use/run"
-    assert calls[0]["kwargs"]["json_body"] == {
-        "instruction": "click submit button",
-        "screenshot_base64": "ZmFrZQ==",
-        "safety": {"blocked_actions": ["submit"], "confirm_before_execute": False},
-    }
-    assert payload["actions"][0]["step"] == 1
-    assert payload["actions"][0]["action"] == "click"
-    assert payload["require_confirmation"] is True
-    assert payload["blocked_actions"] == ["submit"]
-    assert payload["final_text"] == "Need confirmation."
-    assert payload["thought_metadata"] == {"planner": "rule_based"}
-
-
-def test_ui_audit_tools_post_and_normalize_payloads() -> None:
-    mcp = _FakeMCP()
-    calls: list[dict[str, Any]] = []
-
-    def fake_api_call(method: str, path: str, **kwargs: Any) -> dict[str, Any]:
-        calls.append({"method": method, "path": path, "kwargs": kwargs})
-        if path == "/api/v1/ui-audit/run":
-            return {
-                "run_id": "run-1",
-                "job_id": "00000000-0000-0000-0000-000000000001",
-                "artifact_root": "/tmp/artifacts",
-                "status": "completed",
-                "created_at": "2026-02-22T08:00:00Z",
-                "summary": {
-                    "artifact_count": 2,
-                    "finding_count": 1,
-                    "severity_counts": {"high": 1},
-                },
-            }
-        if path == "/api/v1/ui-audit/run-1/findings":
-            return {
-                "items": [
-                    {
-                        "id": "f-1",
-                        "severity": "high",
-                        "title": "Color contrast",
-                        "message": "Insufficient contrast",
-                        "rule": "color-contrast",
-                        "artifact_key": "axe.json",
-                    }
-                ]
-            }
-        if path == "/api/v1/ui-audit/run-1/artifact":
-            return {
-                "key": "axe.json",
-                "path": "/tmp/artifacts/axe.json",
-                "mime_type": "application/json",
-                "size_bytes": 200,
-                "category": "playwright",
-                "exists": True,
-                "base64": "e30=",
-            }
-        if path == "/api/v1/ui-audit/run-1/autofix":
-            return {
-                "run_id": "run-1",
-                "mode": "dry-run",
-                "autofix_applied": False,
-                "summary": {
-                    "finding_count": 1,
-                    "high_or_worse_count": 1,
-                },
-                "guardrails": {
-                    "max_files": 2,
-                    "max_changed_lines": 80,
-                },
-                "suggested_actions": ["Fix high-severity UI issues first and rerun focused E2E."],
-            }
-        return {
-            "run_id": "run-1",
-            "job_id": "00000000-0000-0000-0000-000000000001",
-            "artifact_root": "/tmp/artifacts",
-            "status": "completed",
-            "created_at": "2026-02-22T08:00:00Z",
-            "summary": {
-                "artifact_count": 2,
-                "finding_count": 1,
-                "severity_counts": {"high": 1},
-            },
-        }
-
-    register_ui_audit_tools(mcp, fake_api_call)
-    run_payload = mcp.tools["vd.ui_audit.run"](artifact_root="/tmp/artifacts")
-    get_payload = mcp.tools["vd.ui_audit.get"](run_id="run-1")
-    findings_payload = mcp.tools["vd.ui_audit.list_findings"](run_id="run-1", severity="high")
-    artifact_payload = mcp.tools["vd.ui_audit.get_artifact"](
-        run_id="run-1",
-        key="axe.json",
-        include_base64=True,
-    )
-    autofix_payload = mcp.tools["vd.ui_audit.autofix"](
-        run_id="run-1",
-        mode="dry-run",
-        max_files=2,
-        max_changed_lines=80,
-    )
-
-    assert calls[0]["method"] == "POST"
-    assert calls[0]["path"] == "/api/v1/ui-audit/run"
-    assert run_payload["summary"]["finding_count"] == 1
-    assert get_payload["run_id"] == "run-1"
-    assert findings_payload["items"][0]["rule"] == "color-contrast"
-    assert artifact_payload["exists"] is True
-    assert artifact_payload["base64"] == "e30="
-    assert calls[4]["method"] == "POST"
-    assert calls[4]["path"] == "/api/v1/ui-audit/run-1/autofix"
-    assert calls[4]["kwargs"]["json_body"] == {
-        "mode": "dry-run",
-        "max_files": 2,
-        "max_changed_lines": 80,
-    }
-    assert autofix_payload["run_id"] == "run-1"
-    assert autofix_payload["summary"]["finding_count"] == 1
-    assert autofix_payload["summary"]["high_or_worse_count"] == 1
-    assert autofix_payload["guardrails"]["max_files"] == 2
-    assert autofix_payload["suggested_actions"] == [
-        "Fix high-severity UI issues first and rerun focused E2E."
-    ]

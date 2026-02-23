@@ -45,10 +45,12 @@
   - 达到上限后以 `termination_reason=max_function_call_rounds_reached` 结束当前轮。
 - Thinking 策略：
   - 默认由 `GEMINI_THINKING_LEVEL` 控制。
+  - 复杂任务强制 `include_thoughts=true`；缺少 thought signatures 视为硬失败。
   - 请求级可通过 `overrides.llm.thinking_level` 覆盖。
 - Context cache：
   - 由 `GEMINI_CONTEXT_CACHE_ENABLED/TTL_SECONDS/MIN_CHARS` 控制。
 - Media resolution 入口：
+  - 支持 `low|medium|high|ultra_high`。
   - `PIPELINE_LLM_INPUT_MODE`（`auto|text|video_text|frames_text`）
   - `PIPELINE_MAX_FRAMES` 与 `overrides.frames.max_frames`
   - 运行态 `llm_media_input`（`video_available`, `frame_count`）
@@ -172,3 +174,4 @@ OPS_CLEANUP_OLDER_THAN_HOURS=24 \
 - 状态机：`docs/state-machine.md`
 - 环境治理：`ENVIRONMENT.md`
 - 引用文档：`docs/reference/logging.md`、`docs/reference/cache.md`、`docs/reference/dependency-governance.md`
+- MCP 路由：`docs/reference/mcp-tool-routing.md`（13 工具、action 路由、组合示例）
