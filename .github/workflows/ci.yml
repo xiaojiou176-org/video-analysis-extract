@@ -114,7 +114,7 @@ jobs:
     needs: preflight
     services:
       postgres:
-        image: postgres:16
+        image: pgvector/pgvector:pg16
         env:
           POSTGRES_DB: video_analysis_ci
           POSTGRES_USER: postgres
@@ -311,6 +311,9 @@ jobs:
 
       - name: Sync Python deps (locked)
         run: uv sync --frozen --extra dev --extra e2e
+
+      - name: Install web deps
+        run: npm --prefix apps/web ci
 
       - name: Install Playwright browser (chromium)
         run: uv run --with playwright python -m playwright install --with-deps chromium
