@@ -126,14 +126,108 @@ class JobsService:
 
         return result
 
-    def _extract_thought_metadata(self, result_payload: Any) -> dict[str, Any] | None:
+    def _extract_thought_metadata(self, result_payload: Any) -> dict[str, Any]:
+        empty = self._empty_thought_metadata()
         if not isinstance(result_payload, dict):
-            return None
+            return empty
+
+        legacy_payload: dict[str, Any] = {}
         for key in ("thought_metadata", "thinking_metadata", "thoughts_metadata", "thoughts"):
             value = result_payload.get(key)
             if isinstance(value, dict):
-                return value
-        return None
+                legacy_payload = dict(value)
+                break
+
+        llm_meta = result_payload.get("llm_meta")
+        llm_meta_dict = llm_meta if isinstance(llm_meta, dict) else {}
+        llm_thinking = llm_meta_dict.get("thinking")
+        llm_thinking_dict = llm_thinking if isinstance(llm_thinking, dict) else {}
+
+        merged = dict(legacy_payload)
+        normalized_thinking = self._normalize_thinking_payload(legacy_payload, llm_thinking_dict)
+        merged["thinking"] = normalized_thinking
+        merged["thought_count"] = normalized_thinking["thought_count"]
+        merged["thought_signatures"] = list(normalized_thinking["thought_signatures"])
+        merged["thought_signature_digest"] = normalized_thinking["thought_signature_digest"]
+
+        provider = merged.get("provider")
+        if not isinstance(provider, str) or not provider.strip():
+            thinking_provider = llm_thinking_dict.get("provider")
+            if isinstance(thinking_provider, str) and thinking_provider.strip():
+                merged["provider"] = thinking_provider.strip()
+            else:
+                llm_provider = llm_meta_dict.get("provider")
+                if isinstance(llm_provider, str) and llm_provider.strip():
+                    merged["provider"] = llm_provider.strip()
+
+        return merged if merged else empty
+
+    def _normalize_thinking_payload(
+        self,
+        legacy_payload: dict[str, Any],
+        llm_thinking_payload: dict[str, Any],
+    ) -> dict[str, Any]:
+        empty = self._empty_thinking_payload()
+
+        source = llm_thinking_payload or legacy_payload
+        if not isinstance(source, dict):
+            return empty
+
+        normalized = self._empty_thinking_payload()
+        for key in ("enabled", "include_thoughts"):
+            value = source.get(key)
+            if isinstance(value, bool):
+                normalized[key] = value
+
+        level = source.get("level")
+        if isinstance(level, str) and level.strip():
+            normalized["level"] = level.strip().lower()
+
+        thought_count = source.get("thought_count")
+        if isinstance(thought_count, int):
+            normalized["thought_count"] = max(0, thought_count)
+
+        thought_signatures = source.get("thought_signatures")
+        if isinstance(thought_signatures, list):
+            normalized["thought_signatures"] = [
+                item.strip()
+                for item in thought_signatures
+                if isinstance(item, str) and item.strip()
+            ]
+
+        signature_digest = source.get("thought_signature_digest")
+        if isinstance(signature_digest, str) and signature_digest.strip():
+            normalized["thought_signature_digest"] = signature_digest.strip()
+
+        usage = source.get("usage")
+        if isinstance(usage, dict):
+            normalized["usage"] = dict(usage)
+        elif isinstance(source.get("thought_tokens"), int):
+            normalized["usage"] = {"thoughts_token_count": int(source["thought_tokens"])}
+
+        if normalized["thought_count"] == 0 and normalized["thought_signatures"]:
+            normalized["thought_count"] = len(normalized["thought_signatures"])
+
+        return normalized
+
+    def _empty_thought_metadata(self) -> dict[str, Any]:
+        return {
+            "thinking": self._empty_thinking_payload(),
+            "thought_count": 0,
+            "thought_signatures": [],
+            "thought_signature_digest": None,
+        }
+
+    def _empty_thinking_payload(self) -> dict[str, Any]:
+        return {
+            "enabled": None,
+            "level": None,
+            "include_thoughts": None,
+            "thought_count": 0,
+            "thought_signatures": [],
+            "thought_signature_digest": None,
+            "usage": {},
+        }
 
     def get_step_summary(self, job_id: uuid.UUID) -> list[dict[str, object]]:
         return [

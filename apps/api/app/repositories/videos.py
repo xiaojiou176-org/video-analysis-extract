@@ -21,8 +21,18 @@ class VideosRepository:
         status: str | None = None,
         limit: int = 50,
     ) -> list[dict]:
+        filters: list[str] = []
+        params: dict[str, object] = {"limit": limit}
+        if platform is not None:
+            filters.append("v.platform = :platform")
+            params["platform"] = platform
+        if status is not None:
+            filters.append("lj.status = :status")
+            params["status"] = status
+        where_clause = f"WHERE {' AND '.join(filters)}" if filters else ""
+
         stmt = text(
-            """
+            f"""
             SELECT
                 v.id,
                 v.platform,
@@ -42,21 +52,13 @@ class VideosRepository:
                 ORDER BY j.created_at DESC
                 LIMIT 1
             ) lj ON TRUE
-            WHERE (:platform IS NULL OR v.platform = :platform)
-              AND (:status IS NULL OR lj.status = :status)
+            {where_clause}
             ORDER BY v.last_seen_at DESC
             LIMIT :limit
             """
         )
 
-        rows = self.db.execute(
-            stmt,
-            {
-                "platform": platform,
-                "status": status,
-                "limit": limit,
-            },
-        ).mappings()
+        rows = self.db.execute(stmt, params).mappings()
         return [dict(row) for row in rows]
 
     def list_recent(self, *, platform: str | None, limit: int) -> list[Video]:

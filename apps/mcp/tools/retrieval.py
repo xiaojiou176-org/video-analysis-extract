@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from mcp.server.fastmcp import FastMCP
 
@@ -32,6 +32,7 @@ def register_retrieval_tools(mcp: FastMCP, api_call: ApiCall) -> None:
     def retrieval_search(
         query: str,
         top_k: int = 10,
+        mode: Literal["keyword", "semantic", "hybrid"] = "keyword",
         filters: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         response = api_call(
@@ -40,6 +41,7 @@ def register_retrieval_tools(mcp: FastMCP, api_call: ApiCall) -> None:
             json_body={
                 "query": query,
                 "top_k": top_k,
+                "mode": mode,
                 "filters": filters or {},
             },
         )

@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import base64
-import os
 from dataclasses import dataclass, field
 from typing import Any
+
+from ..config import Settings
 
 
 @dataclass(frozen=True)
@@ -15,9 +16,10 @@ class ComputerUseSafetyConfig:
 
 class ComputerUseService:
     def __init__(self) -> None:
-        self._api_key = (os.getenv("GEMINI_API_KEY") or "").strip()
-        self._model = (os.getenv("GEMINI_MODEL") or "gemini-3.1-pro-preview").strip()
-        self._thinking_level = (os.getenv("GEMINI_THINKING_LEVEL") or "high").strip().upper()
+        settings = Settings.from_env()
+        self._api_key = (settings.gemini_api_key or "").strip()
+        self._model = (settings.gemini_model or "gemini-3.1-pro-preview").strip()
+        self._thinking_level = (settings.gemini_thinking_level or "high").strip().upper()
 
     def run(
         self,

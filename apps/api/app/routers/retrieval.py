@@ -15,6 +15,7 @@ router = APIRouter(prefix="/api/v1/retrieval", tags=["retrieval"])
 class RetrievalSearchRequest(BaseModel):
     query: str = Field(min_length=1)
     top_k: int = Field(default=10, ge=1, le=50)
+    mode: Literal["keyword", "semantic", "hybrid"] = "keyword"
     filters: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -45,5 +46,5 @@ def retrieval_search(
     db: Session = Depends(get_db),
 ) -> RetrievalSearchResponse:
     service = RetrievalService(db)
-    result = service.search(query=payload.query, top_k=payload.top_k, filters=payload.filters)
+    result = service.search(query=payload.query, top_k=payload.top_k, mode=payload.mode, filters=payload.filters)
     return RetrievalSearchResponse(**result)

@@ -3,7 +3,6 @@ from __future__ import annotations
 import base64
 import json
 import mimetypes
-import os
 import threading
 import uuid
 from datetime import datetime, timezone
@@ -13,6 +12,8 @@ from typing import Any
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session
+
+from ..config import Settings
 
 _PLAYWRIGHT_HINTS = {
     "playwright",
@@ -279,9 +280,10 @@ class UiAuditService:
         }
 
     def _run_gemini_review(self, artifacts: list[dict[str, Any]]) -> dict[str, Any] | None:
-        if not self._is_gemini_ui_audit_enabled():
+        settings = Settings.from_env()
+        if not self._is_gemini_ui_audit_enabled(settings):
             return None
-        api_key = (os.getenv("GEMINI_API_KEY") or "").strip()
+        api_key = (settings.gemini_api_key or "").strip()
         if not api_key:
             return None
 
@@ -296,8 +298,8 @@ class UiAuditService:
         if not image_artifacts and not text_snippets:
             return None
 
-        model = (os.getenv("GEMINI_MODEL") or "gemini-3.1-pro-preview").strip()
-        thinking_level = (os.getenv("GEMINI_THINKING_LEVEL") or "high").strip().upper()
+        model = (settings.gemini_model or "gemini-3.1-pro-preview").strip()
+        thinking_level = (settings.gemini_thinking_level or "high").strip().upper()
         prompt = self._build_gemini_ui_prompt(text_snippets=text_snippets, image_artifacts=image_artifacts)
         contents: list[Any] = [prompt]
         for item in image_artifacts:
@@ -421,9 +423,8 @@ class UiAuditService:
             )
         return payload
 
-    def _is_gemini_ui_audit_enabled(self) -> bool:
-        raw = (os.getenv("UI_AUDIT_GEMINI_ENABLED") or "true").strip().lower()
-        return raw in {"1", "true", "yes", "on"}
+    def _is_gemini_ui_audit_enabled(self, settings: Settings) -> bool:
+        return bool(settings.ui_audit_gemini_enabled)
 
     def _select_gemini_image_artifacts(self, artifacts: list[dict[str, Any]]) -> list[dict[str, Any]]:
         selected: list[dict[str, Any]] = []

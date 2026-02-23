@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from ..db import get_db
@@ -27,7 +27,7 @@ class JobStepDetail(JobStepSummary):
     error_kind: str | None = None
     retry_meta: dict[str, Any] | None = None
     result: dict[str, Any] | None = None
-    thought_metadata: dict[str, Any] | None = None
+    thought_metadata: dict[str, Any] = Field(default_factory=dict)
     cache_key: str | None = None
 
 
