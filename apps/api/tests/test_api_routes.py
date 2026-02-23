@@ -213,9 +213,10 @@ def test_job_get_returns_mode_and_pipeline_fields(
 
 
 def test_retrieval_search_returns_items(api_client: TestClient, monkeypatch) -> None:
-    def fake_search(self, *, query, top_k, filters):
+    def fake_search(self, *, query, top_k, mode, filters):
         assert query == "timeout"
         assert top_k == 2
+        assert mode == "keyword"
         assert filters == {"platform": "youtube"}
         return {
             "query": query,
@@ -252,6 +253,29 @@ def test_retrieval_search_returns_items(api_client: TestClient, monkeypatch) -> 
     assert payload["filters"] == {"platform": "youtube"}
     assert payload["items"][0]["source"] == "digest"
     assert payload["items"][0]["score"] == 2.5
+
+
+def test_retrieval_search_passes_semantic_mode(api_client: TestClient, monkeypatch) -> None:
+    def fake_search(self, *, query, top_k, mode, filters):
+        assert query == "retry policy"
+        assert top_k == 3
+        assert mode == "semantic"
+        assert filters == {"platform": "youtube"}
+        return {"query": query, "top_k": top_k, "filters": filters, "items": []}
+
+    monkeypatch.setattr("apps.api.app.services.retrieval.RetrievalService.search", fake_search)
+
+    response = api_client.post(
+        "/api/v1/retrieval/search",
+        json={"query": "retry policy", "top_k": 3, "mode": "semantic", "filters": {"platform": "youtube"}},
+    )
+    payload = response.json()
+
+    assert response.status_code == 200
+    assert payload["query"] == "retry policy"
+    assert payload["top_k"] == 3
+    assert payload["filters"] == {"platform": "youtube"}
+    assert payload["items"] == []
 
 
 def test_computer_use_run_returns_required_fields(api_client: TestClient, monkeypatch) -> None:
@@ -381,6 +405,7 @@ def test_job_get_infers_llm_gate_fields_from_steps_when_legacy_fields_are_null(
     assert payload["llm_required"] is True
     assert payload["llm_gate_passed"] is False
     assert payload["hard_fail_reason"] == "provider_unavailable"
+    assert payload["steps"][0]["thought_metadata"] == {}
 
 
 def test_job_get_infers_llm_gate_passed_true_when_llm_steps_succeed(
@@ -453,6 +478,7 @@ def test_job_get_infers_llm_gate_passed_true_when_llm_steps_succeed(
     assert payload["llm_required"] is True
     assert payload["llm_gate_passed"] is True
     assert payload["hard_fail_reason"] is None
+    assert payload["steps"][0]["thought_metadata"] == {}
 
 
 def test_health_providers_returns_rollup(api_client: TestClient, monkeypatch) -> None:

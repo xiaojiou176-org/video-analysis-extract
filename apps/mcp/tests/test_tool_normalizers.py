@@ -270,6 +270,7 @@ def test_retrieval_search_tool_normalizes_payload() -> None:
         assert path == "/api/v1/retrieval/search"
         assert kwargs["json_body"]["query"] == "timeout"
         assert kwargs["json_body"]["top_k"] == 3
+        assert kwargs["json_body"]["mode"] == "keyword"
         return {
             "query": "timeout",
             "top_k": 3,
@@ -303,6 +304,23 @@ def test_retrieval_search_tool_normalizes_payload() -> None:
     assert payload["filters"] == {"platform": "youtube"}
     assert payload["items"][0]["source"] == "digest"
     assert payload["items"][0]["score"] == 2.2
+
+
+def test_retrieval_search_tool_supports_semantic_mode() -> None:
+    mcp = _FakeMCP()
+
+    def fake_api_call(method: str, path: str, **kwargs: Any) -> dict[str, Any]:
+        assert method == "POST"
+        assert path == "/api/v1/retrieval/search"
+        assert kwargs["json_body"]["mode"] == "semantic"
+        return {"query": "timeout", "top_k": 2, "filters": {}, "items": []}
+
+    register_retrieval_tools(mcp, fake_api_call)
+    payload = mcp.tools["vd.retrieval.search"](query="timeout", top_k=2, mode="semantic")
+
+    assert payload["query"] == "timeout"
+    assert payload["top_k"] == 2
+    assert payload["items"] == []
 
 
 def test_notifications_get_config_tool_normalizes_payload() -> None:
