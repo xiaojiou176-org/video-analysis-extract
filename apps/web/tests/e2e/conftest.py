@@ -112,8 +112,14 @@ def mock_api_state(mock_api_server: MockApiServer) -> MockApiState:
 
 @pytest.fixture(scope="session")
 def browser() -> Browser:
+    browser_name = os.environ.get("WEB_E2E_BROWSER", "chromium").strip().lower()
+    launchers = {"chromium", "firefox", "webkit"}
+    if browser_name not in launchers:
+        raise RuntimeError(
+            f"unsupported WEB_E2E_BROWSER={browser_name!r}; expected one of {sorted(launchers)}"
+        )
     with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(headless=True)
+        browser = getattr(playwright, browser_name).launch(headless=True)
         yield browser
         browser.close()
 

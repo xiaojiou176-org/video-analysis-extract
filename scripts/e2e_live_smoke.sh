@@ -41,6 +41,7 @@ LIVE_SMOKE_COMPUTER_USE_STRICT="${LIVE_SMOKE_COMPUTER_USE_STRICT:-1}"
 LIVE_SMOKE_COMPUTER_USE_SKIP="${LIVE_SMOKE_COMPUTER_USE_SKIP:-0}"
 LIVE_SMOKE_COMPUTER_USE_SKIP_REASON="${LIVE_SMOKE_COMPUTER_USE_SKIP_REASON:-}"
 LIVE_SMOKE_COMPUTER_USE_CMD="${LIVE_SMOKE_COMPUTER_USE_CMD:-}"
+LIVE_SMOKE_REQUIRE_SECRETS="${LIVE_SMOKE_REQUIRE_SECRETS:-0}"
 YOUTUBE_SMOKE_URL="${YOUTUBE_SMOKE_URL:-https://www.youtube.com/watch?v=dQw4w9WgXcQ}"
 BILIBILI_SMOKE_URL="${BILIBILI_SMOKE_URL:-https://www.bilibili.com/video/BV1xx411c7mD}"
 
@@ -153,6 +154,9 @@ check_prerequisites() {
   [[ -z "${YOUTUBE_API_KEY:-}" ]] && missing+=("YOUTUBE_API_KEY")
 
   if [[ "${#missing[@]}" -gt 0 ]]; then
+    if is_truthy "$LIVE_SMOKE_REQUIRE_SECRETS"; then
+      fail "missing required secrets: ${missing[*]}"
+    fi
     log "SKIP: missing secrets: ${missing[*]}"
     exit 0
   fi
