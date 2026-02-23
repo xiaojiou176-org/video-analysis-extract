@@ -45,11 +45,14 @@
 - 不依赖容器路径，文件引用均为绝对路径。
 
 ## MCP Mapping
-- `vd.subscriptions.*` -> `/api/v1/subscriptions*`
+- `vd.subscriptions.manage(action=list|upsert|remove)` -> `/api/v1/subscriptions*`
 - `vd.ingest.poll` -> `/api/v1/ingest/poll`
 - `vd.jobs.get` -> `/api/v1/jobs/{job_id}`
 - `vd.videos.list` -> `/api/v1/videos`
 - `vd.videos.process` -> `/api/v1/videos/process`
-- `vd.artifacts.get_markdown` -> `/api/v1/artifacts/markdown`
+- `vd.artifacts.get(kind=markdown|asset)` -> `/api/v1/artifacts/markdown|/api/v1/artifacts/assets`
+- `vd.health.get(scope=system|providers|all)` -> `/healthz|/api/v1/health/providers`
+- `vd.notifications.manage(action=...)` -> `/api/v1/notifications/*|/api/v1/reports/daily/send`
+- `vd.ui_audit.run|vd.ui_audit.read(action=...)` -> `/api/v1/ui-audit/*`
 
 `vd.jobs.get` 规范化输出必须保留 `steps/degradations/pipeline_final_status/llm_required/llm_gate_passed/hard_fail_reason/artifacts_index/mode`，不能裁剪为仅 `step_summary`。
