@@ -32,7 +32,7 @@ RG_ARGS=(
   -e "api\\.openai\\.com"
   -e "\\bfrom\\s+openai\\s+import\\b"
   -e "\\bimport\\s+openai\\b"
-  -e "\\bAsync?OpenAI\\b"
+  -e "\\b(?:Async)?OpenAI\\b"
   -e "\\bOpenAI\\s*\\("
   -e "\\bclient\\.responses\\.create\\b"
   -e "\\bclient\\.chat\\.completions\\.create\\b"

@@ -191,23 +191,6 @@ jobs:
       - name: Sync Python deps (locked)
         run: uv sync --frozen --extra dev --extra e2e
 
-      - name: Wait for PostgreSQL service
-        run: |
-          for _ in $(seq 1 30); do
-            if uv run --with psycopg python - <<'PY'
-          import psycopg
-          conn = psycopg.connect("postgresql://postgres:postgres@127.0.0.1:5432/video_analysis_pytests")
-          conn.close()
-          print("postgres ready")
-          PY
-            then
-              exit 0
-            fi
-            sleep 1
-          done
-          echo "postgres service not ready in time"
-          exit 1
-
       - name: Pipeline smoke
         env:
           PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/apps/worker
@@ -362,7 +345,7 @@ jobs:
           set -o pipefail
           uv run --with pytest --with playwright \
             pytest apps/web/tests/e2e -q --junitxml=.runtime-cache/web-e2e-junit-${WEB_E2E_BROWSER}.xml -rA \
-            2>&1 | tee .runtime-cache/web-e2e.log
+            2>&1 | tee .runtime-cache/web-e2e-${WEB_E2E_BROWSER}.log
 
           python - <<'PY'
           import xml.etree.ElementTree as ET
@@ -404,7 +387,7 @@ jobs:
           if-no-files-found: ignore
           path: |
             .runtime-cache/web-e2e-junit-${{ matrix.browser }}.xml
-            .runtime-cache/web-e2e.log
+            .runtime-cache/web-e2e-${{ matrix.browser }}.log
 
   aggregate-gate:
     runs-on: ubuntu-latest
