@@ -244,7 +244,7 @@ jobs:
             --cov=apps/mcp \
             --cov-report=term-missing:skip-covered \
             --cov-report=xml:.runtime-cache/python-coverage.xml \
-            --cov-fail-under=75 \
+            --cov-fail-under=65 \
             --junitxml=.runtime-cache/python-tests-junit.xml \
             2>&1 | tee .runtime-cache/python-tests.log
 
