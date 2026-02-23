@@ -22,26 +22,38 @@ def _normalize_provider_item(item: Any) -> dict[str, Any]:
 
 
 def register_health_tools(mcp: FastMCP, api_call: ApiCall) -> None:
-    @mcp.tool(name="vd.health.system", description="Get system liveness healthz.")
-    def get_system_health() -> dict[str, Any]:
-        response = api_call("GET", "/healthz")
-        if is_error_payload(response):
-            return response
-        status = to_optional_str(response.get("status")) or "unknown"
-        return {"status": status}
+    @mcp.tool(
+        name="vd.health.get",
+        description="Get system/provider health in one call. scope=system|providers|all.",
+    )
+    def get_health(
+        scope: str = "all",
+        window_hours: int = 24,
+    ) -> dict[str, Any]:
+        normalized_scope = str(scope or "all").strip().lower()
+        if normalized_scope not in {"system", "providers", "all"}:
+            normalized_scope = "all"
 
-    @mcp.tool(name="vd.health.providers", description="Get provider health rollup.")
-    def get_provider_health(window_hours: int = 24) -> dict[str, Any]:
-        response = api_call(
-            "GET",
-            "/api/v1/health/providers",
-            params={"window_hours": window_hours},
-        )
-        if is_error_payload(response):
-            return response
-        items = response.get("providers")
-        providers = items if isinstance(items, list) else []
-        return {
-            "window_hours": to_int(response.get("window_hours"), default=24),
-            "providers": [_normalize_provider_item(item) for item in providers],
-        }
+        payload: dict[str, Any] = {"scope": normalized_scope}
+        if normalized_scope in {"system", "all"}:
+            system_response = api_call("GET", "/healthz")
+            if is_error_payload(system_response):
+                return system_response
+            payload["system"] = {"status": to_optional_str(system_response.get("status")) or "unknown"}
+
+        if normalized_scope in {"providers", "all"}:
+            providers_response = api_call(
+                "GET",
+                "/api/v1/health/providers",
+                params={"window_hours": window_hours},
+            )
+            if is_error_payload(providers_response):
+                return providers_response
+            items = providers_response.get("providers")
+            providers = items if isinstance(items, list) else []
+            payload["providers"] = {
+                "window_hours": to_int(providers_response.get("window_hours"), default=24),
+                "items": [_normalize_provider_item(item) for item in providers],
+            }
+
+        return payload

@@ -807,237 +807,6 @@
   },
   "tools": [
     {
-      "name": "vd.subscriptions.list",
-      "http": {
-        "method": "GET",
-        "path": "/api/v1/subscriptions"
-      },
-      "inputSchema": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "platform": {
-            "$ref": "#/$defs/platform"
-          },
-          "enabled_only": {
-            "type": "boolean",
-            "default": false
-          }
-        }
-      },
-      "outputSchema": {
-        "oneOf": [
-          {
-            "type": "object",
-            "additionalProperties": false,
-            "required": [
-              "items"
-            ],
-            "properties": {
-              "items": {
-                "type": "array",
-                "items": {
-                  "$ref": "#/$defs/subscription"
-                }
-              }
-            }
-          },
-          {
-            "$ref": "#/$defs/errorPayload"
-          }
-        ]
-      }
-    },
-    {
-      "name": "vd.subscriptions.upsert",
-      "http": {
-        "method": "POST",
-        "path": "/api/v1/subscriptions"
-      },
-      "inputSchema": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": [
-          "platform",
-          "source_type",
-          "source_value"
-        ],
-        "properties": {
-          "platform": {
-            "$ref": "#/$defs/platform"
-          },
-          "source_type": {
-            "$ref": "#/$defs/sourceType"
-          },
-          "source_value": {
-            "type": "string",
-            "minLength": 1
-          },
-          "rsshub_route": {
-            "type": "string"
-          },
-          "enabled": {
-            "type": "boolean",
-            "default": true
-          }
-        }
-      },
-      "outputSchema": {
-        "oneOf": [
-          {
-            "type": "object",
-            "additionalProperties": false,
-            "required": [
-              "subscription",
-              "created"
-            ],
-            "properties": {
-              "subscription": {
-                "$ref": "#/$defs/subscription"
-              },
-              "created": {
-                "type": "boolean"
-              }
-            }
-          },
-          {
-            "$ref": "#/$defs/errorPayload"
-          }
-        ]
-      }
-    },
-    {
-      "name": "vd.subscriptions.remove",
-      "http": {
-        "method": "DELETE",
-        "path": "/api/v1/subscriptions/{id}"
-      },
-      "inputSchema": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": [
-          "id"
-        ],
-        "properties": {
-          "id": {
-            "type": "string",
-            "format": "uuid"
-          }
-        }
-      },
-      "outputSchema": {
-        "oneOf": [
-          {
-            "type": "object",
-            "additionalProperties": false,
-            "required": [
-              "ok"
-            ],
-            "properties": {
-              "ok": {
-                "type": "boolean"
-              }
-            }
-          },
-          {
-            "$ref": "#/$defs/errorPayload"
-          }
-        ]
-      }
-    },
-    {
-      "name": "vd.ingest.poll",
-      "http": {
-        "method": "POST",
-        "path": "/api/v1/ingest/poll"
-      },
-      "inputSchema": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "subscription_id": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "platform": {
-            "$ref": "#/$defs/platform"
-          },
-          "max_new_videos": {
-            "type": "integer",
-            "minimum": 1,
-            "default": 50
-          }
-        }
-      },
-      "outputSchema": {
-        "oneOf": [
-          {
-            "type": "object",
-            "additionalProperties": false,
-            "required": [
-              "enqueued",
-              "candidates"
-            ],
-            "properties": {
-              "enqueued": {
-                "type": "integer",
-                "minimum": 0
-              },
-              "candidates": {
-                "type": "array",
-                "items": {
-                  "type": "object",
-                  "additionalProperties": false,
-                  "required": [
-                    "video_id",
-                    "platform",
-                    "video_uid",
-                    "source_url",
-                    "job_id"
-                  ],
-                  "properties": {
-                    "video_id": {
-                      "type": "string",
-                      "format": "uuid"
-                    },
-                    "platform": {
-                      "$ref": "#/$defs/platform"
-                    },
-                    "video_uid": {
-                      "type": "string"
-                    },
-                    "source_url": {
-                      "type": "string"
-                    },
-                    "title": {
-                      "type": [
-                        "string",
-                        "null"
-                      ]
-                    },
-                    "published_at": {
-                      "type": [
-                        "string",
-                        "null"
-                      ],
-                      "format": "date-time"
-                    },
-                    "job_id": {
-                      "type": "string",
-                      "format": "uuid"
-                    }
-                  }
-                }
-              }
-            }
-          },
-          {
-            "$ref": "#/$defs/errorPayload"
-          }
-        ]
-      }
-    },
-    {
       "name": "vd.jobs.get",
       "http": {
         "method": "GET",
@@ -1233,73 +1002,6 @@
       }
     },
     {
-      "name": "vd.retrieval.search",
-      "http": {
-        "method": "POST",
-        "path": "/api/v1/retrieval/search"
-      },
-      "inputSchema": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": [
-          "query"
-        ],
-        "properties": {
-          "query": {
-            "type": "string",
-            "minLength": 1
-          },
-          "top_k": {
-            "type": "integer",
-            "minimum": 1,
-            "maximum": 50,
-            "default": 10
-          },
-          "filters": {
-            "type": "object",
-            "additionalProperties": true,
-            "default": {}
-          }
-        }
-      },
-      "outputSchema": {
-        "oneOf": [
-          {
-            "type": "object",
-            "additionalProperties": false,
-            "required": [
-              "query",
-              "top_k",
-              "filters",
-              "items"
-            ],
-            "properties": {
-              "query": {
-                "type": "string"
-              },
-              "top_k": {
-                "type": "integer",
-                "minimum": 1
-              },
-              "filters": {
-                "type": "object",
-                "additionalProperties": true
-              },
-              "items": {
-                "type": "array",
-                "items": {
-                  "$ref": "#/$defs/retrievalHit"
-                }
-              }
-            }
-          },
-          {
-            "$ref": "#/$defs/errorPayload"
-          }
-        ]
-      }
-    },
-    {
       "name": "vd.videos.list",
       "http": {
         "method": "GET",
@@ -1457,20 +1159,32 @@
       }
     },
     {
-      "name": "vd.health.providers",
+      "name": "vd.retrieval.search",
       "http": {
-        "method": "GET",
-        "path": "/api/v1/health/providers"
+        "method": "POST",
+        "path": "/api/v1/retrieval/search"
       },
       "inputSchema": {
         "type": "object",
         "additionalProperties": false,
+        "required": [
+          "query"
+        ],
         "properties": {
-          "window_hours": {
+          "query": {
+            "type": "string",
+            "minLength": 1
+          },
+          "top_k": {
             "type": "integer",
             "minimum": 1,
-            "maximum": 168,
-            "default": 24
+            "maximum": 50,
+            "default": 10
+          },
+          "filters": {
+            "type": "object",
+            "additionalProperties": true,
+            "default": {}
           }
         }
       },
@@ -1480,18 +1194,27 @@
             "type": "object",
             "additionalProperties": false,
             "required": [
-              "window_hours",
-              "providers"
+              "query",
+              "top_k",
+              "filters",
+              "items"
             ],
             "properties": {
-              "window_hours": {
+              "query": {
+                "type": "string"
+              },
+              "top_k": {
                 "type": "integer",
                 "minimum": 1
               },
-              "providers": {
+              "filters": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "items": {
                 "type": "array",
                 "items": {
-                  "$ref": "#/$defs/providerHealthSummary"
+                  "$ref": "#/$defs/retrievalHit"
                 }
               }
             }
@@ -1503,207 +1226,46 @@
       }
     },
     {
-      "name": "vd.artifacts.get_markdown",
-      "http": {
-        "method": "GET",
-        "path": "/api/v1/artifacts/markdown"
-      },
-      "inputSchema": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "job_id": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "video_url": {
-            "type": "string",
-            "minLength": 1
-          }
-        },
-        "anyOf": [
-          {
-            "required": [
-              "job_id"
-            ]
-          },
-          {
-            "required": [
-              "video_url"
-            ]
-          }
-        ]
-      },
-      "outputSchema": {
-        "oneOf": [
-          {
-            "type": "object",
-            "additionalProperties": false,
-            "required": [
-              "markdown",
-              "job_id",
-              "video_url",
-              "found"
-            ],
-            "properties": {
-              "markdown": {
-                "type": "string"
-              },
-              "job_id": {
-                "type": [
-                  "string",
-                  "null"
-                ],
-                "format": "uuid"
-              },
-              "video_url": {
-                "type": [
-                  "string",
-                  "null"
-                ]
-              },
-              "found": {
-                "type": "boolean"
-              }
-            }
-          },
-          {
-            "$ref": "#/$defs/errorPayload"
-          }
-        ]
-      }
-    },
-    {
-      "name": "vd.notifications.send_test",
+      "name": "vd.workflows.run",
       "http": {
         "method": "POST",
-        "path": "/api/v1/notifications/test"
-      },
-      "inputSchema": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "to_email": {
-            "type": "string",
-            "minLength": 1
-          },
-          "subject": {
-            "type": "string",
-            "minLength": 1
-          },
-          "body": {
-            "type": "string",
-            "minLength": 1
-          }
-        }
-      },
-      "outputSchema": {
-        "oneOf": [
-          {
-            "type": "object",
-            "additionalProperties": false,
-            "required": [
-              "delivery_id",
-              "status",
-              "provider_message_id",
-              "error_message",
-              "recipient_email",
-              "subject",
-              "sent_at",
-              "created_at"
-            ],
-            "properties": {
-              "delivery_id": {
-                "type": [
-                  "string",
-                  "null"
-                ],
-                "format": "uuid"
-              },
-              "status": {
-                "type": [
-                  "string",
-                  "null"
-                ]
-              },
-              "provider_message_id": {
-                "type": [
-                  "string",
-                  "null"
-                ]
-              },
-              "error_message": {
-                "type": [
-                  "string",
-                  "null"
-                ]
-              },
-              "recipient_email": {
-                "type": [
-                  "string",
-                  "null"
-                ]
-              },
-              "subject": {
-                "type": [
-                  "string",
-                  "null"
-                ]
-              },
-              "sent_at": {
-                "type": [
-                  "string",
-                  "null"
-                ],
-                "format": "date-time"
-              },
-              "created_at": {
-                "type": [
-                  "string",
-                  "null"
-                ],
-                "format": "date-time"
-              }
-            }
-          },
-          {
-            "$ref": "#/$defs/errorPayload"
-          }
-        ]
-      }
-    },
-    {
-      "name": "vd.notifications.set_config",
-      "http": {
-        "method": "PUT",
-        "path": "/api/v1/notifications/config"
+        "path": "/api/v1/workflows/run"
       },
       "inputSchema": {
         "type": "object",
         "additionalProperties": false,
         "required": [
-          "enabled"
+          "workflow"
         ],
         "properties": {
-          "enabled": {
-            "type": "boolean"
-          },
-          "to_email": {
+          "workflow": {
             "type": "string",
-            "minLength": 1
+            "enum": [
+              "poll_feeds",
+              "daily_digest",
+              "notification_retry",
+              "cleanup",
+              "provider_canary"
+            ]
           },
-          "daily_digest_enabled": {
-            "type": "boolean",
-            "default": false
-          },
-          "daily_digest_hour_utc": {
-            "type": "integer",
-            "minimum": 0,
-            "maximum": 23
-          },
-          "failure_alert_enabled": {
+          "run_once": {
             "type": "boolean",
             "default": true
+          },
+          "wait_for_result": {
+            "type": "boolean",
+            "default": false
+          },
+          "workflow_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "payload": {
+            "type": "object",
+            "default": {},
+            "additionalProperties": true
           }
         }
       },
@@ -1713,114 +1275,38 @@
             "type": "object",
             "additionalProperties": false,
             "required": [
-              "enabled",
-              "to_email",
-              "daily_digest_enabled",
-              "daily_digest_hour_utc",
-              "failure_alert_enabled",
-              "created_at",
-              "updated_at"
-            ],
-            "properties": {
-              "enabled": {
-                "type": [
-                  "boolean",
-                  "null"
-                ]
-              },
-              "to_email": {
-                "type": [
-                  "string",
-                  "null"
-                ]
-              },
-              "daily_digest_enabled": {
-                "type": [
-                  "boolean",
-                  "null"
-                ]
-              },
-              "daily_digest_hour_utc": {
-                "type": [
-                  "integer",
-                  "null"
-                ]
-              },
-              "failure_alert_enabled": {
-                "type": [
-                  "boolean",
-                  "null"
-                ]
-              },
-              "created_at": {
-                "type": [
-                  "string",
-                  "null"
-                ],
-                "format": "date-time"
-              },
-              "updated_at": {
-                "type": [
-                  "string",
-                  "null"
-                ],
-                "format": "date-time"
-              }
-            }
-          },
-          {
-            "$ref": "#/$defs/errorPayload"
-          }
-        ]
-      }
-    },
-    {
-      "name": "vd.reports.daily_send",
-      "http": {
-        "method": "POST",
-        "path": "/api/v1/reports/daily/send"
-      },
-      "inputSchema": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "date": {
-            "type": "string",
-            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
-          },
-          "to_email": {
-            "type": "string",
-            "minLength": 1
-          },
-          "subject": {
-            "type": "string",
-            "minLength": 1
-          },
-          "body": {
-            "type": "string",
-            "minLength": 1
-          }
-        }
-      },
-      "outputSchema": {
-        "oneOf": [
-          {
-            "type": "object",
-            "additionalProperties": false,
-            "required": [
-              "sent",
+              "workflow",
+              "workflow_name",
+              "workflow_id",
+              "run_id",
               "status",
-              "delivery_id",
-              "date",
-              "recipient_email",
-              "subject",
-              "error_message",
-              "sent_at",
-              "created_at"
+              "started_at",
+              "result"
             ],
             "properties": {
-              "sent": {
-                "type": "boolean"
+              "workflow": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "workflow_name": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "workflow_id": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "run_id": {
+                "type": [
+                  "string",
+                  "null"
+                ]
               },
               "status": {
                 "type": [
@@ -1828,51 +1314,18 @@
                   "null"
                 ]
               },
-              "delivery_id": {
-                "type": [
-                  "string",
-                  "null"
-                ],
-                "format": "uuid"
-              },
-              "date": {
-                "type": [
-                  "string",
-                  "null"
-                ],
-                "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
-              },
-              "recipient_email": {
+              "started_at": {
                 "type": [
                   "string",
                   "null"
                 ]
               },
-              "subject": {
+              "result": {
                 "type": [
-                  "string",
-                  "null"
-                ]
-              },
-              "error_message": {
-                "type": [
-                  "string",
-                  "null"
-                ]
-              },
-              "sent_at": {
-                "type": [
-                  "string",
+                  "object",
                   "null"
                 ],
-                "format": "date-time"
-              },
-              "created_at": {
-                "type": [
-                  "string",
-                  "null"
-                ],
-                "format": "date-time"
+                "additionalProperties": true
               }
             }
           },
@@ -1883,108 +1336,26 @@
       }
     },
     {
-      "name": "vd.notifications.get_config",
+      "name": "vd.ingest.poll",
       "http": {
-        "method": "GET",
-        "path": "/api/v1/notifications/config"
+        "method": "POST",
+        "path": "/api/v1/ingest/poll"
       },
       "inputSchema": {
         "type": "object",
         "additionalProperties": false,
-        "properties": {}
-      },
-      "outputSchema": {
-        "oneOf": [
-          {
-            "type": "object",
-            "additionalProperties": false,
-            "required": [
-              "enabled",
-              "to_email",
-              "daily_digest_enabled",
-              "daily_digest_hour_utc",
-              "failure_alert_enabled",
-              "created_at",
-              "updated_at"
-            ],
-            "properties": {
-              "enabled": {
-                "type": [
-                  "boolean",
-                  "null"
-                ]
-              },
-              "to_email": {
-                "type": [
-                  "string",
-                  "null"
-                ]
-              },
-              "daily_digest_enabled": {
-                "type": [
-                  "boolean",
-                  "null"
-                ]
-              },
-              "daily_digest_hour_utc": {
-                "type": [
-                  "integer",
-                  "null"
-                ]
-              },
-              "failure_alert_enabled": {
-                "type": [
-                  "boolean",
-                  "null"
-                ]
-              },
-              "created_at": {
-                "type": [
-                  "string",
-                  "null"
-                ],
-                "format": "date-time"
-              },
-              "updated_at": {
-                "type": [
-                  "string",
-                  "null"
-                ],
-                "format": "date-time"
-              }
-            }
-          },
-          {
-            "$ref": "#/$defs/errorPayload"
-          }
-        ]
-      }
-    },
-    {
-      "name": "vd.artifacts.get_asset",
-      "http": {
-        "method": "GET",
-        "path": "/api/v1/artifacts/assets"
-      },
-      "inputSchema": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": [
-          "job_id",
-          "path"
-        ],
         "properties": {
-          "job_id": {
+          "subscription_id": {
             "type": "string",
             "format": "uuid"
           },
-          "path": {
-            "type": "string",
-            "minLength": 1
+          "platform": {
+            "$ref": "#/$defs/platform"
           },
-          "include_base64": {
-            "type": "boolean",
-            "default": false
+          "max_new_videos": {
+            "type": "integer",
+            "minimum": 1,
+            "default": 50
           }
         }
       },
@@ -1994,70 +1365,59 @@
             "type": "object",
             "additionalProperties": false,
             "required": [
-              "exists",
-              "asset_url",
-              "mime_type",
-              "base64",
-              "size_bytes"
+              "enqueued",
+              "candidates"
             ],
             "properties": {
-              "exists": {
-                "type": "boolean"
+              "enqueued": {
+                "type": "integer",
+                "minimum": 0
               },
-              "asset_url": {
-                "type": [
-                  "string",
-                  "null"
-                ]
-              },
-              "mime_type": {
-                "type": [
-                  "string",
-                  "null"
-                ]
-              },
-              "base64": {
-                "type": [
-                  "string",
-                  "null"
-                ]
-              },
-              "size_bytes": {
-                "type": [
-                  "integer",
-                  "null"
-                ]
-              }
-            }
-          },
-          {
-            "$ref": "#/$defs/errorPayload"
-          }
-        ]
-      }
-    },
-    {
-      "name": "vd.health.system",
-      "http": {
-        "method": "GET",
-        "path": "/healthz"
-      },
-      "inputSchema": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {}
-      },
-      "outputSchema": {
-        "oneOf": [
-          {
-            "type": "object",
-            "additionalProperties": false,
-            "required": [
-              "status"
-            ],
-            "properties": {
-              "status": {
-                "type": "string"
+              "candidates": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "video_id",
+                    "platform",
+                    "video_uid",
+                    "source_url",
+                    "job_id"
+                  ],
+                  "properties": {
+                    "video_id": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "platform": {
+                      "$ref": "#/$defs/platform"
+                    },
+                    "video_uid": {
+                      "type": "string"
+                    },
+                    "source_url": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "published_at": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "format": "date-time"
+                    },
+                    "job_id": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
               }
             }
           },
@@ -2202,54 +1562,28 @@
       }
     },
     {
-      "name": "vd.ui_audit.get",
+      "name": "vd.health.get",
       "http": {
-        "method": "GET",
-        "path": "/api/v1/ui-audit/{run_id}"
+        "method": "POST",
+        "path": "/api/v1/mcp/virtual/health/get"
       },
       "inputSchema": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "run_id"
-        ],
         "properties": {
-          "run_id": {
+          "scope": {
             "type": "string",
-            "format": "uuid"
-          }
-        }
-      },
-      "outputSchema": {
-        "oneOf": [
-          {
-            "$ref": "#/$defs/uiAuditRun"
+            "enum": [
+              "system",
+              "providers",
+              "all"
+            ],
+            "default": "all"
           },
-          {
-            "$ref": "#/$defs/errorPayload"
-          }
-        ]
-      }
-    },
-    {
-      "name": "vd.ui_audit.list_findings",
-      "http": {
-        "method": "GET",
-        "path": "/api/v1/ui-audit/{run_id}/findings"
-      },
-      "inputSchema": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": [
-          "run_id"
-        ],
-        "properties": {
-          "run_id": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "severity": {
-            "type": "string"
+          "window_hours": {
+            "type": "integer",
+            "minimum": 1,
+            "default": 24
           }
         }
       },
@@ -2257,30 +1591,7 @@
         "oneOf": [
           {
             "type": "object",
-            "additionalProperties": false,
-            "required": [
-              "run_id",
-              "severity",
-              "items"
-            ],
-            "properties": {
-              "run_id": {
-                "type": "string",
-                "format": "uuid"
-              },
-              "severity": {
-                "type": [
-                  "string",
-                  "null"
-                ]
-              },
-              "items": {
-                "type": "array",
-                "items": {
-                  "$ref": "#/$defs/uiAuditFinding"
-                }
-              }
-            }
+            "additionalProperties": true
           },
           {
             "$ref": "#/$defs/errorPayload"
@@ -2289,26 +1600,152 @@
       }
     },
     {
-      "name": "vd.ui_audit.get_artifact",
+      "name": "vd.subscriptions.manage",
       "http": {
-        "method": "GET",
-        "path": "/api/v1/ui-audit/{run_id}/artifact"
+        "method": "POST",
+        "path": "/api/v1/mcp/virtual/subscriptions/manage"
       },
       "inputSchema": {
         "type": "object",
         "additionalProperties": false,
         "required": [
-          "run_id",
-          "key"
+          "action"
         ],
         "properties": {
-          "run_id": {
+          "action": {
             "type": "string",
-            "format": "uuid"
+            "enum": [
+              "list",
+              "upsert",
+              "remove"
+            ]
           },
-          "key": {
+          "id": {
+            "type": "string"
+          },
+          "platform": {
+            "$ref": "#/$defs/platform"
+          },
+          "enabled_only": {
+            "type": "boolean"
+          },
+          "source_type": {
+            "$ref": "#/$defs/sourceType"
+          },
+          "source_value": {
+            "type": "string"
+          },
+          "rsshub_route": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean",
+            "default": true
+          }
+        }
+      },
+      "outputSchema": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": true
+          },
+          {
+            "$ref": "#/$defs/errorPayload"
+          }
+        ]
+      }
+    },
+    {
+      "name": "vd.notifications.manage",
+      "http": {
+        "method": "POST",
+        "path": "/api/v1/mcp/virtual/notifications/manage"
+      },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "action"
+        ],
+        "properties": {
+          "action": {
             "type": "string",
-            "minLength": 1
+            "enum": [
+              "get_config",
+              "set_config",
+              "send_test",
+              "daily_send"
+            ]
+          },
+          "date": {
+            "type": "string"
+          },
+          "to_email": {
+            "type": "string"
+          },
+          "subject": {
+            "type": "string"
+          },
+          "body": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "daily_digest_enabled": {
+            "type": "boolean"
+          },
+          "daily_digest_hour_utc": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 23
+          },
+          "failure_alert_enabled": {
+            "type": "boolean"
+          }
+        }
+      },
+      "outputSchema": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": true
+          },
+          {
+            "$ref": "#/$defs/errorPayload"
+          }
+        ]
+      }
+    },
+    {
+      "name": "vd.artifacts.get",
+      "http": {
+        "method": "POST",
+        "path": "/api/v1/mcp/virtual/artifacts/get"
+      },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "kind"
+        ],
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "markdown",
+              "asset"
+            ]
+          },
+          "job_id": {
+            "type": "string"
+          },
+          "video_url": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
           },
           "include_base64": {
             "type": "boolean",
@@ -2320,43 +1757,7 @@
         "oneOf": [
           {
             "type": "object",
-            "additionalProperties": false,
-            "required": [
-              "key",
-              "path",
-              "mime_type",
-              "size_bytes",
-              "category",
-              "exists",
-              "base64"
-            ],
-            "properties": {
-              "key": {
-                "type": "string"
-              },
-              "path": {
-                "type": "string"
-              },
-              "mime_type": {
-                "type": "string"
-              },
-              "size_bytes": {
-                "type": "integer",
-                "minimum": 0
-              },
-              "category": {
-                "type": "string"
-              },
-              "exists": {
-                "type": "boolean"
-              },
-              "base64": {
-                "type": [
-                  "string",
-                  "null"
-                ]
-              }
-            }
+            "additionalProperties": true
           },
           {
             "$ref": "#/$defs/errorPayload"
@@ -2365,21 +1766,47 @@
       }
     },
     {
-      "name": "vd.ui_audit.autofix",
+      "name": "vd.ui_audit.read",
       "http": {
         "method": "POST",
-        "path": "/api/v1/ui-audit/{run_id}/autofix"
+        "path": "/api/v1/mcp/virtual/ui-audit/read"
       },
       "inputSchema": {
         "type": "object",
         "additionalProperties": false,
         "required": [
+          "action",
           "run_id"
         ],
         "properties": {
-          "run_id": {
+          "action": {
             "type": "string",
-            "format": "uuid"
+            "enum": [
+              "get",
+              "list_findings",
+              "get_artifact",
+              "autofix"
+            ]
+          },
+          "run_id": {
+            "type": "string"
+          },
+          "severity": {
+            "type": "string",
+            "enum": [
+              "critical",
+              "high",
+              "medium",
+              "low",
+              "info"
+            ]
+          },
+          "key": {
+            "type": "string"
+          },
+          "include_base64": {
+            "type": "boolean",
+            "default": false
           },
           "mode": {
             "type": "string",
@@ -2406,117 +1833,8 @@
       "outputSchema": {
         "oneOf": [
           {
-            "$ref": "#/$defs/uiAuditAutofix"
-          },
-          {
-            "$ref": "#/$defs/errorPayload"
-          }
-        ]
-      }
-    },
-    {
-      "name": "vd.workflows.run",
-      "http": {
-        "method": "POST",
-        "path": "/api/v1/workflows/run"
-      },
-      "inputSchema": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": [
-          "workflow"
-        ],
-        "properties": {
-          "workflow": {
-            "type": "string",
-            "enum": [
-              "poll_feeds",
-              "daily_digest",
-              "notification_retry",
-              "cleanup",
-              "provider_canary"
-            ]
-          },
-          "run_once": {
-            "type": "boolean",
-            "default": true
-          },
-          "wait_for_result": {
-            "type": "boolean",
-            "default": false
-          },
-          "workflow_id": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "payload": {
             "type": "object",
-            "default": {},
             "additionalProperties": true
-          }
-        }
-      },
-      "outputSchema": {
-        "oneOf": [
-          {
-            "type": "object",
-            "additionalProperties": false,
-            "required": [
-              "workflow",
-              "workflow_name",
-              "workflow_id",
-              "run_id",
-              "status",
-              "started_at",
-              "result"
-            ],
-            "properties": {
-              "workflow": {
-                "type": [
-                  "string",
-                  "null"
-                ]
-              },
-              "workflow_name": {
-                "type": [
-                  "string",
-                  "null"
-                ]
-              },
-              "workflow_id": {
-                "type": [
-                  "string",
-                  "null"
-                ]
-              },
-              "run_id": {
-                "type": [
-                  "string",
-                  "null"
-                ]
-              },
-              "status": {
-                "type": [
-                  "string",
-                  "null"
-                ]
-              },
-              "started_at": {
-                "type": [
-                  "string",
-                  "null"
-                ]
-              },
-              "result": {
-                "type": [
-                  "object",
-                  "null"
-                ],
-                "additionalProperties": true
-              }
-            }
           },
           {
             "$ref": "#/$defs/errorPayload"

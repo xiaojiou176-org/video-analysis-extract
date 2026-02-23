@@ -97,68 +97,78 @@ def register_ui_audit_tools(mcp: FastMCP, api_call: ApiCall) -> None:
         )
         return _normalize_run_payload(response)
 
-    @mcp.tool(name="vd.ui_audit.get", description="Get one UI audit run by id.")
-    def ui_audit_get(run_id: str) -> dict[str, Any]:
-        response = api_call("GET", f"/api/v1/ui-audit/{run_id}")
-        return _normalize_run_payload(response)
-
-    @mcp.tool(name="vd.ui_audit.list_findings", description="List findings for one UI audit run.")
-    def ui_audit_list_findings(
+    @mcp.tool(
+        name="vd.ui_audit.read",
+        description="Read UI audit results. action=get|list_findings|get_artifact|autofix.",
+    )
+    def ui_audit_read(
+        action: str,
         run_id: str,
         severity: str | None = None,
-    ) -> dict[str, Any]:
-        response = api_call(
-            "GET",
-            f"/api/v1/ui-audit/{run_id}/findings",
-            params={"severity": severity},
-        )
-        if is_error_payload(response):
-            return response
-
-        items = response.get("items")
-        raw_items = items if isinstance(items, list) else []
-        return {
-            "run_id": run_id,
-            "severity": severity,
-            "items": [_normalize_finding(item) for item in raw_items],
-        }
-
-    @mcp.tool(name="vd.ui_audit.get_artifact", description="Get one UI audit artifact metadata or inline bytes.")
-    def ui_audit_get_artifact(
-        run_id: str,
-        key: str,
+        key: str | None = None,
         include_base64: bool = False,
-    ) -> dict[str, Any]:
-        response = api_call(
-            "GET",
-            f"/api/v1/ui-audit/{run_id}/artifact",
-            params={
-                "key": key,
-                "include_base64": include_base64,
-            },
-        )
-        if is_error_payload(response):
-            return response
-
-        payload = _normalize_artifact(response)
-        payload["exists"] = bool(response.get("exists", False))
-        payload["base64"] = to_optional_str(response.get("base64")) if include_base64 else None
-        return payload
-
-    @mcp.tool(name="vd.ui_audit.autofix", description="Generate or apply UI audit autofix plan for one run.")
-    def ui_audit_autofix(
-        run_id: str,
         mode: str = "dry-run",
         max_files: int = 3,
         max_changed_lines: int = 120,
     ) -> dict[str, Any]:
-        response = api_call(
-            "POST",
-            f"/api/v1/ui-audit/{run_id}/autofix",
-            json_body={
-                "mode": mode,
-                "max_files": max_files,
-                "max_changed_lines": max_changed_lines,
-            },
-        )
-        return _normalize_autofix_payload(response)
+        normalized_action = str(action or "").strip().lower()
+
+        if normalized_action == "get":
+            response = api_call("GET", f"/api/v1/ui-audit/{run_id}")
+            return _normalize_run_payload(response)
+
+        if normalized_action == "list_findings":
+            response = api_call(
+                "GET",
+                f"/api/v1/ui-audit/{run_id}/findings",
+                params={"severity": severity},
+            )
+            if is_error_payload(response):
+                return response
+            items = response.get("items")
+            raw_items = items if isinstance(items, list) else []
+            return {
+                "run_id": run_id,
+                "severity": severity,
+                "items": [_normalize_finding(item) for item in raw_items],
+            }
+
+        if normalized_action == "get_artifact":
+            if not key:
+                return {
+                    "code": "INVALID_ARGUMENT",
+                    "message": "key is required when action=get_artifact",
+                    "details": {"method": "GET", "path": "/api/v1/ui-audit/{run_id}/artifact"},
+                }
+            response = api_call(
+                "GET",
+                f"/api/v1/ui-audit/{run_id}/artifact",
+                params={
+                    "key": key,
+                    "include_base64": include_base64,
+                },
+            )
+            if is_error_payload(response):
+                return response
+            payload = _normalize_artifact(response)
+            payload["exists"] = bool(response.get("exists", False))
+            payload["base64"] = to_optional_str(response.get("base64")) if include_base64 else None
+            return payload
+
+        if normalized_action == "autofix":
+            response = api_call(
+                "POST",
+                f"/api/v1/ui-audit/{run_id}/autofix",
+                json_body={
+                    "mode": mode,
+                    "max_files": max_files,
+                    "max_changed_lines": max_changed_lines,
+                },
+            )
+            return _normalize_autofix_payload(response)
+
+        return {
+            "code": "INVALID_ARGUMENT",
+            "message": "action must be one of: get, list_findings, get_artifact, autofix",
+            "details": {"method": "POST", "path": "vd.ui_audit.read"},
+        }
