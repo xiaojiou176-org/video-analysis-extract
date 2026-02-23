@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 import json
 from pathlib import Path
 import sqlite3
@@ -23,7 +23,55 @@ def _is_expired(ts: str | None) -> bool:
 def _json_dumps(payload: dict[str, Any] | None) -> str | None:
     if payload is None:
         return None
-    return json.dumps(payload, ensure_ascii=False, sort_keys=True)
+    normalized = _to_jsonable(payload)
+    return json.dumps(normalized, ensure_ascii=False, sort_keys=True)
+
+
+def _json_fallback(value: Any) -> Any:
+    if isinstance(value, (datetime, date)):
+        return value.isoformat()
+    if isinstance(value, Path):
+        return str(value)
+    if isinstance(value, (set, tuple)):
+        return list(value)
+    if hasattr(value, "model_dump") and callable(value.model_dump):
+        return value.model_dump()  # pydantic v2
+    if hasattr(value, "dict") and callable(value.dict):
+        return value.dict()  # pydantic v1 compatibility
+    if hasattr(value, "isoformat") and callable(value.isoformat):
+        try:
+            return value.isoformat()
+        except Exception:
+            pass
+    # Never fail step persistence because of metadata shape.
+    return str(value)
+
+
+def _to_jsonable(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {str(k): _to_jsonable(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_to_jsonable(item) for item in value]
+    if isinstance(value, tuple):
+        return [_to_jsonable(item) for item in value]
+    if isinstance(value, set):
+        return [_to_jsonable(item) for item in value]
+    if isinstance(value, (datetime, date)):
+        return value.isoformat()
+    if isinstance(value, Path):
+        return str(value)
+    if hasattr(value, "model_dump") and callable(value.model_dump):
+        return _to_jsonable(value.model_dump())
+    if hasattr(value, "dict") and callable(value.dict):
+        return _to_jsonable(value.dict())
+    if hasattr(value, "isoformat") and callable(value.isoformat):
+        try:
+            return value.isoformat()
+        except Exception:
+            pass
+    if isinstance(value, (str, int, float, bool)) or value is None:
+        return value
+    return str(value)
 
 
 def _json_loads(payload: str | None) -> dict[str, Any] | None:

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 from pathlib import Path
 import re
 import shutil
@@ -91,9 +90,6 @@ def build_comments_prompt_context(comments: dict[str, Any], *, top_n: int = 4) -
 
 
 def should_include_frame_prompt(settings: Settings) -> bool:
-    env_value = os.getenv("PIPELINE_LLM_INCLUDE_FRAMES")
-    if env_value is not None:
-        return coerce_bool(env_value, default=False)
     if hasattr(settings, "pipeline_llm_include_frames"):
         return coerce_bool(getattr(settings, "pipeline_llm_include_frames"), default=False)
     return False

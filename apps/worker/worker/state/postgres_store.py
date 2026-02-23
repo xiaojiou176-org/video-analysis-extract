@@ -19,10 +19,20 @@ class PostgresBusinessStore:
         subscription_id: str | None = None,
         platform: str | None = None,
     ) -> list[dict[str, Any]]:
+        filters = ["enabled = TRUE"]
+        params: dict[str, Any] = {}
+        if subscription_id is not None:
+            filters.append("id = CAST(:subscription_id AS UUID)")
+            params["subscription_id"] = subscription_id
+        if platform is not None:
+            filters.append("platform = :platform")
+            params["platform"] = platform
+
+        where_clause = " AND ".join(filters)
         with self._engine.begin() as conn:
             rows = conn.execute(
                 text(
-                    """
+                    f"""
                     SELECT
                         id::text AS id,
                         platform,
@@ -31,16 +41,11 @@ class PostgresBusinessStore:
                         rsshub_route,
                         enabled
                     FROM subscriptions
-                    WHERE enabled = TRUE
-                      AND (:subscription_id IS NULL OR id = CAST(:subscription_id AS UUID))
-                      AND (:platform IS NULL OR platform = :platform)
+                    WHERE {where_clause}
                     ORDER BY created_at DESC
                     """
                 ),
-                {
-                    "subscription_id": subscription_id,
-                    "platform": platform,
-                },
+                params,
             ).mappings().all()
         return [dict(row) for row in rows]
 
@@ -318,6 +323,13 @@ class PostgresBusinessStore:
             raise ValueError("embedding vector is empty")
         return "[" + ",".join(f"{float(value):.10f}" for value in values) + "]"
 
+    @staticmethod
+    def _video_embeddings_table_exists(conn: Any) -> bool:
+        exists = conn.execute(
+            text("SELECT to_regclass('public.video_embeddings') IS NOT NULL")
+        ).scalar()
+        return bool(exists)
+
     def upsert_video_embeddings(
         self,
         *,
@@ -330,6 +342,8 @@ class PostgresBusinessStore:
             return 0
 
         with self._engine.begin() as conn:
+            if not self._video_embeddings_table_exists(conn):
+                return 0
             conn.execute(
                 text(
                     """
@@ -403,6 +417,8 @@ class PostgresBusinessStore:
         normalized_limit = max(1, int(limit))
         normalized_content_type = str(content_type or "").strip().lower() or None
         with self._engine.begin() as conn:
+            if not self._video_embeddings_table_exists(conn):
+                return []
             rows = conn.execute(
                 text(
                     """

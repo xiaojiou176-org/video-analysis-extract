@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 from typing import Any
 
 from worker.config import Settings
@@ -30,34 +29,11 @@ from worker.pipeline.runner_policies import (
 from worker.pipeline.types import RetryCategory
 
 
-def _safe_int_env(name: str, default: int) -> int:
-    raw = os.getenv(name)
-    if raw is None:
-        return default
-    try:
-        return int(raw)
-    except ValueError:
-        return default
-
-
-def _safe_float_env(name: str, default: float) -> float:
-    raw = os.getenv(name)
-    if raw is None:
-        return default
-    try:
-        return float(raw)
-    except ValueError:
-        return default
-
-
 def pipeline_llm_hard_required(settings: Settings, llm_policy: dict[str, Any] | None = None) -> bool:
     policy = dict(llm_policy or {})
     if "hard_required" in policy:
         return coerce_bool(policy.get("hard_required"), default=True)
-    raw = os.getenv("PIPELINE_LLM_HARD_REQUIRED")
-    if raw is None:
-        return True
-    return coerce_bool(raw, default=True)
+    return coerce_bool(getattr(settings, "pipeline_llm_hard_required", True), default=True)
 
 
 def pipeline_llm_fail_on_provider_error(
@@ -67,10 +43,7 @@ def pipeline_llm_fail_on_provider_error(
     policy = dict(llm_policy or {})
     if "fail_on_provider_error" in policy:
         return coerce_bool(policy.get("fail_on_provider_error"), default=True)
-    raw = os.getenv("PIPELINE_LLM_FAIL_ON_PROVIDER_ERROR")
-    if raw is None:
-        return True
-    return coerce_bool(raw, default=True)
+    return coerce_bool(getattr(settings, "pipeline_llm_fail_on_provider_error", True), default=True)
 
 
 def pipeline_llm_max_retries(settings: Settings, llm_policy: dict[str, Any] | None = None) -> int | None:
@@ -79,14 +52,10 @@ def pipeline_llm_max_retries(settings: Settings, llm_policy: dict[str, Any] | No
         retries = coerce_int(policy.get("max_retries"), -1)
         return retries if retries >= 0 else None
 
-    raw = os.getenv("PIPELINE_LLM_MAX_RETRIES")
+    raw = getattr(settings, "pipeline_llm_max_retries", None)
     if raw is None:
         return None
-    try:
-        parsed = int(raw)
-    except ValueError:
-        return None
-    return max(0, parsed)
+    return max(0, coerce_int(raw, 0))
 
 
 def build_llm_policy(settings: Settings, overrides: dict[str, Any]) -> dict[str, Any]:
@@ -109,40 +78,67 @@ def build_retry_policy(
 
     policy: dict[RetryCategory, dict[str, float | int]] = {
         "transient": {
-            "retries": max(0, _safe_int_env("PIPELINE_RETRY_TRANSIENT_ATTEMPTS", base_retries)),
+            "retries": max(
+                0,
+                coerce_int(getattr(settings, "pipeline_retry_transient_attempts", None), base_retries),
+            ),
             "backoff": max(
                 0.0,
-                _safe_float_env("PIPELINE_RETRY_TRANSIENT_BACKOFF_SECONDS", base_backoff),
+                coerce_float(
+                    getattr(settings, "pipeline_retry_transient_backoff_seconds", None),
+                    base_backoff,
+                ),
             ),
             "max_backoff": max(
                 0.0,
-                _safe_float_env("PIPELINE_RETRY_TRANSIENT_MAX_BACKOFF_SECONDS", base_backoff * 8),
+                coerce_float(
+                    getattr(settings, "pipeline_retry_transient_max_backoff_seconds", None),
+                    base_backoff * 8,
+                ),
             ),
         },
         "rate_limit": {
-            "retries": max(0, _safe_int_env("PIPELINE_RETRY_RATE_LIMIT_ATTEMPTS", max(base_retries, 3))),
+            "retries": max(
+                0,
+                coerce_int(
+                    getattr(settings, "pipeline_retry_rate_limit_attempts", None),
+                    max(base_retries, 3),
+                ),
+            ),
             "backoff": max(
                 0.0,
-                _safe_float_env("PIPELINE_RETRY_RATE_LIMIT_BACKOFF_SECONDS", base_backoff * 2),
+                coerce_float(
+                    getattr(settings, "pipeline_retry_rate_limit_backoff_seconds", None),
+                    base_backoff * 2,
+                ),
             ),
             "max_backoff": max(
                 0.0,
-                _safe_float_env(
-                    "PIPELINE_RETRY_RATE_LIMIT_MAX_BACKOFF_SECONDS",
+                coerce_float(
+                    getattr(settings, "pipeline_retry_rate_limit_max_backoff_seconds", None),
                     max(base_backoff * 16, 1.0),
                 ),
             ),
         },
         "auth": {
-            "retries": max(0, _safe_int_env("PIPELINE_RETRY_AUTH_ATTEMPTS", 0)),
-            "backoff": max(0.0, _safe_float_env("PIPELINE_RETRY_AUTH_BACKOFF_SECONDS", base_backoff)),
+            "retries": max(
+                0,
+                coerce_int(getattr(settings, "pipeline_retry_auth_attempts", None), 0),
+            ),
+            "backoff": max(
+                0.0,
+                coerce_float(getattr(settings, "pipeline_retry_auth_backoff_seconds", None), base_backoff),
+            ),
             "max_backoff": max(
                 0.0,
-                _safe_float_env("PIPELINE_RETRY_AUTH_MAX_BACKOFF_SECONDS", base_backoff * 2),
+                coerce_float(
+                    getattr(settings, "pipeline_retry_auth_max_backoff_seconds", None),
+                    base_backoff * 2,
+                ),
             ),
         },
         "fatal": {
-            "retries": max(0, _safe_int_env("PIPELINE_RETRY_FATAL_ATTEMPTS", 0)),
+            "retries": max(0, coerce_int(getattr(settings, "pipeline_retry_fatal_attempts", None), 0)),
             "backoff": 0.0,
             "max_backoff": 0.0,
         },

@@ -21,6 +21,70 @@ from worker.pipeline.steps.llm import normalize_digest_payload, normalize_outlin
 from worker.pipeline.types import PipelineContext, StepExecution
 
 
+def _has_transcript_evidence(transcript: str) -> bool:
+    return len(transcript.strip()) >= 80
+
+
+def _has_comments_evidence(comments: dict[str, Any]) -> bool:
+    top_comments = comments.get("top_comments") if isinstance(comments, dict) else None
+    return isinstance(top_comments, list) and bool(top_comments)
+
+
+def _is_low_evidence_mode(
+    *,
+    transcript: str,
+    comments: dict[str, Any],
+    frames: list[dict[str, Any]],
+) -> bool:
+    return (
+        not _has_transcript_evidence(transcript)
+        and not _has_comments_evidence(comments)
+        and not bool(frames)
+    )
+
+
+def _apply_low_evidence_guard(
+    digest: dict[str, Any],
+    outline: dict[str, Any],
+    *,
+    transcript: str,
+    comments: dict[str, Any],
+) -> None:
+    digest["summary"] = (
+        "当前缺少可验证证据（字幕/评论/截图均不可用），无法生成高置信度内容摘要。"
+        "以下仅保留流程性提示，不提供具体章节与时间戳结论。"
+    )
+    digest["tldr"] = [
+        "未获取到可用字幕，无法基于语义内容做摘要。",
+        "未采集到评论，缺少外部观点信号。",
+        "未提取到关键截图，缺少画面证据。",
+    ]
+    digest["highlights"] = [
+        "证据不足：本次结果不能作为视频内容事实依据。",
+        "已禁用章节精读与时间戳定位，避免误导。",
+        "建议补齐字幕、评论或关键帧后重新生成。",
+    ]
+    digest["action_items"] = [
+        "检查字幕抓取链路（平台字幕/ASR）后重跑。",
+        "启用评论采集或确认评论接口可用。",
+        "启用关键帧提取后再次生成摘要。",
+    ]
+    digest["timestamp_references"] = []
+    digest["code_blocks"] = []
+
+    fallback_notes = [str(item) for item in (digest.get("fallback_notes") or []) if str(item).strip()]
+    if not _has_transcript_evidence(transcript):
+        fallback_notes.append("transcript_missing_or_too_short")
+    if not _has_comments_evidence(comments):
+        fallback_notes.append("comments_missing")
+    fallback_notes.append("frames_missing")
+    fallback_notes.append("quality_gate:low_evidence_mode")
+    digest["fallback_notes"] = fallback_notes
+
+    outline["chapters"] = []
+    outline["timestamp_references"] = []
+
+
 async def step_write_artifacts(ctx: PipelineContext, state: dict[str, Any]) -> StepExecution:
     try:
         template = load_digest_template(ctx.settings)
@@ -35,6 +99,8 @@ async def step_write_artifacts(ctx: PipelineContext, state: dict[str, Any]) -> S
         degradations = list(state.get("degradations") or [])
         raw_frames = list(state.get("frames") or [])
         frames, frame_files = materialize_frames_for_artifacts(raw_frames, ctx.artifacts_dir)
+        if _is_low_evidence_mode(transcript=transcript, comments=comments, frames=frames):
+            _apply_low_evidence_guard(digest, outline, transcript=transcript, comments=comments)
 
         tldr = [str(item) for item in (digest.get("tldr") or []) if str(item).strip()]
         highlights = [str(item) for item in (digest.get("highlights") or []) if str(item).strip()]

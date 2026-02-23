@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 import hashlib
 import json
 from pathlib import Path
@@ -43,11 +43,24 @@ def jsonable(value: Any) -> Any:
         return [jsonable(item) for item in value]
     if isinstance(value, tuple):
         return [jsonable(item) for item in value]
-    if isinstance(value, datetime):
+    if isinstance(value, set):
+        return [jsonable(item) for item in value]
+    if isinstance(value, (datetime, date)):
         return value.isoformat()
     if isinstance(value, Path):
         return str(value)
-    return value
+    if hasattr(value, "model_dump") and callable(value.model_dump):
+        return jsonable(value.model_dump())
+    if hasattr(value, "dict") and callable(value.dict):
+        return jsonable(value.dict())
+    if hasattr(value, "isoformat") and callable(value.isoformat):
+        try:
+            return value.isoformat()
+        except Exception:
+            pass
+    if isinstance(value, (str, int, float, bool)) or value is None:
+        return value
+    return str(value)
 
 
 def read_text_file(path: Path) -> str:
@@ -164,9 +177,15 @@ def _write_step_cache(cache_info: dict[str, Any], execution: StepExecution) -> N
         "cached_at": utc_now_iso(),
     }
     cache_path = cache_info["cache_path"]
-    cache_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+    cache_path.write_text(
+        json.dumps(jsonable(payload), ensure_ascii=False, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
     legacy_path = cache_info["legacy_path"]
-    legacy_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+    legacy_path.write_text(
+        json.dumps(jsonable(payload), ensure_ascii=False, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
 
 
 def apply_state_updates(state: dict[str, Any], updates: dict[str, Any]) -> None:

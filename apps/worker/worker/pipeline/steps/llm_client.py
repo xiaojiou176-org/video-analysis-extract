@@ -226,6 +226,7 @@ def gemini_generate(
     effective_include_thoughts = (
         settings.gemini_include_thoughts if include_thoughts is None else bool(include_thoughts)
     )
+    strict_schema_mode = bool(settings.gemini_strict_schema_mode)
     effective_media_resolution = _normalize_media_resolution_policy(media_resolution)
     max_function_call_rounds = max(0, int(max_function_call_rounds))
     computer_use_max_steps = max(0, int(computer_use_max_steps))
@@ -257,7 +258,7 @@ def gemini_generate(
     if tool_defs:
         config_kwargs["tools"] = tool_defs
     config_variants: list[dict[str, Any]] = [dict(config_kwargs)]
-    if response_schema:
+    if response_schema and not strict_schema_mode:
         fallback_kwargs = dict(config_kwargs)
         fallback_kwargs.pop("response_json_schema", None)
         config_variants.append(fallback_kwargs)
@@ -471,9 +472,15 @@ def gemini_generate(
     if normalized_mode in {"auto", "text"}:
         cache_key = _cache_key(model_name, prompt, normalized_mode)
         cached_content_name: str | None = None
-        cache_enabled = bool(use_context_cache) and bool(settings.gemini_context_cache_enabled)
+        cache_enabled = (
+            bool(use_context_cache)
+            and bool(settings.gemini_context_cache_enabled)
+            and not bool(enable_function_calling or enable_computer_use)
+        )
         cache_meta = _cache_meta_default()
-        if not cache_enabled:
+        if enable_function_calling or enable_computer_use:
+            cache_meta["cache_bypass_reason"] = "cache_incompatible_with_tools"
+        elif not cache_enabled:
             cache_meta["cache_bypass_reason"] = "cache_disabled"
         elif len(prompt) < max(0, settings.gemini_context_cache_min_chars):
             cache_meta["cache_bypass_reason"] = "prompt_too_short"
