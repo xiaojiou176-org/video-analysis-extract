@@ -5,6 +5,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
+from ..security import sanitize_exception_detail
 from ..services.computer_use import ComputerUseSafetyConfig, ComputerUseService
 
 router = APIRouter(prefix="/api/v1/computer-use", tags=["computer_use"])
@@ -52,6 +53,6 @@ def run_computer_use(payload: ComputerUseRunRequest) -> ComputerUseRunResponse:
             ),
         )
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise HTTPException(status_code=400, detail=sanitize_exception_detail(exc)) from exc
 
     return ComputerUseRunResponse(**result)

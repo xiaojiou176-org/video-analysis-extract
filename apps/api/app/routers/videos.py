@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from ..db import get_db
+from ..security import sanitize_exception_detail
 from ..services import VideosService
 
 router = APIRouter(prefix="/api/v1/videos", tags=["videos"])
@@ -92,9 +93,9 @@ async def process_video(payload: VideoProcessRequest, db: Session = Depends(get_
             force=payload.force,
         )
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise HTTPException(status_code=400, detail=sanitize_exception_detail(exc)) from exc
     except RuntimeError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
+        raise HTTPException(status_code=503, detail=sanitize_exception_detail(exc)) from exc
 
     return VideoProcessResponse(
         job_id=result["job_id"],

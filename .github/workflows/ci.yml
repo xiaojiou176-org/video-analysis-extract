@@ -556,8 +556,8 @@ jobs:
             exit 1
           fi
 
-          if [[ "$require_live_smoke" -eq 0 && "$live_smoke_result" == "failure" ]]; then
-            echo "final gate failed: live smoke ran and failed"
+          if [[ "$require_live_smoke" -eq 0 && "$live_smoke_result" != "success" && "$live_smoke_result" != "skipped" ]]; then
+            echo "final gate failed: live smoke is optional in this context, but ran and did not succeed (result='$live_smoke_result')"
             exit 1
           fi
 

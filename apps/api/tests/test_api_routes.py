@@ -127,6 +127,39 @@ def test_video_process_returns_mode_field(
     assert payload["overrides"] == {"lang": "zh-CN"}
 
 
+def test_video_process_redacts_sensitive_error_detail(
+    api_client: TestClient,
+    monkeypatch,
+) -> None:
+    async def fake_process_video(self, **kwargs):
+        raise RuntimeError(
+            "provider_failed Authorization: Bearer sk-live-12345678901234567890 "
+            "https://api.example.com/send?api_key=abc123xyz"
+        )
+
+    monkeypatch.setattr(
+        "apps.api.app.services.videos.VideosService.process_video",
+        fake_process_video,
+    )
+
+    response = api_client.post(
+        "/api/v1/videos/process",
+        json={
+            "video": {
+                "platform": "youtube",
+                "url": "https://www.youtube.com/watch?v=abc123",
+            }
+        },
+    )
+    detail = response.json()["detail"]
+
+    assert response.status_code == 503
+    assert "Bearer ***REDACTED***" in detail
+    assert "api_key=***REDACTED***" in detail
+    assert "abc123xyz" not in detail
+    assert "sk-live-12345678901234567890" not in detail
+
+
 def test_job_get_returns_mode_and_pipeline_fields(
     api_client: TestClient,
     monkeypatch,
@@ -333,6 +366,31 @@ def test_computer_use_run_rejects_invalid_screenshot_base64(api_client: TestClie
 
     assert response.status_code == 400
     assert response.json()["detail"] == "screenshot must be valid base64"
+
+
+def test_computer_use_run_redacts_sensitive_error_detail(api_client: TestClient, monkeypatch) -> None:
+    screenshot_b64 = base64.b64encode(b"fake-image-bytes").decode("ascii")
+
+    def fake_run(self, **kwargs):
+        raise ValueError("computer_use_provider_error: Bearer ghp_12345678901234567890")
+
+    monkeypatch.setattr(
+        "apps.api.app.services.computer_use.ComputerUseService.run",
+        fake_run,
+    )
+
+    response = api_client.post(
+        "/api/v1/computer-use/run",
+        json={
+            "instruction": "Open settings",
+            "screenshot_base64": screenshot_b64,
+        },
+    )
+    detail = response.json()["detail"]
+
+    assert response.status_code == 400
+    assert "Bearer ***REDACTED***" in detail
+    assert "ghp_12345678901234567890" not in detail
 
 
 def test_job_get_infers_llm_gate_fields_from_steps_when_legacy_fields_are_null(

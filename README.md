@@ -143,6 +143,7 @@ uv run --with pytest --with playwright pytest apps/web/tests/e2e -q
 - `daily_digest`
 - `notification_retry`
 - `provider_canary`
+- `cleanup_workspace`
 
 基础用法：
 ```bash
@@ -157,6 +158,8 @@ OPS_NOTIFICATION_INTERVAL_MINUTES=5 \
 OPS_NOTIFICATION_RETRY_BATCH_LIMIT=100 \
 OPS_CANARY_INTERVAL_HOURS=1 \
 OPS_CANARY_TIMEOUT_SECONDS=8 \
+OPS_CLEANUP_INTERVAL_HOURS=6 \
+OPS_CLEANUP_OLDER_THAN_HOURS=24 \
 ./scripts/start_ops_workflows.sh
 ```
 

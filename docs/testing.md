@@ -13,10 +13,12 @@
 
 ## CI Topology (GitHub Actions)
 
-- `offline-gate`：主门禁（env contract、迁移、python tests、web lint/build、web e2e）。
-- `autofix-dry-run`：依赖 `offline-gate`，仅在测试失败时运行（读取 `.runtime-cache` 诊断工件）。
-- `live-smoke`：依赖 `offline-gate`，仅在必需 secrets 存在时运行。
-- `autofix-dry-run` 与 `live-smoke` 在 `offline-gate` 后可并发执行。
+- `preflight`：预检门禁（env contract、provider residual guard、schema parity、worker file line limits）。
+- `db-migration-smoke` / `python-tests` / `web-lint-build` / `web-e2e`：依赖 `preflight` 并行执行。
+- `aggregate-gate`：汇总上述四个作业结果，任一非 `success` 即失败。
+- `autofix-dry-run`：依赖 `python-tests` + `web-e2e`，仅在两者任一失败时运行（读取 `.runtime-cache` 诊断工件）。
+- `live-smoke`：依赖 `aggregate-gate`，仅在必需 secrets 存在时运行。
+- `ci-final-gate`：最终门禁；始终检查 `aggregate-gate`，并在 `main` push / nightly schedule 强制 `live-smoke` 成功。
 
 ## Run Commands
 
@@ -99,4 +101,4 @@ npm run lint
 - 由于当前 Web 代码尚未完成 Next.js 16 `searchParams` 异步迁移，`jobs -> artifacts` 用例会先断言查询跳转与页面占位状态（`No artifact loaded yet.`）；迁移后可升级为 markdown/screenshot 区块可见性断言。
 - API 路由测试会通过 `monkeypatch` 隔离 Temporal/数据库外部依赖，验证路由层映射行为。
 - 需要访问真实依赖（Postgres/Temporal）的端到端链路，可在后续补专门的 integration 套件。
-- CI 缓存策略：Node 使用 `setup-node` 的 npm 缓存（锁文件 `apps/web/package-lock.json`）；Python 采用 `uv sync --frozen`（当前 workflow 未配置独立 Python cache）；测试与 e2e 产物统一写入 `.runtime-cache` 并作为 artifact 上传。
+- CI 缓存策略：Node 使用 `setup-node` 的 npm 缓存（锁文件 `apps/web/package-lock.json`）；Python 使用 `actions/cache@v4` 缓存 `~/.cache/uv`，并配合 `uv sync --frozen`；测试与 e2e 产物统一写入 `.runtime-cache` 并作为 artifact 上传。

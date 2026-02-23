@@ -52,16 +52,19 @@ def web_base_url(mock_api_server: MockApiServer) -> str:
     if not (WEB_DIR / "node_modules").exists():
         raise RuntimeError("apps/web/node_modules is missing. Run `npm ci` in apps/web before E2E.")
 
+    output_lines: list[str] = []
+    worker_id = os.environ.get("PYTEST_XDIST_WORKER", "gw0")
+    worker_slug = "".join(ch if ch.isalnum() else "-" for ch in worker_id.lower())
     web_port = free_port()
     base_url = f"http://127.0.0.1:{web_port}"
     env = os.environ.copy()
     env["NEXT_PUBLIC_API_BASE_URL"] = mock_api_server.base_url
     env["VD_API_BASE_URL"] = mock_api_server.base_url
+    env["NEXT_DIST_DIR"] = f".next-e2e-{worker_slug}"
     env["PORT"] = str(web_port)
     env["HOSTNAME"] = "127.0.0.1"
     env["CI"] = "1"
 
-    output_lines: list[str] = []
     process = subprocess.Popen(
         ["npm", "run", "dev", "--", "--hostname", "127.0.0.1", "--port", str(web_port)],
         cwd=WEB_DIR,

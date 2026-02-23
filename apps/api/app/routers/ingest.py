@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from ..db import get_db
+from ..security import sanitize_exception_detail
 from ..services import IngestService
 
 router = APIRouter(prefix="/api/v1/ingest", tags=["ingest"])
@@ -45,9 +46,9 @@ async def poll_ingest(payload: IngestPollRequest, db: Session = Depends(get_db))
             max_new_videos=payload.max_new_videos,
         )
     except RuntimeError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
+        raise HTTPException(status_code=503, detail=sanitize_exception_detail(exc)) from exc
     except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+        raise HTTPException(status_code=404, detail=sanitize_exception_detail(exc)) from exc
 
     return IngestPollResponse(
         enqueued=enqueued,

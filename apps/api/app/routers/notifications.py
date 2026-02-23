@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from ..db import get_db
+from ..security import sanitize_exception_detail
 from ..services.notifications import (
     get_notification_config,
     send_daily_report_notification,
@@ -118,9 +119,9 @@ def post_test_notification(payload: NotificationTestRequest, db: Session = Depen
             body=payload.body,
         )
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise HTTPException(status_code=400, detail=sanitize_exception_detail(exc)) from exc
     except RuntimeError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
+        raise HTTPException(status_code=503, detail=sanitize_exception_detail(exc)) from exc
 
     return NotificationSendResponse(
         delivery_id=row.id,
@@ -149,9 +150,9 @@ def post_daily_report_send(payload: DailyReportSendRequest, db: Session = Depend
             body=payload.body,
         )
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise HTTPException(status_code=400, detail=sanitize_exception_detail(exc)) from exc
     except RuntimeError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
+        raise HTTPException(status_code=503, detail=sanitize_exception_detail(exc)) from exc
 
     digest_date = payload.date
     if digest_date is None and isinstance(row.payload_json, dict):

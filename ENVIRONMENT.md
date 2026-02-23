@@ -99,6 +99,8 @@ LLM generation is Gemini-only in this repository:
 - `OPS_*` (workflow bootstrap overrides for `scripts/start_ops_workflows.sh`, including `OPS_CLEANUP_*`, `OPS_SHOW_HINTS`, `OPS_DRY_RUN`)
 - `API_*`, `WORKER_*`, `MCP_*`, `OUTPUT_PATH`, `INIT_ENV_FORCE`
 - `WEB_BASE_URL` (web e2e target override)
+- `NEXT_DIST_DIR` (optional Next.js dist directory override for parallel web e2e workers)
+- `PYTEST_XDIST_WORKER` (optional worker id used by web e2e fixtures to isolate runtime dirs)
 
 `LIVE_SMOKE_*` includes strict computer-use controls:
 
@@ -141,7 +143,7 @@ GitHub Actions workflow: `.github/workflows/env-governance.yml`
 ## CI Autofix Dry-Run
 
 - Workflow `ci.yml` includes `autofix-dry-run` job.
-- Trigger: runs only when test steps fail in `offline-gate`.
+- Trigger: runs when either `python-tests` or `web-e2e` fails.
 - Input artifacts: junit/log files from `.runtime-cache/`.
 - Output artifact: `autofix-dry-run-report-<run_id>-<run_attempt>` containing `.runtime-cache/autofix-report.json`.
 - Safety: dry-run only, no code mutation.
@@ -149,11 +151,13 @@ GitHub Actions workflow: `.github/workflows/env-governance.yml`
 ## CI Job Topology and Cache Policy (`.github/workflows/ci.yml`)
 
 - Job topology:
-  - `offline-gate` is the primary gate.
-  - `autofix-dry-run` depends on `offline-gate` and runs only when `tests_failed == true`.
-  - `live-smoke` depends on `offline-gate` and runs only when required secrets are present.
-  - `autofix-dry-run` and `live-smoke` are independent after `offline-gate` and can run in parallel.
+  - `preflight` is the primary prerequisite gate.
+  - `db-migration-smoke` / `python-tests` / `web-lint-build` / `web-e2e` all depend on `preflight`.
+  - `aggregate-gate` depends on the four jobs above and blocks when any required job is not `success`.
+  - `live-smoke` depends on `aggregate-gate` and runs only when required secrets are present.
+  - `autofix-dry-run` depends on `python-tests` and `web-e2e`, and runs only when either one fails.
+  - `ci-final-gate` is the final gate: it always checks `aggregate-gate`, and additionally enforces `live-smoke` on `main` push / nightly schedule.
 - Cache and artifacts:
   - Node deps: `actions/setup-node@v4` with `cache: npm` and `apps/web/package-lock.json`.
-  - Python deps: deterministic `uv sync --frozen --extra dev --extra e2e` (no explicit `actions/cache` layer in this workflow).
+  - Python deps: deterministic `uv sync --frozen --extra dev --extra e2e` + explicit `actions/cache@v4` for `~/.cache/uv`.
   - Test diagnostics: `.runtime-cache/*.xml` and `.runtime-cache/*.log` are uploaded as CI artifacts; web e2e traces/videos are uploaded from `.runtime-cache/web-e2e-artifacts`.
