@@ -83,7 +83,10 @@ def _iter_files(root: Path) -> list[Path]:
         for path in base_dir.rglob("*"):
             if not path.is_file():
                 continue
-            if any(part in {".git", "node_modules", ".next", "__pycache__"} for part in path.parts):
+            if any(
+                part in {".git", "node_modules", "__pycache__"} or part.startswith(".next")
+                for part in path.parts
+            ):
                 continue
             if path.suffix in {".py", ".ts", ".tsx", ".js", ".mjs", ".sh"}:
                 files.append(path)

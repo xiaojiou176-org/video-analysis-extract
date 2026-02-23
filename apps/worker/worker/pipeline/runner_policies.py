@@ -7,7 +7,7 @@ from worker.config import Settings
 
 PipelineMode = Literal["full", "text_only", "refresh_comments", "refresh_llm"]
 LLMInputMode = Literal["auto", "text", "video_text", "frames_text"]
-MediaResolution = Literal["low", "medium", "high"]
+MediaResolution = Literal["low", "medium", "high", "ultra_high"]
 
 
 def coerce_bool(value: Any, default: bool = False) -> bool:
@@ -38,8 +38,8 @@ def coerce_float(value: Any, default: float | None = None) -> float | None:
 
 
 def _normalize_media_resolution(value: Any, *, default: MediaResolution = "medium") -> MediaResolution:
-    text = str(value or "").strip().lower()
-    if text in {"low", "medium", "high"}:
+    text = str(value or "").strip().lower().replace("-", "_").replace(" ", "_")
+    if text in {"low", "medium", "high", "ultra_high"}:
         return text  # type: ignore[return-value]
     return default
 

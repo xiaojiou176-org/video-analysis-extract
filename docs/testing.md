@@ -14,11 +14,14 @@
 ## CI Topology (GitHub Actions)
 
 - `preflight`：预检门禁（env contract、provider residual guard、schema parity、worker file line limits）。
-- `db-migration-smoke` / `python-tests` / `web-lint-build` / `web-e2e`：依赖 `preflight` 并行执行。
-- `aggregate-gate`：汇总上述四个作业结果，任一非 `success` 即失败。
+- `db-migration-smoke` / `python-tests` / `api-real-smoke` / `web-lint-build` / `web-e2e`：依赖 `preflight` 并行执行。
+- `api-real-smoke`：PR 可运行的真实 API 轻量烟测（启动 FastAPI + Postgres，覆盖 `/healthz` 与 subscriptions 写读链路），不依赖外部 provider secrets。
+- `web-e2e`：增量浏览器策略。PR 仅跑 core（chromium/firefox）；`main` push 与 nightly schedule 跑 full（含 webkit）。
+- `aggregate-gate`：汇总上述五个作业结果，任一非 `success` 即失败。
 - `autofix-dry-run`：依赖 `python-tests` + `web-e2e`，仅在两者任一失败时运行（读取 `.runtime-cache` 诊断工件）。
+- `nightly-flaky-python` + `nightly-flaky-web-e2e`：仅 nightly schedule 触发，执行重复运行策略用于发现 flaky。
 - `live-smoke`：依赖 `aggregate-gate`，仅在必需 secrets 存在时运行。
-- `ci-final-gate`：最终门禁；始终检查 `aggregate-gate`，并在 `main` push / nightly schedule 强制 `live-smoke` 成功。
+- `ci-final-gate`：最终门禁；始终检查 `aggregate-gate`，并在 nightly 强制 `nightly-flaky-*` 成功，在 `main` push / nightly schedule 强制 `live-smoke` 成功。
 
 ## Run Commands
 

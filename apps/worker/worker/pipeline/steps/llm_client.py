@@ -298,9 +298,24 @@ def gemini_generate(
         safety_blocked = False
         request_id: str | None = None
         conversation = list(contents) if isinstance(contents, list) else [contents]
+        carried_signatures: list[str] = []
 
         while True:
             rounds += 1
+            if carried_signatures:
+                conversation.append(
+                    {
+                        "role": "user",
+                        "parts": [
+                            {
+                                "text": (
+                                    "Continue tool reasoning with preserved thought signatures from previous rounds: "
+                                    + ", ".join(carried_signatures[:8])
+                                )
+                            }
+                        ],
+                    }
+                )
             try:
                 response = _generate(conversation, cached_content=cached_content)
             except Exception as exc:
@@ -322,7 +337,10 @@ def gemini_generate(
             ).strip() or request_id
             thought_meta = _collect_thought_metadata(response)
             thought_count += int(thought_meta.get("thought_count") or 0)
-            thought_signatures.extend(list(thought_meta.get("thought_signatures") or []))
+            current_signatures = [str(item).strip() for item in list(thought_meta.get("thought_signatures") or []) if str(item).strip()]
+            thought_signatures.extend(current_signatures)
+            if current_signatures:
+                carried_signatures = list(dict.fromkeys(current_signatures))
             for key, value in dict(thought_meta.get("usage") or {}).items():
                 if isinstance(value, int):
                     usage_rollup[key] = usage_rollup.get(key, 0) + value
@@ -381,6 +399,20 @@ def gemini_generate(
             conversation.append(_build_function_response_content(genai_types, tool_responses))
 
         deduped_signatures = list(dict.fromkeys(thought_signatures))
+        if (
+            effective_include_thoughts
+            and rounds > 1
+            and not deduped_signatures
+            and (thought_count > 0 or bool(usage_rollup))
+        ):
+            return None, _failure_meta(
+                model=model_name,
+                media_input="text",
+                reason="llm_thoughts_required",
+                detail="missing thought_signatures in multi-round generation",
+                error_kind="contract",
+                termination_reason="missing_thought_signatures",
+            )
         signature_digest = None
         if deduped_signatures:
             signature_digest = hashlib.sha256(

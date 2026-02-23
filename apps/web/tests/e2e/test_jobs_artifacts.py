@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import re
+from http import HTTPStatus
 from urllib.parse import quote
 
 import pytest
 from playwright.sync_api import Page, expect
 
-from support.assertions import wait_for_call_count, wait_for_http_path, wait_for_http_query_fragment
+from support.assertions import wait_for_call_count, wait_for_http_call
 from support.mock_api import MockApiState
 
 
@@ -15,7 +16,7 @@ def test_jobs_to_artifacts_query_navigation(page: Page, mock_api_state: MockApiS
     page.get_by_label("Job ID").fill(mock_api_state.job_id)
     page.get_by_role("button", name="Fetch job").click()
 
-    expect(page).to_have_url(re.compile(r"/jobs\?job_id=job-e2e-001"))
+    expect(page).to_have_url(re.compile(rf"/jobs\?job_id={re.escape(mock_api_state.job_id)}"))
     expect(page.get_by_role("heading", name="Job lookup")).to_be_visible()
 
     page.goto("/artifacts", wait_until="domcontentloaded")
@@ -24,14 +25,39 @@ def test_jobs_to_artifacts_query_navigation(page: Page, mock_api_state: MockApiS
     page.get_by_role("button", name="Load artifacts").click()
 
     wait_for_call_count(mock_api_state, "get_artifact_markdown", 1)
-    wait_for_http_path(mock_api_state, "/api/v1/artifacts/assets")
-    wait_for_http_query_fragment(mock_api_state, "/api/v1/artifacts/assets", "path=screenshots%2Fframe_0001.png")
-    wait_for_http_query_fragment(mock_api_state, "/api/v1/artifacts/assets", "path=screenshots%2Fframe_0002.webp")
+    wait_for_http_call(
+        mock_api_state,
+        method="GET",
+        path="/api/v1/artifacts/markdown",
+        status=int(HTTPStatus.OK),
+        query_fragment="include_meta=true",
+    )
+    wait_for_http_call(
+        mock_api_state,
+        method="GET",
+        path="/api/v1/artifacts/assets",
+        status=int(HTTPStatus.OK),
+        query_fragment=f"job_id={quote(mock_api_state.job_id, safe='')}",
+    )
+    wait_for_http_call(
+        mock_api_state,
+        method="GET",
+        path="/api/v1/artifacts/assets",
+        status=int(HTTPStatus.OK),
+        query_fragment="path=screenshots%2Fframe_0001.png",
+    )
+    wait_for_http_call(
+        mock_api_state,
+        method="GET",
+        path="/api/v1/artifacts/assets",
+        status=int(HTTPStatus.OK),
+        query_fragment="path=screenshots%2Fframe_0002.webp",
+    )
     artifact_payload = mock_api_state.last_call("get_artifact_markdown")
     assert artifact_payload["job_id"] == mock_api_state.job_id
     assert artifact_payload["include_meta"] == "true"
 
-    expect(page).to_have_url(re.compile(r"/artifacts\?job_id=job-e2e-001"))
+    expect(page).to_have_url(re.compile(rf"/artifacts\?job_id={re.escape(mock_api_state.job_id)}"))
     expect(page.get_by_role("heading", name="Artifact lookup")).to_be_visible()
     expect(page.get_by_role("heading", name="Markdown preview")).to_be_visible()
 
@@ -41,7 +67,7 @@ def test_artifacts_lookup_form_requires_single_field(page: Page) -> None:
     submit = page.get_by_role("button", name="Load artifacts")
 
     expect(submit).to_be_disabled()
-    page.get_by_label("Job ID").fill("job-e2e-001")
+    page.get_by_label("Job ID").fill("00000000-0000-4000-8000-0000000000ff")
     expect(submit).to_be_enabled()
     page.get_by_label("Video URL").fill("https://www.youtube.com/watch?v=e2e001")
     expect(submit).to_be_disabled()
@@ -57,7 +83,7 @@ def test_jobs_lookup_form_requires_job_id(page: Page) -> None:
     expect(submit).to_be_disabled()
     page.get_by_label("Job ID").fill("   ")
     expect(submit).to_be_disabled()
-    page.get_by_label("Job ID").fill("job-e2e-001")
+    page.get_by_label("Job ID").fill("00000000-0000-4000-8000-0000000000ff")
     expect(submit).to_be_enabled()
 
 
@@ -83,11 +109,12 @@ def test_artifact_preview_and_asset_request_for_image_formats(
     page.get_by_role("button", name="Load artifacts").click()
 
     wait_for_call_count(mock_api_state, "get_artifact_markdown", 1)
-    wait_for_http_path(mock_api_state, "/api/v1/artifacts/assets")
-    wait_for_http_query_fragment(
+    wait_for_http_call(
         mock_api_state,
-        "/api/v1/artifacts/assets",
-        f"path={quote(frame_file, safe='')}",
+        method="GET",
+        path="/api/v1/artifacts/assets",
+        status=int(HTTPStatus.OK),
+        query_fragment=f"path={quote(frame_file, safe='')}",
     )
 
     embedded_section = page.locator("section", has=page.get_by_role("heading", name="Embedded screenshots"))

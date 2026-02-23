@@ -7,7 +7,7 @@ from pathlib import Path
 import re
 from typing import Any, Callable
 
-_ALLOWED_MEDIA_RESOLUTION = {"low", "medium", "high"}
+_ALLOWED_MEDIA_RESOLUTION = {"low", "medium", "high", "ultra_high"}
 ComputerUseHandler = Callable[..., dict[str, Any]]
 
 
@@ -47,7 +47,7 @@ def _extract_response_text(response: Any) -> str | None:
 
 
 def _normalize_media_resolution(value: Any, *, default: str = "medium") -> str:
-    text = str(value or "").strip().lower()
+    text = str(value or "").strip().lower().replace("-", "_").replace(" ", "_")
     if text in _ALLOWED_MEDIA_RESOLUTION:
         return text
     return default

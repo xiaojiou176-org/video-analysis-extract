@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+from http import HTTPStatus
+
 from playwright.sync_api import Page, expect
 
-from support.assertions import wait_for_call_count
+from support.assertions import wait_for_call_count, wait_for_http_call
 from support.mock_api import MockApiState
 
 
@@ -22,6 +24,13 @@ def test_settings_save_config_button(page: Page, mock_api_state: MockApiState) -
     page.get_by_role("button", name="Save config").click()
 
     wait_for_call_count(mock_api_state, "update_notification_config", 1)
+    wait_for_http_call(
+        mock_api_state,
+        method="PUT",
+        path="/api/v1/notifications/config",
+        status=int(HTTPStatus.OK),
+        payload_contains={"to_email": "ops-e2e@example.com", "daily_digest_enabled": True},
+    )
     update_payload = mock_api_state.last_call("update_notification_config")
     assert update_payload["to_email"] == "ops-e2e@example.com"
     assert update_payload["daily_digest_enabled"] is True
@@ -36,6 +45,13 @@ def test_settings_send_test_email_button(page: Page, mock_api_state: MockApiStat
     page.get_by_role("button", name="Send test email").click()
 
     wait_for_call_count(mock_api_state, "send_notification_test", 1)
+    wait_for_http_call(
+        mock_api_state,
+        method="POST",
+        path="/api/v1/notifications/test",
+        status=int(HTTPStatus.OK),
+        payload_contains={"to_email": "qa-e2e@example.com", "subject": "E2E notification check"},
+    )
     notify_payload = mock_api_state.last_call("send_notification_test")
     assert notify_payload["to_email"] == "qa-e2e@example.com"
     assert notify_payload["subject"] == "E2E notification check"

@@ -113,7 +113,7 @@ class Settings:
     gemini_fast_model: str = "gemini-3-flash-preview"
     gemini_embedding_model: str = "gemini-embedding-001"
     gemini_thinking_level: str = "high"
-    gemini_include_thoughts: bool = False
+    gemini_include_thoughts: bool = True
     gemini_context_cache_enabled: bool = True
     gemini_context_cache_ttl_seconds: int = 21600
     gemini_context_cache_min_chars: int = 4096
@@ -262,7 +262,7 @@ class Settings:
             gemini_thinking_level=os.getenv("GEMINI_THINKING_LEVEL", "high"),
             gemini_include_thoughts=_parse_bool(
                 os.getenv("GEMINI_INCLUDE_THOUGHTS"),
-                default=False,
+                default=True,
             ),
             gemini_context_cache_enabled=_parse_bool(
                 os.getenv("GEMINI_CONTEXT_CACHE_ENABLED"),
