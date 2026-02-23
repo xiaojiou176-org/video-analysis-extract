@@ -5,7 +5,7 @@ from http import HTTPStatus
 import pytest
 from playwright.sync_api import Page, expect
 
-from support.assertions import wait_for_call_count
+from support.assertions import wait_for_call_count, wait_for_http_call
 from support.mock_api import MockApiState
 from support.runtime_utils import external_web_base_url_from_env
 
@@ -29,6 +29,13 @@ def test_dashboard_trigger_ingest_poll_button(page: Page, mock_api_state: MockAp
     page.get_by_role("button", name="Trigger ingest poll").click()
 
     wait_for_call_count(mock_api_state, "poll_ingest", 1)
+    wait_for_http_call(
+        mock_api_state,
+        method="POST",
+        path="/api/v1/ingest/poll",
+        status=int(HTTPStatus.ACCEPTED),
+        payload_contains={"max_new_videos": 50},
+    )
     payload = mock_api_state.last_call("poll_ingest")
     assert payload.get("max_new_videos") == 50
 
@@ -68,6 +75,13 @@ def test_dashboard_start_processing_button(page: Page, mock_api_state: MockApiSt
     start_button.click()
 
     wait_for_call_count(mock_api_state, "process_video", 1)
+    wait_for_http_call(
+        mock_api_state,
+        method="POST",
+        path="/api/v1/videos/process",
+        status=int(HTTPStatus.ACCEPTED),
+        payload_check=lambda payload: bool(payload and payload.get("video", {}).get("url")),
+    )
     process_payload = mock_api_state.last_call("process_video")
     assert process_payload["video"]["url"] == "https://www.youtube.com/watch?v=e2e001"
     assert process_payload["mode"] == "text_only"

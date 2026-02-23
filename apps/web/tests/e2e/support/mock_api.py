@@ -4,6 +4,7 @@ import base64
 import json
 import threading
 import time
+import uuid
 from dataclasses import dataclass, field
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -16,6 +17,24 @@ PING_IMAGE_BYTES = base64.b64decode(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9sYfA8kAAAAASUVORK5CYII="
 )
 
+MOCK_JOB_ID = "00000000-0000-4000-8000-000000000001"
+MOCK_VIDEO_ID = "00000000-0000-4000-8000-000000000002"
+MOCK_VIDEO_DB_ID = "00000000-0000-4000-8000-000000000003"
+MOCK_DELIVERY_ID = "00000000-0000-4000-8000-000000000004"
+SUBSCRIPTION_NAMESPACE = uuid.UUID("00000000-0000-4000-8000-0000000000aa")
+
+
+def _is_valid_uuid(value: str) -> bool:
+    try:
+        uuid.UUID(value)
+        return True
+    except (ValueError, TypeError):
+        return False
+
+
+def _subscription_uuid(index: int) -> str:
+    return str(uuid.uuid5(SUBSCRIPTION_NAMESPACE, f"mock-subscription-{index}"))
+
 
 @dataclass
 class MockApiState:
@@ -23,7 +42,7 @@ class MockApiState:
     subscriptions: list[dict[str, Any]] = field(default_factory=list)
     notification_config: dict[str, Any] = field(default_factory=dict)
     calls: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
-    job_id: str = "job-e2e-001"
+    job_id: str = MOCK_JOB_ID
     health_status: int = int(HTTPStatus.OK)
     health_delay_seconds: float = 0.0
     artifact_frame_files: list[str] = field(default_factory=list)
@@ -75,13 +94,13 @@ class MockApiState:
         now = utc_now()
         return {
             "id": self.job_id,
-            "video_id": "video-db-001",
+            "video_id": MOCK_VIDEO_ID,
             "kind": "video_digest_v1",
             "status": "succeeded",
             "idempotency_key": "idem-e2e",
             "error_message": None,
             "artifact_digest_md": "artifacts/digest.md",
-            "artifact_root": "artifacts/job-e2e-001",
+            "artifact_root": f"artifacts/{self.job_id}",
             "created_at": now,
             "updated_at": now,
             "step_summary": [
@@ -181,15 +200,41 @@ def _mock_handler(state: MockApiState) -> type[BaseHTTPRequestHandler]:
             payload = json.loads(raw)
             return payload if isinstance(payload, dict) else {}
 
+        def _record_http(
+            self,
+            *,
+            method: str,
+            path: str,
+            query: str,
+            status: int,
+            payload: dict[str, Any] | None = None,
+        ) -> None:
+            state.record(
+                "http",
+                {
+                    "method": method,
+                    "path": path,
+                    "query": query,
+                    "status": status,
+                    "payload": payload,
+                },
+            )
+
         def do_GET(self) -> None:  # noqa: N802
             parsed = urlparse(self.path)
             path = parsed.path
             query = parse_qs(parsed.query)
-            state.record("http", {"method": "GET", "path": path, "query": parsed.query})
 
             if path == "/api/v1/subscriptions":
                 with state.lock:
-                    self._send_json(HTTPStatus.OK, state.subscriptions)
+                    subscriptions = list(state.subscriptions)
+                self._record_http(
+                    method="GET",
+                    path=path,
+                    query=parsed.query,
+                    status=int(HTTPStatus.OK),
+                )
+                self._send_json(HTTPStatus.OK, subscriptions)
                 return
 
             if path == "/healthz":
@@ -199,6 +244,12 @@ def _mock_handler(state: MockApiState) -> type[BaseHTTPRequestHandler]:
                 if delay_seconds > 0:
                     time.sleep(delay_seconds)
                 status = HTTPStatus(status_code)
+                self._record_http(
+                    method="GET",
+                    path=path,
+                    query=parsed.query,
+                    status=int(status),
+                )
                 self._send_json(status, {"status": "ok" if status == HTTPStatus.OK else "degraded"})
                 return
 
@@ -206,7 +257,7 @@ def _mock_handler(state: MockApiState) -> type[BaseHTTPRequestHandler]:
                 now = utc_now()
                 videos = [
                     {
-                        "id": "video-db-001",
+                        "id": MOCK_VIDEO_ID,
                         "platform": "youtube",
                         "video_uid": "yt-e2e-001",
                         "source_url": "https://youtube.com/watch?v=e2e001",
@@ -218,69 +269,194 @@ def _mock_handler(state: MockApiState) -> type[BaseHTTPRequestHandler]:
                         "last_job_id": state.job_id,
                     }
                 ]
+                self._record_http(
+                    method="GET",
+                    path=path,
+                    query=parsed.query,
+                    status=int(HTTPStatus.OK),
+                )
                 self._send_json(HTTPStatus.OK, videos)
                 return
 
             if path.startswith("/api/v1/jobs/"):
                 requested_job_id = path.rsplit("/", 1)[-1]
+                if not _is_valid_uuid(requested_job_id):
+                    self._record_http(
+                        method="GET",
+                        path=path,
+                        query=parsed.query,
+                        status=int(HTTPStatus.UNPROCESSABLE_ENTITY),
+                    )
+                    self._send_json(HTTPStatus.UNPROCESSABLE_ENTITY, {"detail": "job_id must be a valid UUID"})
+                    return
                 state.record("get_job", {"job_id": requested_job_id})
                 if requested_job_id != state.job_id:
+                    self._record_http(
+                        method="GET",
+                        path=path,
+                        query=parsed.query,
+                        status=int(HTTPStatus.NOT_FOUND),
+                    )
                     self._send_json(HTTPStatus.NOT_FOUND, {"detail": "job not found"})
                     return
+                self._record_http(
+                    method="GET",
+                    path=path,
+                    query=parsed.query,
+                    status=int(HTTPStatus.OK),
+                )
                 self._send_json(HTTPStatus.OK, state.current_job())
                 return
 
             if path == "/api/v1/artifacts/markdown":
+                job_id = query.get("job_id", [""])[0]
+                video_url = query.get("video_url", [""])[0]
+                if not job_id and not video_url:
+                    self._record_http(
+                        method="GET",
+                        path=path,
+                        query=parsed.query,
+                        status=int(HTTPStatus.BAD_REQUEST),
+                    )
+                    self._send_json(HTTPStatus.BAD_REQUEST, {"detail": "either job_id or video_url is required"})
+                    return
+                if job_id and not _is_valid_uuid(job_id):
+                    self._record_http(
+                        method="GET",
+                        path=path,
+                        query=parsed.query,
+                        status=int(HTTPStatus.UNPROCESSABLE_ENTITY),
+                    )
+                    self._send_json(HTTPStatus.UNPROCESSABLE_ENTITY, {"detail": "job_id must be a valid UUID"})
+                    return
                 state.record(
                     "get_artifact_markdown",
                     {
-                        "job_id": query.get("job_id", [""])[0],
-                        "video_url": query.get("video_url", [""])[0],
+                        "job_id": job_id,
+                        "video_url": video_url,
                         "include_meta": query.get("include_meta", [""])[0],
                     },
                 )
                 include_meta = query.get("include_meta", ["false"])[0].lower() == "true"
                 payload = state.artifact_payload()
                 if include_meta:
+                    self._record_http(
+                        method="GET",
+                        path=path,
+                        query=parsed.query,
+                        status=int(HTTPStatus.OK),
+                    )
                     self._send_json(HTTPStatus.OK, payload)
                     return
+                self._record_http(
+                    method="GET",
+                    path=path,
+                    query=parsed.query,
+                    status=int(HTTPStatus.OK),
+                )
                 self._send_text(HTTPStatus.OK, payload["markdown"], "text/markdown; charset=utf-8")
                 return
 
             if path == "/api/v1/artifacts/assets":
-                path_param = query.get("path", [""])[0].lower()
+                job_id = query.get("job_id", [""])[0]
+                path_param = query.get("path", [""])[0]
+                if not job_id or not path_param:
+                    self._record_http(
+                        method="GET",
+                        path=path,
+                        query=parsed.query,
+                        status=int(HTTPStatus.UNPROCESSABLE_ENTITY),
+                    )
+                    self._send_json(HTTPStatus.UNPROCESSABLE_ENTITY, {"detail": "job_id and path are required"})
+                    return
+                if not _is_valid_uuid(job_id):
+                    self._record_http(
+                        method="GET",
+                        path=path,
+                        query=parsed.query,
+                        status=int(HTTPStatus.UNPROCESSABLE_ENTITY),
+                    )
+                    self._send_json(HTTPStatus.UNPROCESSABLE_ENTITY, {"detail": "job_id must be a valid UUID"})
+                    return
+                if job_id != state.job_id:
+                    self._record_http(
+                        method="GET",
+                        path=path,
+                        query=parsed.query,
+                        status=int(HTTPStatus.NOT_FOUND),
+                    )
+                    self._send_json(HTTPStatus.NOT_FOUND, {"detail": "artifact asset not found"})
+                    return
+                path_param = path_param.lower()
                 if path_param.endswith(".webp"):
+                    self._record_http(
+                        method="GET",
+                        path=path,
+                        query=parsed.query,
+                        status=int(HTTPStatus.OK),
+                    )
                     self._send_binary(HTTPStatus.OK, PING_IMAGE_BYTES, "image/webp")
                     return
                 if path_param.endswith(".jpg") or path_param.endswith(".jpeg"):
+                    self._record_http(
+                        method="GET",
+                        path=path,
+                        query=parsed.query,
+                        status=int(HTTPStatus.OK),
+                    )
                     self._send_binary(HTTPStatus.OK, PING_IMAGE_BYTES, "image/jpeg")
                     return
+                self._record_http(
+                    method="GET",
+                    path=path,
+                    query=parsed.query,
+                    status=int(HTTPStatus.OK),
+                )
                 self._send_binary(HTTPStatus.OK, PING_IMAGE_BYTES, "image/png")
                 return
 
             if path == "/api/v1/notifications/config":
                 with state.lock:
-                    self._send_json(HTTPStatus.OK, state.notification_config)
+                    notification_config = dict(state.notification_config)
+                self._record_http(
+                    method="GET",
+                    path=path,
+                    query=parsed.query,
+                    status=int(HTTPStatus.OK),
+                )
+                self._send_json(HTTPStatus.OK, notification_config)
                 return
 
+            self._record_http(
+                method="GET",
+                path=path,
+                query=parsed.query,
+                status=int(HTTPStatus.NOT_FOUND),
+            )
             self._send_json(HTTPStatus.NOT_FOUND, {"detail": f"Unhandled GET path: {path}"})
 
         def do_POST(self) -> None:  # noqa: N802
             parsed = urlparse(self.path)
             path = parsed.path
-            state.record("http", {"method": "POST", "path": path, "query": parsed.query})
             payload = self._read_json()
 
             if path == "/api/v1/ingest/poll":
                 state.record("poll_ingest", payload)
-                self._send_json(HTTPStatus.OK, {"enqueued": 2, "candidates": []})
+                self._record_http(
+                    method="POST",
+                    path=path,
+                    query=parsed.query,
+                    status=int(HTTPStatus.ACCEPTED),
+                    payload=payload,
+                )
+                self._send_json(HTTPStatus.ACCEPTED, {"enqueued": 2, "candidates": []})
                 return
 
             if path == "/api/v1/videos/process":
                 state.record("process_video", payload)
                 response = {
                     "job_id": state.job_id,
-                    "video_db_id": "video-db-001",
+                    "video_db_id": MOCK_VIDEO_DB_ID,
                     "video_uid": "yt-e2e-001",
                     "status": "queued",
                     "idempotency_key": "idem-e2e",
@@ -290,14 +466,21 @@ def _mock_handler(state: MockApiState) -> type[BaseHTTPRequestHandler]:
                     "reused": False,
                     "workflow_id": "wf-e2e-001",
                 }
-                self._send_json(HTTPStatus.OK, response)
+                self._record_http(
+                    method="POST",
+                    path=path,
+                    query=parsed.query,
+                    status=int(HTTPStatus.ACCEPTED),
+                    payload=payload,
+                )
+                self._send_json(HTTPStatus.ACCEPTED, response)
                 return
 
             if path == "/api/v1/subscriptions":
                 state.record("upsert_subscription", payload)
                 now = utc_now()
                 with state.lock:
-                    new_id = f"sub-{len(state.subscriptions) + 1:03d}"
+                    new_id = _subscription_uuid(len(state.subscriptions) + 1)
                     subscription = {
                         "id": new_id,
                         "platform": payload.get("platform", "youtube"),
@@ -309,6 +492,13 @@ def _mock_handler(state: MockApiState) -> type[BaseHTTPRequestHandler]:
                         "updated_at": now,
                     }
                     state.subscriptions.append(subscription)
+                self._record_http(
+                    method="POST",
+                    path=path,
+                    query=parsed.query,
+                    status=int(HTTPStatus.OK),
+                    payload=payload,
+                )
                 self._send_json(HTTPStatus.OK, {"subscription": subscription, "created": True})
                 return
 
@@ -316,10 +506,17 @@ def _mock_handler(state: MockApiState) -> type[BaseHTTPRequestHandler]:
                 state.record("send_notification_test", payload)
                 now = utc_now()
                 to_email = payload.get("to_email") or "ops@example.com"
+                self._record_http(
+                    method="POST",
+                    path=path,
+                    query=parsed.query,
+                    status=int(HTTPStatus.OK),
+                    payload=payload,
+                )
                 self._send_json(
                     HTTPStatus.OK,
                     {
-                        "delivery_id": "delivery-e2e-001",
+                        "delivery_id": MOCK_DELIVERY_ID,
                         "status": "sent",
                         "provider_message_id": "provider-001",
                         "error_message": None,
@@ -331,12 +528,18 @@ def _mock_handler(state: MockApiState) -> type[BaseHTTPRequestHandler]:
                 )
                 return
 
+            self._record_http(
+                method="POST",
+                path=path,
+                query=parsed.query,
+                status=int(HTTPStatus.NOT_FOUND),
+                payload=payload,
+            )
             self._send_json(HTTPStatus.NOT_FOUND, {"detail": f"Unhandled POST path: {path}"})
 
         def do_PUT(self) -> None:  # noqa: N802
             parsed = urlparse(self.path)
             path = parsed.path
-            state.record("http", {"method": "PUT", "path": path, "query": parsed.query})
             payload = self._read_json()
 
             if path == "/api/v1/notifications/config":
@@ -353,23 +556,68 @@ def _mock_handler(state: MockApiState) -> type[BaseHTTPRequestHandler]:
                         "updated_at": now,
                     }
                     response = dict(state.notification_config)
+                self._record_http(
+                    method="PUT",
+                    path=path,
+                    query=parsed.query,
+                    status=int(HTTPStatus.OK),
+                    payload=payload,
+                )
                 self._send_json(HTTPStatus.OK, response)
                 return
 
+            self._record_http(
+                method="PUT",
+                path=path,
+                query=parsed.query,
+                status=int(HTTPStatus.NOT_FOUND),
+                payload=payload,
+            )
             self._send_json(HTTPStatus.NOT_FOUND, {"detail": f"Unhandled PUT path: {path}"})
 
         def do_DELETE(self) -> None:  # noqa: N802
             parsed = urlparse(self.path)
             path = parsed.path
-            state.record("http", {"method": "DELETE", "path": path, "query": parsed.query})
             if path.startswith("/api/v1/subscriptions/"):
                 subscription_id = path.rsplit("/", 1)[-1]
+                if not _is_valid_uuid(subscription_id):
+                    self._record_http(
+                        method="DELETE",
+                        path=path,
+                        query=parsed.query,
+                        status=int(HTTPStatus.UNPROCESSABLE_ENTITY),
+                    )
+                    self._send_json(HTTPStatus.UNPROCESSABLE_ENTITY, {"detail": "subscription id must be a valid UUID"})
+                    return
                 state.record("delete_subscription", {"id": subscription_id})
                 with state.lock:
+                    before = len(state.subscriptions)
                     state.subscriptions = [item for item in state.subscriptions if item["id"] != subscription_id]
+                    deleted = len(state.subscriptions) != before
+                if not deleted:
+                    self._record_http(
+                        method="DELETE",
+                        path=path,
+                        query=parsed.query,
+                        status=int(HTTPStatus.NOT_FOUND),
+                    )
+                    self._send_json(HTTPStatus.NOT_FOUND, {"detail": "subscription not found"})
+                    return
+                self._record_http(
+                    method="DELETE",
+                    path=path,
+                    query=parsed.query,
+                    status=int(HTTPStatus.NO_CONTENT),
+                )
                 self._send_no_content()
                 return
 
+            self._record_http(
+                method="DELETE",
+                path=path,
+                query=parsed.query,
+                status=int(HTTPStatus.NOT_FOUND),
+            )
             self._send_json(HTTPStatus.NOT_FOUND, {"detail": f"Unhandled DELETE path: {path}"})
 
     return MockHandler
@@ -393,6 +641,8 @@ def stop_mock_api_server(running: RunningMockServer) -> None:
 
 
 def seed_subscription(state: MockApiState, subscription_id: str, source_value: str) -> None:
+    if not _is_valid_uuid(subscription_id):
+        raise ValueError("subscription_id must be a valid UUID")
     now = utc_now()
     with state.lock:
         state.subscriptions = [

@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+from http import HTTPStatus
+
 from playwright.sync_api import Page, expect
 
-from support.assertions import wait_for_call_count
+from support.assertions import wait_for_call_count, wait_for_http_call
 from support.mock_api import MockApiState, seed_subscription
 
 
@@ -13,6 +15,13 @@ def test_subscriptions_save_subscription_button(page: Page, mock_api_state: Mock
     page.get_by_role("button", name="Save subscription").click()
 
     wait_for_call_count(mock_api_state, "upsert_subscription", 1)
+    wait_for_http_call(
+        mock_api_state,
+        method="POST",
+        path="/api/v1/subscriptions",
+        status=int(HTTPStatus.OK),
+        payload_contains={"source_value": "https://youtube.com/@vd-e2e"},
+    )
     upsert_payload = mock_api_state.last_call("upsert_subscription")
     assert upsert_payload["source_value"] == "https://youtube.com/@vd-e2e"
     assert upsert_payload["rsshub_route"] == "/youtube/channel/vd-e2e"
@@ -23,7 +32,7 @@ def test_subscriptions_save_subscription_button(page: Page, mock_api_state: Mock
 
 def test_subscriptions_delete_button(page: Page, mock_api_state: MockApiState) -> None:
     seeded_source = "https://youtube.com/@vd-delete"
-    seeded_id = "sub-seeded-001"
+    seeded_id = "00000000-0000-4000-8000-0000000000aa"
     seed_subscription(mock_api_state, seeded_id, seeded_source)
 
     page.goto("/subscriptions", wait_until="domcontentloaded")
@@ -32,6 +41,12 @@ def test_subscriptions_delete_button(page: Page, mock_api_state: MockApiState) -
     row.get_by_role("button", name="Delete").click()
 
     wait_for_call_count(mock_api_state, "delete_subscription", 1)
+    wait_for_http_call(
+        mock_api_state,
+        method="DELETE",
+        path=f"/api/v1/subscriptions/{seeded_id}",
+        status=int(HTTPStatus.NO_CONTENT),
+    )
     delete_payload = mock_api_state.last_call("delete_subscription")
     assert delete_payload["id"] == seeded_id
     expect(page.locator("tbody tr", has_text=seeded_source)).to_have_count(0)
