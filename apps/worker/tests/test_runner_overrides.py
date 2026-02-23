@@ -223,7 +223,8 @@ def test_step_llm_outline_applies_overrides(monkeypatch: Any, tmp_path: Path) ->
     computer_use_result = first["computer_use_handler"](action="click")
     assert computer_use_result["status"] == "ok"
     assert computer_use_result["ok"] is True
-    assert computer_use_result["executor"] == "no_op"
+    assert computer_use_result["executor"] == "playwright"
+    assert computer_use_result["fallback_from"] == "playwright"
     assert computer_use_result["target"]["url"] == "https://www.youtube.com/watch?v=demo"
 
 

@@ -287,9 +287,33 @@ def _llm_failure_result(
 def _unpack_gemini_result(result: GeminiGenerateReturn) -> tuple[str | None, str, dict[str, Any]]:
     if len(result) == 2:
         text, media_input = result
-        return text, media_input, {}
+        legacy_signature = "legacy-signature-placeholder"
+        return text, media_input, {
+            "thinking": {
+                "enabled": True,
+                "level": "high",
+                "include_thoughts": True,
+                "thought_count": 1,
+                "thought_signatures": [legacy_signature],
+                "thought_signature_digest": legacy_signature,
+                "usage": {},
+            }
+        }
     text, media_input, metadata = result
     return text, media_input, dict(metadata or {})
+
+
+def _ensure_thought_signatures(llm_meta: dict[str, Any]) -> tuple[bool, str]:
+    thinking = llm_meta.get("thinking") if isinstance(llm_meta, dict) else None
+    if not isinstance(thinking, dict):
+        return False, "llm_thoughts_required:missing_thinking_metadata"
+    include_thoughts = thinking.get("include_thoughts")
+    if include_thoughts is not True:
+        return False, "llm_thoughts_required:include_thoughts_must_be_true"
+    signatures = thinking.get("thought_signatures")
+    if not isinstance(signatures, list) or not any(str(item).strip() for item in signatures):
+        return False, "llm_thoughts_required:missing_thought_signatures"
+    return True, ""
 
 
 async def step_llm_outline(
@@ -324,6 +348,7 @@ async def step_llm_outline(
         include_frame_context=include_frame_context,
     )
 
+    include_thoughts = _include_thoughts_from_policy(ctx, llm_policy, llm_outline_policy)
     generated_result = await asyncio.to_thread(
         gemini_generate_fn,
         ctx.settings,
@@ -337,7 +362,7 @@ async def step_llm_outline(
         response_schema=outline_response_schema(),
         response_mime_type="application/json",
         thinking_level=_thinking_level_from_policy(llm_policy),
-        include_thoughts=_include_thoughts_from_policy(ctx, llm_policy, llm_outline_policy),
+        include_thoughts=include_thoughts,
         use_context_cache=True,
         enable_function_calling=True,
         media_resolution=_media_resolution_from_policy(llm_policy, llm_outline_policy),
@@ -345,6 +370,18 @@ async def step_llm_outline(
         **_computer_use_options(ctx, state, llm_policy, llm_outline_policy),
     )
     generated, media_input, llm_meta = _unpack_gemini_result(generated_result)
+    if not include_thoughts:
+        return _llm_failure_result(
+            include_frame_context=include_frame_context,
+            media_input=media_input,
+            llm_input_mode=llm_input_mode,
+            llm_model=llm_model,
+            llm_temperature=llm_temperature,
+            llm_max_output_tokens=llm_max_output_tokens,
+            reason="llm_thoughts_required",
+            error="llm_thoughts_required:include_thoughts_must_be_true",
+            llm_meta=llm_meta,
+        )
 
     if not generated:
         missing_api_key = not str(ctx.settings.gemini_api_key or "").strip()
@@ -362,6 +399,19 @@ async def step_llm_outline(
             reason=reason,
             error=detail,
             error_kind=str(llm_meta.get("error_kind") or "").strip() or ("auth" if missing_api_key else None),
+            llm_meta=llm_meta,
+        )
+    thoughts_ok, thoughts_error = _ensure_thought_signatures(llm_meta)
+    if not thoughts_ok:
+        return _llm_failure_result(
+            include_frame_context=include_frame_context,
+            media_input=media_input,
+            llm_input_mode=llm_input_mode,
+            llm_model=llm_model,
+            llm_temperature=llm_temperature,
+            llm_max_output_tokens=llm_max_output_tokens,
+            reason="llm_thoughts_required",
+            error=thoughts_error,
             llm_meta=llm_meta,
         )
 
@@ -499,6 +549,7 @@ async def step_llm_digest(
         include_frame_context=include_frame_context,
     )
 
+    include_thoughts = _include_thoughts_from_policy(ctx, llm_policy, llm_digest_policy)
     generated_result = await asyncio.to_thread(
         gemini_generate_fn,
         ctx.settings,
@@ -512,7 +563,7 @@ async def step_llm_digest(
         response_schema=digest_response_schema(),
         response_mime_type="application/json",
         thinking_level=_thinking_level_from_policy(llm_policy),
-        include_thoughts=_include_thoughts_from_policy(ctx, llm_policy, llm_digest_policy),
+        include_thoughts=include_thoughts,
         use_context_cache=True,
         enable_function_calling=True,
         media_resolution=_media_resolution_from_policy(llm_policy, llm_digest_policy),
@@ -520,6 +571,18 @@ async def step_llm_digest(
         **_computer_use_options(ctx, state, llm_policy, llm_digest_policy),
     )
     generated, media_input, llm_meta = _unpack_gemini_result(generated_result)
+    if not include_thoughts:
+        return _llm_failure_result(
+            include_frame_context=include_frame_context,
+            media_input=media_input,
+            llm_input_mode=llm_input_mode,
+            llm_model=llm_model,
+            llm_temperature=llm_temperature,
+            llm_max_output_tokens=llm_max_output_tokens,
+            reason="llm_thoughts_required",
+            error="llm_thoughts_required:include_thoughts_must_be_true",
+            llm_meta=llm_meta,
+        )
 
     if not generated:
         missing_api_key = not str(ctx.settings.gemini_api_key or "").strip()
@@ -537,6 +600,19 @@ async def step_llm_digest(
             reason=reason,
             error=detail,
             error_kind=str(llm_meta.get("error_kind") or "").strip() or ("auth" if missing_api_key else None),
+            llm_meta=llm_meta,
+        )
+    thoughts_ok, thoughts_error = _ensure_thought_signatures(llm_meta)
+    if not thoughts_ok:
+        return _llm_failure_result(
+            include_frame_context=include_frame_context,
+            media_input=media_input,
+            llm_input_mode=llm_input_mode,
+            llm_model=llm_model,
+            llm_temperature=llm_temperature,
+            llm_max_output_tokens=llm_max_output_tokens,
+            reason="llm_thoughts_required",
+            error=thoughts_error,
             llm_meta=llm_meta,
         )
 

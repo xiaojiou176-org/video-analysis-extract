@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 from typing import Any, Callable
 
 from worker.pipeline.steps.llm_client_helpers import ComputerUseHandler
@@ -30,7 +31,7 @@ def _resolve_computer_use_payload(
             or llm_payload.get("executor")
             or llm_policy.get("computer_use_executor")
             or state_payload.get("executor")
-            or "no_op"
+            or "playwright"
         ),
         "url": (
             section_payload.get("url")
@@ -93,8 +94,72 @@ def _execute_browser_stub(action_name: str, action_args: dict[str, Any]) -> dict
     }
 
 
+def _execute_playwright(
+    *,
+    action_name: str,
+    action_args: dict[str, Any],
+    url: str,
+) -> dict[str, Any]:
+    if not action_name:
+        return {"ok": False, "status": "error", "error": "computer_use_action_missing"}
+    if not url:
+        return {"ok": False, "status": "error", "error": "computer_use_target_url_missing"}
+
+    try:
+        from playwright.sync_api import sync_playwright
+    except Exception as exc:  # pragma: no cover
+        return {"ok": False, "status": "error", "error": f"computer_use_playwright_unavailable:{exc}"}
+
+    selector = str(
+        action_args.get("selector")
+        or action_args.get("target")
+        or action_args.get("element")
+        or ""
+    ).strip()
+    text_value = str(action_args.get("text") or action_args.get("input_text") or "").strip()
+    wait_ms = int(action_args.get("wait_ms") or 800)
+    timeout_ms = int(action_args.get("timeout_ms") or 8000)
+
+    try:
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            page = browser.new_page()
+            page.goto(url, timeout=timeout_ms, wait_until="domcontentloaded")
+            normalized = action_name.lower()
+            if normalized in {"click", "tap"}:
+                page.click(selector, timeout=timeout_ms)
+            elif normalized in {"type", "fill", "input"}:
+                page.fill(selector, text_value, timeout=timeout_ms)
+            elif normalized in {"navigate", "goto"}:
+                next_url = str(action_args.get("url") or "").strip()
+                if not next_url:
+                    raise ValueError("navigate action requires url")
+                page.goto(next_url, timeout=timeout_ms, wait_until="domcontentloaded")
+            elif normalized in {"wait", "sleep"}:
+                page.wait_for_timeout(wait_ms)
+            elif normalized in {"scroll"}:
+                page.evaluate("window.scrollBy(0, Math.max(200, window.innerHeight * 0.8));")
+            else:
+                page.wait_for_timeout(100)
+            screenshot_bytes = page.screenshot(type="png", full_page=False)
+            current_url = page.url
+            browser.close()
+            return {
+                "ok": True,
+                "status": "ok",
+                "message": "computer_use_playwright_executed",
+                "action": {"name": action_name, "args": action_args},
+                "current_url": current_url,
+                "screenshot_base64": base64.b64encode(screenshot_bytes).decode("ascii"),
+            }
+    except Exception as exc:
+        return {"ok": False, "status": "error", "error": f"computer_use_playwright_failed:{exc}"}
+
+
 def _executor_name(raw: Any) -> str:
     candidate = str(raw or "").strip().lower()
+    if candidate in {"playwright", "browser_playwright"}:
+        return "playwright"
     if candidate in {"browser", "browser_stub"}:
         return "browser_stub"
     return "no_op"
@@ -123,7 +188,20 @@ def build_default_computer_use_handler(
             context = base_payload.get("context")
         context_payload = _coerce_dict(context) if isinstance(context, dict) else {"value": context}
 
-        if executor == "browser_stub":
+        if executor == "playwright":
+            result = _execute_playwright(
+                action_name=action_name,
+                action_args=action_args,
+                url=url,
+            )
+            if str(result.get("status") or "").strip().lower() == "error":
+                fallback = _execute_browser_stub(action_name, action_args)
+                result = {
+                    **fallback,
+                    "fallback_from": "playwright",
+                    "playwright_error": str(result.get("error") or ""),
+                }
+        elif executor == "browser_stub":
             result = _execute_browser_stub(action_name, action_args)
         else:
             result = _execute_noop(action_name, action_args)
@@ -139,4 +217,3 @@ def build_default_computer_use_handler(
         }
 
     return _handler
-
