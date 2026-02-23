@@ -480,7 +480,6 @@ jobs:
           path: .runtime-cache/autofix-report.json
 
   live-smoke:
-    if: ${{ secrets.GEMINI_API_KEY != '' && secrets.RESEND_API_KEY != '' && secrets.RESEND_FROM_EMAIL != '' && secrets.YOUTUBE_API_KEY != '' }}
     needs: aggregate-gate
     runs-on: ubuntu-latest
     env:
@@ -496,7 +495,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Skip live smoke when required secrets are missing
+        if: ${{ env.GEMINI_API_KEY == '' || env.RESEND_API_KEY == '' || env.RESEND_FROM_EMAIL == '' || env.YOUTUBE_API_KEY == '' }}
+        run: |
+          echo "live smoke skipped: missing required secrets"
+
       - name: Run live smoke
+        if: ${{ env.GEMINI_API_KEY != '' && env.RESEND_API_KEY != '' && env.RESEND_FROM_EMAIL != '' && env.YOUTUBE_API_KEY != '' }}
         run: scripts/e2e_live_smoke.sh
 
   ci-final-gate:
