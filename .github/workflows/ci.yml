@@ -152,6 +152,20 @@ jobs:
   python-tests:
     runs-on: ubuntu-latest
     needs: preflight
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_DB: video_analysis_pytests
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d video_analysis_pytests"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -177,10 +191,27 @@ jobs:
       - name: Sync Python deps (locked)
         run: uv sync --frozen --extra dev --extra e2e
 
+      - name: Wait for PostgreSQL service
+        run: |
+          for _ in $(seq 1 30); do
+            if uv run --with psycopg python - <<'PY'
+          import psycopg
+          conn = psycopg.connect("postgresql://postgres:postgres@127.0.0.1:5432/video_analysis_pytests")
+          conn.close()
+          print("postgres ready")
+          PY
+            then
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "postgres service not ready in time"
+          exit 1
+
       - name: Pipeline smoke
         env:
           PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/apps/worker
-          DATABASE_URL: "sqlite+pysqlite:///:memory:"
+          DATABASE_URL: "postgresql+psycopg://postgres:postgres@127.0.0.1:5432/video_analysis_pytests"
           TEMPORAL_TARGET_HOST: 127.0.0.1:7233
           TEMPORAL_NAMESPACE: default
           TEMPORAL_TASK_QUEUE: video-analysis-worker
@@ -196,7 +227,7 @@ jobs:
       - name: Run Python tests
         env:
           PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/apps/worker
-          DATABASE_URL: "sqlite+pysqlite:///:memory:"
+          DATABASE_URL: "postgresql+psycopg://postgres:postgres@127.0.0.1:5432/video_analysis_pytests"
           TEMPORAL_TARGET_HOST: 127.0.0.1:7233
           TEMPORAL_NAMESPACE: default
           TEMPORAL_TASK_QUEUE: video-analysis-worker
@@ -213,7 +244,7 @@ jobs:
             --cov=apps/mcp \
             --cov-report=term-missing:skip-covered \
             --cov-report=xml:.runtime-cache/python-coverage.xml \
-            --cov-fail-under=60 \
+            --cov-fail-under=75 \
             --junitxml=.runtime-cache/python-tests-junit.xml \
             2>&1 | tee .runtime-cache/python-tests.log
 
@@ -279,6 +310,10 @@ jobs:
   web-e2e:
     runs-on: ubuntu-latest
     needs: preflight
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, firefox]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -305,9 +340,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-playwright-${{ hashFiles('uv.lock') }}
+          key: ${{ runner.os }}-playwright-${{ matrix.browser }}-${{ hashFiles('uv.lock') }}
           restore-keys: |
-            ${{ runner.os }}-playwright-
+            ${{ runner.os }}-playwright-${{ matrix.browser }}-
 
       - name: Sync Python deps (locked)
         run: uv sync --frozen --extra dev --extra e2e
@@ -315,23 +350,27 @@ jobs:
       - name: Install web deps
         run: npm --prefix apps/web ci
 
-      - name: Install Playwright browser (chromium)
-        run: uv run --with playwright python -m playwright install --with-deps chromium
+      - name: Install Playwright browser (${{ matrix.browser }})
+        run: uv run --with playwright python -m playwright install --with-deps ${{ matrix.browser }}
 
       - name: Web E2E gate (no silent skip)
+        env:
+          WEB_E2E_BROWSER: ${{ matrix.browser }}
         run: |
           mkdir -p .runtime-cache
 
           set -o pipefail
           uv run --with pytest --with playwright \
-            pytest apps/web/tests/e2e -q --junitxml=.runtime-cache/web-e2e-junit.xml -rA \
+            pytest apps/web/tests/e2e -q --junitxml=.runtime-cache/web-e2e-junit-${WEB_E2E_BROWSER}.xml -rA \
             2>&1 | tee .runtime-cache/web-e2e.log
 
           python - <<'PY'
           import xml.etree.ElementTree as ET
+          import os
           from pathlib import Path
 
-          report = Path(".runtime-cache/web-e2e-junit.xml")
+          browser = os.environ.get("WEB_E2E_BROWSER", "unknown")
+          report = Path(f".runtime-cache/web-e2e-junit-{browser}.xml")
           if not report.is_file():
               raise SystemExit("web e2e gate failed: junit report missing")
 
@@ -344,27 +383,27 @@ jobs:
               raise SystemExit("web e2e gate failed: collected 0 tests")
           if skipped > 0:
               raise SystemExit(f"web e2e gate failed: skipped={skipped} (no silent skip allowed)")
-          print(f"web e2e gate passed: tests={tests}, skipped={skipped}")
+          print(f"web e2e gate passed ({browser}): tests={tests}, skipped={skipped}")
           PY
 
       - name: Upload web e2e artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: web-e2e-artifacts
+          name: web-e2e-artifacts-${{ matrix.browser }}
           path: |
             .runtime-cache/web-e2e-artifacts
-            .runtime-cache/web-e2e-junit.xml
+            .runtime-cache/web-e2e-junit-${{ matrix.browser }}.xml
           if-no-files-found: warn
 
       - name: Upload CI failure diagnostics (web)
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ci-failure-diagnostics-web-e2e-${{ github.run_id }}-${{ github.run_attempt }}
+          name: ci-failure-diagnostics-web-e2e-${{ matrix.browser }}-${{ github.run_id }}-${{ github.run_attempt }}
           if-no-files-found: ignore
           path: |
-            .runtime-cache/web-e2e-junit.xml
+            .runtime-cache/web-e2e-junit-${{ matrix.browser }}.xml
             .runtime-cache/web-e2e.log
 
   aggregate-gate:
@@ -485,26 +524,22 @@ jobs:
   live-smoke:
     needs: aggregate-gate
     runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'schedule' || (github.event_name == 'push' && github.ref == 'refs/heads/main') }}
     env:
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
       RESEND_FROM_EMAIL: ${{ secrets.RESEND_FROM_EMAIL }}
       YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+      LIVE_SMOKE_API_BASE_URL: ${{ secrets.LIVE_SMOKE_API_BASE_URL }}
       LIVE_SMOKE_REQUIRE_API: "1"
+      LIVE_SMOKE_REQUIRE_SECRETS: "1"
       LIVE_SMOKE_COMPUTER_USE_STRICT: "1"
-      LIVE_SMOKE_COMPUTER_USE_SKIP: "1"
-      LIVE_SMOKE_COMPUTER_USE_SKIP_REASON: "CI runner has no computer_use harness configured"
+      LIVE_SMOKE_COMPUTER_USE_SKIP: "0"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Skip live smoke when required secrets are missing
-        if: ${{ env.GEMINI_API_KEY == '' || env.RESEND_API_KEY == '' || env.RESEND_FROM_EMAIL == '' || env.YOUTUBE_API_KEY == '' }}
-        run: |
-          echo "live smoke skipped: missing required secrets"
-
       - name: Run live smoke
-        if: ${{ env.GEMINI_API_KEY != '' && env.RESEND_API_KEY != '' && env.RESEND_FROM_EMAIL != '' && env.YOUTUBE_API_KEY != '' }}
         run: scripts/e2e_live_smoke.sh
 
   ci-final-gate:
@@ -519,6 +554,7 @@ jobs:
       HAS_RESEND_API_KEY: ${{ secrets.RESEND_API_KEY != '' }}
       HAS_RESEND_FROM_EMAIL: ${{ secrets.RESEND_FROM_EMAIL != '' }}
       HAS_YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY != '' }}
+      HAS_LIVE_SMOKE_API_BASE_URL: ${{ secrets.LIVE_SMOKE_API_BASE_URL != '' }}
     steps:
       - name: Enforce final gate (with required live smoke on main/nightly)
         run: |
@@ -556,6 +592,7 @@ jobs:
             [[ "${HAS_RESEND_API_KEY}" != "true" ]] && missing+=("RESEND_API_KEY")
             [[ "${HAS_RESEND_FROM_EMAIL}" != "true" ]] && missing+=("RESEND_FROM_EMAIL")
             [[ "${HAS_YOUTUBE_API_KEY}" != "true" ]] && missing+=("YOUTUBE_API_KEY")
+            [[ "${HAS_LIVE_SMOKE_API_BASE_URL}" != "true" ]] && missing+=("LIVE_SMOKE_API_BASE_URL")
             if [[ "${#missing[@]}" -gt 0 ]]; then
               echo "final gate failed: live smoke required on main/nightly, but required secrets are missing: ${missing[*]}"
             else

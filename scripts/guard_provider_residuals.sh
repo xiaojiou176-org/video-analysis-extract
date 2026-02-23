@@ -12,6 +12,7 @@ ALLOWLIST=(
 )
 
 TARGETS=(
+  ".github"
   "apps"
   "docs"
   "infra"
@@ -23,10 +24,18 @@ TARGETS=(
 
 RG_ARGS=(
   -n
+  -i
+  --pcre2
   --color=never
   -e "\\bopenai\\b"
-  -e "\\bOpenAI\\b"
   -e "OPENAI_"
+  -e "api\\.openai\\.com"
+  -e "\\bfrom\\s+openai\\s+import\\b"
+  -e "\\bimport\\s+openai\\b"
+  -e "\\bAsync?OpenAI\\b"
+  -e "\\bOpenAI\\s*\\("
+  -e "\\bclient\\.responses\\.create\\b"
+  -e "\\bclient\\.chat\\.completions\\.create\\b"
   -e "chat\\.completions"
   -e "responses\\.create"
   -e "gpt-"
