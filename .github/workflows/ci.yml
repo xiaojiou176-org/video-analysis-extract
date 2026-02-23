@@ -6,6 +6,12 @@ on:
     branches:
       - main
       - codex/**
+  schedule:
+    - cron: "0 3 * * *"
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   preflight:
@@ -67,6 +73,9 @@ jobs:
       - name: Docs env canonical check
         run: |
           ! rg -n 'cp \.env\.local\.example \.env\.local|source \.env\.local|自动加载 `?\.env\.local' README.md docs/runbook-local.md
+
+      - name: Provider residual guard (blocking)
+        run: bash scripts/guard_provider_residuals.sh .
 
       - name: Worker file line limits (pipeline/steps + temporal <= 700)
         run: python3 scripts/check_worker_line_limits.py
@@ -199,8 +208,36 @@ jobs:
           mkdir -p .runtime-cache
           set -o pipefail
           uv run pytest apps/worker/tests apps/api/tests apps/mcp/tests -q -rA -n 2 \
+            --cov=apps/worker/worker \
+            --cov=apps/api \
+            --cov=apps/mcp \
+            --cov-report=term-missing:skip-covered \
+            --cov-report=xml:.runtime-cache/python-coverage.xml \
+            --cov-fail-under=60 \
             --junitxml=.runtime-cache/python-tests-junit.xml \
             2>&1 | tee .runtime-cache/python-tests.log
+
+      - name: Python tests skip guard (no silent skip)
+        run: |
+          python - <<'PY'
+          import xml.etree.ElementTree as ET
+          from pathlib import Path
+
+          report = Path(".runtime-cache/python-tests-junit.xml")
+          if not report.is_file():
+              raise SystemExit("python skip guard failed: junit report missing")
+
+          root = ET.parse(report).getroot()
+          suites = [root] if root.tag == "testsuite" else root.findall("testsuite")
+          tests = sum(int(suite.attrib.get("tests", "0")) for suite in suites)
+          skipped = sum(int(suite.attrib.get("skipped", "0")) for suite in suites)
+
+          if tests == 0:
+              raise SystemExit("python skip guard failed: collected 0 tests")
+          if skipped > 0:
+              raise SystemExit(f"python skip guard failed: skipped={skipped} (no silent skip allowed)")
+          print(f"python skip guard passed: tests={tests}, skipped={skipped}")
+          PY
 
       - name: Upload CI failure diagnostics (python)
         if: always()
@@ -211,6 +248,7 @@ jobs:
           path: |
             .runtime-cache/python-tests-junit.xml
             .runtime-cache/python-tests.log
+            .runtime-cache/python-coverage.xml
 
   web-lint-build:
     runs-on: ubuntu-latest
@@ -360,6 +398,58 @@ jobs:
           fi
           echo "aggregate gate passed"
 
+  nightly-flaky-python:
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'schedule' }}
+    needs: preflight
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Setup uv
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install uv
+
+      - name: Cache uv
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/uv
+          key: ${{ runner.os }}-uv-${{ hashFiles('uv.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-uv-
+
+      - name: Sync Python deps (locked)
+        run: uv sync --frozen --extra dev --extra e2e
+
+      - name: Nightly flaky subset (repeat x3)
+        env:
+          PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/apps/worker
+          DATABASE_URL: "sqlite+pysqlite:///:memory:"
+          TEMPORAL_TARGET_HOST: 127.0.0.1:7233
+          TEMPORAL_NAMESPACE: default
+          TEMPORAL_TASK_QUEUE: video-analysis-worker
+          SQLITE_STATE_PATH: /tmp/video-digestor-api-tests-nightly.db
+          SQLITE_PATH: /tmp/video-digestor-worker-tests-nightly.db
+          PIPELINE_WORKSPACE_DIR: /tmp/video-digestor-workspace-nightly
+          PIPELINE_ARTIFACT_ROOT: /tmp/video-digestor-artifacts-nightly
+        run: |
+          for i in 1 2 3; do
+            echo "nightly flaky run #${i}"
+            uv run pytest \
+              apps/worker/tests/test_runner_modes.py::test_run_pipeline_text_only_mode_skips_media_steps \
+              apps/worker/tests/test_runner_modes.py::test_run_pipeline_refresh_llm_forces_only_llm_steps \
+              apps/api/tests/test_api_routes.py::test_healthz_returns_ok_status \
+              apps/api/tests/test_api_routes.py::test_video_process_returns_mode_field \
+              apps/mcp/tests/test_tool_normalizers.py::test_health_system_tool_returns_status \
+              -q -rA
+          done
+
   autofix-dry-run:
     name: autofix-dry-run
     runs-on: ubuntu-latest
@@ -408,3 +498,67 @@ jobs:
 
       - name: Run live smoke
         run: scripts/e2e_live_smoke.sh
+
+  ci-final-gate:
+    runs-on: ubuntu-latest
+    if: always()
+    needs:
+      - aggregate-gate
+      - live-smoke
+      - nightly-flaky-python
+    env:
+      HAS_GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY != '' }}
+      HAS_RESEND_API_KEY: ${{ secrets.RESEND_API_KEY != '' }}
+      HAS_RESEND_FROM_EMAIL: ${{ secrets.RESEND_FROM_EMAIL != '' }}
+      HAS_YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY != '' }}
+    steps:
+      - name: Enforce final gate (with required live smoke on main/nightly)
+        run: |
+          aggregate_result="${{ needs.aggregate-gate.result }}"
+          live_smoke_result="${{ needs.live-smoke.result }}"
+          nightly_flaky_result="${{ needs.nightly-flaky-python.result }}"
+          event_name="${{ github.event_name }}"
+          ref="${{ github.ref }}"
+
+          require_live_smoke=0
+          if [[ "$event_name" == "schedule" ]]; then
+            require_live_smoke=1
+          elif [[ "$event_name" == "push" && "$ref" == "refs/heads/main" ]]; then
+            require_live_smoke=1
+          fi
+
+          echo "aggregate-gate=$aggregate_result"
+          echo "live-smoke=$live_smoke_result"
+          echo "nightly-flaky-python=$nightly_flaky_result"
+          echo "event=$event_name ref=$ref require_live_smoke=$require_live_smoke"
+
+          if [[ "$aggregate_result" != "success" ]]; then
+            echo "final gate failed: aggregate gate is not successful"
+            exit 1
+          fi
+
+          if [[ "$event_name" == "schedule" && "$nightly_flaky_result" != "success" ]]; then
+            echo "final gate failed: nightly flaky subset must pass on schedule runs (result='$nightly_flaky_result')"
+            exit 1
+          fi
+
+          if [[ "$require_live_smoke" -eq 1 && "$live_smoke_result" != "success" ]]; then
+            missing=()
+            [[ "${HAS_GEMINI_API_KEY}" != "true" ]] && missing+=("GEMINI_API_KEY")
+            [[ "${HAS_RESEND_API_KEY}" != "true" ]] && missing+=("RESEND_API_KEY")
+            [[ "${HAS_RESEND_FROM_EMAIL}" != "true" ]] && missing+=("RESEND_FROM_EMAIL")
+            [[ "${HAS_YOUTUBE_API_KEY}" != "true" ]] && missing+=("YOUTUBE_API_KEY")
+            if [[ "${#missing[@]}" -gt 0 ]]; then
+              echo "final gate failed: live smoke required on main/nightly, but required secrets are missing: ${missing[*]}"
+            else
+              echo "final gate failed: live smoke required on main/nightly but result is '$live_smoke_result'"
+            fi
+            exit 1
+          fi
+
+          if [[ "$require_live_smoke" -eq 0 && "$live_smoke_result" == "failure" ]]; then
+            echo "final gate failed: live smoke ran and failed"
+            exit 1
+          fi
+
+          echo "final gate passed"
