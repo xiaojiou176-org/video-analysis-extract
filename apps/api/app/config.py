@@ -38,6 +38,11 @@ class Settings:
     notification_enabled: bool
     resend_api_key: str | None
     resend_from_email: str | None
+    gemini_api_key: str | None
+    gemini_model: str
+    gemini_embedding_model: str
+    gemini_thinking_level: str
+    ui_audit_gemini_enabled: bool
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -55,6 +60,14 @@ class Settings:
             ),
             resend_api_key=os.getenv("RESEND_API_KEY"),
             resend_from_email=os.getenv("RESEND_FROM_EMAIL"),
+            gemini_api_key=os.getenv("GEMINI_API_KEY"),
+            gemini_model=os.getenv("GEMINI_MODEL", "gemini-3.1-pro-preview"),
+            gemini_embedding_model=os.getenv("GEMINI_EMBEDDING_MODEL", "gemini-embedding-001"),
+            gemini_thinking_level=os.getenv("GEMINI_THINKING_LEVEL", "high"),
+            ui_audit_gemini_enabled=_parse_bool(
+                os.getenv("UI_AUDIT_GEMINI_ENABLED"),
+                default=True,
+            ),
         )
 
     def validate(self) -> "Settings":

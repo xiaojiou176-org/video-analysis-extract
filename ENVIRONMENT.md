@@ -5,7 +5,7 @@ This repository uses a contract-first environment model:
 1. Source of truth: `infra/config/env.contract.json`
 2. Local template: `.env.example` (copied to `.env`)
 3. Runtime access: configuration modules (`apps/api/app/config.py`, `apps/worker/worker/config.py`, `apps/mcp/server.py`)
-4. Gate: `python scripts/check_env_contract.py --strict`
+4. Gate: `python3 scripts/check_env_contract.py --strict`
 
 ## Loading Order
 
@@ -57,9 +57,10 @@ Startup validation fails when:
 - `COMMENTS_TOP_N`, `COMMENTS_REPLIES_PER_COMMENT`, `COMMENTS_REQUEST_TIMEOUT_SECONDS`
 - `PIPELINE_LLM_INPUT_MODE`, `PIPELINE_LLM_INCLUDE_FRAMES`
 - `PIPELINE_LLM_HARD_REQUIRED`, `PIPELINE_LLM_FAIL_ON_PROVIDER_ERROR`, `PIPELINE_LLM_MAX_RETRIES`
+- `PIPELINE_RETRY_TRANSIENT_*`, `PIPELINE_RETRY_RATE_LIMIT_*`, `PIPELINE_RETRY_AUTH_*`, `PIPELINE_RETRY_FATAL_ATTEMPTS`
 - `GEMINI_API_KEY`, `GEMINI_MODEL`, `GEMINI_OUTLINE_MODEL`, `GEMINI_DIGEST_MODEL`
 - `GEMINI_FAST_MODEL`, `GEMINI_EMBEDDING_MODEL`, `YOUTUBE_API_KEY`
-- `GEMINI_THINKING_LEVEL`, `GEMINI_INCLUDE_THOUGHTS`
+- `GEMINI_THINKING_LEVEL`, `GEMINI_INCLUDE_THOUGHTS`, `GEMINI_STRICT_SCHEMA_MODE`
 - `GEMINI_CONTEXT_CACHE_ENABLED`, `GEMINI_CONTEXT_CACHE_TTL_SECONDS`, `GEMINI_CONTEXT_CACHE_MIN_CHARS`, `GEMINI_CONTEXT_CACHE_MAX_KEYS`, `GEMINI_CONTEXT_CACHE_LOCAL_TTL_SECONDS`, `GEMINI_CONTEXT_CACHE_SWEEP_INTERVAL_SECONDS`
 - `GEMINI_COMPUTER_USE_ENABLED`, `GEMINI_COMPUTER_USE_REQUIRE_CONFIRMATION`
 - `GEMINI_COMPUTER_USE_MAX_STEPS`, `GEMINI_COMPUTER_USE_TIMEOUT_SECONDS`
@@ -88,12 +89,14 @@ LLM generation is Gemini-only in this repository:
 
 - `VD_API_BASE_URL`, `VD_API_TIMEOUT_SEC`, `VD_API_KEY`
 - `NEXT_PUBLIC_API_BASE_URL`
+- `UI_AUDIT_GEMINI_ENABLED` (API-side Gemini UI audit toggle, default `true`)
 
 ### Script Runtime
 
 - `DIGEST_*`
 - `FAILURE_*`
 - `LIVE_SMOKE_*`
+- `OPS_*` (workflow bootstrap overrides for `scripts/start_ops_workflows.sh`, including `OPS_CLEANUP_*`, `OPS_SHOW_HINTS`, `OPS_DRY_RUN`)
 - `API_*`, `WORKER_*`, `MCP_*`, `OUTPUT_PATH`, `INIT_ENV_FORCE`
 - `WEB_BASE_URL` (web e2e target override)
 
@@ -126,7 +129,7 @@ cp .env.example .env
 GitHub Actions workflow: `.github/workflows/env-governance.yml`
 
 1. Environment contract check:
-   - `python scripts/check_env_contract.py --strict --env-file .env.example`
+   - `python3 scripts/check_env_contract.py --strict --env-file .env.example`
    - Validates:
      - all referenced env vars are registered in `infra/config/env.contract.json`
      - every `required=true` contract variable has `default=null`

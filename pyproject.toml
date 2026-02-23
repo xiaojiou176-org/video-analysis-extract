@@ -21,6 +21,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
   "pytest>=8.4.1,<9",
+  "pytest-cov>=6.0.0,<7",
   "pytest-xdist>=3.8.0,<4",
 ]
 e2e = [

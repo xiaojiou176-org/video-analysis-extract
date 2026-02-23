@@ -27,6 +27,24 @@ def _is_blank(value: str | None) -> bool:
     return value is None or not value.strip()
 
 
+def _parse_optional_int(raw: str | None) -> int | None:
+    if raw is None:
+        return None
+    try:
+        return int(raw)
+    except ValueError:
+        return None
+
+
+def _parse_optional_float(raw: str | None) -> float | None:
+    if raw is None:
+        return None
+    try:
+        return float(raw)
+    except ValueError:
+        return None
+
+
 def _read_required_env(name: str) -> str:
     value = os.getenv(name)
     if _is_blank(value):
@@ -74,6 +92,20 @@ class Settings:
     pipeline_max_frames: int = 6
     pipeline_frame_interval_seconds: int = 30
     pipeline_llm_input_mode: str = "auto"
+    pipeline_llm_include_frames: bool = False
+    pipeline_llm_hard_required: bool = True
+    pipeline_llm_fail_on_provider_error: bool = True
+    pipeline_llm_max_retries: int | None = None
+    pipeline_retry_transient_attempts: int | None = None
+    pipeline_retry_transient_backoff_seconds: float | None = None
+    pipeline_retry_transient_max_backoff_seconds: float | None = None
+    pipeline_retry_rate_limit_attempts: int | None = None
+    pipeline_retry_rate_limit_backoff_seconds: float | None = None
+    pipeline_retry_rate_limit_max_backoff_seconds: float | None = None
+    pipeline_retry_auth_attempts: int | None = None
+    pipeline_retry_auth_backoff_seconds: float | None = None
+    pipeline_retry_auth_max_backoff_seconds: float | None = None
+    pipeline_retry_fatal_attempts: int | None = None
     gemini_api_key: str | None = None
     gemini_model: str = "gemini-3.1-pro-preview"
     gemini_outline_model: str = "gemini-3.1-pro-preview"
@@ -88,6 +120,7 @@ class Settings:
     gemini_context_cache_max_keys: int = 1000
     gemini_context_cache_local_ttl_seconds: int = 21600
     gemini_context_cache_sweep_interval_seconds: int = 300
+    gemini_strict_schema_mode: bool = True
     gemini_computer_use_enabled: bool = False
     gemini_computer_use_require_confirmation: bool = True
     gemini_computer_use_max_steps: int = 3
@@ -163,6 +196,54 @@ class Settings:
                 os.getenv("PIPELINE_FRAME_INTERVAL_SECONDS", "30")
             ),
             pipeline_llm_input_mode=os.getenv("PIPELINE_LLM_INPUT_MODE", "auto"),
+            pipeline_llm_include_frames=_parse_bool(
+                os.getenv("PIPELINE_LLM_INCLUDE_FRAMES"),
+                default=False,
+            ),
+            pipeline_llm_hard_required=_parse_bool(
+                os.getenv("PIPELINE_LLM_HARD_REQUIRED"),
+                default=True,
+            ),
+            pipeline_llm_fail_on_provider_error=_parse_bool(
+                os.getenv("PIPELINE_LLM_FAIL_ON_PROVIDER_ERROR"),
+                default=True,
+            ),
+            pipeline_llm_max_retries=(
+                max(0, parsed_retries)
+                if (parsed_retries := _parse_optional_int(os.getenv("PIPELINE_LLM_MAX_RETRIES")))
+                is not None
+                else None
+            ),
+            pipeline_retry_transient_attempts=_parse_optional_int(
+                os.getenv("PIPELINE_RETRY_TRANSIENT_ATTEMPTS")
+            ),
+            pipeline_retry_transient_backoff_seconds=_parse_optional_float(
+                os.getenv("PIPELINE_RETRY_TRANSIENT_BACKOFF_SECONDS")
+            ),
+            pipeline_retry_transient_max_backoff_seconds=_parse_optional_float(
+                os.getenv("PIPELINE_RETRY_TRANSIENT_MAX_BACKOFF_SECONDS")
+            ),
+            pipeline_retry_rate_limit_attempts=_parse_optional_int(
+                os.getenv("PIPELINE_RETRY_RATE_LIMIT_ATTEMPTS")
+            ),
+            pipeline_retry_rate_limit_backoff_seconds=_parse_optional_float(
+                os.getenv("PIPELINE_RETRY_RATE_LIMIT_BACKOFF_SECONDS")
+            ),
+            pipeline_retry_rate_limit_max_backoff_seconds=_parse_optional_float(
+                os.getenv("PIPELINE_RETRY_RATE_LIMIT_MAX_BACKOFF_SECONDS")
+            ),
+            pipeline_retry_auth_attempts=_parse_optional_int(
+                os.getenv("PIPELINE_RETRY_AUTH_ATTEMPTS")
+            ),
+            pipeline_retry_auth_backoff_seconds=_parse_optional_float(
+                os.getenv("PIPELINE_RETRY_AUTH_BACKOFF_SECONDS")
+            ),
+            pipeline_retry_auth_max_backoff_seconds=_parse_optional_float(
+                os.getenv("PIPELINE_RETRY_AUTH_MAX_BACKOFF_SECONDS")
+            ),
+            pipeline_retry_fatal_attempts=_parse_optional_int(
+                os.getenv("PIPELINE_RETRY_FATAL_ATTEMPTS")
+            ),
             gemini_api_key=os.getenv("GEMINI_API_KEY"),
             gemini_model=os.getenv("GEMINI_MODEL", "gemini-3.1-pro-preview"),
             gemini_outline_model=os.getenv(
@@ -201,6 +282,10 @@ class Settings:
             ),
             gemini_context_cache_sweep_interval_seconds=int(
                 os.getenv("GEMINI_CONTEXT_CACHE_SWEEP_INTERVAL_SECONDS", "300")
+            ),
+            gemini_strict_schema_mode=_parse_bool(
+                os.getenv("GEMINI_STRICT_SCHEMA_MODE"),
+                default=True,
             ),
             gemini_computer_use_enabled=_parse_bool(
                 os.getenv("GEMINI_COMPUTER_USE_ENABLED"),
