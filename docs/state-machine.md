@@ -9,7 +9,7 @@
 5. 启动 API / Worker / MCP
 6. 触发最小验收请求
 
-执行命令以 `README.md` 与 `docs/runbook-local.md` 为准。
+执行命令以 `docs/start-here.md` 与 `docs/runbook-local.md` 为准。
 
 ## Job 状态（`jobs.status`）
 - `queued -> running -> succeeded`
@@ -72,7 +72,7 @@
 - 适用步骤：`llm_outline`、`llm_digest`。
 - 允许工具白名单：`select_supporting_frames`、`build_evidence_citations`。
 - 非白名单调用：记为 `blocked`，不执行。
-- `computer_use` 开关已接入策略层（`GEMINI_COMPUTER_USE_*` + `overrides.llm*`），但当前 worker 未注入执行 handler，调用返回 `computer_use_handler_missing`。
+- `computer_use` 开关已接入策略层（`GEMINI_COMPUTER_USE_*` + `overrides.llm*`）；当 `enable_computer_use=true` 且未显式提供 handler 时，worker 会默认注入 `build_default_computer_use_handler`。
 - `computer_use_require_confirmation` 默认 `true`，未确认返回 `computer_use_confirmation_required`。
 - 回合上限：`max_function_call_rounds`（默认 `2`，可通过 `overrides.llm*` 覆盖）。
 - 翻译回退路径固定 `enable_function_calling=false`。
@@ -94,7 +94,7 @@
 - `steps[].result.llm_meta.thinking.thought_signature_digest`
 - `steps[].result.llm_meta.function_calling`（`calls`、`termination_reason` 等）
 - `steps[].cache_key`
-- `steps[].thought_metadata`（兼容提取位，可能为 `null`）
+- `steps[].thought_metadata`（兼容提取位，统一归一化，缺失时为空结构）
 - `degradations[].cache_meta`
 
 ## Retry Strategy

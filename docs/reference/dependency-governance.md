@@ -15,6 +15,7 @@
 ## CI Gates
 - `ci.yml`：
   - `uv sync --frozen`（锁文件强约束）
+  - `bash scripts/guard_provider_residuals.sh .`（Provider 残留防回归）
   - migration smoke
   - python tests
   - web lint/build/e2e

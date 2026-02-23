@@ -11,10 +11,22 @@
 - 计划任务（cron/launchd）场景，日志应重定向到 `logs/`（该目录已在 `.gitignore`）。
 - 脚本日志必须带前缀（如 `[run_daily_digest]`、`[dev_worker]`）以便 grep。
 
+## Log Directory Initialization
+首次启用定时任务或常驻 ops workflow 前，先创建日志目录：
+```bash
+mkdir -p logs logs/ops
+touch logs/daily_digest.log logs/failure_alerts.log logs/ops/workflows.log
+```
+
+推荐重定向方式：
+```bash
+./scripts/start_ops_workflows.sh >> ./logs/ops/workflows.log 2>&1
+```
+
 ## Sensitive Data Rules
 `run_daily_digest.sh` 与 `run_failure_alerts.sh` 内置 `safe_body_preview`，会对以下模式脱敏：
 - `Bearer <token>`
-- `sk-*`（OpenAI 形态）
+- `sk-*`（通用 API 密钥形态）
 - `ghp_*`（GitHub token 形态）
 - `AKIA*`（AWS key 形态）
 - URL query 中的 `api_key/token/secret/password/auth*`
@@ -56,6 +68,21 @@ rg -n "cache_hit|cache_recreate|cache_bypass_reason|legacy_cache_hit|checkpoint_
 ```bash
 rg -n "thought_signatures|thought_signature_digest|thought_metadata|llm_meta" logs -g '*.log'
 ```
+
+## Rotation and Retention
+建议使用系统轮转器（`logrotate` 或 `newsyslog`），避免日志无限增长。
+
+建议参数：
+- 轮转周期：`daily`
+- 单文件大小：`50M`（触发提前轮转）
+- 保留策略：
+  - `logs/ops/workflows.log`：保留 `30` 天（运维审计）
+  - `logs/daily_digest.log`、`logs/failure_alerts.log`：保留 `14` 天
+- 压缩：开启（`compress`）
+
+互斥策略（必须）：
+- `cron` 与 `start_ops_workflows.sh` 常驻 workflow 二选一。
+- 若已启用常驻 workflow，不应再用 cron 重复触发相同任务，避免重复执行与重复日志。
 
 ## Doc Drift Trigger
 如修改日志格式、脱敏规则或日志落盘策略，必须同步更新本文件与 `docs/runbook-local.md`。

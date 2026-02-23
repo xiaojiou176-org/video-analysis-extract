@@ -1,6 +1,7 @@
 # Documentation Index
 
 ## Start Here
+- 1 分钟入口（唯一）：`docs/start-here.md`
 - 项目前门：`README.md`
 - AI/协作协议：`AGENTS.md`
 - 本地运行与排障：`docs/runbook-local.md`

@@ -30,7 +30,7 @@ temporal server start-dev --ip 127.0.0.1 --port 7233
 ```bash
 ./scripts/init_env_example.sh
 cp .env.example .env
-python scripts/check_env_contract.py --strict
+python3 scripts/check_env_contract.py --strict
 set -a; source .env; set +a
 ```
 
@@ -91,10 +91,78 @@ WORKER_COMMAND=start-cleanup-workflow ./scripts/dev_worker.sh --run-once --older
 缓存策略细节见 `docs/reference/cache.md`。
 
 ### 调度（cron）
+注意：`cron` 与下方“实时稳定推送（常驻 workflow）”必须二选一，避免重复触发同类任务。
+
 ```cron
 0 9 * * * /bin/bash -lc 'cd "<repo-path>" && ./scripts/run_daily_digest.sh >> ./logs/daily_digest.log 2>&1'
 */30 * * * * /bin/bash -lc 'cd "<repo-path>" && ./scripts/run_failure_alerts.sh >> ./logs/failure_alerts.log 2>&1'
 ```
+
+### 实时稳定推送（生产建议）
+
+仓库内置了 `scripts/start_ops_workflows.sh`，用于一次性启动/确保以下长期运行 workflow：
+- `daily_digest`（日报）
+- `notification_retry`（失败投递重试）
+- `provider_canary`（上游可用性探针）
+- `cleanup_workspace`（媒体与缓存清理）
+
+该脚本复用现有 worker CLI（`start-daily-workflow` / `start-notification-retry-workflow` / `start-provider-canary-workflow` / `start-cleanup-workflow`），默认适配本地非 Docker 运行。
+
+1. 基础用法
+```bash
+./scripts/start_ops_workflows.sh
+```
+
+2. 推荐参数（生产）
+```bash
+mkdir -p logs logs/ops
+OPS_DAILY_LOCAL_HOUR=9 \
+OPS_DAILY_TIMEZONE=Asia/Shanghai \
+OPS_NOTIFICATION_INTERVAL_MINUTES=5 \
+OPS_NOTIFICATION_RETRY_BATCH_LIMIT=100 \
+OPS_CANARY_INTERVAL_HOURS=1 \
+OPS_CANARY_TIMEOUT_SECONDS=8 \
+OPS_CLEANUP_INTERVAL_HOURS=6 \
+OPS_CLEANUP_OLDER_THAN_HOURS=24 \
+./scripts/start_ops_workflows.sh >> ./logs/ops/workflows.log 2>&1
+```
+
+3. 常用环境变量
+- `OPS_DAILY_LOCAL_HOUR`：日报触发小时（默认回退 `DIGEST_DAILY_LOCAL_HOUR`，再回退 `9`）。
+- `OPS_DAILY_TIMEZONE`：IANA 时区（默认回退 `DIGEST_LOCAL_TIMEZONE`，再回退 `system-local`）。
+- `OPS_DAILY_TIMEZONE_OFFSET_MINUTES`：可选，显式 UTC 偏移分钟。
+- `OPS_NOTIFICATION_INTERVAL_MINUTES`：重试扫描间隔分钟（默认 `10`）。
+- `OPS_NOTIFICATION_RETRY_BATCH_LIMIT`：单次重试批量上限（默认 `50`）。
+- `OPS_CANARY_INTERVAL_HOURS`：可用性探针间隔小时（默认 `1`）。
+- `OPS_CANARY_TIMEOUT_SECONDS`：探针超时秒数（默认 `8`，最小 `3`）。
+- `OPS_CLEANUP_INTERVAL_HOURS`：cleanup 轮询间隔小时（默认 `6`）。
+- `OPS_CLEANUP_OLDER_THAN_HOURS`：媒体/帧文件保留小时（默认 `24`）。
+- `OPS_CLEANUP_CACHE_OLDER_THAN_HOURS`：可选，cache 文件按年龄清理阈值。
+- `OPS_CLEANUP_CACHE_MAX_SIZE_MB`：可选，cache 清理后体积上限。
+- `OPS_CLEANUP_WORKSPACE_DIR` / `OPS_CLEANUP_CACHE_DIR`：可选，覆盖默认目录。
+- `OPS_DAILY_WORKFLOW_ID` / `OPS_NOTIFICATION_WORKFLOW_ID` / `OPS_CANARY_WORKFLOW_ID` / `OPS_CLEANUP_WORKFLOW_ID`：固定 workflow id，用于“已运行则不重复启动”。
+- `OPS_DAILY_RUN_ONCE=1` / `OPS_NOTIFICATION_RUN_ONCE=1` / `OPS_CANARY_RUN_ONCE=1` / `OPS_CLEANUP_RUN_ONCE=1`：改为单次执行（排障时使用，生产常驻建议保持 `0`）。
+- `OPS_SHOW_HINTS=0`：关闭脚本启动摘要日志（默认 `1`）。
+- `OPS_DRY_RUN=1`：只打印命令不执行（等价 `./scripts/start_ops_workflows.sh --dry-run`）。
+- `DEV_WORKER_SHOW_HINTS=0`：关闭 `dev_worker.sh` 的大段提示，适合 cron/守护进程日志。
+
+4. 调度互斥策略（必须执行）
+- 方案 A：使用 cron（`run_daily_digest.sh` / `run_failure_alerts.sh`），则不要启动对应常驻 workflow。
+- 方案 B：使用 `start_ops_workflows.sh` 常驻模式（推荐），则停用上述 cron 条目。
+- cleanup 建议统一走常驻 workflow，不建议额外 cron 重复触发 `start-cleanup-workflow`。
+
+5. 脚本可用性快速验证
+```bash
+bash -n scripts/start_ops_workflows.sh
+./scripts/start_ops_workflows.sh --help
+./scripts/start_ops_workflows.sh --dry-run
+```
+
+6. 告警与重试调优建议（基于现有能力）
+- 投递重试策略已内置指数退避：`2/5/15/30/60` 分钟，最多 `5` 次；`auth/config_error` 不会继续重试。
+- 建议将 `OPS_NOTIFICATION_INTERVAL_MINUTES` 设为 `3-10` 分钟；高流量场景可配合 `OPS_NOTIFICATION_RETRY_BATCH_LIMIT=100-300`，避免 backlog 累积。
+- `provider_canary` 每轮会写入 `provider_health_checks`（`rsshub/youtube_data_api/gemini/resend`），建议外部监控以最近 5-10 分钟窗口统计 `status=fail` 或连续 `warn` 触发告警。
+- 失败投递会记录在 `notification_deliveries`（含 `attempt_count`、`next_retry_at`、`last_error_kind`），建议对 `status='failed' AND next_retry_at IS NULL` 的记录设置人工告警（通常表示已达上限或配置错误）。
 
 ## 常见故障
 - `API health check failed`：确认 `./scripts/dev_api.sh` 已运行，且 `VD_API_BASE_URL` 可访问。
@@ -118,7 +186,7 @@ WORKER_COMMAND=start-cleanup-workflow ./scripts/dev_worker.sh --run-once --older
   - 仅白名单工具：`select_supporting_frames`、`build_evidence_citations`。
   - 非白名单会记录为 `blocked`，不会执行任意工具。
   - 调用回合上限：`max_function_call_rounds`（默认 `2`）。
-  - `computer_use` 开关可配置，但当前 worker 未注入执行 handler，调用会返回 `computer_use_handler_missing`（默认拒绝）。
+  - `computer_use` 开关可配置；当 `enable_computer_use=true` 且未显式提供 handler 时，worker 会默认注入 `build_default_computer_use_handler`。
   - `computer_use_require_confirmation` 默认 `true`，未确认会返回 `computer_use_confirmation_required`。
   - 翻译回退阶段固定关闭 function calling。
 
@@ -143,7 +211,7 @@ curl -sS -X POST http://127.0.0.1:8000/api/v1/videos/process \
 
 - API：`GET /api/v1/jobs/<job_id>` 的 `steps[].result.llm_meta.thinking` 可见 `thought_signatures` / `thought_signature_digest` / `usage`。
 - MCP：`vd.jobs.get` 保留相同结构。
-- 兼容字段：`steps[].thought_metadata` 为兼容提取位，未命中时返回 `null`。
+- 兼容字段：`steps[].thought_metadata` 为归一化兼容提取位（含 `llm_meta.thinking`），未命中时返回空结构（非 `null`）。
 
 ## 文档联动规则
 以下改动必须同步本文件：

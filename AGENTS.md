@@ -1,13 +1,14 @@
 # AGENTS
 
-本文件定义本仓库的人类/AI 协作最小协议，目标是让接手者在 10 分钟内完成本地启动与问题定位。
+本文件定义本仓库的人类/AI 协作最小协议，目标是让接手者在 1 分钟理解入口、10 分钟完成本地启动与问题定位。
 
 ## 1. 文档真相源（优先级）
-1. `docs/runbook-local.md`：本地运行标准流程（6 步）
-2. `docs/state-machine.md`：状态机与流程契约（3 阶段 + 8-step pipeline）
-3. `ENVIRONMENT.md` + `infra/config/env.contract.json`：环境变量契约
-4. `docs/reference/*.md`：日志/缓存/依赖治理细则
-5. `README.md`：仓库前门与导航
+1. `docs/start-here.md`：唯一 1 分钟入口（先看这个）
+2. `docs/runbook-local.md`：本地运行标准流程（6 步）
+3. `docs/state-machine.md`：状态机与流程契约（3 阶段 + 9-step pipeline）
+4. `ENVIRONMENT.md` + `infra/config/env.contract.json`：环境变量契约
+5. `docs/reference/*.md`：日志/缓存/依赖治理细则
+6. `README.md`：仓库前门与导航
 
 ## 2. Golden Commands
 
@@ -20,8 +21,8 @@ npm --prefix apps/web ci
 ### 初始化环境
 ```bash
 ./scripts/init_env_example.sh
-cp .env.local.example .env.local
-python scripts/check_env_contract.py --strict
+cp .env.example .env
+python3 scripts/check_env_contract.py --strict
 ```
 
 ### 启动基础服务
@@ -55,7 +56,7 @@ sqlite3 "$SQLITE_PATH" < infra/sql/sqlite_state_init.sql
 
 ## 4. 最小验收
 ```bash
-python scripts/check_env_contract.py --strict
+python3 scripts/check_env_contract.py --strict
 PYTHONPATH="$PWD:$PWD/apps/worker" DATABASE_URL='sqlite+pysqlite:///:memory:' uv run pytest apps/worker/tests apps/api/tests apps/mcp/tests -q
 npm --prefix apps/web run lint
 ```

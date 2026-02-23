@@ -74,9 +74,22 @@ WORKER_COMMAND=start-cleanup-workflow ./scripts/dev_worker.sh --run-once --older
 WORKER_COMMAND=start-cleanup-workflow ./scripts/dev_worker.sh --interval-hours 6 --older-than-hours 24
 ```
 
+通过常驻 ops 启动脚本接入 cleanup（推荐）：
+```bash
+OPS_CLEANUP_INTERVAL_HOURS=6 \
+OPS_CLEANUP_OLDER_THAN_HOURS=24 \
+./scripts/start_ops_workflows.sh
+```
+
+可选缓存保留参数：
+- `OPS_CLEANUP_CACHE_OLDER_THAN_HOURS`：按文件年龄清理 cache。
+- `OPS_CLEANUP_CACHE_MAX_SIZE_MB`：清理后按大小阈值继续淘汰最旧文件。
+- `OPS_CLEANUP_WORKSPACE_DIR` / `OPS_CLEANUP_CACHE_DIR`：覆盖默认目录。
+
 ## Operational Notes
 - pipeline 产物目录（`$PIPELINE_ARTIFACT_ROOT`）不在 cleanup 删除范围。
 - 如需调整缓存保留窗口，优先修改：
   - `--cache-older-than-hours`
   - `--cache-max-size-mb`
 - 修改缓存签名算法、路径或保留策略后，必须同步更新 `docs/state-machine.md`。
+- 调度模式必须二选一：使用 `start_ops_workflows.sh` 常驻 workflow 时，不要再用 cron 重复触发 cleanup。

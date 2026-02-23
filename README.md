@@ -6,6 +6,10 @@
 - `apps/mcp`：FastMCP 工具层，转发 API 能力
 - `apps/web`：Next.js 管理台
 
+## 1 分钟入口
+
+先读 `docs/start-here.md`。它是唯一上手入口，聚合了启动命令、口径说明和后续文档导航。
+
 ## 处理流程（统一口径）
 
 `ProcessJobWorkflow` 由 3 个阶段组成：
@@ -35,7 +39,7 @@
   - 翻译回退路径关闭 function calling。
 - Computer Use（函数调用回合）安全闸：
   - 仅允许 `select_supporting_frames` 与 `build_evidence_citations` 两个工具；非白名单调用会被标记 `blocked`。
-  - `computer_use` 入口由 `GEMINI_COMPUTER_USE_*` 与 `overrides.llm*.enable_computer_use` 控制，但当前 pipeline 未注入执行 handler，调用会返回 `computer_use_handler_missing`（安全默认拒绝）。
+  - `computer_use` 入口由 `GEMINI_COMPUTER_USE_*` 与 `overrides.llm*.enable_computer_use` 控制；当 `enable_computer_use=true` 且未显式提供 handler 时，pipeline 会默认注入 `build_default_computer_use_handler`。
   - `computer_use_require_confirmation` 默认 `true`；即使未来接入 handler，未确认也会返回 `computer_use_confirmation_required`。
   - 最大调用回合由 `max_function_call_rounds` 控制（默认 `2`，可由 `overrides.llm.max_function_call_rounds` / `overrides.llm_outline.max_function_call_rounds` / `overrides.llm_digest.max_function_call_rounds` 覆盖）。
   - 达到上限后以 `termination_reason=max_function_call_rounds_reached` 结束当前轮。
@@ -62,7 +66,7 @@
   - `thought_signature_digest`
   - `usage`（token 统计）
 - MCP：`vd.jobs.get` 保留同结构字段（位于 `steps[].result`）。
-- 兼容字段：`steps[].thought_metadata` 为兼容提取位（来源于 `result` 中 `thought_metadata|thinking_metadata|thoughts_metadata|thoughts`）；若未写入这些键则为 `null`。
+- 兼容字段：`steps[].thought_metadata` 统一归一化为稳定结构，兼容来源 `result.thought_metadata|thinking_metadata|thoughts_metadata|thoughts|llm_meta.thinking`；无数据时返回空结构（非 `null`）。
 
 ## 本地运行（标准 6 步）
 
@@ -85,7 +89,7 @@ temporal server start-dev --ip 127.0.0.1 --port 7233
 ```bash
 ./scripts/init_env_example.sh
 cp .env.example .env
-python scripts/check_env_contract.py --strict
+python3 scripts/check_env_contract.py --strict
 set -a; source .env; set +a
 ```
 
@@ -111,7 +115,7 @@ sqlite3 "$SQLITE_PATH" < infra/sql/sqlite_state_init.sql
 ### 6) 最小验收
 ```bash
 curl -sS http://127.0.0.1:8000/healthz
-curl -sS -X POST http://127.0.0.1:8000/api/v1/ingest/poll -H 'Content-Type: application/json' -d '{"max_new_videos": 5}'
+curl -sS -X POST http://127.0.0.1:8000/api/v1/ingest/poll -H 'Content-Type: application/json' -d '{"max_new_videos": 20}'
 ```
 
 `GET /api/v1/jobs/{job_id}` 与 `vd.jobs.get` 稳定字段：
@@ -133,7 +137,33 @@ uv run --with playwright python -m playwright install chromium
 uv run --with pytest --with playwright pytest apps/web/tests/e2e -q
 ```
 
+## 可选：实时稳定推送 workflow
+
+仓库内置 `scripts/start_ops_workflows.sh`，用于一次性启动/确保以下长期运行 workflow：
+- `daily_digest`
+- `notification_retry`
+- `provider_canary`
+
+基础用法：
+```bash
+./scripts/start_ops_workflows.sh
+```
+
+常用参数：
+```bash
+OPS_DAILY_LOCAL_HOUR=9 \
+OPS_DAILY_TIMEZONE=Asia/Shanghai \
+OPS_NOTIFICATION_INTERVAL_MINUTES=5 \
+OPS_NOTIFICATION_RETRY_BATCH_LIMIT=100 \
+OPS_CANARY_INTERVAL_HOURS=1 \
+OPS_CANARY_TIMEOUT_SECONDS=8 \
+./scripts/start_ops_workflows.sh
+```
+
+完整参数说明见 `docs/runbook-local.md`。
+
 ## 文档导航
+- 1 分钟入口：`docs/start-here.md`
 - 总入口：`docs/index.md`
 - 本地运维：`docs/runbook-local.md`
 - 状态机：`docs/state-machine.md`
