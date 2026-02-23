@@ -47,6 +47,24 @@ class _FakePGStore:
         return len(items)
 
 
+class _FakePGStoreTableMissing(_FakePGStore):
+    def upsert_video_embeddings(
+        self,
+        *,
+        video_id: str,
+        job_id: str,
+        model: str,
+        items: list[dict[str, Any]],
+    ) -> int:
+        self.last_write = {
+            "video_id": video_id,
+            "job_id": job_id,
+            "model": model,
+            "items": items,
+        }
+        return 0
+
+
 def _make_ctx(tmp_path: Path, *, pg_store: _FakePGStore | None = None) -> PipelineContext:
     work_dir = tmp_path / "work"
     cache_dir = work_dir / "cache"
@@ -127,5 +145,25 @@ def test_step_build_embeddings_degrades_when_provider_unavailable(tmp_path: Path
     assert execution.status == "succeeded"
     assert execution.degraded is True
     assert execution.reason == "embedding_provider_unavailable"
+    assert execution.output["stored_count"] == 0
+    assert execution.state_updates["embeddings"]["retrievable"] is False
+
+
+def test_step_build_embeddings_handles_store_unavailable_table(tmp_path: Path) -> None:
+    pg_store = _FakePGStoreTableMissing()
+    ctx = _make_ctx(tmp_path, pg_store=pg_store)
+    state = {
+        "transcript": "line-1\nline-2",
+        "outline": {"title": "Demo", "highlights": ["x"], "chapters": []},
+    }
+
+    def _fake_embed(*_: Any, **kwargs: Any) -> list[list[float]]:
+        texts = list(kwargs.get("texts") or _[1])
+        return [[0.01] * EMBEDDING_DIMENSION for _ in texts]
+
+    execution = asyncio.run(step_build_embeddings(ctx, state, gemini_embed_texts_fn=_fake_embed))
+
+    assert execution.status == "succeeded"
+    assert execution.degraded is False
     assert execution.output["stored_count"] == 0
     assert execution.state_updates["embeddings"]["retrievable"] is False

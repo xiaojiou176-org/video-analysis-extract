@@ -175,6 +175,13 @@ def test_settings_from_env_reads_new_fallback_flags(monkeypatch: Any, tmp_path: 
     monkeypatch.setenv("YOUTUBE_TRANSCRIPT_FALLBACK_ENABLED", "false")
     monkeypatch.setenv("ASR_FALLBACK_ENABLED", "true")
     monkeypatch.setenv("ASR_MODEL_SIZE", "base")
+    monkeypatch.setenv("GEMINI_STRICT_SCHEMA_MODE", "false")
+    monkeypatch.setenv("PIPELINE_LLM_INCLUDE_FRAMES", "true")
+    monkeypatch.setenv("PIPELINE_LLM_HARD_REQUIRED", "false")
+    monkeypatch.setenv("PIPELINE_LLM_FAIL_ON_PROVIDER_ERROR", "false")
+    monkeypatch.setenv("PIPELINE_LLM_MAX_RETRIES", "2")
+    monkeypatch.setenv("PIPELINE_RETRY_TRANSIENT_ATTEMPTS", "7")
+    monkeypatch.setenv("PIPELINE_RETRY_TRANSIENT_BACKOFF_SECONDS", "0.75")
 
     settings = Settings.from_env()
 
@@ -182,6 +189,13 @@ def test_settings_from_env_reads_new_fallback_flags(monkeypatch: Any, tmp_path: 
     assert settings.youtube_transcript_fallback_enabled is False
     assert settings.asr_fallback_enabled is True
     assert settings.asr_model_size == "base"
+    assert settings.gemini_strict_schema_mode is False
+    assert settings.pipeline_llm_include_frames is True
+    assert settings.pipeline_llm_hard_required is False
+    assert settings.pipeline_llm_fail_on_provider_error is False
+    assert settings.pipeline_llm_max_retries == 2
+    assert settings.pipeline_retry_transient_attempts == 7
+    assert settings.pipeline_retry_transient_backoff_seconds == 0.75
 
 
 def test_step_write_artifacts_renders_embedded_screenshots(tmp_path: Path) -> None:
@@ -223,3 +237,58 @@ def test_step_write_artifacts_renders_embedded_screenshots(tmp_path: Path) -> No
 
     meta_payload = json.loads((ctx.artifacts_dir / "meta.json").read_text(encoding="utf-8"))
     assert meta_payload["frame_files"] == ["frames/frame_001.jpg"]
+
+
+def test_step_write_artifacts_low_evidence_mode_blocks_fabricated_details(tmp_path: Path) -> None:
+    settings = Settings(
+        pipeline_workspace_dir=str((tmp_path / "workspace").resolve()),
+        pipeline_artifact_root=str((tmp_path / "artifact-root").resolve()),
+    )
+    ctx = _build_ctx(tmp_path, settings=settings)
+
+    execution = asyncio.run(
+        runner._step_write_artifacts(
+            ctx,
+            {
+                "title": "Demo",
+                "source_url": "https://www.bilibili.com/video/BV1JzNUeuEEo",
+                "platform": "bilibili",
+                "video_uid": "BV1JzNUeuEEo",
+                "metadata": {"title": "Demo"},
+                "outline": {
+                    "chapters": [
+                        {
+                            "chapter_no": 1,
+                            "title": "开箱与防伪检查",
+                            "start_s": 0,
+                            "end_s": 60,
+                            "summary": "这是模型臆测内容",
+                            "bullets": ["伪造要点"],
+                        }
+                    ],
+                    "timestamp_references": [
+                        {"ts_s": 30, "label": "检查防伪标签", "reason": "臆测"}
+                    ],
+                },
+                "digest": {
+                    "summary": "这是模型臆测摘要",
+                    "highlights": ["臆测高光"],
+                    "action_items": ["臆测建议"],
+                    "timestamp_references": [
+                        {"ts_s": 30, "label": "检查防伪标签", "reason": "臆测"}
+                    ],
+                },
+                "comments": {},
+                "transcript": "",
+                "degradations": [],
+                "frames": [],
+            },
+        )
+    )
+
+    assert execution.status == "succeeded"
+    digest_content = (ctx.artifacts_dir / "digest.md").read_text(encoding="utf-8")
+    assert "缺少可验证证据" in digest_content
+    assert "开箱与防伪检查" not in digest_content
+    assert "检查防伪标签" not in digest_content
+    assert "quality_gate:low_evidence_mode" in digest_content

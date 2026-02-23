@@ -98,13 +98,17 @@ def test_step_llm_outline_fails_when_provider_unavailable_by_default(tmp_path: P
 
 
 def test_step_llm_outline_still_fails_when_flags_disable_provider_soft_fail(
-    monkeypatch: Any,
     tmp_path: Path,
 ) -> None:
-    monkeypatch.setenv("PIPELINE_LLM_HARD_REQUIRED", "false")
-    monkeypatch.setenv("PIPELINE_LLM_FAIL_ON_PROVIDER_ERROR", "false")
-
-    ctx = _build_ctx(tmp_path)
+    ctx = _build_ctx(
+        tmp_path,
+        settings=Settings(
+            pipeline_workspace_dir=str((tmp_path / "workspace").resolve()),
+            pipeline_artifact_root=str((tmp_path / "artifact-root").resolve()),
+            pipeline_llm_hard_required=False,
+            pipeline_llm_fail_on_provider_error=False,
+        ),
+    )
     state = {
         "metadata": {"title": "Demo"},
         "title": "Demo",
@@ -288,9 +292,14 @@ def test_run_pipeline_embedding_degraded_does_not_fail_llm_gate(
     assert result["hard_fail_reason"] is None
 
 
-def test_execute_step_uses_pipeline_llm_max_retries(monkeypatch: Any, tmp_path: Path) -> None:
-    monkeypatch.setenv("PIPELINE_LLM_MAX_RETRIES", "1")
-    ctx = _build_ctx(tmp_path, settings=Settings(pipeline_retry_attempts=5))
+def test_execute_step_uses_pipeline_llm_max_retries(tmp_path: Path) -> None:
+    ctx = _build_ctx(
+        tmp_path,
+        settings=Settings(
+            pipeline_retry_attempts=5,
+            pipeline_llm_max_retries=1,
+        ),
+    )
 
     calls = {"count": 0}
 

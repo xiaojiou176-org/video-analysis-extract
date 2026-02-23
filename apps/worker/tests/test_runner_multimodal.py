@@ -330,6 +330,66 @@ def test_gemini_text_cache_self_heals_on_stale_cached_content(monkeypatch: Any) 
     llm_client._CACHE_NAME_BY_KEY.pop(cache_key, None)
 
 
+def test_gemini_text_cache_bypassed_when_function_calling_enabled(monkeypatch: Any) -> None:
+    class _FakeModels:
+        @staticmethod
+        def generate_content(*, model: str, contents: Any, config: Any) -> Any:
+            kwargs = dict(getattr(config, "kwargs", {}))
+            assert "cached_content" not in kwargs
+            return types.SimpleNamespace(text='{"ok":true}')
+
+    class _FakeCaches:
+        @staticmethod
+        def create(*, model: str, config: Any) -> Any:
+            raise AssertionError("cache create should be bypassed when tools are enabled")
+
+    class _FakeClient:
+        def __init__(self, *, api_key: str):
+            self.api_key = api_key
+            self.models = _FakeModels()
+            self.files = object()
+            self.caches = _FakeCaches()
+
+    class _FakeThinkingConfig:
+        def __init__(self, **kwargs: Any):
+            self.kwargs = kwargs
+
+    class _FakeGenerateContentConfig:
+        def __init__(self, **kwargs: Any):
+            self.kwargs = kwargs
+
+    fake_types = types.SimpleNamespace(
+        ThinkingConfig=_FakeThinkingConfig,
+        GenerateContentConfig=_FakeGenerateContentConfig,
+    )
+    fake_genai = types.ModuleType("google.genai")
+    fake_genai.Client = _FakeClient  # type: ignore[attr-defined]
+    fake_genai.types = fake_types  # type: ignore[attr-defined]
+
+    fake_google = types.ModuleType("google")
+    fake_google.genai = fake_genai  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "google", fake_google)
+    monkeypatch.setitem(sys.modules, "google.genai", fake_genai)
+
+    settings = Settings(
+        gemini_api_key="key",
+        gemini_context_cache_enabled=True,
+        gemini_context_cache_min_chars=1,
+    )
+    text, media_input, meta = llm_client.gemini_generate(
+        settings,
+        "cache-conflict-prompt",
+        llm_input_mode="text",
+        use_context_cache=True,
+        enable_function_calling=True,
+    )
+
+    assert text == '{"ok":true}'
+    assert media_input == "text"
+    assert meta["cache_hit"] is False
+    assert meta["cache_bypass_reason"] == "cache_incompatible_with_tools"
+
+
 def test_gemini_computer_use_requires_confirmation(monkeypatch: Any) -> None:
     class _FunctionCall:
         def __init__(self, name: str, args: dict[str, Any]):
