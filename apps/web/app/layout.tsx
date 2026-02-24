@@ -1,5 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { Inter } from "next/font/google";
+
+const inter = Inter({ subsets: ["latin"], variable: "--font-inter", display: "swap" });
 
 import { FormValidationController } from "@/components/form-validation-controller";
 import { AppNav } from "@/components/nav";
@@ -38,8 +41,8 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
   const healthLabel =
     healthState === "healthy" ? "正常" : healthState === "unhealthy" ? "异常" : "未知";
   return (
-    <html lang="en">
-      <body>
+    <html lang="zh-Hans" className={inter.variable}>
+      <body style={{ fontFamily: "var(--font-inter), 'SF Pro Display', -apple-system, sans-serif" }}>
         <a className="skip-link" href="#main-content">
           Skip to content
         </a>
