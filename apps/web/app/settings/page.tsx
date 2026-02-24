@@ -1,4 +1,8 @@
+import type { Metadata } from "next";
+
 import { sendTestNotificationAction, updateNotificationConfigAction } from "@/app/settings/actions";
+
+export const metadata: Metadata = { title: "设置" };
 import { apiClient } from "@/lib/api/client";
 import { formatDateTime } from "@/lib/format";
 import { resolveSearchParams, type SearchParamsInput } from "@/lib/search-params";

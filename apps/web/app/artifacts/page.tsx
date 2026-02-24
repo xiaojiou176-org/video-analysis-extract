@@ -1,4 +1,8 @@
+import type { Metadata } from "next";
+
 import { MarkdownPreview } from "@/components/markdown-preview";
+
+export const metadata: Metadata = { title: "产物" };
 import { apiClient } from "@/lib/api/client";
 import { buildArtifactAssetUrl } from "@/lib/api/url";
 import type { ArtifactMarkdownWithMeta } from "@/lib/api/types";

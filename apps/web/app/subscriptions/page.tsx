@@ -1,4 +1,8 @@
+import type { Metadata } from "next";
+
 import { upsertSubscriptionAction } from "@/app/subscriptions/actions";
+
+export const metadata: Metadata = { title: "订阅管理" };
 import { SubscriptionBatchPanel } from "@/components/subscription-batch-panel";
 import { apiClient } from "@/lib/api/client";
 import { resolveSearchParams, type SearchParamsInput } from "@/lib/search-params";

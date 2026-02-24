@@ -1,8 +1,5 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Inter } from "next/font/google";
-
-const inter = Inter({ subsets: ["latin"], variable: "--font-inter", display: "swap" });
 
 import { FormValidationController } from "@/components/form-validation-controller";
 import { AppNav } from "@/components/nav";
@@ -11,7 +8,10 @@ import { buildApiUrl } from "@/lib/api/url";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "AI 信息中枢",
+  title: {
+    default: "AI 信息中枢",
+    template: "%s — AI 信息中枢",
+  },
   description: "订阅、任务、产物与通知管理后台",
 };
 
@@ -41,10 +41,18 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
   const healthLabel =
     healthState === "healthy" ? "正常" : healthState === "unhealthy" ? "异常" : "未知";
   return (
-    <html lang="zh-Hans" className={inter.variable}>
-      <body style={{ fontFamily: "var(--font-inter), 'SF Pro Display', -apple-system, sans-serif" }}>
+    <html lang="zh-Hans">
+      <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link
+          href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+SC:wght@400;500;600;700;800&display=swap"
+          rel="stylesheet"
+        />
+      </head>
+      <body>
         <a className="skip-link" href="#main-content">
-          Skip to content
+          跳至主内容
         </a>
         <div className="page-shell">
           <FormValidationController />

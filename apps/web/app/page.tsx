@@ -1,7 +1,10 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 
 import { pollIngestAction, processVideoAction } from "@/app/actions";
 import { toDisplayStatus } from "@/app/status";
+
+export const metadata: Metadata = { title: "首页" };
 import { apiClient } from "@/lib/api/client";
 import { resolveSearchParams, type SearchParamsInput } from "@/lib/search-params";
 
@@ -47,18 +50,24 @@ export default async function DashboardPage({ searchParams }: DashboardProps) {
         <div className="card metric">
           <span className="metric-label">订阅数</span>
           <span className="metric-value">{subscriptions.length}</span>
+          {subscriptions.length === 0 && (
+            <Link href="/subscriptions" className="metric-cta">添加第一个订阅 →</Link>
+          )}
         </div>
         <div className="card metric">
           <span className="metric-label">已发现视频</span>
           <span className="metric-value">{videos.length}</span>
         </div>
-        <div className="card metric">
+        <div className="card metric" data-accent={runningJobs > 0 ? "warning" : undefined}>
           <span className="metric-label">运行中/排队</span>
           <span className="metric-value">{runningJobs}</span>
         </div>
-        <div className="card metric">
+        <div className="card metric" data-accent={failedJobs > 0 ? "error" : undefined}>
           <span className="metric-label">失败任务</span>
           <span className="metric-value">{failedJobs}</span>
+          {failedJobs > 0 && (
+            <Link href="/jobs" className="metric-cta metric-cta-error">查看失败任务 →</Link>
+          )}
         </div>
       </section>
 

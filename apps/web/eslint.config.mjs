@@ -6,4 +6,10 @@ export default defineConfig([
   ...nextCoreWebVitals,
   ...nextTypeScript,
   globalIgnores([".next/**", ".next-e2e-*/**", "out/**", "build/**", "next-env.d.ts"]),
+  {
+    rules: {
+      // App Router layout.tsx uses <head> for Google Fonts - Pages Router rule doesn't apply
+      "@next/next/no-page-custom-font": "off",
+    },
+  },
 ]);

@@ -1,6 +1,9 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 
 import { toDisplayStatus } from "@/app/status";
+
+export const metadata: Metadata = { title: "任务" };
 import { apiClient } from "@/lib/api/client";
 import { buildArtifactAssetUrl } from "@/lib/api/url";
 import { formatDateTime, formatDateTimeWithSeconds } from "@/lib/format";
@@ -27,7 +30,13 @@ export default async function JobsPage({ searchParams }: JobsPageProps) {
     <div className="stack">
       <section className="card stack">
         <h2>任务查询</h2>
-        <p className="small">输入任务 ID 以查看步骤详情和产物。</p>
+        <p className="small">
+          输入任务 ID 查看步骤详情和产物。可从{" "}
+          <Link href="/">首页最近视频</Link>
+          {" "}或{" "}
+          <Link href="/feed">AI 摘要页</Link>
+          {" "}中的任务链接直接进入。
+        </p>
         <form method="GET" className="inline" data-auto-disable-required="true">
           <label className="wide-field">
             任务 ID *
