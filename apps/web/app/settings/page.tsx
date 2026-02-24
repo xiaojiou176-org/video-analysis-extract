@@ -29,20 +29,20 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
       {loadError ? <p className="alert error">{loadError}</p> : null}
 
       <section className="card stack">
-        <h2>Notification config</h2>
+        <h2>通知配置</h2>
         {config ? (
           <p className="small">
-            Created: {formatDateTime(config.created_at)} | Updated: {formatDateTime(config.updated_at)}
+            创建时间：{formatDateTime(config.created_at)} | 更新时间：{formatDateTime(config.updated_at)}
           </p>
         ) : null}
         <form action={updateNotificationConfigAction} className="stack">
           <label className="inline">
             <input name="enabled" type="checkbox" defaultChecked={config?.enabled ?? true} />
-            Enable notifications
+            启用通知
           </label>
 
           <label>
-            Recipient email
+            收件人邮箱
             <input
               name="to_email"
               type="email"
@@ -57,11 +57,11 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
               type="checkbox"
               defaultChecked={config?.daily_digest_enabled ?? false}
             />
-            Enable daily digest
+            启用每日摘要
           </label>
 
           <label>
-            Daily digest hour (UTC)
+            每日摘要发送时间（UTC 小时）
             <input
               name="daily_digest_hour_utc"
               type="number"
@@ -80,36 +80,36 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
               type="checkbox"
               defaultChecked={config?.failure_alert_enabled ?? true}
             />
-            Enable failure alert
+            启用失败告警
           </label>
 
           <button type="submit" className="primary">
-            Save config
+            保存配置
           </button>
         </form>
 
       </section>
 
       <section className="card stack">
-        <h2>Send test notification</h2>
+        <h2>发送测试通知</h2>
         <form action={sendTestNotificationAction} className="stack">
           <label>
-            Override recipient (optional)
-            <input name="to_email" type="email" placeholder="leave empty to use configured recipient" />
+            覆盖收件人（可选）
+            <input name="to_email" type="email" placeholder="留空则使用已配置的收件人" />
           </label>
 
           <label>
-            Subject (optional)
-            <input name="subject" type="text" placeholder="Video Digestor test notification" />
+            主题（可选）
+            <input name="subject" type="text" placeholder="AI 信息中枢测试通知" />
           </label>
 
           <label>
-            Body (optional)
-            <textarea name="body" rows={4} placeholder="This is a test notification from Video Digestor." />
+            正文（可选）
+            <textarea name="body" rows={4} placeholder="这是来自 AI 信息中枢的测试通知邮件。" />
           </label>
 
           <button type="submit" className="primary">
-            Send test email
+            发送测试邮件
           </button>
         </form>
       </section>

@@ -48,7 +48,7 @@ export function SubscriptionBatchPanel({ subscriptions }: Props) {
       setSelected((prev) => { const next = new Set(prev); next.delete(id); return next; });
       router.refresh();
     } catch (err) {
-      setApplyResult(`Delete error: ${err instanceof Error ? err.message : "unknown"}`);
+      setApplyResult(`删除失败：${err instanceof Error ? err.message : "未知错误"}`);
     } finally {
       setDeletingId(null);
     }
@@ -63,11 +63,11 @@ export function SubscriptionBatchPanel({ subscriptions }: Props) {
         ids: Array.from(selected),
         category: batchCategory,
       });
-      setApplyResult(`Updated ${result.updated} subscription(s) to "${batchCategory}"`);
+      setApplyResult(`已将 ${result.updated} 条订阅移至分类「${batchCategory}」`);
       setSelected(new Set());
       router.refresh();
     } catch (err) {
-      setApplyResult(`Error: ${err instanceof Error ? err.message : "unknown error"}`);
+      setApplyResult(`操作失败：${err instanceof Error ? err.message : "未知错误"}`);
     } finally {
       setApplying(false);
     }
@@ -78,7 +78,7 @@ export function SubscriptionBatchPanel({ subscriptions }: Props) {
   return (
     <div className="stack">
       {subscriptions.length === 0 ? (
-        <p className="small">No subscription data.</p>
+        <p className="small">暂无订阅数据。</p>
       ) : (
         <>
           <table>
@@ -89,18 +89,18 @@ export function SubscriptionBatchPanel({ subscriptions }: Props) {
                     type="checkbox"
                     checked={allSelected}
                     onChange={toggleAll}
-                    aria-label="Select all"
+                    aria-label="全选"
                   />
                 </th>
-                <th>Source</th>
-                <th>Adapter</th>
-                <th>Platform</th>
-                <th>Type</th>
-                <th>Category</th>
-                <th>Priority</th>
-                <th>Enabled</th>
-                <th>Updated</th>
-                <th>Action</th>
+                <th>来源</th>
+                <th>适配器</th>
+                <th>平台</th>
+                <th>类型</th>
+                <th>分类</th>
+                <th>优先级</th>
+                <th>启用</th>
+                <th>更新时间</th>
+                <th>操作</th>
               </tr>
             </thead>
             <tbody>
@@ -130,7 +130,7 @@ export function SubscriptionBatchPanel({ subscriptions }: Props) {
                     <div className="small">{item.tags.join(", ") || "-"}</div>
                   </td>
                   <td>{item.priority}</td>
-                  <td>{item.enabled ? "yes" : "no"}</td>
+                  <td>{item.enabled ? "是" : "否"}</td>
                   <td>{formatDateTime(item.updated_at)}</td>
                   <td>
                     <button
@@ -139,7 +139,7 @@ export function SubscriptionBatchPanel({ subscriptions }: Props) {
                       disabled={deletingId === item.id}
                       onClick={() => handleDelete(item.id)}
                     >
-                      {deletingId === item.id ? "…" : "Delete"}
+                      {deletingId === item.id ? "…" : "删除"}
                     </button>
                   </td>
                 </tr>
@@ -160,11 +160,11 @@ export function SubscriptionBatchPanel({ subscriptions }: Props) {
               }}
             >
               <span className="small">
-                {selected.size} selected
+                已选 {selected.size} 条
               </span>
               <div className="inline">
                 <label style={{ margin: 0 }}>
-                  Move to category
+                  批量设分类
                   <select
                     value={batchCategory}
                     onChange={(e) => setBatchCategory(e.target.value as SubscriptionCategory)}
@@ -180,20 +180,20 @@ export function SubscriptionBatchPanel({ subscriptions }: Props) {
                   disabled={applying}
                   onClick={handleApplyCategory}
                 >
-                  {applying ? "Applying…" : "Apply"}
+                  {applying ? "应用中…" : "应用"}
                 </button>
                 <button
                   type="button"
                   onClick={() => setSelected(new Set())}
                 >
-                  Cancel
+                  取消
                 </button>
               </div>
             </div>
           )}
 
           {applyResult && (
-            <p className={applyResult.startsWith("Error") ? "alert error" : "alert success"}>
+            <p className={applyResult.startsWith("操作失败") || applyResult.startsWith("删除失败") ? "alert error" : "alert success"}>
               {applyResult}
             </p>
           )}

@@ -25,10 +25,10 @@ export function SyncNowButton() {
   }
 
   const labels: Record<typeof state, string> = {
-    idle: "Sync Now",
-    loading: "Syncing…",
-    done: "Done ✓",
-    error: "Error — retry?",
+    idle: "立即同步",
+    loading: "同步中…",
+    done: "完成 ✓",
+    error: "出错，重试？",
   };
 
   return (

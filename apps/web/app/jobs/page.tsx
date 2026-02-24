@@ -26,11 +26,11 @@ export default async function JobsPage({ searchParams }: JobsPageProps) {
   return (
     <div className="stack">
       <section className="card stack">
-        <h2>Job lookup</h2>
-        <p className="small">Enter a Job ID to inspect step details and artifacts.</p>
+        <h2>任务查询</h2>
+        <p className="small">输入任务 ID 以查看步骤详情和产物。</p>
         <form method="GET" className="inline" data-auto-disable-required="true">
           <label className="wide-field">
-            Job ID *
+            任务 ID *
             <input
               name="job_id"
               type="text"
@@ -41,7 +41,7 @@ export default async function JobsPage({ searchParams }: JobsPageProps) {
             />
           </label>
           <button type="submit" className="primary">
-            Fetch job
+            查询
           </button>
         </form>
       </section>
@@ -51,22 +51,22 @@ export default async function JobsPage({ searchParams }: JobsPageProps) {
       {job ? (
         <>
           <section className="card stack">
-            <h2>Job summary</h2>
+            <h2>任务概览</h2>
             <div className="grid grid-cols-2">
               <div>
-                <div className="small">Job ID</div>
+                <div className="small">任务 ID</div>
                 <div>{job.id}</div>
               </div>
               <div>
-                <div className="small">Video ID</div>
+                <div className="small">视频 ID</div>
                 <div>{job.video_id}</div>
               </div>
               <div>
-                <div className="small">Status</div>
+                <div className="small">状态</div>
                 <span className={`status-chip status-${jobStatus?.css ?? "queued"}`}>{jobStatus?.label ?? "-"}</span>
               </div>
               <div>
-                <div className="small">Pipeline final</div>
+                <div className="small">流水线最终状态</div>
                 {pipelineStatus ? (
                   <span className={`status-chip status-${pipelineStatus.css}`}>{pipelineStatus.label}</span>
                 ) : (
@@ -74,32 +74,32 @@ export default async function JobsPage({ searchParams }: JobsPageProps) {
                 )}
               </div>
               <div>
-                <div className="small">Created</div>
+                <div className="small">创建时间</div>
                 <div>{formatDateTime(job.created_at)}</div>
               </div>
               <div>
-                <div className="small">Updated</div>
+                <div className="small">更新时间</div>
                 <div>{formatDateTime(job.updated_at)}</div>
               </div>
             </div>
             <div className="inline">
-              <Link href={`/artifacts?job_id=${job.id}`}>Open artifact page</Link>
+              <Link href={`/artifacts?job_id=${job.id}`}>查看产物页</Link>
             </div>
           </section>
 
           <section className="card stack">
-            <h2>Step summary</h2>
+            <h2>步骤摘要</h2>
             {job.step_summary.length === 0 ? (
-              <p className="small">No step records found.</p>
+              <p className="small">暂无步骤记录。</p>
             ) : (
               <table>
                 <thead>
                   <tr>
-                    <th>Step</th>
-                    <th>Status</th>
-                    <th>Attempt</th>
-                    <th>Started</th>
-                    <th>Finished</th>
+                    <th>步骤</th>
+                    <th>状态</th>
+                    <th>重试次数</th>
+                    <th>开始时间</th>
+                    <th>结束时间</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -124,9 +124,9 @@ export default async function JobsPage({ searchParams }: JobsPageProps) {
 
           <section className="grid grid-cols-2">
             <div className="card stack">
-              <h3>Degradations</h3>
+              <h3>降级记录</h3>
               {job.degradations.length === 0 ? (
-                <p className="small">No degradations recorded.</p>
+                <p className="small">无降级记录。</p>
               ) : (
                 <ul>
                   {job.degradations.map((item, index) => {
@@ -143,9 +143,9 @@ export default async function JobsPage({ searchParams }: JobsPageProps) {
             </div>
 
             <div className="card stack">
-              <h3>Artifacts index</h3>
+              <h3>产物索引</h3>
               {Object.keys(job.artifacts_index).length === 0 ? (
-                <p className="small">No artifacts available.</p>
+                <p className="small">暂无产物。</p>
               ) : (
                 <ul>
                   {Object.entries(job.artifacts_index).map(([key, value]) => (

@@ -24,10 +24,10 @@ export default async function SubscriptionsPage({ searchParams }: SubscriptionsP
       {renderAlert(status, message)}
 
       <section className="card stack">
-        <h2>Create or update subscription</h2>
+        <h2>创建或更新订阅</h2>
         <form action={upsertSubscriptionAction} className="grid grid-cols-2">
           <label>
-            Platform
+            平台
             <select name="platform" defaultValue="youtube">
               <option value="youtube">youtube</option>
               <option value="bilibili">bilibili</option>
@@ -35,7 +35,7 @@ export default async function SubscriptionsPage({ searchParams }: SubscriptionsP
           </label>
 
           <label>
-            Source type
+            来源类型
             <select name="source_type" defaultValue="url">
               <option value="url">url</option>
               <option value="youtube_channel_id">youtube_channel_id</option>
@@ -44,12 +44,12 @@ export default async function SubscriptionsPage({ searchParams }: SubscriptionsP
           </label>
 
           <label>
-            Source value
-            <input name="source_value" required placeholder="channel id / uid / url" />
+            来源值
+            <input name="source_value" required placeholder="频道 ID / UID / URL" />
           </label>
 
           <label>
-            Adapter type
+            适配器类型
             <select name="adapter_type" defaultValue="rsshub_route">
               <option value="rsshub_route">rsshub_route</option>
               <option value="rss_generic">rss_generic</option>
@@ -57,17 +57,17 @@ export default async function SubscriptionsPage({ searchParams }: SubscriptionsP
           </label>
 
           <label>
-            Source URL (for rss_generic)
+            来源 URL（rss_generic 时使用）
             <input name="source_url" placeholder="https://example.com/feed.xml" />
           </label>
 
           <label>
-            RSSHub route (optional)
+            RSSHub 路由（可选）
             <input name="rsshub_route" placeholder="/youtube/channel/UCxxxx" />
           </label>
 
           <label>
-            Category
+            分类
             <select name="category" defaultValue="misc">
               <option value="misc">misc</option>
               <option value="tech">tech</option>
@@ -78,31 +78,31 @@ export default async function SubscriptionsPage({ searchParams }: SubscriptionsP
           </label>
 
           <label>
-            Tags (comma separated, optional)
+            标签（逗号分隔，可选）
             <input name="tags" placeholder="ai,weekly,high-priority" />
           </label>
           <label>
-            Priority (0-100)
+            优先级 (0-100)
             <input name="priority" type="number" min={0} max={100} defaultValue={50} />
           </label>
 
           <label className="inline">
             <input name="enabled" type="checkbox" defaultChecked />
-            Enabled
+            启用
           </label>
 
           <div className="inline">
             <button type="submit" className="primary">
-              Save subscription
+              保存订阅
             </button>
           </div>
         </form>
       </section>
 
       <section className="card stack">
-        <h2>Current subscriptions</h2>
+        <h2>当前订阅列表</h2>
         <p className="small">
-          Select multiple rows to batch-update their category. Use the sticky action bar that appears at the bottom.
+          勾选多行可批量更新分类，底部将出现操作栏。
         </p>
         <SubscriptionBatchPanel subscriptions={subscriptions} />
       </section>

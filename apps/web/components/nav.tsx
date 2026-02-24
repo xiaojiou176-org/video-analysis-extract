@@ -4,12 +4,12 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const NAV_ITEMS = [
-  { href: "/", label: "Dashboard" },
-  { href: "/subscriptions", label: "Subscriptions" },
-  { href: "/jobs", label: "Jobs" },
-  { href: "/feed", label: "Feed" },
-  { href: "/artifacts", label: "Artifacts" },
-  { href: "/settings", label: "Settings" },
+  { href: "/", label: "首页" },
+  { href: "/subscriptions", label: "订阅管理" },
+  { href: "/jobs", label: "任务" },
+  { href: "/feed", label: "AI 摘要" },
+  { href: "/artifacts", label: "产物" },
+  { href: "/settings", label: "设置" },
 ];
 
 export function AppNav() {

@@ -45,54 +45,54 @@ export default async function DashboardPage({ searchParams }: DashboardProps) {
 
       <section className="grid grid-cols-2">
         <div className="card metric">
-          <span className="metric-label">Subscriptions</span>
+          <span className="metric-label">订阅数</span>
           <span className="metric-value">{subscriptions.length}</span>
         </div>
         <div className="card metric">
-          <span className="metric-label">Videos discovered</span>
+          <span className="metric-label">已发现视频</span>
           <span className="metric-value">{videos.length}</span>
         </div>
         <div className="card metric">
-          <span className="metric-label">Running or queued</span>
+          <span className="metric-label">运行中/排队</span>
           <span className="metric-value">{runningJobs}</span>
         </div>
         <div className="card metric">
-          <span className="metric-label">Failed jobs</span>
+          <span className="metric-label">失败任务</span>
           <span className="metric-value">{failedJobs}</span>
         </div>
       </section>
 
       <section className="grid grid-cols-2">
         <div className="card stack">
-          <h2>Poll ingest</h2>
+          <h2>拉取采集</h2>
           <form action={pollIngestAction} className="stack form-fill">
             <label>
-              Platform (optional)
+              平台（可选）
               <select name="platform" defaultValue="">
-                <option value="">All</option>
+                <option value="">全部</option>
                 <option value="youtube">YouTube</option>
                 <option value="bilibili">Bilibili</option>
               </select>
             </label>
 
             <label>
-              Max new videos
+              最多拉取视频数
               <input name="max_new_videos" type="number" min={1} max={500} defaultValue={50} />
             </label>
 
             <div className="submit-row">
               <button className="primary" type="submit">
-                Trigger ingest poll
+                触发采集
               </button>
             </div>
           </form>
         </div>
 
         <div className="card stack">
-          <h2>Process a video</h2>
+          <h2>处理单个视频</h2>
           <form action={processVideoAction} className="stack form-fill" data-auto-disable-required="true">
             <label>
-              Platform *
+              平台 *
               <select name="platform" defaultValue="youtube">
                 <option value="youtube">YouTube</option>
                 <option value="bilibili">Bilibili</option>
@@ -100,7 +100,7 @@ export default async function DashboardPage({ searchParams }: DashboardProps) {
             </label>
 
             <label>
-              Video URL *
+              视频链接 *
               <input
                 name="url"
                 type="url"
@@ -111,23 +111,23 @@ export default async function DashboardPage({ searchParams }: DashboardProps) {
             </label>
 
             <label>
-              Mode *
+              模式 *
               <select name="mode" defaultValue="full">
-                <option value="full">Full</option>
-                <option value="text_only">Text Only</option>
-                <option value="refresh_comments">Refresh Comments</option>
-                <option value="refresh_llm">Refresh LLM</option>
+                <option value="full">完整</option>
+                <option value="text_only">纯文本</option>
+                <option value="refresh_comments">刷新评论</option>
+                <option value="refresh_llm">刷新 LLM</option>
               </select>
             </label>
 
             <div className="checkbox-row">
               <input id="force-run" name="force" type="checkbox" />
-              <label htmlFor="force-run">Force run</label>
+              <label htmlFor="force-run">强制执行</label>
             </div>
 
             <div className="submit-row">
               <button className="primary" type="submit">
-                Start processing
+                开始处理
               </button>
             </div>
           </form>
@@ -135,17 +135,17 @@ export default async function DashboardPage({ searchParams }: DashboardProps) {
       </section>
 
       <section className="card stack">
-        <h2>Recent videos</h2>
+        <h2>最近视频</h2>
         {videos.length === 0 ? (
-          <p className="small empty-state">No videos yet.</p>
+          <p className="small empty-state">暂无视频。</p>
         ) : (
           <table>
             <thead>
               <tr>
-                <th>Title</th>
-                <th>Platform</th>
-                <th>Status</th>
-                <th>Last Job</th>
+                <th>标题</th>
+                <th>平台</th>
+                <th>状态</th>
+                <th>最近任务</th>
               </tr>
             </thead>
             <tbody>

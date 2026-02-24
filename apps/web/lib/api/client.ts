@@ -50,7 +50,7 @@ function normalizeJob(job: Job): Job {
 }
 
 function buildUrl(path: string, query?: Record<string, string | number | boolean | null | undefined>): string {
-  const target = new URL(path, resolveApiBaseUrl());
+  const target = new URL(path, resolveApiBaseUrl({ allowFallback: true }));
   if (!query) {
     return target.toString();
   }

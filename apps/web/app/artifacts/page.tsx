@@ -85,13 +85,13 @@ export default async function ArtifactsPage({ searchParams }: ArtifactsPageProps
   return (
     <div className="stack">
       <section className="card stack">
-        <h2>Artifact lookup</h2>
+        <h2>产物查询</h2>
         <p className="small">
-          Provide either a Job ID or a Video URL, then load artifact markdown and screenshots.
+          输入任务 ID 或视频 URL，加载对应的 Markdown 产物和截图。
         </p>
         <form method="GET" className="stack" data-require-one="job_id,video_url" data-require-one-exclusive="true">
           <label>
-            Job ID
+            任务 ID
             <input
               name="job_id"
               type="text"
@@ -101,12 +101,12 @@ export default async function ArtifactsPage({ searchParams }: ArtifactsPageProps
             />
           </label>
 
-          <p className="small artifacts-or-divider" aria-label="Use one of two fields">
-            OR
+          <p className="small artifacts-or-divider" aria-label="二选一">
+            或
           </p>
 
           <label>
-            Video URL
+            视频 URL
             <input
               name="video_url"
               type="url"
@@ -118,7 +118,7 @@ export default async function ArtifactsPage({ searchParams }: ArtifactsPageProps
 
           <div>
             <button type="submit" className="primary">
-              Load artifacts
+              加载产物
             </button>
           </div>
         </form>
@@ -129,9 +129,9 @@ export default async function ArtifactsPage({ searchParams }: ArtifactsPageProps
       {payload ? (
         <>
           <section className="card stack">
-            <h3>Embedded screenshots</h3>
+            <h3>内嵌截图</h3>
             {embeddedScreenshots.length === 0 ? (
-              <p className="small">No screenshots found in meta.frame_files.</p>
+              <p className="small">meta.frame_files 中未找到截图。</p>
             ) : (
               <ol>
                 {embeddedScreenshots.map((item, index) => (
@@ -139,7 +139,7 @@ export default async function ArtifactsPage({ searchParams }: ArtifactsPageProps
                     {item.assetUrl ? (
                       <>
                         <a className="screenshot-link" href={item.assetUrl} target="_blank" rel="noreferrer">
-                          Open screenshot {index + 1}
+                          查看截图 {index + 1}
                         </a>
                         <object
                           aria-label={`Screenshot ${index + 1}: ${item.path}`}
@@ -171,9 +171,9 @@ export default async function ArtifactsPage({ searchParams }: ArtifactsPageProps
           </section>
 
           <section className="card stack">
-            <h3>Screenshot index (fallback)</h3>
+            <h3>截图索引（备用链接）</h3>
             {screenshotIndex.length === 0 ? (
-              <p className="small">No screenshot paths found in meta.frame_files.</p>
+              <p className="small">meta.frame_files 中未找到截图路径。</p>
             ) : (
               <ol>
                 {screenshotIndex.map((path, index) => (
@@ -197,14 +197,14 @@ export default async function ArtifactsPage({ searchParams }: ArtifactsPageProps
           </section>
 
           <section className="card stack">
-            <h3>Markdown preview</h3>
+            <h3>Markdown 预览</h3>
             <MarkdownPreview markdown={payload.markdown} />
           </section>
         </>
       ) : !hasLookupParams ? (
         null
       ) : !error ? (
-        <p className="small">Artifact request completed but no markdown payload was returned.</p>
+        <p className="small">产物请求已完成，但未返回 Markdown 内容。</p>
       ) : (
         null
       )}

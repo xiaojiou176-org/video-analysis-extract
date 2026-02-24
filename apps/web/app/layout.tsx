@@ -8,8 +8,8 @@ import { buildApiUrl } from "@/lib/api/url";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Video Digestor Web",
-  description: "Web dashboard for subscriptions, jobs, artifacts and notifications.",
+  title: "AI 信息中枢",
+  description: "订阅、任务、产物与通知管理后台",
 };
 
 type ApiHealthState = "healthy" | "unhealthy" | "unknown";
@@ -36,7 +36,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
   const healthUrl = buildApiUrl("/healthz");
   const healthState = await fetchApiHealthState();
   const healthLabel =
-    healthState === "healthy" ? "Healthy" : healthState === "unhealthy" ? "Degraded" : "Unknown";
+    healthState === "healthy" ? "正常" : healthState === "unhealthy" ? "异常" : "未知";
   return (
     <html lang="en">
       <body>
@@ -47,14 +47,14 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
           <FormValidationController />
           <header className="top-header">
             <div>
-              <p className="eyebrow">Video Digestor</p>
-              <h1 className="site-title">Operations Console</h1>
+              <p className="eyebrow">AI 信息中枢</p>
+              <h1 className="site-title">控制台</h1>
             </div>
             <div className="header-links">
               <Link href={healthUrl} target="_blank" rel="noreferrer">
                 <span className="api-health-chip" aria-live="polite">
                   <span className={`api-health-dot api-health-dot-${healthState}`} aria-hidden="true" />
-                  API health: {healthLabel}
+                  API 状态：{healthLabel}
                 </span>
               </Link>
             </div>

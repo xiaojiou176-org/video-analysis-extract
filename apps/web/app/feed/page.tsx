@@ -69,23 +69,22 @@ export default async function FeedPage({ searchParams }: FeedPageProps) {
     <div className="stack">
       <section className="card stack">
         <div className="inline" style={{ justifyContent: "space-between", alignItems: "center" }}>
-          <h2 style={{ margin: 0 }}>AI Digest Feed</h2>
+          <h2 style={{ margin: 0 }}>AI 摘要订阅流</h2>
           <SyncNowButton />
         </div>
         <p className="small">
-          Unified timeline for AI generated digest text. This page prioritizes digest markdown and falls back to
-          outline summary when digest is unavailable.
+          AI 生成摘要的统一时间线。优先展示 digest 全文，无 digest 时回退到 outline 摘要。
         </p>
 
         <form method="GET" className="inline">
           <label>
-            Source
+            来源平台
             <input name="source" defaultValue={source} placeholder="youtube / bilibili / rss_generic" />
           </label>
           <label>
-            Category
+            分类
             <select name="category" defaultValue={category}>
-              <option value="">All</option>
+              <option value="">全部</option>
               <option value="tech">tech</option>
               <option value="creator">creator</option>
               <option value="macro">macro</option>
@@ -94,11 +93,11 @@ export default async function FeedPage({ searchParams }: FeedPageProps) {
             </select>
           </label>
           <label>
-            Page size
+            每页条数
             <input name="limit" type="number" min={1} max={100} defaultValue={String(safeLimit)} />
           </label>
           <button type="submit" className="primary">
-            Apply
+            筛选
           </button>
         </form>
       </section>
@@ -107,7 +106,7 @@ export default async function FeedPage({ searchParams }: FeedPageProps) {
 
       {!error && items.length === 0 ? (
         <section className="card">
-          <p className="small">No AI feed items found for the selected filters.</p>
+          <p className="small">当前筛选条件下暂无 AI 摘要内容。</p>
         </section>
       ) : null}
 
@@ -121,16 +120,16 @@ export default async function FeedPage({ searchParams }: FeedPageProps) {
           </div>
 
           <div className="small">
-            Artifact type: <code>{item.artifact_type}</code> · Job:{" "}
+            产物类型：<code>{item.artifact_type}</code> · 任务：{" "}
             <Link href={`/jobs?job_id=${item.job_id}`}>{item.job_id}</Link>
           </div>
 
           <MarkdownPreview markdown={item.summary_md} />
 
           <div className="inline">
-            <Link href={`/artifacts?job_id=${item.job_id}`}>Open artifacts</Link>
+            <Link href={`/artifacts?job_id=${item.job_id}`}>查看产物</Link>
             <a href={item.video_url} target="_blank" rel="noreferrer">
-              Open source URL
+              打开原始链接
             </a>
           </div>
         </section>
@@ -138,15 +137,15 @@ export default async function FeedPage({ searchParams }: FeedPageProps) {
 
       {!error ? (
         <section className="card inline" style={{ justifyContent: "space-between" }}>
-          <span className="small">Cursor pagination</span>
+          <span className="small">游标分页</span>
           {nextCursor !== null ? (
             <Link
               href={`/feed?source=${encodeURIComponent(source)}&category=${encodeURIComponent(category)}&limit=${safeLimit}&cursor=${encodeURIComponent(nextCursor)}`}
             >
-              Next page
+              下一页
             </Link>
           ) : (
-            <span className="small">Next page</span>
+            <span className="small">已到末页</span>
           )}
         </section>
       ) : null}
