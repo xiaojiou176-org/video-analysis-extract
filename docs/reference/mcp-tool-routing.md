@@ -29,25 +29,88 @@
 ## Manage Tool Quick Reference
 
 ### `vd.subscriptions.manage`
-- `action=list`: 可选 `platform`, `enabled_only`
+- `action=list`: 可选 `platform`, `category`, `enabled_only`
 - `action=upsert`: 必填 `platform`, `source_type`, `source_value`
+  - 可选 `adapter_type`（`rsshub_route|rss_generic`）
+  - 当 `adapter_type=rss_generic` 时建议显式传 `source_url`
+  - 可选 `category`, `tags`
 - `action=remove`: 必填 `id`
+- 常见失败:
+  - `action` 缺失或非法 -> 参数校验失败（4xx）
+  - `remove` 目标不存在 -> 幂等删除（建议上层按成功处理）
 
 ### `vd.notifications.manage`
 - `action=get_config`
 - `action=set_config`: 推荐传 `enabled`, `to_email`
 - `action=send_test`: 可传 `to_email`, `subject`, `body`
 - `action=daily_send`: 可传 `date`, `to_email`, `subject`, `body`
+- 常见失败:
+  - Webhook/邮件服务不可达 -> 可重试错误
+  - 目标邮箱缺失或配置无效 -> 不可重试错误（先修配置）
 
 ### `vd.artifacts.get`
 - `kind=markdown`: 需要 `job_id` 或 `video_url`
 - `kind=asset`: 必须 `job_id` + `path`，可选 `include_base64=true`
+- 常见失败:
+  - 产物不存在 -> 返回 404 语义，先用 `vd.jobs.get` 校验任务状态
+  - `kind=asset` 丢 `path` -> 参数错误（4xx）
 
 ### `vd.ui_audit.read`
 - `action=get`: 读取 run 摘要
 - `action=list_findings`: 可带 `severity`
 - `action=get_artifact`: 必填 `key`，可带 `include_base64`
 - `action=autofix`: 可带 `mode`, `max_files`, `max_changed_lines`
+- 常见失败:
+  - `run_id` 不存在 -> 404
+  - `autofix` 超出限制 -> 4xx（请收紧 `max_files/max_changed_lines`）
+
+## I/O Example Snippets
+
+### `vd.jobs.get`
+- 输入:
+```json
+{"job_id":"00000000-0000-4000-8000-000000000001"}
+```
+- 关键输出字段:
+```json
+{
+  "status": "succeeded",
+  "mode": "standard",
+  "steps": [],
+  "degradations": [],
+  "artifacts_index": {"digest": "/abs/path/digest.md"}
+}
+```
+
+### `vd.retrieval.search`
+- 输入:
+```json
+{"query":"provider timeout","mode":"hybrid","top_k":5}
+```
+- 关键输出字段:
+```json
+{
+  "items": [
+    {"job_id":"...","source":"digest","score":0.82,"snippet":"..."}
+  ]
+}
+```
+
+### `vd.notifications.manage(action=set_config)`
+- 输入:
+```json
+{
+  "action":"set_config",
+  "enabled":true,
+  "to_email":"you@example.com",
+  "daily_digest_enabled":true,
+  "daily_digest_hour_utc":8
+}
+```
+- 关键输出字段:
+```json
+{"ok":true,"enabled":true,"to_email":"you@example.com"}
+```
 
 ## Workflow Examples
 

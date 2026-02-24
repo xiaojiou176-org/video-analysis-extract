@@ -63,6 +63,8 @@ def _system_timezone_name() -> str:
 @dataclass(frozen=True)
 class Settings:
     rsshub_base_url: str = "https://rsshub.app"
+    rsshub_public_fallback_base_url: str | None = "https://rsshub.app"
+    rsshub_fallback_base_urls: list[str] = field(default_factory=list)
     feed_paths: list[str] = field(default_factory=list)
     request_timeout_seconds: float = 15.0
     request_retry_attempts: int = 3
@@ -154,6 +156,11 @@ class Settings:
         feed_paths = feed_urls or _split_csv(os.getenv("FEED_PATHS"))
         settings = cls(
             rsshub_base_url=os.getenv("RSSHUB_BASE_URL", "https://rsshub.app"),
+            rsshub_public_fallback_base_url=(
+                os.getenv("RSSHUB_PUBLIC_FALLBACK_BASE_URL", "https://rsshub.app").strip()
+                or None
+            ),
+            rsshub_fallback_base_urls=_split_csv(os.getenv("RSSHUB_FALLBACK_BASE_URLS")),
             feed_paths=feed_paths,
             request_timeout_seconds=float(os.getenv("REQUEST_TIMEOUT_SECONDS", "15")),
             request_retry_attempts=int(os.getenv("REQUEST_RETRY_ATTEMPTS", "3")),

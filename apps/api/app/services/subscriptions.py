@@ -17,12 +17,43 @@ def _derive_rsshub_route(platform: str, source_type: str, source_value: str) -> 
     return source_value
 
 
+def _resolve_adapter(
+    *,
+    platform: str,
+    adapter_type: str | None,
+    source_type: str,
+    source_value: str,
+    source_url: str | None,
+    rsshub_route: str | None,
+) -> tuple[str, str | None, str]:
+    normalized_adapter = str(adapter_type or "").strip().lower() or "rsshub_route"
+    normalized_source_url = str(source_url or "").strip() or None
+
+    if normalized_adapter == "rss_generic":
+        resolved_source_url = normalized_source_url or source_value
+        if not str(resolved_source_url or "").strip():
+            raise ValueError("source_url is required for adapter_type=rss_generic")
+        return "rss_generic", str(resolved_source_url), str(resolved_source_url)
+
+    if normalized_adapter != "rsshub_route":
+        raise ValueError("adapter_type must be one of: rsshub_route, rss_generic")
+
+    resolved_route = rsshub_route or _derive_rsshub_route(platform, source_type, source_value)
+    return "rsshub_route", normalized_source_url, resolved_route
+
+
 class SubscriptionsService:
     def __init__(self, db: Session) -> None:
         self.repo = SubscriptionsRepository(db)
 
-    def list_subscriptions(self, *, platform: str | None = None, enabled_only: bool = False):
-        return self.repo.list(platform=platform, enabled_only=enabled_only)
+    def list_subscriptions(
+        self,
+        *,
+        platform: str | None = None,
+        category: str | None = None,
+        enabled_only: bool = False,
+    ):
+        return self.repo.list(platform=platform, category=category, enabled_only=enabled_only)
 
     def upsert_subscription(
         self,
@@ -30,17 +61,50 @@ class SubscriptionsService:
         platform: str,
         source_type: str,
         source_value: str,
+        adapter_type: str | None,
+        source_url: str | None,
         rsshub_route: str | None,
+        category: str | None,
+        tags: list[str] | None,
+        priority: int | None,
         enabled: bool,
     ):
-        resolved_route = rsshub_route or _derive_rsshub_route(platform, source_type, source_value)
+        resolved_adapter_type, resolved_source_url, resolved_route = _resolve_adapter(
+            adapter_type=adapter_type,
+            source_type=source_type,
+            source_value=source_value,
+            source_url=source_url,
+            rsshub_route=rsshub_route,
+            platform=platform,
+        )
+        resolved_category = (category or "misc").strip().lower()
+        resolved_tags = [str(item).strip() for item in (tags or []) if str(item).strip()]
+        resolved_priority = int(priority if priority is not None else 50)
+        if resolved_priority < 0 or resolved_priority > 100:
+            raise ValueError("priority must be in [0, 100]")
         return self.repo.upsert(
             platform=platform,
             source_type=source_type,
             source_value=source_value,
+            adapter_type=resolved_adapter_type,
+            source_url=resolved_source_url,
             rsshub_route=resolved_route,
+            category=resolved_category,
+            tags=resolved_tags,
+            priority=resolved_priority,
             enabled=enabled,
         )
+
+    def batch_update_category(
+        self,
+        *,
+        ids: list[uuid.UUID],
+        category: str,
+    ) -> int:
+        resolved_category = (category or "").strip().lower()
+        if not resolved_category:
+            raise ValueError("category is required")
+        return self.repo.batch_update_category(ids=ids, category=resolved_category)
 
     def delete_subscription(self, subscription_id: uuid.UUID) -> bool:
         return self.repo.delete(subscription_id)

@@ -1,5 +1,7 @@
-export type Platform = "bilibili" | "youtube";
-export type SourceType = "bilibili_uid" | "youtube_channel_id" | "url";
+export type Platform = string;
+export type SourceType = string;
+export type SubscriptionCategory = "tech" | "creator" | "macro" | "ops" | "misc";
+export type SubscriptionAdapterType = string;
 export type JobStatus = "queued" | "running" | "succeeded" | "failed";
 export type PipelineFinalStatus = "succeeded" | "degraded" | "failed";
 export type VideoProcessMode = "full" | "text_only" | "refresh_comments" | "refresh_llm";
@@ -9,7 +11,13 @@ export type Subscription = {
   platform: Platform;
   source_type: SourceType;
   source_value: string;
+  source_name: string;
+  adapter_type: SubscriptionAdapterType;
+  source_url: string | null;
   rsshub_route: string;
+  category: SubscriptionCategory;
+  tags: string[];
+  priority: number;
   enabled: boolean;
   created_at: string;
   updated_at: string;
@@ -19,7 +27,12 @@ export type SubscriptionUpsertRequest = {
   platform: Platform;
   source_type: SourceType;
   source_value: string;
+  adapter_type?: SubscriptionAdapterType;
+  source_url?: string | null;
   rsshub_route?: string | null;
+  category?: SubscriptionCategory;
+  tags?: string[];
+  priority?: number;
   enabled?: boolean;
 };
 
@@ -145,6 +158,7 @@ export type NotificationConfig = {
   daily_digest_enabled: boolean;
   daily_digest_hour_utc: number | null;
   failure_alert_enabled: boolean;
+  category_rules: Record<string, unknown>;
   created_at: string;
   updated_at: string;
 };
@@ -155,6 +169,7 @@ export type NotificationConfigUpdateRequest = {
   daily_digest_enabled: boolean;
   daily_digest_hour_utc: number | null;
   failure_alert_enabled: boolean;
+  category_rules?: Record<string, unknown>;
 };
 
 export type NotificationTestRequest = {
@@ -172,4 +187,23 @@ export type NotificationSendResponse = {
   subject: string;
   sent_at: string | null;
   created_at: string;
+};
+
+export type DigestFeedItem = {
+  feed_id: string;
+  job_id: string;
+  video_url: string;
+  title: string;
+  source: Platform | string;
+  source_name: string;
+  category: SubscriptionCategory;
+  published_at: string;
+  summary_md: string;
+  artifact_type: "digest" | "outline";
+};
+
+export type DigestFeedResponse = {
+  items: DigestFeedItem[];
+  has_more: boolean;
+  next_cursor: string | null;
 };

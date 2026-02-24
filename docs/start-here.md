@@ -38,6 +38,27 @@ curl -sS http://127.0.0.1:8000/healthz
 curl -sS -X POST http://127.0.0.1:8000/api/v1/ingest/poll -H 'Content-Type: application/json' -d '{"max_new_videos": 20}'
 ```
 
+## 一键路径（推荐）
+
+如果你希望 `clone` 后尽快达到可运行状态，直接用：
+
+```bash
+./scripts/bootstrap_full_stack.sh
+./scripts/full_stack.sh up
+./scripts/smoke_full_stack.sh
+```
+
+默认行为：
+- bootstrap 会拉起 core services + Miniflux + Nextflux。
+- smoke 会强制检查 reader 栈并执行 AI 文本回写到 Miniflux。
+
+可选阅读栈（Miniflux + Nextflux）：
+
+```bash
+cp .env.example .env.reader-stack
+./scripts/bootstrap_full_stack.sh --with-reader-stack 1 --reader-env-file .env.reader-stack
+```
+
 ## 下一步看哪里
 
 - 本地运维与参数细节：`docs/runbook-local.md`

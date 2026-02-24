@@ -1,6 +1,6 @@
-import { deleteSubscriptionAction, upsertSubscriptionAction } from "@/app/subscriptions/actions";
+import { upsertSubscriptionAction } from "@/app/subscriptions/actions";
+import { SubscriptionBatchPanel } from "@/components/subscription-batch-panel";
 import { apiClient } from "@/lib/api/client";
-import { formatDateTime } from "@/lib/format";
 import { resolveSearchParams, type SearchParamsInput } from "@/lib/search-params";
 
 type SubscriptionsPageProps = {
@@ -49,8 +49,41 @@ export default async function SubscriptionsPage({ searchParams }: SubscriptionsP
           </label>
 
           <label>
+            Adapter type
+            <select name="adapter_type" defaultValue="rsshub_route">
+              <option value="rsshub_route">rsshub_route</option>
+              <option value="rss_generic">rss_generic</option>
+            </select>
+          </label>
+
+          <label>
+            Source URL (for rss_generic)
+            <input name="source_url" placeholder="https://example.com/feed.xml" />
+          </label>
+
+          <label>
             RSSHub route (optional)
             <input name="rsshub_route" placeholder="/youtube/channel/UCxxxx" />
+          </label>
+
+          <label>
+            Category
+            <select name="category" defaultValue="misc">
+              <option value="misc">misc</option>
+              <option value="tech">tech</option>
+              <option value="creator">creator</option>
+              <option value="macro">macro</option>
+              <option value="ops">ops</option>
+            </select>
+          </label>
+
+          <label>
+            Tags (comma separated, optional)
+            <input name="tags" placeholder="ai,weekly,high-priority" />
+          </label>
+          <label>
+            Priority (0-100)
+            <input name="priority" type="number" min={0} max={100} defaultValue={50} />
           </label>
 
           <label className="inline">
@@ -68,44 +101,10 @@ export default async function SubscriptionsPage({ searchParams }: SubscriptionsP
 
       <section className="card stack">
         <h2>Current subscriptions</h2>
-        {subscriptions.length === 0 ? (
-          <p className="small">No subscription data.</p>
-        ) : (
-          <table>
-            <thead>
-              <tr>
-                <th>Source</th>
-                <th>Platform</th>
-                <th>Type</th>
-                <th>Enabled</th>
-                <th>Updated</th>
-                <th>Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {subscriptions.map((item) => (
-                <tr key={item.id}>
-                  <td>
-                    <div>{item.source_value}</div>
-                    <div className="small">{item.rsshub_route}</div>
-                  </td>
-                  <td>{item.platform}</td>
-                  <td>{item.source_type}</td>
-                  <td>{item.enabled ? "yes" : "no"}</td>
-                  <td>{formatDateTime(item.updated_at)}</td>
-                  <td>
-                    <form action={deleteSubscriptionAction}>
-                      <input type="hidden" name="id" value={item.id} />
-                      <button type="submit" className="destructive">
-                        Delete
-                      </button>
-                    </form>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
+        <p className="small">
+          Select multiple rows to batch-update their category. Use the sticky action bar that appears at the bottom.
+        </p>
+        <SubscriptionBatchPanel subscriptions={subscriptions} />
       </section>
     </div>
   );

@@ -14,10 +14,6 @@ class Video(Base):
     __tablename__ = "videos"
     __table_args__ = (
         UniqueConstraint("platform", "video_uid", name="uq_videos_platform_video_uid"),
-        CheckConstraint(
-            "platform IN ('bilibili', 'youtube')",
-            name="videos_platform_check",
-        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(

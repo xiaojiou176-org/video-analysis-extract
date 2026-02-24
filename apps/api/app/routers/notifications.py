@@ -11,6 +11,7 @@ from ..db import get_db
 from ..security import sanitize_exception_detail
 from ..services.notifications import (
     get_notification_config,
+    send_category_digest,
     send_daily_report_notification,
     send_test_email,
     update_notification_config,
@@ -26,6 +27,7 @@ class NotificationConfigResponse(BaseModel):
     daily_digest_enabled: bool
     daily_digest_hour_utc: int | None
     failure_alert_enabled: bool
+    category_rules: dict[str, object] = Field(default_factory=dict)
     created_at: datetime
     updated_at: datetime
 
@@ -36,6 +38,7 @@ class NotificationConfigUpdateRequest(BaseModel):
     daily_digest_enabled: bool = False
     daily_digest_hour_utc: int | None = Field(default=None, ge=0, le=23)
     failure_alert_enabled: bool = True
+    category_rules: dict[str, object] | None = None
 
 
 class NotificationTestRequest(BaseModel):
@@ -74,6 +77,15 @@ class DailyReportSendResponse(BaseModel):
     created_at: datetime
 
 
+class CategoryDigestSendRequest(BaseModel):
+    category: str = Field(min_length=1)
+    body: str = Field(min_length=1)
+    to_email: str | None = None
+    subject: str | None = None
+    priority: int | None = Field(default=None, ge=0, le=100)
+    dispatch_key: str | None = None
+
+
 @router.get("/config", response_model=NotificationConfigResponse)
 def get_config(db: Session = Depends(get_db)):
     row = get_notification_config(db)
@@ -83,6 +95,7 @@ def get_config(db: Session = Depends(get_db)):
         daily_digest_enabled=row.daily_digest_enabled,
         daily_digest_hour_utc=row.daily_digest_hour_utc,
         failure_alert_enabled=row.failure_alert_enabled,
+        category_rules=row.category_rules if isinstance(row.category_rules, dict) else {},
         created_at=row.created_at,
         updated_at=row.updated_at,
     )
@@ -97,6 +110,7 @@ def put_config(payload: NotificationConfigUpdateRequest, db: Session = Depends(g
         daily_digest_enabled=payload.daily_digest_enabled,
         daily_digest_hour_utc=payload.daily_digest_hour_utc,
         failure_alert_enabled=payload.failure_alert_enabled,
+        category_rules=payload.category_rules,
     )
     return NotificationConfigResponse(
         enabled=row.enabled,
@@ -104,6 +118,7 @@ def put_config(payload: NotificationConfigUpdateRequest, db: Session = Depends(g
         daily_digest_enabled=row.daily_digest_enabled,
         daily_digest_hour_utc=row.daily_digest_hour_utc,
         failure_alert_enabled=row.failure_alert_enabled,
+        category_rules=row.category_rules if isinstance(row.category_rules, dict) else {},
         created_at=row.created_at,
         updated_at=row.updated_at,
     )
@@ -171,6 +186,35 @@ def post_daily_report_send(payload: DailyReportSendRequest, db: Session = Depend
         recipient_email=row.recipient_email,
         subject=row.subject,
         error_message=row.error_message,
+        sent_at=row.sent_at,
+        created_at=row.created_at,
+    )
+
+
+@router.post("/category/send", response_model=NotificationSendResponse, status_code=status.HTTP_200_OK)
+def post_category_send(payload: CategoryDigestSendRequest, db: Session = Depends(get_db)):
+    try:
+        row = send_category_digest(
+            db,
+            category=payload.category,
+            digest_markdown=payload.body,
+            to_email=payload.to_email,
+            subject=payload.subject,
+            priority=payload.priority,
+            dispatch_key=payload.dispatch_key,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=sanitize_exception_detail(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=sanitize_exception_detail(exc)) from exc
+
+    return NotificationSendResponse(
+        delivery_id=row.id,
+        status=row.status,
+        provider_message_id=row.provider_message_id,
+        error_message=row.error_message,
+        recipient_email=row.recipient_email,
+        subject=row.subject,
         sent_at=row.sent_at,
         created_at=row.created_at,
     )

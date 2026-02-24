@@ -37,6 +37,7 @@ def _normalize_set_config_payload(payload: dict[str, Any]) -> dict[str, Any]:
         "daily_digest_enabled": to_optional_bool(payload.get("daily_digest_enabled")),
         "daily_digest_hour_utc": to_optional_int(payload.get("daily_digest_hour_utc")),
         "failure_alert_enabled": to_optional_bool(payload.get("failure_alert_enabled")),
+        "category_rules": payload.get("category_rules") if isinstance(payload.get("category_rules"), dict) else {},
         "created_at": to_optional_str(payload.get("created_at")),
         "updated_at": to_optional_str(payload.get("updated_at")),
     }
@@ -45,7 +46,7 @@ def _normalize_set_config_payload(payload: dict[str, Any]) -> dict[str, Any]:
 def register_notification_tools(mcp: FastMCP, api_call: ApiCall) -> None:
     @mcp.tool(
         name="vd.notifications.manage",
-        description="Manage notifications. action=get_config|set_config|send_test|daily_send.",
+        description="Manage notifications. action=get_config|set_config|send_test|daily_send|category_send.",
     )
     def manage_notifications(
         action: str,
@@ -53,10 +54,14 @@ def register_notification_tools(mcp: FastMCP, api_call: ApiCall) -> None:
         to_email: str | None = None,
         subject: str | None = None,
         body: str | None = None,
+        category: str | None = None,
+        priority: int | None = None,
+        dispatch_key: str | None = None,
         enabled: bool = True,
         daily_digest_enabled: bool = False,
         daily_digest_hour_utc: int | None = None,
         failure_alert_enabled: bool = True,
+        category_rules: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         normalized_action = str(action or "").strip().lower()
         if normalized_action == "get_config":
@@ -73,6 +78,7 @@ def register_notification_tools(mcp: FastMCP, api_call: ApiCall) -> None:
                     "daily_digest_enabled": daily_digest_enabled,
                     "daily_digest_hour_utc": daily_digest_hour_utc,
                     "failure_alert_enabled": failure_alert_enabled,
+                    "category_rules": category_rules,
                 },
             )
             return _normalize_set_config_payload(response)
@@ -114,8 +120,23 @@ def register_notification_tools(mcp: FastMCP, api_call: ApiCall) -> None:
                 "created_at": to_optional_str(response.get("created_at")),
             }
 
+        if normalized_action == "category_send":
+            response = api_call(
+                "POST",
+                "/api/v1/notifications/category/send",
+                json_body={
+                    "category": category,
+                    "body": body,
+                    "to_email": to_email,
+                    "subject": subject,
+                    "priority": priority,
+                    "dispatch_key": dispatch_key,
+                },
+            )
+            return _normalize_send_test_payload(response)
+
         return {
             "code": "INVALID_ARGUMENT",
-            "message": "action must be one of: get_config, set_config, send_test, daily_send",
+            "message": "action must be one of: get_config, set_config, send_test, daily_send, category_send",
             "details": {"method": "POST", "path": "vd.notifications.manage"},
         }

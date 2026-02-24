@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import Boolean, CheckConstraint, DateTime, SmallInteger, String, func
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .base import Base
@@ -34,6 +34,7 @@ class NotificationConfig(Base):
     daily_digest_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     daily_digest_hour_utc: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
     failure_alert_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    category_rules: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False, default=dict)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

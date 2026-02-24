@@ -1,0 +1,204 @@
+"use client";
+
+import { useRouter } from "next/navigation";
+import { useState } from "react";
+
+import { apiClient } from "@/lib/api/client";
+import { formatDateTime } from "@/lib/format";
+import type { Subscription, SubscriptionCategory } from "@/lib/api/types";
+
+const CATEGORIES: SubscriptionCategory[] = ["tech", "creator", "macro", "ops", "misc"];
+
+type Props = {
+  subscriptions: Subscription[];
+};
+
+export function SubscriptionBatchPanel({ subscriptions }: Props) {
+  const router = useRouter();
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [batchCategory, setBatchCategory] = useState<SubscriptionCategory>("misc");
+  const [applying, setApplying] = useState(false);
+  const [applyResult, setApplyResult] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  function toggleAll() {
+    if (selected.size === subscriptions.length) {
+      setSelected(new Set());
+    } else {
+      setSelected(new Set(subscriptions.map((s) => s.id)));
+    }
+  }
+
+  function toggleOne(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }
+
+  async function handleDelete(id: string) {
+    setDeletingId(id);
+    try {
+      await apiClient.deleteSubscription(id);
+      setSelected((prev) => { const next = new Set(prev); next.delete(id); return next; });
+      router.refresh();
+    } catch (err) {
+      setApplyResult(`Delete error: ${err instanceof Error ? err.message : "unknown"}`);
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
+  async function handleApplyCategory() {
+    if (selected.size === 0) return;
+    setApplying(true);
+    setApplyResult(null);
+    try {
+      const result = await apiClient.batchUpdateSubscriptionCategory({
+        ids: Array.from(selected),
+        category: batchCategory,
+      });
+      setApplyResult(`Updated ${result.updated} subscription(s) to "${batchCategory}"`);
+      setSelected(new Set());
+      router.refresh();
+    } catch (err) {
+      setApplyResult(`Error: ${err instanceof Error ? err.message : "unknown error"}`);
+    } finally {
+      setApplying(false);
+    }
+  }
+
+  const allSelected = subscriptions.length > 0 && selected.size === subscriptions.length;
+
+  return (
+    <div className="stack">
+      {subscriptions.length === 0 ? (
+        <p className="small">No subscription data.</p>
+      ) : (
+        <>
+          <table>
+            <thead>
+              <tr>
+                <th>
+                  <input
+                    type="checkbox"
+                    checked={allSelected}
+                    onChange={toggleAll}
+                    aria-label="Select all"
+                  />
+                </th>
+                <th>Source</th>
+                <th>Adapter</th>
+                <th>Platform</th>
+                <th>Type</th>
+                <th>Category</th>
+                <th>Priority</th>
+                <th>Enabled</th>
+                <th>Updated</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {subscriptions.map((item) => (
+                <tr key={item.id}>
+                  <td>
+                    <input
+                      type="checkbox"
+                      checked={selected.has(item.id)}
+                      onChange={() => toggleOne(item.id)}
+                      aria-label={`Select ${item.source_name}`}
+                    />
+                  </td>
+                  <td>
+                    <div>{item.source_name}</div>
+                    <div className="small">UID/Value: {item.source_value}</div>
+                    <div className="small">{item.rsshub_route}</div>
+                  </td>
+                  <td>
+                    <div>{item.adapter_type}</div>
+                    <div className="small">{item.source_url ?? "-"}</div>
+                  </td>
+                  <td>{item.platform}</td>
+                  <td>{item.source_type}</td>
+                  <td>
+                    <div>{item.category}</div>
+                    <div className="small">{item.tags.join(", ") || "-"}</div>
+                  </td>
+                  <td>{item.priority}</td>
+                  <td>{item.enabled ? "yes" : "no"}</td>
+                  <td>{formatDateTime(item.updated_at)}</td>
+                  <td>
+                    <button
+                      type="button"
+                      className="destructive"
+                      disabled={deletingId === item.id}
+                      onClick={() => handleDelete(item.id)}
+                    >
+                      {deletingId === item.id ? "…" : "Delete"}
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          {selected.size > 0 && (
+            <div
+              className="card inline"
+              style={{
+                position: "sticky",
+                bottom: "1rem",
+                justifyContent: "space-between",
+                alignItems: "center",
+                background: "var(--color-surface, #fff)",
+                boxShadow: "0 -2px 8px rgba(0,0,0,.12)",
+              }}
+            >
+              <span className="small">
+                {selected.size} selected
+              </span>
+              <div className="inline">
+                <label style={{ margin: 0 }}>
+                  Move to category
+                  <select
+                    value={batchCategory}
+                    onChange={(e) => setBatchCategory(e.target.value as SubscriptionCategory)}
+                  >
+                    {CATEGORIES.map((c) => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                  </select>
+                </label>
+                <button
+                  type="button"
+                  className="primary"
+                  disabled={applying}
+                  onClick={handleApplyCategory}
+                >
+                  {applying ? "Applying…" : "Apply"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelected(new Set())}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+
+          {applyResult && (
+            <p className={applyResult.startsWith("Error") ? "alert error" : "alert success"}>
+              {applyResult}
+            </p>
+          )}
+        </>
+      )}
+    </div>
+  );
+}

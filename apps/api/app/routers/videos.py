@@ -17,7 +17,7 @@ router = APIRouter(prefix="/api/v1/videos", tags=["videos"])
 
 class VideoResponse(BaseModel):
     id: uuid.UUID
-    platform: Literal["bilibili", "youtube"]
+    platform: str
     video_uid: str
     source_url: str
     title: str | None
@@ -29,7 +29,7 @@ class VideoResponse(BaseModel):
 
 
 class VideoProcessInput(BaseModel):
-    platform: Literal["bilibili", "youtube"]
+    platform: str = Field(min_length=1)
     url: str = Field(min_length=1)
     video_id: str | None = None
 
@@ -56,7 +56,7 @@ class VideoProcessResponse(BaseModel):
 
 @router.get("", response_model=list[VideoResponse])
 def list_videos(
-    platform: Literal["bilibili", "youtube"] | None = None,
+    platform: str | None = None,
     status: Literal["queued", "running", "succeeded", "failed"] | None = None,
     limit: int = Query(default=50, ge=1, le=500),
     db: Session = Depends(get_db),

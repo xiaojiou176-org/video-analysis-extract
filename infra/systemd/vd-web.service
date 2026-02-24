@@ -1,0 +1,23 @@
+[Unit]
+Description=Video Digestor - Next.js Web Frontend
+After=network.target vd-api.service
+
+[Service]
+Type=simple
+User=vd
+Group=vd
+WorkingDirectory=/opt/vd/repo/apps/web
+EnvironmentFile=/opt/vd/.env
+Environment=NODE_ENV=production
+ExecStart=/usr/bin/npm run start -- --port 3001
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=vd-web
+
+NoNewPrivileges=yes
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target

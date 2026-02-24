@@ -1,0 +1,47 @@
+services:
+  miniflux:
+    image: miniflux/miniflux:latest
+    container_name: vd-miniflux
+    depends_on:
+      - db
+    ports:
+      - "${MINIFLUX_PORT:-8080}:8080"
+    environment:
+      DATABASE_URL: postgres://${MINIFLUX_DB_USER:-miniflux}:${MINIFLUX_DB_PASSWORD:-change_me}@db/${MINIFLUX_DB_NAME:-miniflux}?sslmode=disable
+      RUN_MIGRATIONS: "1"
+      CREATE_ADMIN: "1"
+      ADMIN_USERNAME: ${MINIFLUX_ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD: ${MINIFLUX_ADMIN_PASSWORD:-change_me}
+      BASE_URL: ${MINIFLUX_BASE_URL:-http://127.0.0.1:8080}
+      POLLING_FREQUENCY: ${MINIFLUX_POLLING_FREQUENCY:-30}
+      CLEANUP_ARCHIVE_READ_DAYS: ${MINIFLUX_CLEANUP_ARCHIVE_READ_DAYS:-30}
+      CLEANUP_REMOVE_SESSIONS_DAYS: ${MINIFLUX_CLEANUP_REMOVE_SESSIONS_DAYS:-30}
+    restart: unless-stopped
+
+  db:
+    image: postgres:16-alpine
+    container_name: vd-miniflux-db
+    environment:
+      POSTGRES_USER: ${MINIFLUX_DB_USER:-miniflux}
+      POSTGRES_PASSWORD: ${MINIFLUX_DB_PASSWORD:-change_me}
+      POSTGRES_DB: ${MINIFLUX_DB_NAME:-miniflux}
+    volumes:
+      - miniflux_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${MINIFLUX_DB_USER:-miniflux} -d ${MINIFLUX_DB_NAME:-miniflux}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  nextflux:
+    image: electh/nextflux:latest
+    container_name: vd-nextflux
+    ports:
+      - "${NEXTFLUX_PORT:-3000}:3000"
+    depends_on:
+      - miniflux
+    restart: unless-stopped
+
+volumes:
+  miniflux_db_data:

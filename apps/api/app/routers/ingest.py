@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
@@ -17,13 +16,13 @@ router = APIRouter(prefix="/api/v1/ingest", tags=["ingest"])
 
 class IngestPollRequest(BaseModel):
     subscription_id: uuid.UUID | None = None
-    platform: Literal["bilibili", "youtube"] | None = None
+    platform: str | None = None
     max_new_videos: int = Field(default=50, ge=1, le=500)
 
 
 class IngestCandidate(BaseModel):
     video_id: uuid.UUID
-    platform: Literal["bilibili", "youtube"]
+    platform: str
     video_uid: str
     source_url: str
     title: str | None

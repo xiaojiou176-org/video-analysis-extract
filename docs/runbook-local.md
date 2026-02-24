@@ -164,6 +164,23 @@ bash -n scripts/start_ops_workflows.sh
 - `provider_canary` 每轮会写入 `provider_health_checks`（`rsshub/youtube_data_api/gemini/resend`），建议外部监控以最近 5-10 分钟窗口统计 `status=fail` 或连续 `warn` 触发告警。
 - 失败投递会记录在 `notification_deliveries`（含 `attempt_count`、`next_retry_at`、`last_error_kind`），建议对 `status='failed' AND next_retry_at IS NULL` 的记录设置人工告警（通常表示已达上限或配置错误）。
 
+## 一键脚本（Clone 后 80%+ 快速可用）
+
+```bash
+./scripts/bootstrap_full_stack.sh
+./scripts/full_stack.sh up
+./scripts/smoke_full_stack.sh
+```
+
+脚本说明：
+- `bootstrap_full_stack.sh`：依赖安装、环境校验、数据库迁移、可选 reader stack。
+- `full_stack.sh`：统一起停 API/Worker/MCP/Web。
+- `smoke_full_stack.sh`：执行端到端 smoke（含 feed/web 检查，可选 reader 检查）。
+
+当前默认：
+- `bootstrap_full_stack.sh` 默认启用 `WITH_CORE_SERVICES=1` 和 `WITH_READER_STACK=1`。
+- `smoke_full_stack.sh` 默认启用 `FULL_STACK_REQUIRE_READER=1`，并会执行 `run_ai_feed_sync.sh` 验证 AI 文本回写 Miniflux。
+
 ## 常见故障
 - `API health check failed`：确认 `./scripts/dev_api.sh` 已运行，且 `VD_API_BASE_URL` 可访问。
 - `RESEND_API_KEY is not configured` / `RESEND_FROM_EMAIL is not configured`：`NOTIFICATION_ENABLED=true` 时需补齐 `.env`（或仅在兼容模式下补齐 `.env.local`）。

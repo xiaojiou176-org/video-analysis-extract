@@ -38,6 +38,8 @@ class PostgresBusinessStore:
                         platform,
                         source_type,
                         source_value,
+                        adapter_type,
+                        source_url,
                         rsshub_route,
                         enabled
                     FROM subscriptions
@@ -216,6 +218,7 @@ class PostgresBusinessStore:
         *,
         video_id: str,
         idempotency_key: str,
+        mode: str | None = None,
     ) -> tuple[dict[str, Any], bool]:
         try:
             with self._engine.begin() as conn:
@@ -227,6 +230,7 @@ class PostgresBusinessStore:
                             kind,
                             status,
                             idempotency_key,
+                            mode,
                             created_at,
                             updated_at
                         )
@@ -235,15 +239,17 @@ class PostgresBusinessStore:
                             'video_digest_v1',
                             'queued',
                             :idempotency_key,
+                            :mode,
                             NOW(),
                             NOW()
                         )
-                        RETURNING id::text AS id, status
+                        RETURNING id::text AS id, status, mode
                         """
                     ),
                     {
                         "video_id": video_id,
                         "idempotency_key": idempotency_key,
+                        "mode": mode,
                     },
                 ).mappings().one()
                 return dict(row), True

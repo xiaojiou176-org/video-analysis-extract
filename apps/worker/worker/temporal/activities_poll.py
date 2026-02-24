@@ -4,7 +4,7 @@ from os import getpid
 from typing import Any
 
 from worker.config import Settings
-from worker.rss.normalizer import normalize_entry
+from worker.rss.adapters import poll_subscription_entries, resolve_feed_url
 from worker.state.postgres_store import PostgresBusinessStore
 from worker.state.sqlite_store import SQLiteStateStore
 from worker.temporal.activities_timing import _utc_now_iso
@@ -21,14 +21,6 @@ except ModuleNotFoundError:  # pragma: no cover
             return _decorator
 
     activity = _ActivityFallback()
-
-
-def _resolve_feed_url(settings: Settings, rsshub_route: str) -> str:
-    if rsshub_route.startswith("http://") or rsshub_route.startswith("https://"):
-        return rsshub_route
-    base = settings.rsshub_base_url.rstrip("/")
-    path = rsshub_route if rsshub_route.startswith("/") else f"/{rsshub_route}"
-    return f"{base}{path}"
 
 
 async def run_poll_feeds_once(
@@ -54,7 +46,10 @@ async def run_poll_feeds_once(
 
         feed_to_subscription: dict[str, dict[str, Any]] = {}
         for item in subscriptions:
-            feed_url = _resolve_feed_url(settings, item["rsshub_route"])
+            try:
+                feed_url = resolve_feed_url(settings, item)
+            except ValueError:
+                continue
             feed_to_subscription[feed_url] = item
 
         feed_urls = list(feed_to_subscription.keys())
@@ -62,9 +57,9 @@ async def run_poll_feeds_once(
             timeout_seconds=settings.request_timeout_seconds,
             retry_attempts=settings.request_retry_attempts,
             retry_backoff_seconds=settings.request_retry_backoff_seconds,
+            public_fallback_base_url=settings.rsshub_public_fallback_base_url,
+            public_fallback_base_urls=settings.rsshub_fallback_base_urls,
         )
-        fetched = await fetcher.fetch_many(feed_urls)
-
         created_job_ids: list[str] = []
         candidates: list[dict[str, Any]] = []
         max_new = int(filters.get("max_new_videos") or 50)
@@ -75,23 +70,29 @@ async def run_poll_feeds_once(
         ingest_event_duplicates = 0
         job_duplicates = 0
 
-        for feed_url, raw_entries in fetched.items():
+        for feed_url in feed_urls:
             subscription = feed_to_subscription.get(feed_url)
             if not subscription:
                 continue
+            try:
+                _, normalized_entries = await poll_subscription_entries(
+                    settings=settings,
+                    fetcher=fetcher,
+                    subscription=subscription,
+                )
+            except ValueError:
+                normalized_entries = []
 
-            entries_fetched += len(raw_entries)
-            for raw_entry in raw_entries:
-                normalized = normalize_entry(raw_entry, feed_url)
+            entries_fetched += len(normalized_entries)
+            for normalized in normalized_entries:
                 entries_normalized += 1
 
-                platform = normalized.get("video_platform")
-                if platform not in {"bilibili", "youtube"}:
-                    continue
+                platform = _resolve_platform(normalized=normalized, subscription=subscription)
+                video_uid = _resolve_video_uid(normalized=normalized)
 
                 video = pg_store.upsert_video(
                     platform=platform,
-                    video_uid=normalized["video_uid"],
+                    video_uid=video_uid,
                     source_url=normalized.get("link") or feed_url,
                     title=normalized.get("title") or None,
                     published_at=normalized.get("published_at"),
@@ -116,9 +117,13 @@ async def run_poll_feeds_once(
                     job_duplicates += 1
                     continue
 
+                adapter_type = str(subscription.get("adapter_type") or "rsshub_route")
+                pipeline_mode: str | None = "text_only" if adapter_type == "rss_generic" else None
+
                 job, created = pg_store.create_queued_job(
                     video_id=video["id"],
                     idempotency_key=normalized["idempotency_key"],
+                    mode=pipeline_mode,
                 )
                 if not created:
                     job_duplicates += 1
@@ -126,6 +131,7 @@ async def run_poll_feeds_once(
 
                 created_job_ids.append(job["id"])
                 if len(candidates) < max_new:
+                    rss_transcript = _build_rss_transcript(normalized)
                     candidates.append(
                         {
                             "job_id": job["id"],
@@ -137,6 +143,8 @@ async def run_poll_feeds_once(
                             "published_at": video.get("published_at"),
                             "entry_hash": normalized["entry_hash"],
                             "ingest_event_id": ingest_event["id"],
+                            "pipeline_mode": pipeline_mode,
+                            "rss_transcript": rss_transcript,
                         }
                     )
 
@@ -157,6 +165,42 @@ async def run_poll_feeds_once(
         }
     finally:
         sqlite_store.release_lock(lock_key, lock_owner)
+
+
+def _resolve_platform(*, normalized: dict[str, Any], subscription: dict[str, Any]) -> str:
+    normalized_platform = str(normalized.get("video_platform") or "").strip().lower()
+    if normalized_platform:
+        return normalized_platform
+    fallback_platform = str(subscription.get("platform") or "").strip().lower()
+    return fallback_platform or "generic"
+
+
+def _resolve_video_uid(*, normalized: dict[str, Any]) -> str:
+    candidate = str(normalized.get("video_uid") or "").strip()
+    if candidate:
+        return candidate
+    entry_hash = str(normalized.get("entry_hash") or "").strip()
+    if entry_hash:
+        return entry_hash
+    return "unknown"
+
+
+def _build_rss_transcript(normalized: dict[str, Any]) -> str | None:
+    """Assemble a plain-text transcript from RSS entry fields for text-only pipeline."""
+    parts: list[str] = []
+    title = str(normalized.get("title") or "").strip()
+    if title:
+        parts.append(f"# {title}\n")
+    content = str(normalized.get("content") or normalized.get("summary") or "").strip()
+    if content:
+        parts.append(content)
+    link = str(normalized.get("link") or "").strip()
+    if link:
+        parts.append(f"\nSource: {link}")
+    published = str(normalized.get("published_at") or "").strip()
+    if published:
+        parts.append(f"Published: {published}")
+    return "\n".join(parts) if parts else None
 
 
 @activity.defn(name="poll_feeds_activity")

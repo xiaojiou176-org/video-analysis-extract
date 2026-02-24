@@ -34,6 +34,7 @@ class NotificationDelivery(Base):
     provider: Mapped[str] = mapped_column(String(32), nullable=False, default="resend")
     provider_message_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    dispatch_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
     attempt_count: Mapped[int] = mapped_column(nullable=False, default=0)
     last_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     next_retry_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

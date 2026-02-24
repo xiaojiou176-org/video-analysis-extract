@@ -1,0 +1,23 @@
+[Unit]
+Description=Video Digestor - Temporal Worker
+After=network.target vd-api.service
+Wants=vd-api.service
+
+[Service]
+Type=simple
+User=vd
+Group=vd
+WorkingDirectory=/opt/vd/repo
+EnvironmentFile=/opt/vd/.env
+ExecStart=/opt/vd/repo/.venv/bin/python -m apps.worker.worker.main
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=vd-worker
+
+NoNewPrivileges=yes
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target

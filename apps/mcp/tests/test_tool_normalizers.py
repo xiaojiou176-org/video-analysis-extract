@@ -172,14 +172,20 @@ def test_subscriptions_manage_supports_list_upsert_remove() -> None:
         source_type="url",
         source_value="https://youtube.com/@demo",
     )["ok"] is True
+    assert mcp.tools["vd.subscriptions.manage"](
+        action="batch_update_category",
+        ids=["sub-1", "sub-2"],
+        category="macro",
+    )["ok"] is True
     assert mcp.tools["vd.subscriptions.manage"](action="remove", id="sub-1")["ok"] is True
 
     assert calls[0]["method"] == "GET"
     assert calls[1]["method"] == "POST"
-    assert calls[2]["method"] == "DELETE"
+    assert calls[2]["method"] == "POST"
+    assert calls[3]["method"] == "DELETE"
 
 
-def test_notifications_manage_supports_get_set_send_and_daily_send() -> None:
+def test_notifications_manage_supports_get_set_send_daily_and_category_send() -> None:
     mcp = _FakeMCP()
 
     def fake_api_call(method: str, path: str, **kwargs: Any) -> dict[str, Any]:
@@ -191,6 +197,8 @@ def test_notifications_manage_supports_get_set_send_and_daily_send() -> None:
             return {"delivery_id": "d-1", "status": "sent"}
         if path == "/api/v1/reports/daily/send":
             return {"sent": True, "status": "sent", "delivery_id": "d-2"}
+        if path == "/api/v1/notifications/category/send":
+            return {"delivery_id": "d-3", "status": "sent"}
         raise AssertionError(f"unexpected call: {method} {path}")
 
     register_notification_tools(mcp, fake_api_call)
@@ -198,6 +206,10 @@ def test_notifications_manage_supports_get_set_send_and_daily_send() -> None:
     assert mcp.tools["vd.notifications.manage"](action="set_config", enabled=True)["enabled"] is True
     assert mcp.tools["vd.notifications.manage"](action="send_test")["status"] == "sent"
     assert mcp.tools["vd.notifications.manage"](action="daily_send")["sent"] is True
+    assert (
+        mcp.tools["vd.notifications.manage"](action="category_send", category="tech", body="digest")["status"]
+        == "sent"
+    )
 
 
 def test_artifacts_get_supports_markdown_and_asset() -> None:

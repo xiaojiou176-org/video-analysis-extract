@@ -11,7 +11,10 @@ from support.mock_api import MockApiState, seed_subscription
 def test_subscriptions_save_subscription_button(page: Page, mock_api_state: MockApiState) -> None:
     page.goto("/subscriptions", wait_until="domcontentloaded")
     page.get_by_label("Source value").fill("https://youtube.com/@vd-e2e")
+    page.get_by_label("Adapter type").select_option("rsshub_route")
     page.get_by_label("RSSHub route (optional)").fill("/youtube/channel/vd-e2e")
+    page.get_by_label("Category").select_option("creator")
+    page.get_by_label("Tags (comma separated, optional)").fill("ai,weekly")
     page.get_by_role("button", name="Save subscription").click()
 
     wait_for_call_count(mock_api_state, "upsert_subscription", 1)
@@ -24,7 +27,10 @@ def test_subscriptions_save_subscription_button(page: Page, mock_api_state: Mock
     )
     upsert_payload = mock_api_state.last_call("upsert_subscription")
     assert upsert_payload["source_value"] == "https://youtube.com/@vd-e2e"
+    assert upsert_payload["adapter_type"] == "rsshub_route"
     assert upsert_payload["rsshub_route"] == "/youtube/channel/vd-e2e"
+    assert upsert_payload["category"] == "creator"
+    assert upsert_payload["tags"] == ["ai", "weekly"]
     assert upsert_payload["enabled"] is True
     created_row = page.locator("tbody tr", has_text="https://youtube.com/@vd-e2e")
     expect(created_row).to_be_visible()

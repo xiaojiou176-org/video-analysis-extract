@@ -6,6 +6,7 @@ from .config import settings
 from .routers import (
     artifacts,
     computer_use,
+    feed,
     health,
     ingest,
     jobs,
@@ -26,6 +27,7 @@ def health_check() -> dict[str, str]:
 
 
 app.include_router(subscriptions.router)
+app.include_router(feed.router)
 app.include_router(ingest.router)
 app.include_router(jobs.router)
 app.include_router(videos.router)

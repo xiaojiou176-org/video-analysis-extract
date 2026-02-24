@@ -10,6 +10,21 @@
 
 先读 `docs/start-here.md`。它是唯一上手入口，聚合了启动命令、口径说明和后续文档导航。
 
+## Clone 后快速跑通（推荐）
+
+```bash
+./scripts/bootstrap_full_stack.sh
+./scripts/full_stack.sh up
+./scripts/smoke_full_stack.sh
+```
+
+这三步会把仓库拉到“可运行 + 可验证”的状态（本地优先）。
+
+说明：
+- `bootstrap_full_stack.sh` 默认会拉起 core services（Postgres/Redis/Temporal）和 reader stack（Miniflux/Nextflux）。
+- `smoke_full_stack.sh` 默认会校验 reader stack，并执行一次 `AI Feed -> Miniflux` 回写检查。
+- 若你临时不想检查 reader：`FULL_STACK_REQUIRE_READER=0 ./scripts/smoke_full_stack.sh`
+
 ## 处理流程（统一口径）
 
 `ProcessJobWorkflow` 由 3 个阶段组成：
@@ -139,6 +154,41 @@ uv run --with playwright python -m playwright install chromium
 uv run --with pytest --with playwright pytest apps/web/tests/e2e -q
 ```
 
+## P1 新增能力（2026-02-23）
+
+- Subscriptions 支持分类与标签：
+  - 字段：`category`（`tech|creator|macro|ops|misc`）、`tags`（字符串数组）
+  - API：
+    - `GET /api/v1/subscriptions?category=tech`
+    - `POST /api/v1/subscriptions` 支持 `category/tags`
+- Notifications 支持分类规则与按分类发送：
+  - 配置字段：`category_rules`（JSON）
+  - 新接口：`POST /api/v1/notifications/category/send`
+
+## P2 新增能力（2026-02-23）
+
+- 来源适配器化（Subscriptions）：
+  - 新字段：`adapter_type`（`rsshub_route|rss_generic`）、`source_url`
+  - 行为：
+    - `adapter_type=rsshub_route`：沿用 `rsshub_route`（兼容旧行为）
+    - `adapter_type=rss_generic`：直接使用 `source_url` 拉取 RSS
+  - 目标：从平台硬编码输入逐步迁移到 `adapter + source_url` 模式。
+
+## 可选：Reader Stack（Miniflux + Nextflux）
+
+如果你要“AI 处理流水线 + 漂亮阅读器 UI + 多端访问”，仓库已内置可选部署栈：
+- Compose: `infra/compose/miniflux-nextflux.compose.yml`
+- 脚本: `scripts/deploy_reader_stack.sh`
+- GCE 指南: `docs/deploy/miniflux-nextflux-gce.md`
+
+快速启动：
+```bash
+cp .env.example .env.reader-stack
+# 编辑 .env.reader-stack，至少设置 MINIFLUX_DB_PASSWORD / MINIFLUX_ADMIN_PASSWORD / MINIFLUX_BASE_URL
+./scripts/deploy_reader_stack.sh up --env-file .env.reader-stack
+./scripts/deploy_reader_stack.sh status --env-file .env.reader-stack
+```
+
 ## 可选：实时稳定推送 workflow
 
 仓库内置 `scripts/start_ops_workflows.sh`，用于一次性启动/确保以下长期运行 workflow：
@@ -175,3 +225,5 @@ OPS_CLEANUP_OLDER_THAN_HOURS=24 \
 - 环境治理：`ENVIRONMENT.md`
 - 引用文档：`docs/reference/logging.md`、`docs/reference/cache.md`、`docs/reference/dependency-governance.md`
 - MCP 路由：`docs/reference/mcp-tool-routing.md`（13 工具、action 路由、组合示例）
+- 仓库完善蓝图：`Repo_Next_Step_Plan.md`
+- 证据链审计报告：`Repo完善与证据链报告.md`

@@ -1,5 +1,6 @@
 import type {
   ArtifactMarkdownWithMeta,
+  DigestFeedResponse,
   IngestPollRequest,
   IngestPollResponse,
   Job,
@@ -168,6 +169,13 @@ export const apiClient = {
     });
   },
 
+  batchUpdateSubscriptionCategory(payload: { ids: string[]; category: string }) {
+    return requestJson<{ updated: number }>("/api/v1/subscriptions/batch-update-category", {
+      method: "POST",
+      body: payload,
+    });
+  },
+
   deleteSubscription(id: string) {
     return requestJson<void>(`/api/v1/subscriptions/${id}`, {
       method: "DELETE",
@@ -218,5 +226,15 @@ export const apiClient = {
       method: "POST",
       body: payload,
     });
+  },
+
+  getDigestFeed(params?: {
+    source?: Platform;
+    category?: "tech" | "creator" | "macro" | "ops" | "misc";
+    limit?: number;
+    cursor?: string;
+    since?: string;
+  }) {
+    return requestJson<DigestFeedResponse>("/api/v1/feed/digests", {}, params);
   },
 };

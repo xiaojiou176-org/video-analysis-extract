@@ -1,0 +1,45 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: vd-core-postgres
+    ports:
+      - "${CORE_POSTGRES_PORT:-5432}:5432"
+    environment:
+      POSTGRES_DB: ${CORE_POSTGRES_DB:-video_analysis}
+      POSTGRES_USER: ${CORE_POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${CORE_POSTGRES_PASSWORD:-postgres}
+      POSTGRES_HOST_AUTH_METHOD: trust
+    volumes:
+      - vd_core_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${CORE_POSTGRES_USER:-postgres} -d ${CORE_POSTGRES_DB:-video_analysis}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: vd-core-redis
+    ports:
+      - "${CORE_REDIS_PORT:-6379}:6379"
+    restart: unless-stopped
+
+  temporal:
+    image: temporalio/auto-setup:1.27.2
+    container_name: vd-core-temporal
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "${CORE_TEMPORAL_PORT:-7233}:7233"
+    environment:
+      DB: postgres12
+      DB_PORT: 5432
+      POSTGRES_USER: ${CORE_POSTGRES_USER:-postgres}
+      POSTGRES_PWD: ${CORE_POSTGRES_PASSWORD:-postgres}
+      POSTGRES_SEEDS: postgres
+    restart: unless-stopped
+
+volumes:
+  vd_core_postgres_data:

@@ -311,6 +311,159 @@ def test_retrieval_search_passes_semantic_mode(api_client: TestClient, monkeypat
     assert payload["items"] == []
 
 
+def test_feed_digests_returns_items(api_client: TestClient, monkeypatch) -> None:
+    def fake_list_digest_feed(self, *, source, category, limit, cursor, since):
+        assert source == "youtube"
+        assert category == "tech"
+        assert limit == 5
+        assert cursor is None
+        assert since is None
+        return {
+            "items": [
+                {
+                    "feed_id": "2026-02-23T09:58:12Z__job-1",
+                    "job_id": "job-1",
+                    "video_url": "https://www.youtube.com/watch?v=abc123",
+                    "title": "Demo Title",
+                    "source": "youtube",
+                    "source_name": "youtube",
+                    "category": "tech",
+                    "published_at": "2026-02-23T09:58:12Z",
+                    "summary_md": "# Demo\n\nsummary body",
+                    "artifact_type": "digest",
+                }
+            ],
+            "has_more": True,
+            "next_cursor": "2026-02-23T09:58:12Z__job-1",
+        }
+
+    monkeypatch.setattr("apps.api.app.services.feed.FeedService.list_digest_feed", fake_list_digest_feed)
+
+    response = api_client.get("/api/v1/feed/digests", params={"source": "youtube", "category": "tech", "limit": 5})
+    payload = response.json()
+
+    assert response.status_code == 200
+    assert payload["has_more"] is True
+    assert payload["next_cursor"] == "2026-02-23T09:58:12Z__job-1"
+    assert payload["items"][0]["category"] == "tech"
+    assert payload["items"][0]["source"] == "youtube"
+    assert payload["items"][0]["artifact_type"] == "digest"
+
+
+def test_subscriptions_list_includes_adapter_and_category_fields(api_client: TestClient, monkeypatch) -> None:
+    now = datetime.now(timezone.utc)
+
+    monkeypatch.setattr(
+        "apps.api.app.services.subscriptions.SubscriptionsService.list_subscriptions",
+        lambda self, **kwargs: [
+            SimpleNamespace(
+                id=uuid.uuid4(),
+                platform="youtube",
+                source_type="url",
+                source_value="https://youtube.com/@demo",
+                source_name="https://youtube.com/@demo",
+                adapter_type="rss_generic",
+                source_url="https://example.com/feed.xml",
+                rsshub_route="https://example.com/feed.xml",
+                category="tech",
+                tags=["ai", "weekly"],
+                priority=80,
+                enabled=True,
+                created_at=now,
+                updated_at=now,
+            )
+        ],
+    )
+
+    response = api_client.get("/api/v1/subscriptions")
+    payload = response.json()
+
+    assert response.status_code == 200
+    assert payload[0]["adapter_type"] == "rss_generic"
+    assert payload[0]["source_url"] == "https://example.com/feed.xml"
+    assert payload[0]["source_name"] == "https://youtube.com/@demo"
+    assert payload[0]["category"] == "tech"
+    assert payload[0]["tags"] == ["ai", "weekly"]
+    assert payload[0]["priority"] == 80
+
+
+def test_subscriptions_upsert_passes_adapter_fields(api_client: TestClient, monkeypatch) -> None:
+    now = datetime.now(timezone.utc)
+
+    def fake_upsert_subscription(self, **kwargs):
+        assert kwargs["adapter_type"] == "rss_generic"
+        assert kwargs["source_url"] == "https://example.com/feed.xml"
+        assert kwargs["priority"] == 90
+        return (
+            SimpleNamespace(
+                id=uuid.uuid4(),
+                platform="youtube",
+                source_type="url",
+                source_value="https://youtube.com/@demo",
+                source_name="https://youtube.com/@demo",
+                adapter_type="rss_generic",
+                source_url="https://example.com/feed.xml",
+                rsshub_route="https://example.com/feed.xml",
+                category="ops",
+                tags=["incident"],
+                priority=90,
+                enabled=True,
+                created_at=now,
+                updated_at=now,
+            ),
+            True,
+        )
+
+    monkeypatch.setattr(
+        "apps.api.app.services.subscriptions.SubscriptionsService.upsert_subscription",
+        fake_upsert_subscription,
+    )
+
+    response = api_client.post(
+        "/api/v1/subscriptions",
+        json={
+            "platform": "youtube",
+            "source_type": "url",
+            "source_value": "https://youtube.com/@demo",
+            "adapter_type": "rss_generic",
+            "source_url": "https://example.com/feed.xml",
+            "category": "ops",
+            "tags": ["incident"],
+            "priority": 90,
+            "enabled": True,
+        },
+    )
+    payload = response.json()
+
+    assert response.status_code == 200
+    assert payload["created"] is True
+    assert payload["subscription"]["adapter_type"] == "rss_generic"
+    assert payload["subscription"]["source_url"] == "https://example.com/feed.xml"
+    assert payload["subscription"]["source_name"] == "https://youtube.com/@demo"
+    assert payload["subscription"]["priority"] == 90
+
+
+def test_subscriptions_batch_update_category_endpoint(api_client: TestClient, monkeypatch) -> None:
+    def fake_batch_update(self, *, ids, category):
+        assert len(ids) == 2
+        assert category == "macro"
+        return 2
+
+    monkeypatch.setattr(
+        "apps.api.app.services.subscriptions.SubscriptionsService.batch_update_category",
+        fake_batch_update,
+    )
+
+    response = api_client.post(
+        "/api/v1/subscriptions/batch-update-category",
+        json={"ids": [str(uuid.uuid4()), str(uuid.uuid4())], "category": "macro"},
+    )
+    payload = response.json()
+
+    assert response.status_code == 200
+    assert payload["updated"] == 2
+
+
 def test_computer_use_run_returns_required_fields(api_client: TestClient, monkeypatch) -> None:
     screenshot_b64 = base64.b64encode(b"fake-image-bytes").decode("ascii")
     monkeypatch.setattr(

@@ -1,0 +1,8 @@
+{
+  "total": 49,
+  "ok": 43,
+  "fail_352": 6,
+  "fail_412": 0,
+  "other_fail": 0,
+  "note": "single-pass after server tuning REQUEST_RETRY=5 REQUEST_TIMEOUT=30000"
+}

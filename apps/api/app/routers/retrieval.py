@@ -22,7 +22,7 @@ class RetrievalSearchRequest(BaseModel):
 class RetrievalHit(BaseModel):
     job_id: str
     video_id: str
-    platform: Literal["bilibili", "youtube"]
+    platform: str
     video_uid: str
     source_url: str
     title: str | None = None

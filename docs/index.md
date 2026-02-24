@@ -9,6 +9,7 @@
 ## How-To
 - 本地启动、迁移、验收：`docs/runbook-local.md`
 - 测试执行：`docs/testing.md`
+- GCE 可选阅读栈部署（Miniflux + Nextflux）：`docs/deploy/miniflux-nextflux-gce.md`
 
 ## Reference
 - 状态机与流程契约：`docs/state-machine.md`

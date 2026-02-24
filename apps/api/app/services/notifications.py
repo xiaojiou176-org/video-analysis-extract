@@ -15,6 +15,10 @@ from ..models import NotificationConfig, NotificationDelivery
 RESEND_API_URL = "https://api.resend.com/emails"
 
 
+def _utc_now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
 def get_notification_config(db: Session) -> NotificationConfig:
     stmt = select(NotificationConfig).where(NotificationConfig.singleton_key == 1)
     config = db.scalar(stmt)
@@ -44,6 +48,7 @@ def update_notification_config(
     daily_digest_enabled: bool,
     daily_digest_hour_utc: int | None,
     failure_alert_enabled: bool,
+    category_rules: dict[str, object] | None = None,
 ) -> NotificationConfig:
     config = get_notification_config(db)
     normalized_to_email = _normalize_email(to_email)
@@ -53,6 +58,8 @@ def update_notification_config(
     config.daily_digest_enabled = daily_digest_enabled
     config.daily_digest_hour_utc = daily_digest_hour_utc
     config.failure_alert_enabled = failure_alert_enabled
+    if category_rules is not None:
+        config.category_rules = category_rules if isinstance(category_rules, dict) else {}
 
     db.commit()
     db.refresh(config)
@@ -174,6 +181,42 @@ def send_video_digest(
     )
 
 
+def send_category_digest(
+    db: Session,
+    *,
+    category: str,
+    digest_markdown: str,
+    to_email: str | None = None,
+    subject: str | None = None,
+    priority: int | None = None,
+    dispatch_key: str | None = None,
+) -> NotificationDelivery:
+    config = get_notification_config(db)
+    recipient = _resolve_recipient_email(config, to_email)
+    if recipient is None:
+        raise ValueError("notification recipient email is not configured")
+
+    normalized_category = category.strip().lower()
+    normalized_dispatch_key = _normalize_dispatch_key(dispatch_key)
+    skip_reason = _evaluate_category_rule(
+        config=config,
+        category=normalized_category,
+        now_utc=_utc_now(),
+        priority=priority,
+    )
+
+    return _dispatch_email(
+        db,
+        kind="daily_digest",
+        recipient_email=recipient,
+        subject=subject or f"[Video Digestor] {normalized_category} digest",
+        text_body=digest_markdown,
+        payload={"category": normalized_category, "priority": priority},
+        skip_reason=skip_reason,
+        dispatch_key=normalized_dispatch_key,
+    )
+
+
 def send_daily_report_notification(
     db: Session,
     *,
@@ -202,7 +245,18 @@ def _dispatch_email(
     payload: dict[str, object],
     job_id: uuid.UUID | None = None,
     skip_reason: str | None,
+    dispatch_key: str | None = None,
 ) -> NotificationDelivery:
+    normalized_dispatch_key = _normalize_dispatch_key(dispatch_key)
+    if normalized_dispatch_key is not None:
+        existing = _get_delivery_by_dispatch_key(
+            db,
+            kind=kind,
+            dispatch_key=normalized_dispatch_key,
+        )
+        if existing is not None:
+            return existing
+
     delivery = NotificationDelivery(
         kind=kind,
         status="queued",
@@ -210,6 +264,7 @@ def _dispatch_email(
         subject=subject,
         provider="resend",
         payload_json=payload,
+        dispatch_key=normalized_dispatch_key,
         job_id=job_id,
     )
     db.add(delivery)
@@ -217,6 +272,14 @@ def _dispatch_email(
         db.commit()
     except IntegrityError:
         db.rollback()
+        if normalized_dispatch_key is not None:
+            existing = _get_delivery_by_dispatch_key(
+                db,
+                kind=kind,
+                dispatch_key=normalized_dispatch_key,
+            )
+            if existing is not None:
+                return existing
         if kind == "video_digest" and job_id is not None:
             existing = _get_video_digest_delivery(db, job_id=job_id)
             if existing is not None:
@@ -322,6 +385,100 @@ def _normalize_email(raw_email: str | None) -> str | None:
     return cleaned or None
 
 
+def _normalize_dispatch_key(raw_value: str | None) -> str | None:
+    if raw_value is None:
+        return None
+    cleaned = raw_value.strip()
+    return cleaned or None
+
+
+def _coerce_int(value: object, *, default: int | None = None) -> int | None:
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value)
+    if isinstance(value, str):
+        raw = value.strip()
+        if not raw:
+            return default
+        try:
+            return int(raw)
+        except ValueError:
+            return default
+    return default
+
+
+def _extract_notification_rules(config: NotificationConfig, category: str) -> dict[str, object]:
+    raw = config.category_rules if isinstance(config.category_rules, dict) else {}
+    nested = raw.get("category_rules")
+    if isinstance(nested, dict):
+        category_rules = nested
+        default_rule = raw.get("default_rule")
+    else:
+        category_rules = raw
+        default_rule = None
+
+    category_rule = category_rules.get(category)
+    if isinstance(category_rule, dict):
+        return category_rule
+    if isinstance(default_rule, dict):
+        return default_rule
+    return {}
+
+
+def _evaluate_category_rule(
+    *,
+    config: NotificationConfig,
+    category: str,
+    now_utc: datetime,
+    priority: int | None,
+) -> str | None:
+    if not config.enabled:
+        return "notification config is disabled"
+
+    rule = _extract_notification_rules(config, category)
+    if rule.get("enabled") is False:
+        return f"category rule disabled: {category}"
+
+    min_priority = _coerce_int(rule.get("min_priority"))
+    if min_priority is not None and priority is not None and priority < min_priority:
+        return f"priority below threshold: {priority} < {min_priority}"
+
+    cadence = str(rule.get("cadence") or "instant").strip().lower()
+    rule_hour = _coerce_int(rule.get("hour"), default=config.daily_digest_hour_utc)
+
+    if cadence == "instant":
+        return None
+
+    if cadence == "daily":
+        if rule_hour is None:
+            return None
+        if now_utc.hour != max(0, min(23, rule_hour)):
+            return f"daily cadence mismatch hour={now_utc.hour}"
+        return None
+
+    if cadence == "weekly":
+        weekday = _coerce_int(rule.get("weekday"), default=0)
+        if weekday is None:
+            weekday = 0
+        weekday = max(0, min(6, weekday))
+        if now_utc.weekday() != weekday:
+            return f"weekly cadence mismatch weekday={now_utc.weekday()}"
+        if rule_hour is None:
+            return None
+        if now_utc.hour != max(0, min(23, rule_hour)):
+            return f"weekly cadence mismatch hour={now_utc.hour}"
+        return None
+
+    if cadence == "hourly":
+        interval_hours = max(1, _coerce_int(rule.get("interval_hours"), default=1) or 1)
+        if now_utc.hour % interval_hours != 0:
+            return f"hourly cadence mismatch hour={now_utc.hour} interval={interval_hours}"
+        return None
+
+    return f"unsupported cadence: {cadence}"
+
+
 def _render_markdown_html(text: str) -> str:
     try:
         import markdown as md  # type: ignore
@@ -378,6 +535,23 @@ def _get_video_digest_delivery(
         .where(
             NotificationDelivery.kind == "video_digest",
             NotificationDelivery.job_id == job_id,
+        )
+        .order_by(NotificationDelivery.created_at.desc())
+    )
+    return db.scalar(stmt)
+
+
+def _get_delivery_by_dispatch_key(
+    db: Session,
+    *,
+    kind: str,
+    dispatch_key: str,
+) -> NotificationDelivery | None:
+    stmt = (
+        select(NotificationDelivery)
+        .where(
+            NotificationDelivery.kind == kind,
+            NotificationDelivery.dispatch_key == dispatch_key,
         )
         .order_by(NotificationDelivery.created_at.desc())
     )
