@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, String, Text, func
+from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -22,6 +22,14 @@ class Job(Base):
             "status IN ('queued', 'running', 'succeeded', 'failed')",
             name="jobs_status_check",
         ),
+        CheckConstraint(
+            "pipeline_final_status IS NULL OR pipeline_final_status IN ('succeeded', 'degraded', 'failed')",
+            name="jobs_pipeline_final_status_check",
+        ),
+        CheckConstraint(
+            "degradation_count IS NULL OR degradation_count >= 0",
+            name="jobs_degradation_count_check",
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -31,11 +39,14 @@ class Job(Base):
         UUID(as_uuid=True), ForeignKey("videos.id", ondelete="CASCADE"), nullable=False
     )
     kind: Mapped[str] = mapped_column(String(64), nullable=False)
-    status: Mapped[str] = mapped_column(String(50), nullable=False, default="queued", index=True)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="queued", index=True)
     idempotency_key: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     artifact_digest_md: Mapped[str | None] = mapped_column(Text, nullable=True)
     artifact_root: Mapped[str | None] = mapped_column(Text, nullable=True)
+    pipeline_final_status: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
+    degradation_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    last_error_code: Mapped[str | None] = mapped_column(String(128), nullable=True)
     llm_required: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     llm_gate_passed: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     hard_fail_reason: Mapped[str | None] = mapped_column(Text, nullable=True)

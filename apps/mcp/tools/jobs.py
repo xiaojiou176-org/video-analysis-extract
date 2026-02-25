@@ -6,11 +6,15 @@ from mcp.server.fastmcp import FastMCP
 
 from apps.mcp.tools._common import (
     ApiCall,
+    invalid_argument,
     is_error_payload,
+    parse_uuid,
     to_int,
     to_optional_bool,
     to_optional_dict,
+    validate_object_keys,
     to_optional_str,
+    url_path_segment,
 )
 
 
@@ -115,7 +119,16 @@ def _normalize_job_payload(payload: dict[str, Any]) -> dict[str, Any]:
 def register_job_tools(mcp: FastMCP, api_call: ApiCall) -> None:
     @mcp.tool(name="vd.jobs.get", description="Get one job by id.")
     def get_job(job_id: str) -> dict[str, Any]:
-        response = api_call("GET", f"/api/v1/jobs/{job_id}")
+        normalized_job_id = parse_uuid(job_id)
+        if normalized_job_id is None:
+            return invalid_argument(
+                "job_id must be a valid UUID",
+                method="GET",
+                path="/api/v1/jobs/{job_id}",
+                field="job_id",
+                value=job_id,
+            )
+        response = api_call("GET", f"/api/v1/jobs/{url_path_segment(normalized_job_id)}")
         return _normalize_job_payload(response)
 
     @mcp.tool(name="vd.videos.list", description="List ingested videos.")
@@ -141,13 +154,58 @@ def register_job_tools(mcp: FastMCP, api_call: ApiCall) -> None:
         overrides: dict[str, Any] | None = None,
         force: bool = False,
     ) -> dict[str, Any]:
+        normalized_video, video_error = validate_object_keys(
+            video,
+            allowed_keys={"platform", "url", "video_id"},
+        )
+        if video_error is not None or normalized_video is None:
+            return invalid_argument(
+                f"video {video_error or 'is invalid'}",
+                method="POST",
+                path="/api/v1/videos/process",
+                field="video",
+            )
+        platform = normalized_video.get("platform")
+        url = normalized_video.get("url")
+        if not isinstance(platform, str) or not platform.strip():
+            return invalid_argument(
+                "video.platform is required",
+                method="POST",
+                path="/api/v1/videos/process",
+                field="video.platform",
+            )
+        if not isinstance(url, str) or not url.strip():
+            return invalid_argument(
+                "video.url is required",
+                method="POST",
+                path="/api/v1/videos/process",
+                field="video.url",
+            )
+        normalized_overrides, overrides_error = validate_object_keys(
+            overrides or {},
+            allowed_keys={"comments", "frames", "llm", "llm_outline", "llm_digest"},
+        )
+        if overrides_error is not None or normalized_overrides is None:
+            return invalid_argument(
+                f"overrides {overrides_error or 'is invalid'}",
+                method="POST",
+                path="/api/v1/videos/process",
+                field="overrides",
+            )
+        if any(not isinstance(value, dict) for value in normalized_overrides.values()):
+            return invalid_argument(
+                "overrides values must be objects",
+                method="POST",
+                path="/api/v1/videos/process",
+                field="overrides",
+            )
         return api_call(
             "POST",
             "/api/v1/videos/process",
             json_body={
-                "video": video,
+                "video": normalized_video,
                 "mode": mode,
-                "overrides": overrides or {},
+                "overrides": normalized_overrides,
                 "force": force,
             },
         )

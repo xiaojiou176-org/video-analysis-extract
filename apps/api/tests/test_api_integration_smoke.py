@@ -22,6 +22,7 @@ class IntegrationHarness:
     session_factory: sessionmaker
     job_model: type
     video_model: type
+    subscription_model: type
 
 
 def _purge_api_modules() -> None:
@@ -77,6 +78,7 @@ def integration_api(monkeypatch: pytest.MonkeyPatch, tmp_path: pytest.TempPathFa
         Base = getattr(models_module, "Base")
         Job = getattr(models_module, "Job")
         Video = getattr(models_module, "Video")
+        Subscription = getattr(models_module, "Subscription")
         engine = getattr(db_module, "engine")
         SessionLocal = getattr(db_module, "SessionLocal")
         app = getattr(main_module, "app")
@@ -87,13 +89,22 @@ def integration_api(monkeypatch: pytest.MonkeyPatch, tmp_path: pytest.TempPathFa
             def __init__(self) -> None:
                 self.started: list[dict[str, str]] = []
 
-            async def start_workflow(self, workflow: str, job_id: str, *, id: str, task_queue: str) -> None:
+            async def start_workflow(
+                self,
+                workflow: str,
+                job_id: str,
+                *,
+                id: str,
+                task_queue: str,
+                **kwargs,
+            ) -> None:
                 self.started.append(
                     {
                         "workflow": workflow,
                         "job_id": job_id,
                         "id": id,
                         "task_queue": task_queue,
+                        "kwargs": kwargs,
                     }
                 )
 
@@ -112,6 +123,7 @@ def integration_api(monkeypatch: pytest.MonkeyPatch, tmp_path: pytest.TempPathFa
                 session_factory=SessionLocal,
                 job_model=Job,
                 video_model=Video,
+                subscription_model=Subscription,
             )
     finally:
         _purge_api_modules()
@@ -162,9 +174,7 @@ def test_videos_process_reuses_existing_job_with_real_postgres(
     assert first_json["mode"] == "refresh_comments"
     assert first_json["overrides"] == {"lang": "zh-CN"}
     assert first_json["reused"] is False
-    assert isinstance(first_json["workflow_id"], str) and first_json["workflow_id"].startswith(
-        "api-process-job-"
-    )
+    assert isinstance(first_json["workflow_id"], str) and first_json["workflow_id"].startswith("process-job-")
     assert first_json["status"] == "queued"
 
     assert second_json["reused"] is True
@@ -231,3 +241,38 @@ def test_videos_process_force_creates_new_job_with_same_video(
     with integration_api.session_factory() as session:
         assert _count_rows(session, integration_api.video_model) == 1
         assert _count_rows(session, integration_api.job_model) == 2
+
+
+def test_subscriptions_upsert_is_idempotent_with_real_postgres(
+    integration_api: IntegrationHarness,
+) -> None:
+    payload = {
+        "platform": "youtube",
+        "source_type": "url",
+        "source_value": "https://example.com/feed.xml",
+        "adapter_type": "rss_generic",
+        "source_url": "https://example.com/feed.xml",
+        "category": "tech",
+        "tags": ["ai", "digest"],
+        "priority": 80,
+        "enabled": True,
+    }
+
+    first = integration_api.client.post("/api/v1/subscriptions", json=payload)
+    second = integration_api.client.post("/api/v1/subscriptions", json=payload)
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+
+    first_json = first.json()
+    second_json = second.json()
+
+    assert first_json["created"] is True
+    assert second_json["created"] is False
+    assert second_json["subscription"]["id"] == first_json["subscription"]["id"]
+    assert second_json["subscription"]["adapter_type"] == "rss_generic"
+    assert second_json["subscription"]["source_url"] == "https://example.com/feed.xml"
+    assert second_json["subscription"]["priority"] == 80
+
+    with integration_api.session_factory() as session:
+        assert _count_rows(session, integration_api.subscription_model) == 1

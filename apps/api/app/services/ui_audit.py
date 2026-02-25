@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import base64
+import concurrent.futures
 import json
 import mimetypes
+import os
+import tempfile
 import threading
 import uuid
 from datetime import datetime, timezone
@@ -44,6 +47,9 @@ _MAX_GEMINI_TEXT_CHARS = 2_000
 _MAX_GEMINI_IMAGES = 4
 _MAX_GEMINI_TEXT_SNIPPETS = 4
 _TEXT_SUFFIXES = {".md", ".txt", ".json", ".ndjson", ".log"}
+_DEFAULT_ARTIFACT_BASE_ROOT = tempfile.gettempdir()
+_DEFAULT_MODEL_TIMEOUT_SECONDS = 15.0
+_DEFAULT_MODEL_MAX_RETRIES = 1
 
 _GEMINI_UI_AUDIT_SCHEMA: dict[str, Any] = {
     "type": "object",
@@ -312,9 +318,23 @@ class UiAuditService:
             except OSError:
                 continue
 
+        timeout_seconds = self._read_float_env(
+            "UI_AUDIT_MODEL_TIMEOUT_SECONDS",
+            default=_DEFAULT_MODEL_TIMEOUT_SECONDS,
+            min_value=1.0,
+            max_value=120.0,
+        )
+        max_retries = self._read_int_env(
+            "UI_AUDIT_MODEL_MAX_RETRIES",
+            default=_DEFAULT_MODEL_MAX_RETRIES,
+            min_value=0,
+            max_value=3,
+        )
+
         try:
             client = genai.Client(api_key=api_key)
-            response = client.models.generate_content(
+            response = self._generate_with_timeout_and_retry(
+                client=client,
                 model=model,
                 contents=contents,
                 config=genai_types.GenerateContentConfig(
@@ -325,6 +345,8 @@ class UiAuditService:
                         thinking_level=thinking_level,
                     ),
                 ),
+                timeout_seconds=timeout_seconds,
+                max_retries=max_retries,
             )
         except Exception as exc:
             return {
@@ -364,16 +386,50 @@ class UiAuditService:
             }
         return self._normalize_gemini_review(parsed)
 
+    def _generate_with_timeout_and_retry(
+        self,
+        *,
+        client: Any,
+        model: str,
+        contents: list[Any],
+        config: Any,
+        timeout_seconds: float,
+        max_retries: int,
+    ) -> Any:
+        attempts = max_retries + 1
+        last_error: Exception | None = None
+        for attempt in range(1, attempts + 1):
+            try:
+                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                    future = executor.submit(
+                        client.models.generate_content,
+                        model=model,
+                        contents=contents,
+                        config=config,
+                    )
+                    return future.result(timeout=timeout_seconds)
+            except concurrent.futures.TimeoutError:
+                last_error = TimeoutError(
+                    f"ui audit model timeout after {timeout_seconds:.1f}s (attempt {attempt}/{attempts})"
+                )
+            except Exception as exc:
+                last_error = exc
+            if attempt >= attempts:
+                break
+        raise RuntimeError(str(last_error) if last_error is not None else "ui audit model call failed")
+
     def _resolve_artifact_root(
         self,
         *,
         job_id: uuid.UUID | None,
         artifact_root: str | None,
     ) -> Path | None:
+        base_root = self._artifact_base_root()
         if artifact_root and artifact_root.strip():
             path = Path(artifact_root.strip()).expanduser()
-            if path.exists() and path.is_dir():
-                return path
+            resolved = self._resolve_if_within_base(path=path, base_root=base_root)
+            if resolved is not None and resolved.exists() and resolved.is_dir():
+                return resolved
             return None
 
         if job_id is None or self.db is None:
@@ -398,13 +454,30 @@ class UiAuditService:
             return None
 
         path = Path(root_value).expanduser()
-        return path if path.exists() and path.is_dir() else None
+        resolved = self._resolve_if_within_base(path=path, base_root=base_root)
+        return resolved if resolved is not None and resolved.exists() and resolved.is_dir() else None
+
+    def _artifact_base_root(self) -> Path:
+        configured = os.getenv("UI_AUDIT_ARTIFACT_BASE_ROOT", _DEFAULT_ARTIFACT_BASE_ROOT)
+        return Path(configured).expanduser().resolve(strict=False)
+
+    def _resolve_if_within_base(self, *, path: Path, base_root: Path) -> Path | None:
+        resolved = path.resolve(strict=False)
+        try:
+            resolved.relative_to(base_root)
+        except ValueError:
+            return None
+        if resolved == base_root:
+            return None
+        return resolved
 
     def _collect_artifacts(self, root: Path) -> list[dict[str, Any]]:
         payload: list[dict[str, Any]] = []
-        files = sorted((path for path in root.rglob("*") if path.is_file()), key=lambda p: str(p))
-
-        for path in files[:_MAX_SCAN_FILES]:
+        for path in root.rglob("*"):
+            if len(payload) >= _MAX_SCAN_FILES:
+                break
+            if not path.is_file():
+                continue
             relative = path.relative_to(root).as_posix()
             mime_type, _ = mimetypes.guess_type(path.name)
             category = "playwright" if self._is_playwright_artifact(relative) else "artifact"
@@ -450,22 +523,53 @@ class UiAuditService:
                 continue
             if path.suffix.lower() not in _TEXT_SUFFIXES:
                 continue
-            try:
-                text = path.read_text(encoding="utf-8")
-            except (UnicodeDecodeError, OSError):
-                continue
-            normalized = text.strip()
+            normalized = self._read_text_prefix(path, max_chars=_MAX_GEMINI_TEXT_CHARS)
             if not normalized:
                 continue
             snippets.append(
                 {
                     "key": key,
-                    "snippet": normalized[:_MAX_GEMINI_TEXT_CHARS],
+                    "snippet": normalized,
                 }
             )
             if len(snippets) >= _MAX_GEMINI_TEXT_SNIPPETS:
                 break
         return snippets
+
+    def _read_text_prefix(self, path: Path, *, max_chars: int) -> str | None:
+        chunks: list[str] = []
+        total = 0
+        try:
+            with path.open("r", encoding="utf-8", errors="ignore") as handle:
+                while total < max_chars:
+                    chunk = handle.read(min(4096, max_chars - total))
+                    if not chunk:
+                        break
+                    chunks.append(chunk)
+                    total += len(chunk)
+        except OSError:
+            return None
+        return "".join(chunks).strip() or None
+
+    def _read_float_env(self, name: str, *, default: float, min_value: float, max_value: float) -> float:
+        raw = os.getenv(name)
+        if raw is None:
+            return default
+        try:
+            value = float(raw.strip())
+        except (TypeError, ValueError):
+            return default
+        return min(max(value, min_value), max_value)
+
+    def _read_int_env(self, name: str, *, default: int, min_value: int, max_value: int) -> int:
+        raw = os.getenv(name)
+        if raw is None:
+            return default
+        try:
+            value = int(raw.strip())
+        except (TypeError, ValueError):
+            return default
+        return min(max(value, min_value), max_value)
 
     def _build_gemini_ui_prompt(
         self,

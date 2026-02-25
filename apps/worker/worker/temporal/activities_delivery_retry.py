@@ -10,7 +10,7 @@ async def retry_failed_deliveries_activity_impl(
     pg_store: Any,
     payload: dict[str, Any] | None,
     coerce_int: Callable[[Any, int], int],
-    load_due_failed_deliveries: Callable[..., list[dict[str, Any]]],
+    claim_due_failed_deliveries: Callable[..., list[dict[str, Any]]],
     normalize_email: Callable[[Any], str | None],
     build_retry_failure_payload: Callable[..., tuple[str, datetime | None]],
     mark_delivery_state: Callable[..., dict[str, Any]],
@@ -29,7 +29,7 @@ async def retry_failed_deliveries_activity_impl(
     limit = max(1, coerce_int(payload.get("limit"), fallback=50))
 
     with pg_store._engine.begin() as conn:  # type: ignore[attr-defined]
-        due_deliveries = load_due_failed_deliveries(conn, limit=limit)
+        due_deliveries = claim_due_failed_deliveries(conn, limit=limit)
 
     result = {
         "ok": True,
@@ -66,10 +66,13 @@ async def retry_failed_deliveries_activity_impl(
                 record_attempt=True,
                 last_error_kind=error_kind,
                 next_retry_at=next_retry_at,
+                expected_status="queued",
+                expected_attempt_count=base_attempt_count,
             )
-            result["failed"] += 1
-            if failed.get("next_retry_at") is not None:
-                result["retry_scheduled"] += 1
+            if not bool(failed.get("conflict")):
+                result["failed"] += 1
+                if failed.get("next_retry_at") is not None:
+                    result["retry_scheduled"] += 1
             continue
 
         try:
@@ -129,13 +132,16 @@ async def retry_failed_deliveries_activity_impl(
                 record_attempt=True,
                 last_error_kind=error_kind,
                 next_retry_at=next_retry_at,
+                expected_status="queued",
+                expected_attempt_count=base_attempt_count,
             )
-            result["failed"] += 1
-            if failed.get("next_retry_at") is not None:
-                result["retry_scheduled"] += 1
+            if not bool(failed.get("conflict")):
+                result["failed"] += 1
+                if failed.get("next_retry_at") is not None:
+                    result["retry_scheduled"] += 1
             continue
 
-        mark_delivery_state(
+        sent = mark_delivery_state(
             pg_store,
             delivery_id=delivery_id,
             status="sent",
@@ -144,7 +150,10 @@ async def retry_failed_deliveries_activity_impl(
             sent=True,
             record_attempt=True,
             clear_retry_meta=True,
+            expected_status="queued",
+            expected_attempt_count=base_attempt_count,
         )
-        result["sent"] += 1
+        if not bool(sent.get("conflict")):
+            result["sent"] += 1
 
     return result

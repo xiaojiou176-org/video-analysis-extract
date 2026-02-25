@@ -4,7 +4,15 @@ from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
-from apps.mcp.tools._common import ApiCall, is_error_payload, to_optional_bool, to_optional_dict, to_optional_str
+from apps.mcp.tools._common import (
+    ApiCall,
+    invalid_argument,
+    is_error_payload,
+    to_optional_bool,
+    to_optional_dict,
+    to_optional_str,
+    validate_object_keys,
+)
 
 
 def _normalize_action_item(item: Any, default_step: int) -> dict[str, Any]:
@@ -32,13 +40,24 @@ def register_computer_use_tools(mcp: FastMCP, api_call: ApiCall) -> None:
         screenshot_base64: str,
         safety: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
+        normalized_safety, safety_error = validate_object_keys(
+            safety or {},
+            allowed_keys={"confirm_before_execute", "blocked_actions", "max_actions"},
+        )
+        if safety_error is not None or normalized_safety is None:
+            return invalid_argument(
+                f"safety {safety_error or 'is invalid'}",
+                method="POST",
+                path="/api/v1/computer-use/run",
+                field="safety",
+            )
         response = api_call(
             "POST",
             "/api/v1/computer-use/run",
             json_body={
                 "instruction": instruction,
                 "screenshot_base64": screenshot_base64,
-                "safety": safety or {},
+                "safety": normalized_safety,
             },
         )
         if is_error_payload(response):

@@ -3,10 +3,12 @@ from __future__ import annotations
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from ..db import get_db
+from ..errors import ApiServiceError
 from ..services.retrieval import RetrievalService
 
 router = APIRouter(prefix="/api/v1/retrieval", tags=["retrieval"])
@@ -44,7 +46,10 @@ class RetrievalSearchResponse(BaseModel):
 def retrieval_search(
     payload: RetrievalSearchRequest,
     db: Session = Depends(get_db),
-) -> RetrievalSearchResponse:
+) -> RetrievalSearchResponse | JSONResponse:
     service = RetrievalService(db)
-    result = service.search(query=payload.query, top_k=payload.top_k, mode=payload.mode, filters=payload.filters)
+    try:
+        result = service.search(query=payload.query, top_k=payload.top_k, mode=payload.mode, filters=payload.filters)
+    except ApiServiceError as exc:
+        return JSONResponse(status_code=exc.status_code, content=exc.to_payload())
     return RetrievalSearchResponse(**result)

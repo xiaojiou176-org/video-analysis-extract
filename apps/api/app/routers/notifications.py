@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from ..db import get_db
-from ..security import sanitize_exception_detail
+from ..security import require_write_access, sanitize_exception_detail
 from ..services.notifications import (
     get_notification_config,
     send_category_digest,
@@ -101,7 +101,7 @@ def get_config(db: Session = Depends(get_db)):
     )
 
 
-@router.put("/config", response_model=NotificationConfigResponse)
+@router.put("/config", response_model=NotificationConfigResponse, dependencies=[Depends(require_write_access)])
 def put_config(payload: NotificationConfigUpdateRequest, db: Session = Depends(get_db)):
     row = update_notification_config(
         db,
@@ -124,7 +124,12 @@ def put_config(payload: NotificationConfigUpdateRequest, db: Session = Depends(g
     )
 
 
-@router.post("/test", response_model=NotificationSendResponse, status_code=status.HTTP_200_OK)
+@router.post(
+    "/test",
+    response_model=NotificationSendResponse,
+    status_code=status.HTTP_200_OK,
+    dependencies=[Depends(require_write_access)],
+)
 def post_test_notification(payload: NotificationTestRequest, db: Session = Depends(get_db)):
     try:
         row = send_test_email(
@@ -154,6 +159,7 @@ def post_test_notification(payload: NotificationTestRequest, db: Session = Depen
     "/daily/send",
     response_model=DailyReportSendResponse,
     status_code=status.HTTP_200_OK,
+    dependencies=[Depends(require_write_access)],
 )
 def post_daily_report_send(payload: DailyReportSendRequest, db: Session = Depends(get_db)):
     try:
@@ -191,7 +197,12 @@ def post_daily_report_send(payload: DailyReportSendRequest, db: Session = Depend
     )
 
 
-@router.post("/category/send", response_model=NotificationSendResponse, status_code=status.HTTP_200_OK)
+@router.post(
+    "/category/send",
+    response_model=NotificationSendResponse,
+    status_code=status.HTTP_200_OK,
+    dependencies=[Depends(require_write_access)],
+)
 def post_category_send(payload: CategoryDigestSendRequest, db: Session = Depends(get_db)):
     try:
         row = send_category_digest(

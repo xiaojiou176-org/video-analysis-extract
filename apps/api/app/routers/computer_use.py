@@ -2,9 +2,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
+from ..security import require_write_access
 from ..security import sanitize_exception_detail
 from ..services.computer_use import ComputerUseSafetyConfig, ComputerUseService
 
@@ -39,7 +40,11 @@ class ComputerUseRunResponse(BaseModel):
     thought_metadata: dict[str, Any]
 
 
-@router.post("/run", response_model=ComputerUseRunResponse)
+@router.post(
+    "/run",
+    response_model=ComputerUseRunResponse,
+    dependencies=[Depends(require_write_access)],
+)
 def run_computer_use(payload: ComputerUseRunRequest) -> ComputerUseRunResponse:
     service = ComputerUseService()
     try:

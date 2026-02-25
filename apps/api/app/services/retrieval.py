@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import concurrent.futures
 import json
 import re
 from pathlib import Path
@@ -10,6 +11,7 @@ from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session
 
 from ..config import Settings
+from ..errors import ApiTimeoutError
 
 _ALLOWED_FILTERS = {
     "platform",
@@ -208,13 +210,28 @@ class RetrievalService:
             from google.genai import types as genai_types  # type: ignore
         except Exception:
             return None
-        try:
+
+        def _embed_content() -> Any:
             client = genai.Client(api_key=api_key)
-            response = client.models.embed_content(
+            return client.models.embed_content(
                 model=model,
                 contents=[normalized_query],
                 config=genai_types.EmbedContentConfig(output_dimensionality=_EMBEDDING_DIMENSION),
             )
+
+        try:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                response = executor.submit(_embed_content).result(
+                    timeout=settings.api_retrieval_embedding_timeout_seconds
+                )
+        except concurrent.futures.TimeoutError as exc:
+            raise ApiTimeoutError(
+                detail=(
+                    "retrieval embedding timed out "
+                    f"after {settings.api_retrieval_embedding_timeout_seconds:.1f}s"
+                ),
+                error_code="RETRIEVAL_EMBEDDING_TIMEOUT",
+            ) from exc
         except Exception:
             return None
         return self._extract_embedding_values(response)

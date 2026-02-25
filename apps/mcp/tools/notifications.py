@@ -6,6 +6,7 @@ from mcp.server.fastmcp import FastMCP
 
 from apps.mcp.tools._common import (
     ApiCall,
+    invalid_argument,
     is_error_payload,
     to_optional_bool,
     to_optional_int,
@@ -135,8 +136,10 @@ def register_notification_tools(mcp: FastMCP, api_call: ApiCall) -> None:
             )
             return _normalize_send_test_payload(response)
 
-        return {
-            "code": "INVALID_ARGUMENT",
-            "message": "action must be one of: get_config, set_config, send_test, daily_send, category_send",
-            "details": {"method": "POST", "path": "vd.notifications.manage"},
-        }
+        return invalid_argument(
+            "action must be one of: get_config, set_config, send_test, daily_send, category_send",
+            method="POST",
+            path="vd.notifications.manage",
+            field="action",
+            value=action,
+        )

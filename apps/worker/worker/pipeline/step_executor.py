@@ -4,7 +4,9 @@ import asyncio
 from datetime import date, datetime, timezone
 import hashlib
 import json
+import os
 from pathlib import Path
+import signal
 import subprocess
 from typing import Any, Callable
 
@@ -274,188 +276,230 @@ async def execute_step(
         cache_key=str(cache_info["cache_key"]),
     )
 
-    execution: StepExecution | None = None
-    if not force_run:
-        execution, cache_reason = _load_step_execution_from_cache(cache_info)
-        if execution is not None:
-            execution.status = "skipped"
-            execution.reason = "checkpoint_recovered" if resume_hint else (cache_reason or "cache_hit")
-            execution.cache_meta = {
-                **execution.cache_meta,
-                "source": cache_reason or "cache_hit",
-                "cache_key": cache_info["cache_key"],
-                "signature": cache_info["signature"],
-                "version": cache_info["version"],
+    try:
+        execution: StepExecution | None = None
+        if not force_run:
+            execution, cache_reason = _load_step_execution_from_cache(cache_info)
+            if execution is not None:
+                execution.status = "skipped"
+                execution.reason = "checkpoint_recovered" if resume_hint else (cache_reason or "cache_hit")
+                execution.cache_meta = {
+                    **execution.cache_meta,
+                    "source": cache_reason or "cache_hit",
+                    "cache_key": cache_info["cache_key"],
+                    "signature": cache_info["signature"],
+                    "version": cache_info["version"],
+                }
+                execution.retry_meta = {
+                    "attempts": 0,
+                    "retries_used": 0,
+                    "retries_configured": 0,
+                    "classification": None,
+                    "strategy": "cache",
+                    "resume_hint": resume_hint,
+                }
+            elif resume_hint:
+                prior = sqlite_store.get_latest_step_run(
+                    job_id=ctx.job_id,
+                    step_name=step_name,
+                    status="succeeded",
+                    cache_key=str(cache_info["cache_key"]),
+                )
+                result_json = prior.get("result_json") if prior else None
+                if isinstance(result_json, str) and result_json.strip():
+                    try:
+                        payload = json.loads(result_json)
+                        execution = StepExecution.from_record(dict(payload))
+                        if execution.status == "succeeded":
+                            execution.status = "skipped"
+                            execution.reason = "checkpoint_recovered"
+                            execution.cache_meta = {
+                                **execution.cache_meta,
+                                "source": "checkpoint",
+                                "cache_key": cache_info["cache_key"],
+                                "signature": cache_info["signature"],
+                                "version": cache_info["version"],
+                            }
+                            execution.retry_meta = {
+                                "attempts": 0,
+                                "retries_used": 0,
+                                "retries_configured": 0,
+                                "classification": None,
+                                "strategy": "checkpoint",
+                                "resume_hint": True,
+                            }
+                        else:
+                            execution = None
+                    except Exception:
+                        execution = None
+
+        if execution is None:
+            execution = StepExecution(status="failed", error="step_not_executed", degraded=True)
+            retry_delays: list[float] = []
+            retry_categories: list[RetryCategory] = []
+            attempts = 0
+            configured_retries = 0
+
+            while True:
+                attempts += 1
+                try:
+                    maybe_coro = step_func(ctx, state)
+                    current = await maybe_coro if asyncio.iscoroutine(maybe_coro) else maybe_coro
+                    if not isinstance(current, StepExecution):
+                        current = StepExecution(
+                            status="failed",
+                            error=f"invalid_step_result:{step_name}",
+                            degraded=True,
+                        )
+                except Exception as exc:  # pragma: no cover
+                    current = StepExecution(
+                        status="failed",
+                        reason="unhandled_exception",
+                        error=f"unhandled_exception:{exc}",
+                        degraded=True,
+                    )
+
+                if current.status != "failed":
+                    execution = current
+                    break
+
+                category = current.error_kind or classify_error(current.reason, current.error)
+                current.error_kind = category
+                retry_categories.append(category)
+                policy = retry_policy.get(category, retry_policy["fatal"])
+                configured_retries = max(configured_retries, int(policy.get("retries", 0)))
+                retries_used = attempts - 1
+                if retries_used >= int(policy.get("retries", 0)):
+                    execution = current
+                    break
+
+                delay = retry_delay_seconds(policy, retries_used)
+                retry_delays.append(delay)
+                if delay > 0:
+                    await asyncio.sleep(delay)
+
+            if execution.status == "failed" and execution.error_kind is None:
+                execution.error_kind = classify_error(execution.reason, execution.error)
+
+            execution.retry_meta = {
+                "attempts": attempts,
+                "retries_used": max(0, attempts - 1),
+                "retries_configured": configured_retries,
+                "classification": execution.error_kind,
+                "history": retry_categories,
+                "delays_seconds": retry_delays,
+                "strategy": "retry_wrapper",
+                "resume_hint": resume_hint,
             }
+        elif not execution.retry_meta:
             execution.retry_meta = {
                 "attempts": 0,
                 "retries_used": 0,
                 "retries_configured": 0,
-                "classification": None,
-                "strategy": "cache",
+                "classification": execution.error_kind,
+                "history": [],
+                "delays_seconds": [],
+                "strategy": "none",
                 "resume_hint": resume_hint,
             }
-        elif resume_hint:
-            prior = sqlite_store.get_latest_step_run(
-                job_id=ctx.job_id,
-                step_name=step_name,
-                status="succeeded",
-                cache_key=str(cache_info["cache_key"]),
-            )
-            result_json = prior.get("result_json") if prior else None
-            if isinstance(result_json, str) and result_json.strip():
-                try:
-                    payload = json.loads(result_json)
-                    execution = StepExecution.from_record(dict(payload))
-                    if execution.status == "succeeded":
-                        execution.status = "skipped"
-                        execution.reason = "checkpoint_recovered"
-                        execution.cache_meta = {
-                            **execution.cache_meta,
-                            "source": "checkpoint",
-                            "cache_key": cache_info["cache_key"],
-                            "signature": cache_info["signature"],
-                            "version": cache_info["version"],
-                        }
-                        execution.retry_meta = {
-                            "attempts": 0,
-                            "retries_used": 0,
-                            "retries_configured": 0,
-                            "classification": None,
-                            "strategy": "checkpoint",
-                            "resume_hint": True,
-                        }
-                    else:
-                        execution = None
-                except Exception:
-                    execution = None
 
-    if execution is None:
-        execution = StepExecution(status="failed", error="step_not_executed", degraded=True)
-        retry_delays: list[float] = []
-        retry_categories: list[RetryCategory] = []
-        attempts = 0
-        configured_retries = 0
+        apply_state_updates(state, execution.state_updates)
+        refresh_llm_media_input_dimension(state)
 
-        while True:
-            attempts += 1
-            try:
-                maybe_coro = step_func(ctx, state)
-                current = await maybe_coro if asyncio.iscoroutine(maybe_coro) else maybe_coro
-                if not isinstance(current, StepExecution):
-                    current = StepExecution(
-                        status="failed",
-                        error=f"invalid_step_result:{step_name}",
-                        degraded=True,
-                    )
-            except Exception as exc:  # pragma: no cover
-                current = StepExecution(
-                    status="failed",
-                    reason="unhandled_exception",
-                    error=f"unhandled_exception:{exc}",
-                    degraded=True,
-                )
-
-            if current.status != "failed":
-                execution = current
-                break
-
-            category = current.error_kind or classify_error(current.reason, current.error)
-            current.error_kind = category
-            retry_categories.append(category)
-            policy = retry_policy.get(category, retry_policy["fatal"])
-            configured_retries = max(configured_retries, int(policy.get("retries", 0)))
-            retries_used = attempts - 1
-            if retries_used >= int(policy.get("retries", 0)):
-                execution = current
-                break
-
-            delay = retry_delay_seconds(policy, retries_used)
-            retry_delays.append(delay)
-            if delay > 0:
-                await asyncio.sleep(delay)
-
-        if execution.status == "failed" and execution.error_kind is None:
-            execution.error_kind = classify_error(execution.reason, execution.error)
-
-        execution.retry_meta = {
-            "attempts": attempts,
-            "retries_used": max(0, attempts - 1),
-            "retries_configured": configured_retries,
-            "classification": execution.error_kind,
-            "history": retry_categories,
-            "delays_seconds": retry_delays,
-            "strategy": "retry_wrapper",
-            "resume_hint": resume_hint,
-        }
-    elif not execution.retry_meta:
-        execution.retry_meta = {
-            "attempts": 0,
-            "retries_used": 0,
-            "retries_configured": 0,
-            "classification": execution.error_kind,
-            "history": [],
-            "delays_seconds": [],
-            "strategy": "none",
-            "resume_hint": resume_hint,
-        }
-
-    apply_state_updates(state, execution.state_updates)
-    refresh_llm_media_input_dimension(state)
-
-    sqlite_store.mark_step_finished(
-        job_id=ctx.job_id,
-        step_name=step_name,
-        attempt=ctx.attempt,
-        status=execution.status,
-        error_payload=_build_error_payload(execution),
-        error_kind=execution.error_kind,
-        retry_meta=execution.retry_meta,
-        result_payload=execution.to_record(),
-        cache_key=str(cache_info["cache_key"]),
-    )
-
-    if execution.status in {"succeeded", "skipped"}:
-        sqlite_store.update_checkpoint(
+        sqlite_store.mark_step_finished(
             job_id=ctx.job_id,
-            last_completed_step=step_name,
-            payload={
-                "cache_key": cache_info["cache_key"],
-                "status": execution.status,
-                "reason": execution.reason,
-                "error_kind": execution.error_kind,
-            },
+            step_name=step_name,
+            attempt=ctx.attempt,
+            status=execution.status,
+            error_payload=_build_error_payload(execution),
+            error_kind=execution.error_kind,
+            retry_meta=execution.retry_meta,
+            result_payload=execution.to_record(),
+            cache_key=str(cache_info["cache_key"]),
         )
 
-    skip_is_degrade = execution.status == "skipped" and execution.reason not in NON_DEGRADING_SKIP_REASONS
-    llm_hard_failed = step_name in {"llm_outline", "llm_digest"} and execution.status == "failed"
-    if (execution.status == "failed" and not llm_hard_failed) or execution.degraded or skip_is_degrade:
+        if execution.status in {"succeeded", "skipped"}:
+            sqlite_store.update_checkpoint(
+                job_id=ctx.job_id,
+                last_completed_step=step_name,
+                payload={
+                    "cache_key": cache_info["cache_key"],
+                    "status": execution.status,
+                    "reason": execution.reason,
+                    "error_kind": execution.error_kind,
+                },
+            )
+
+        skip_is_degrade = execution.status == "skipped" and execution.reason not in NON_DEGRADING_SKIP_REASONS
+        llm_hard_failed = step_name in {"llm_outline", "llm_digest"} and execution.status == "failed"
+        if (execution.status == "failed" and not llm_hard_failed) or execution.degraded or skip_is_degrade:
+            append_degradation(
+                state,
+                step_name,
+                status=execution.status,
+                reason=execution.reason,
+                error=execution.error,
+                error_kind=execution.error_kind,
+                retry_meta=execution.retry_meta,
+                cache_meta=execution.cache_meta,
+            )
+
+        if execution.status == "failed" and critical:
+            state["fatal_error"] = f"{step_name}:{execution.error or execution.reason or 'failed'}"
+
+        if execution.status == "succeeded":
+            execution.cache_meta = {
+                **execution.cache_meta,
+                "cache_key": cache_info["cache_key"],
+                "signature": cache_info["signature"],
+                "version": cache_info["version"],
+            }
+            _write_step_cache(cache_info, execution)
+
+        step_record = execution.to_record()
+        state.setdefault("steps", {})[step_name] = step_record
+        return step_record
+    except asyncio.CancelledError:
+        cancelled = StepExecution(
+            status="failed",
+            reason="cancelled",
+            error="step_cancelled",
+            error_kind="fatal",
+            degraded=True,
+            retry_meta={
+                "attempts": 1,
+                "retries_used": 0,
+                "retries_configured": 0,
+                "classification": "fatal",
+                "history": ["fatal"],
+                "delays_seconds": [],
+                "strategy": "cancelled",
+                "resume_hint": resume_hint,
+            },
+        )
+        sqlite_store.mark_step_finished(
+            job_id=ctx.job_id,
+            step_name=step_name,
+            attempt=ctx.attempt,
+            status=cancelled.status,
+            error_payload=_build_error_payload(cancelled),
+            error_kind=cancelled.error_kind,
+            retry_meta=cancelled.retry_meta,
+            result_payload=cancelled.to_record(),
+            cache_key=str(cache_info["cache_key"]),
+        )
+        state.setdefault("steps", {})[step_name] = cancelled.to_record()
         append_degradation(
             state,
             step_name,
-            status=execution.status,
-            reason=execution.reason,
-            error=execution.error,
-            error_kind=execution.error_kind,
-            retry_meta=execution.retry_meta,
-            cache_meta=execution.cache_meta,
+            status=cancelled.status,
+            reason=cancelled.reason,
+            error=cancelled.error,
+            error_kind=cancelled.error_kind,
+            retry_meta=cancelled.retry_meta,
+            cache_meta=cancelled.cache_meta,
         )
-
-    if execution.status == "failed" and critical:
-        state["fatal_error"] = f"{step_name}:{execution.error or execution.reason or 'failed'}"
-
-    if execution.status == "succeeded":
-        execution.cache_meta = {
-            **execution.cache_meta,
-            "cache_key": cache_info["cache_key"],
-            "signature": cache_info["signature"],
-            "version": cache_info["version"],
-        }
-        _write_step_cache(cache_info, execution)
-
-    step_record = execution.to_record()
-    state.setdefault("steps", {})[step_name] = step_record
-    return step_record
+        raise
 
 
 def run_command_once(cmd: list[str], timeout_seconds: int) -> CommandResult:
@@ -483,4 +527,53 @@ def run_command_once(cmd: list[str], timeout_seconds: int) -> CommandResult:
 
 async def run_command(ctx: PipelineContext, cmd: list[str]) -> CommandResult:
     timeout = max(1, int(ctx.settings.pipeline_subprocess_timeout_seconds))
-    return await asyncio.to_thread(run_command_once, cmd, timeout)
+    try:
+        process = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            start_new_session=True,
+        )
+    except FileNotFoundError:
+        return CommandResult(ok=False, reason="binary_not_found")
+
+    try:
+        stdout_raw, stderr_raw = await asyncio.wait_for(process.communicate(), timeout=timeout)
+    except asyncio.TimeoutError:
+        await _terminate_subprocess(process)
+        return CommandResult(ok=False, reason="timeout")
+    except asyncio.CancelledError:
+        await _terminate_subprocess(process)
+        raise
+
+    stdout = stdout_raw.decode("utf-8", errors="ignore") if stdout_raw else ""
+    stderr = stderr_raw.decode("utf-8", errors="ignore") if stderr_raw else ""
+    return CommandResult(
+        ok=process.returncode == 0,
+        returncode=process.returncode,
+        stdout=stdout,
+        stderr=stderr,
+        reason=None if process.returncode == 0 else "non_zero_exit",
+    )
+
+
+async def _terminate_subprocess(process: Any) -> None:
+    if process.returncode is not None:
+        return
+
+    pid = getattr(process, "pid", None)
+    if isinstance(pid, int) and pid > 0:
+        try:
+            os.killpg(pid, signal.SIGTERM)
+            try:
+                await asyncio.wait_for(process.wait(), timeout=1.0)
+            except asyncio.TimeoutError:
+                os.killpg(pid, signal.SIGKILL)
+                await process.wait()
+            return
+        except Exception:
+            pass
+
+    if process.returncode is None:
+        process.kill()
+        await process.wait()

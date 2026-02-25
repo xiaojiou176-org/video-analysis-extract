@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import base64
+import re
 from dataclasses import dataclass
 from typing import Any
 
@@ -33,7 +34,7 @@ class ApiError(RuntimeError):
     def to_payload(self) -> dict[str, Any]:
         return {
             "code": self.code,
-            "message": self.message,
+            "message": _redact_sensitive_text(self.message),
             "details": _normalize_error_details(self.details),
         }
 
@@ -43,6 +44,7 @@ class ApiConfig:
     base_url: str
     timeout_sec: float
     api_key: str | None
+    max_base64_bytes: int = 2 * 1024 * 1024
 
     @classmethod
     def from_env(cls) -> "ApiConfig":
@@ -50,6 +52,7 @@ class ApiConfig:
             base_url=os.getenv("VD_API_BASE_URL", "http://127.0.0.1:8000").rstrip("/"),
             timeout_sec=float(os.getenv("VD_API_TIMEOUT_SEC", "20")),
             api_key=os.getenv("VD_API_KEY"),
+            max_base64_bytes=max(1, int(os.getenv("VD_MCP_MAX_BASE64_BYTES", "2097152"))),
         )
 
 
@@ -66,11 +69,12 @@ class ApiClient:
         json_body: dict[str, Any] | None = None,
         return_bytes_base64: bool = False,
     ) -> dict[str, Any]:
+        normalized_path = _normalize_upstream_path(path)
         headers: dict[str, str] = {"Accept": "application/json"}
         if self._config.api_key:
             headers["Authorization"] = f"Bearer {self._config.api_key}"
 
-        url = f"{self._config.base_url}{path}"
+        url = f"{self._config.base_url}{normalized_path}"
         try:
             with httpx.Client(timeout=self._config.timeout_sec) as http_client:
                 response = http_client.request(
@@ -84,13 +88,13 @@ class ApiClient:
             raise ApiError(
                 "UPSTREAM_TIMEOUT",
                 "Upstream API request timed out.",
-                {"method": method, "path": path, "error": str(exc)},
+                {"method": method, "path": normalized_path, "error": str(exc)},
             ) from exc
         except httpx.HTTPError as exc:
             raise ApiError(
                 "UPSTREAM_NETWORK_ERROR",
                 "Failed to reach upstream API.",
-                {"method": method, "path": path, "error": str(exc)},
+                {"method": method, "path": normalized_path, "error": str(exc)},
             ) from exc
 
         if response.status_code >= 400:
@@ -99,13 +103,13 @@ class ApiClient:
                 "UPSTREAM_HTTP_ERROR",
                 _extract_error_message(
                     error_body,
-                    fallback=f"{method} {path} failed with status {response.status_code}.",
+                    fallback=f"{method} {normalized_path} failed with status {response.status_code}.",
                 ),
                 {
                     "method": method,
-                    "path": path,
+                    "path": normalized_path,
                     "status_code": response.status_code,
-                    "body_preview": _stringify_value(error_body)[:400],
+                    "body_preview": _safe_body_preview(error_body),
                 },
             )
 
@@ -115,10 +119,22 @@ class ApiClient:
         content_type = response.headers.get("content-type", "")
         if "application/json" not in content_type:
             if return_bytes_base64:
+                size_bytes = len(response.content)
+                if size_bytes > self._config.max_base64_bytes:
+                    raise ApiError(
+                        "PAYLOAD_TOO_LARGE",
+                        "Binary payload exceeds base64 return limit.",
+                        {
+                            "method": method,
+                            "path": normalized_path,
+                            "size_bytes": size_bytes,
+                            "max_size_bytes": self._config.max_base64_bytes,
+                        },
+                    )
                 return {
                     "base64": base64.b64encode(response.content).decode("ascii"),
                     "mime_type": content_type or "application/octet-stream",
-                    "size_bytes": len(response.content),
+                    "size_bytes": size_bytes,
                 }
             return {"text": response.text}
 
@@ -187,13 +203,80 @@ def _normalize_error_details(details: dict[str, Any]) -> dict[str, Any]:
 
     error = details.get("error")
     if error is not None:
-        normalized["error"] = _stringify_value(error)
+        normalized["error"] = _redact_sensitive_text(_stringify_value(error))
 
     body_preview = details.get("body_preview")
     if body_preview is not None:
-        normalized["body_preview"] = _stringify_value(body_preview)
+        normalized["body_preview"] = _redact_sensitive_text(_stringify_value(body_preview))
+
+    size_bytes = details.get("size_bytes")
+    if isinstance(size_bytes, int):
+        normalized["size_bytes"] = size_bytes
+
+    max_size_bytes = details.get("max_size_bytes")
+    if isinstance(max_size_bytes, int):
+        normalized["max_size_bytes"] = max_size_bytes
 
     return normalized
+
+
+_PATH_SCHEME_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*://")
+_SENSITIVE_PATTERNS = [
+    re.compile(r"(?i)\b(authorization\s*:\s*bearer\s+)[^\s,;]+"),
+    re.compile(r"(?i)\b((?:api[_-]?key|token|secret|password)\s*[=:]\s*)[^\s,;]+"),
+    re.compile(r'(?i)(["\'](?:api[_-]?key|token|secret|password)["\']\s*:\s*["\'])[^"\']+'),
+    re.compile(r"\bsk-[A-Za-z0-9]{20,}\b"),
+    re.compile(r"\bghp_[A-Za-z0-9]{20,}\b"),
+    re.compile(r"\bAKIA[0-9A-Z]{16}\b"),
+]
+
+
+def _normalize_upstream_path(path: str) -> str:
+    text = str(path or "").strip()
+    if not text:
+        raise ApiError(
+            "INVALID_UPSTREAM_PATH",
+            "Upstream request path must be a non-empty relative path starting with '/'.",
+            {"path": path},
+        )
+    if not text.startswith("/") or text.startswith("//") or _PATH_SCHEME_PATTERN.match(text):
+        raise ApiError(
+            "INVALID_UPSTREAM_PATH",
+            "Upstream request path must be a relative API path.",
+            {"path": path},
+        )
+    if any(char in text for char in ("\r", "\n", "\x00")):
+        raise ApiError(
+            "INVALID_UPSTREAM_PATH",
+            "Upstream request path contains invalid control characters.",
+            {"path": path},
+        )
+    if "?" in text or "#" in text:
+        raise ApiError(
+            "INVALID_UPSTREAM_PATH",
+            "Upstream request path must not include query strings or fragments.",
+            {"path": path},
+        )
+    segments = [segment for segment in text.split("/") if segment not in ("", ".")]
+    if any(segment == ".." for segment in segments):
+        raise ApiError(
+            "INVALID_UPSTREAM_PATH",
+            "Upstream request path must not contain traversal segments.",
+            {"path": path},
+        )
+    return text
+
+
+def _safe_body_preview(error_body: Any, max_chars: int = 400) -> str:
+    preview = _stringify_value(error_body)[:max_chars]
+    return _redact_sensitive_text(preview)
+
+
+def _redact_sensitive_text(value: str) -> str:
+    text = value
+    for pattern in _SENSITIVE_PATTERNS:
+        text = pattern.sub(lambda m: f"{m.group(1)}[REDACTED]" if m.groups() else "[REDACTED]", text)
+    return text
 
 
 def create_server() -> FastMCP:

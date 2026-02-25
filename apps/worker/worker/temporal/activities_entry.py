@@ -7,6 +7,7 @@ from worker.state.postgres_store import PostgresBusinessStore
 from worker.state.sqlite_store import SQLiteStateStore
 from worker.temporal.activities_cleanup import cleanup_workspace_media_files
 from worker.temporal.activities_delivery import (
+    _claim_due_failed_deliveries,
     _build_retry_failure_payload,
     _classify_delivery_error,
     _extract_daily_digest_date,
@@ -43,6 +44,7 @@ from worker.temporal.activities_job_state import (
     mark_failed_activity,
     mark_running_activity,
     mark_succeeded_activity,
+    reconcile_stale_queued_jobs_activity,
     run_pipeline_activity,
 )
 from worker.temporal.activities_poll import poll_feeds_activity, run_poll_feeds_once
@@ -123,6 +125,7 @@ __all__ = [
     "_resolve_degradation_count",
     "_resolve_last_error_code",
     "mark_running_activity",
+    "reconcile_stale_queued_jobs_activity",
     "run_pipeline_activity",
     "mark_succeeded_activity",
     "mark_failed_activity",
@@ -140,6 +143,7 @@ __all__ = [
     "_insert_daily_digest_delivery",
     "_get_existing_video_digest",
     "_get_existing_daily_digest",
+    "_claim_due_failed_deliveries",
     "_load_due_failed_deliveries",
     "_extract_daily_digest_date",
     "_extract_timezone_name",

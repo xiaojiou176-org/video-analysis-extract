@@ -207,7 +207,7 @@ def test_step_llm_outline_applies_overrides(monkeypatch: Any, tmp_path: Path) ->
     execution = asyncio.run(runner._step_llm_outline(ctx, state))
 
     assert execution.status == "succeeded"
-    assert calls
+    assert len(calls) == 1
     first = calls[0]
     assert first["model"] == "gemini-2.0-flash"
     assert first["temperature"] == 0.2

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime
 import json
 from typing import Any
@@ -9,9 +10,57 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.exc import IntegrityError
 
 
+@dataclass
+class AdvisoryLockLease:
+    connection: Any
+    lock_key: str
+
+
 class PostgresBusinessStore:
     def __init__(self, database_url: str) -> None:
         self._engine: Engine = create_engine(database_url, future=True, pool_pre_ping=True)
+
+    def try_acquire_advisory_lock(
+        self,
+        *,
+        lock_key: str,
+    ) -> tuple[bool, AdvisoryLockLease | None, str | None]:
+        """Try to acquire a session-level advisory lock.
+
+        Returns:
+            - supported: whether advisory lock SQL is available.
+            - lease: lock lease when acquired; None when busy/unavailable.
+            - reason: unavailability reason when supported is False.
+        """
+        try:
+            conn = self._engine.connect()
+        except Exception as exc:
+            return False, None, f"connect_failed:{exc.__class__.__name__}"
+
+        try:
+            acquired = conn.execute(
+                text("SELECT pg_try_advisory_lock(hashtext(:lock_key))"),
+                {"lock_key": lock_key},
+            ).scalar()
+        except Exception as exc:
+            conn.close()
+            return False, None, f"advisory_unsupported:{exc.__class__.__name__}"
+
+        if bool(acquired):
+            return True, AdvisoryLockLease(connection=conn, lock_key=lock_key), None
+
+        conn.close()
+        return True, None, None
+
+    def release_advisory_lock(self, lease: AdvisoryLockLease) -> None:
+        conn = lease.connection
+        try:
+            conn.execute(
+                text("SELECT pg_advisory_unlock(hashtext(:lock_key))"),
+                {"lock_key": lease.lock_key},
+            )
+        finally:
+            conn.close()
 
     def list_subscriptions(
         self,
@@ -267,9 +316,10 @@ class PostgresBusinessStore:
                     UPDATE jobs
                     SET status = 'running',
                         error_message = NULL,
+                        hard_fail_reason = NULL,
                         updated_at = NOW()
                     WHERE id = CAST(:job_id AS UUID)
-                      AND status IN ('queued', 'failed')
+                      AND status = 'queued'
                     RETURNING id::text AS id, status
                     """
                 ),
@@ -277,7 +327,9 @@ class PostgresBusinessStore:
             ).mappings().first()
 
             if row is not None:
-                return dict(row)
+                payload = dict(row)
+                payload["transitioned"] = True
+                return payload
 
             existing = conn.execute(
                 text(
@@ -291,7 +343,58 @@ class PostgresBusinessStore:
             ).mappings().first()
             if existing is None:
                 raise ValueError(f"job not found: {job_id}")
-            return dict(existing)
+            payload = dict(existing)
+            payload["transitioned"] = False
+            payload["conflict"] = "already_running" if payload.get("status") == "running" else None
+            return payload
+
+    def fail_stale_queued_jobs(
+        self,
+        *,
+        timeout_seconds: int,
+        limit: int = 200,
+    ) -> list[dict[str, Any]]:
+        safe_timeout_seconds = max(60, int(timeout_seconds))
+        safe_limit = max(1, int(limit))
+        with self._engine.begin() as conn:
+            rows = conn.execute(
+                text(
+                    """
+                    WITH stale_jobs AS (
+                        SELECT id
+                        FROM jobs
+                        WHERE status = 'queued'
+                          AND updated_at <= NOW() - (CAST(:timeout_seconds AS TEXT) || ' seconds')::INTERVAL
+                        ORDER BY updated_at ASC
+                        LIMIT :limit
+                        FOR UPDATE SKIP LOCKED
+                    )
+                    UPDATE jobs AS j
+                    SET
+                        status = 'failed',
+                        error_message = CASE
+                            WHEN COALESCE(j.error_message, '') = '' THEN :error_message
+                            ELSE j.error_message
+                        END,
+                        hard_fail_reason = 'dispatch_timeout',
+                        updated_at = NOW()
+                    FROM stale_jobs
+                    WHERE j.id = stale_jobs.id
+                    RETURNING
+                        j.id::text AS id,
+                        j.status,
+                        j.updated_at,
+                        j.hard_fail_reason,
+                        j.error_message
+                    """
+                ),
+                {
+                    "timeout_seconds": safe_timeout_seconds,
+                    "limit": safe_limit,
+                    "error_message": "workflow_dispatch_timeout",
+                },
+            ).mappings().all()
+        return [dict(row) for row in rows]
 
     def get_job_with_video(self, *, job_id: str) -> dict[str, Any]:
         with self._engine.begin() as conn:
@@ -552,6 +655,7 @@ class PostgresBusinessStore:
                         hard_fail_reason = :hard_fail_reason,
                         updated_at = NOW()
                     WHERE id = CAST(:job_id AS UUID)
+                      AND status IN ('queued', 'running')
                     RETURNING
                         id::text AS id,
                         status,
@@ -577,6 +681,32 @@ class PostgresBusinessStore:
                     "hard_fail_reason": hard_fail_reason,
                 },
             ).mappings().first()
-            if row is None:
+            if row is not None:
+                payload = dict(row)
+                payload["transitioned"] = True
+                return payload
+
+            existing = conn.execute(
+                text(
+                    """
+                    SELECT
+                        id::text AS id,
+                        status,
+                        pipeline_final_status,
+                        degradation_count,
+                        last_error_code,
+                        llm_required,
+                        llm_gate_passed,
+                        hard_fail_reason
+                    FROM jobs
+                    WHERE id = CAST(:job_id AS UUID)
+                    """
+                ),
+                {"job_id": job_id},
+            ).mappings().first()
+            if existing is None:
                 raise ValueError(f"job not found: {job_id}")
-        return dict(row)
+            payload = dict(existing)
+            payload["transitioned"] = False
+            payload["conflict"] = "terminal_status" if payload.get("status") in {"succeeded", "failed"} else None
+            return payload

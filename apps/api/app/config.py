@@ -26,6 +26,19 @@ def _read_required_env(name: str) -> str:
     return value.strip()
 
 
+def _read_positive_float_env(name: str, *, default: float) -> float:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    try:
+        value = float(raw)
+    except ValueError:
+        return default
+    if value <= 0:
+        return default
+    return value
+
+
 @dataclass(frozen=True)
 class Settings:
     app_name: str
@@ -34,6 +47,10 @@ class Settings:
     temporal_target_host: str
     temporal_namespace: str
     temporal_task_queue: str
+    api_temporal_connect_timeout_seconds: float
+    api_temporal_start_timeout_seconds: float
+    api_temporal_result_timeout_seconds: float
+    api_retrieval_embedding_timeout_seconds: float
     sqlite_state_path: str
     notification_enabled: bool
     resend_api_key: str | None
@@ -53,6 +70,22 @@ class Settings:
             temporal_target_host=_read_required_env("TEMPORAL_TARGET_HOST"),
             temporal_namespace=_read_required_env("TEMPORAL_NAMESPACE"),
             temporal_task_queue=_read_required_env("TEMPORAL_TASK_QUEUE"),
+            api_temporal_connect_timeout_seconds=_read_positive_float_env(
+                "API_TEMPORAL_CONNECT_TIMEOUT_SECONDS",
+                default=5.0,
+            ),
+            api_temporal_start_timeout_seconds=_read_positive_float_env(
+                "API_TEMPORAL_START_TIMEOUT_SECONDS",
+                default=10.0,
+            ),
+            api_temporal_result_timeout_seconds=_read_positive_float_env(
+                "API_TEMPORAL_RESULT_TIMEOUT_SECONDS",
+                default=180.0,
+            ),
+            api_retrieval_embedding_timeout_seconds=_read_positive_float_env(
+                "API_RETRIEVAL_EMBEDDING_TIMEOUT_SECONDS",
+                default=8.0,
+            ),
             sqlite_state_path=_read_required_env("SQLITE_STATE_PATH"),
             notification_enabled=_parse_bool(
                 os.getenv("NOTIFICATION_ENABLED"),

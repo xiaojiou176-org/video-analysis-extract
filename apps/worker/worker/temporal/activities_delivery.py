@@ -168,6 +168,8 @@ def _mark_delivery_state(
     last_error_kind: str | None = None,
     next_retry_at: datetime | None = None,
     clear_retry_meta: bool = False,
+    expected_status: str | None = None,
+    expected_attempt_count: int | None = None,
 ) -> dict[str, Any]:
     with pg_store._engine.begin() as conn:  # type: ignore[attr-defined]
         row = conn.execute(
@@ -197,6 +199,11 @@ def _mark_delivery_state(
                         ELSE CAST(:next_retry_at AS TIMESTAMPTZ)
                     END
                 WHERE id = CAST(:delivery_id AS UUID)
+                  AND (:expected_status IS NULL OR status = :expected_status)
+                  AND (
+                      :expected_attempt_count IS NULL
+                      OR attempt_count = :expected_attempt_count
+                  )
                 RETURNING
                     id::text AS delivery_id,
                     status,
@@ -219,9 +226,39 @@ def _mark_delivery_state(
                 "last_error_kind": last_error_kind,
                 "next_retry_at": next_retry_at,
                 "clear_retry_meta": clear_retry_meta,
+                "expected_status": expected_status,
+                "expected_attempt_count": expected_attempt_count,
             },
-        ).mappings().one()
-    return dict(row)
+        ).mappings().first()
+        if row is not None:
+            return dict(row)
+        existing = conn.execute(
+            text(
+                """
+                SELECT
+                    id::text AS delivery_id,
+                    status,
+                    provider_message_id,
+                    error_message,
+                    sent_at,
+                    attempt_count,
+                    last_attempt_at,
+                    next_retry_at,
+                    last_error_kind
+                FROM notification_deliveries
+                WHERE id = CAST(:delivery_id AS UUID)
+                LIMIT 1
+                """
+            ),
+            {"delivery_id": delivery_id},
+        ).mappings().first()
+        if existing is None:
+            raise ValueError(f"delivery not found: {delivery_id}")
+        payload = dict(existing)
+        payload["conflict"] = True
+        payload["expected_status"] = expected_status
+        payload["expected_attempt_count"] = expected_attempt_count
+        return payload
 
 
 def _fetch_job_digest_record(conn: Any, *, job_id: str) -> dict[str, Any]:
@@ -476,7 +513,7 @@ def _get_existing_daily_digest(conn: Any, *, digest_date: date) -> dict[str, Any
     return dict(row) if row is not None else None
 
 
-def _load_due_failed_deliveries(
+def _claim_due_failed_deliveries(
     conn: Any,
     *,
     limit: int,
@@ -484,30 +521,47 @@ def _load_due_failed_deliveries(
     rows = conn.execute(
         text(
             """
-            SELECT
-                id::text AS delivery_id,
-                kind,
-                status,
-                recipient_email,
-                subject,
-                payload_json,
-                job_id::text AS job_id,
-                attempt_count,
-                last_attempt_at,
-                next_retry_at,
-                last_error_kind
-            FROM notification_deliveries
-            WHERE status = 'failed'
-              AND next_retry_at IS NOT NULL
-              AND next_retry_at <= NOW()
-            ORDER BY next_retry_at ASC, created_at ASC
-            LIMIT :limit
-            FOR UPDATE SKIP LOCKED
+            WITH due AS (
+                SELECT id
+                FROM notification_deliveries
+                WHERE status = 'failed'
+                  AND next_retry_at IS NOT NULL
+                  AND next_retry_at <= NOW()
+                ORDER BY next_retry_at ASC, created_at ASC
+                LIMIT :limit
+                FOR UPDATE SKIP LOCKED
+            )
+            UPDATE notification_deliveries AS d
+            SET
+                status = 'queued',
+                updated_at = NOW()
+            FROM due
+            WHERE d.id = due.id
+            RETURNING
+                d.id::text AS delivery_id,
+                d.kind,
+                d.status,
+                d.recipient_email,
+                d.subject,
+                d.payload_json,
+                d.job_id::text AS job_id,
+                d.attempt_count,
+                d.last_attempt_at,
+                d.next_retry_at,
+                d.last_error_kind
             """
         ),
         {"limit": limit},
     ).mappings().all()
     return [dict(item) for item in rows]
+
+
+def _load_due_failed_deliveries(
+    conn: Any,
+    *,
+    limit: int,
+) -> list[dict[str, Any]]:
+    return _claim_due_failed_deliveries(conn, limit=limit)
 
 
 def _extract_daily_digest_date(payload_json: Any) -> date | None:
@@ -566,7 +620,7 @@ async def retry_failed_deliveries_activity(payload: dict[str, Any] | None = None
         pg_store=pg_store,
         payload=payload,
         coerce_int=_coerce_int,
-        load_due_failed_deliveries=_load_due_failed_deliveries,
+        claim_due_failed_deliveries=_claim_due_failed_deliveries,
         normalize_email=_normalize_email,
         build_retry_failure_payload=_build_retry_failure_payload,
         mark_delivery_state=_mark_delivery_state,

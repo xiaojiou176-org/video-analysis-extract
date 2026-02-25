@@ -20,13 +20,26 @@ class MarkdownArtifactMetaResponse(BaseModel):
     meta: dict[str, Any] | None = None
 
 
-@router.get("/markdown", response_class=PlainTextResponse)
+@router.get(
+    "/markdown",
+    response_class=PlainTextResponse,
+    response_model=None,
+    responses={
+        200: {
+            "description": "Returns markdown body or JSON wrapper depending on include_meta.",
+            "content": {
+                "text/markdown": {"schema": {"type": "string"}},
+                "application/json": {"schema": MarkdownArtifactMetaResponse.model_json_schema()},
+            },
+        }
+    },
+)
 def get_markdown_artifact(
     job_id: uuid.UUID | None = Query(default=None),
     video_url: str | None = Query(default=None, min_length=1),
     include_meta: bool = Query(default=False),
     db: Session = Depends(get_db),
-):
+) -> PlainTextResponse | JSONResponse:
     if job_id is None and not video_url:
         raise HTTPException(status_code=400, detail="either job_id or video_url is required")
 

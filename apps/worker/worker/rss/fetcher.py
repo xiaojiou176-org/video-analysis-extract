@@ -339,8 +339,12 @@ class RSSHubFetcher:
 
         by_feed: dict[str, list[dict[str, Any]]] = {}
         for feed_url, result in zip(urls, results):
+            if isinstance(result, asyncio.CancelledError):
+                raise result
             if isinstance(result, Exception):
                 by_feed[feed_url] = []
                 continue
+            if isinstance(result, BaseException):
+                raise result
             by_feed[feed_url] = result
         return by_feed

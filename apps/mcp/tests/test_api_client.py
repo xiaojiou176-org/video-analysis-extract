@@ -120,6 +120,8 @@ def test_normalize_error_details_keeps_expected_fields_only() -> None:
             "status_code": 503,
             "error": {"reason": "timeout"},
             "body_preview": {"detail": "bad"},
+            "size_bytes": 1024,
+            "max_size_bytes": 256,
             "ignored": "x",
         }
     )
@@ -128,4 +130,90 @@ def test_normalize_error_details_keeps_expected_fields_only() -> None:
     assert normalized["status_code"] == 503
     assert "timeout" in normalized["error"]
     assert "bad" in normalized["body_preview"]
+    assert normalized["size_bytes"] == 1024
+    assert normalized["max_size_bytes"] == 256
     assert "ignored" not in normalized
+
+
+def test_normalize_error_details_redacts_secrets() -> None:
+    normalized = _normalize_error_details(
+        {
+            "method": "GET",
+            "path": "/x",
+            "error": "Authorization: Bearer super-secret-token",
+            "body_preview": '{"token":"abc","api_key=secret-key"}',
+        }
+    )
+
+    assert "super-secret-token" not in normalized["error"]
+    assert "[REDACTED]" in normalized["error"]
+    assert "secret-key" not in normalized["body_preview"]
+    assert "[REDACTED]" in normalized["body_preview"]
+
+
+def test_api_error_to_payload_redacts_message_and_json_style_secret() -> None:
+    err = ApiError(
+        "UPSTREAM_HTTP_ERROR",
+        'upstream rejected {"token":"top-secret-token"}',
+        details={"method": "GET", "path": "/x"},
+    )
+    payload = err.to_payload()
+
+    assert payload["code"] == "UPSTREAM_HTTP_ERROR"
+    assert "top-secret-token" not in payload["message"]
+    assert "[REDACTED]" in payload["message"]
+
+
+def test_api_client_rejects_invalid_absolute_or_empty_path() -> None:
+    client = ApiClient(ApiConfig(base_url="http://api", timeout_sec=2, api_key=None))
+
+    with pytest.raises(ApiError) as empty_path_error:
+        client.request("GET", "")
+    with pytest.raises(ApiError) as absolute_path_error:
+        client.request("GET", "https://attacker.example/boom")
+
+    assert empty_path_error.value.code == "INVALID_UPSTREAM_PATH"
+    assert absolute_path_error.value.code == "INVALID_UPSTREAM_PATH"
+
+
+def test_api_client_rejects_path_traversal_and_query_fragment_path() -> None:
+    client = ApiClient(ApiConfig(base_url="http://api", timeout_sec=2, api_key=None))
+
+    with pytest.raises(ApiError) as traversal_path_error:
+        client.request("GET", "/api/v1/jobs/../../secrets")
+    with pytest.raises(ApiError) as query_path_error:
+        client.request("GET", "/api/v1/jobs?status=ok")
+    with pytest.raises(ApiError) as fragment_path_error:
+        client.request("GET", "/api/v1/jobs#frag")
+
+    assert traversal_path_error.value.code == "INVALID_UPSTREAM_PATH"
+    assert query_path_error.value.code == "INVALID_UPSTREAM_PATH"
+    assert fragment_path_error.value.code == "INVALID_UPSTREAM_PATH"
+
+
+def test_api_client_rejects_oversized_base64_payload(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "apps.mcp.server.httpx.Client",
+        lambda timeout: _DummyClient(
+            response=_response(
+                text="abc",
+                content_type="application/octet-stream",
+            )
+        ),
+    )
+    client = ApiClient(
+        ApiConfig(
+            base_url="http://api",
+            timeout_sec=2,
+            api_key=None,
+            max_base64_bytes=2,
+        )
+    )
+
+    with pytest.raises(ApiError) as exc_info:
+        client.request("GET", "/binary", return_bytes_base64=True)
+
+    err = exc_info.value
+    assert err.code == "PAYLOAD_TOO_LARGE"
+    assert err.details["size_bytes"] == 3
+    assert err.details["max_size_bytes"] == 2

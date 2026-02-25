@@ -1,10 +1,15 @@
 from __future__ import annotations
 
 import base64
+import concurrent.futures
+import os
 from dataclasses import dataclass, field
 from typing import Any
 
 from ..config import Settings
+
+_DEFAULT_MODEL_TIMEOUT_SECONDS = 12.0
+_DEFAULT_MODEL_MAX_RETRIES = 1
 
 
 @dataclass(frozen=True)
@@ -43,7 +48,20 @@ class ComputerUseService:
 
         try:
             client = genai.Client(api_key=self._api_key)
-            response = client.models.generate_content(
+            timeout_seconds = self._read_float_env(
+                "COMPUTER_USE_MODEL_TIMEOUT_SECONDS",
+                default=_DEFAULT_MODEL_TIMEOUT_SECONDS,
+                min_value=1.0,
+                max_value=120.0,
+            )
+            max_retries = self._read_int_env(
+                "COMPUTER_USE_MODEL_MAX_RETRIES",
+                default=_DEFAULT_MODEL_MAX_RETRIES,
+                min_value=0,
+                max_value=3,
+            )
+            response = self._generate_with_timeout_and_retry(
+                client=client,
                 model=self._model,
                 contents=[
                     normalized_instruction,
@@ -58,6 +76,8 @@ class ComputerUseService:
                         thinking_level=self._thinking_level,
                     ),
                 ),
+                timeout_seconds=timeout_seconds,
+                max_retries=max_retries,
             )
         except Exception as exc:
             raise ValueError(f"computer_use_provider_error:{exc}") from exc
@@ -93,6 +113,58 @@ class ComputerUseService:
                 "action_count": len(actions),
             },
         }
+
+    def _generate_with_timeout_and_retry(
+        self,
+        *,
+        client: Any,
+        model: str,
+        contents: list[Any],
+        config: Any,
+        timeout_seconds: float,
+        max_retries: int,
+    ) -> Any:
+        attempts = max_retries + 1
+        last_error: Exception | None = None
+        for attempt in range(1, attempts + 1):
+            try:
+                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                    future = executor.submit(
+                        client.models.generate_content,
+                        model=model,
+                        contents=contents,
+                        config=config,
+                    )
+                    return future.result(timeout=timeout_seconds)
+            except concurrent.futures.TimeoutError:
+                last_error = TimeoutError(
+                    f"computer_use model timeout after {timeout_seconds:.1f}s (attempt {attempt}/{attempts})"
+                )
+            except Exception as exc:
+                last_error = exc
+            if attempt >= attempts:
+                break
+        raise RuntimeError(str(last_error) if last_error is not None else "computer_use model call failed")
+
+    def _read_float_env(self, name: str, *, default: float, min_value: float, max_value: float) -> float:
+        raw = os.getenv(name)
+        if raw is None:
+            return default
+        try:
+            value = float(raw.strip())
+        except (TypeError, ValueError):
+            return default
+        return min(max(value, min_value), max_value)
+
+    def _read_int_env(self, name: str, *, default: int, min_value: int, max_value: int) -> int:
+        raw = os.getenv(name)
+        if raw is None:
+            return default
+        try:
+            value = int(raw.strip())
+        except (TypeError, ValueError):
+            return default
+        return min(max(value, min_value), max_value)
 
     def _decode_base64_image(self, payload: str) -> bytes:
         raw = payload.strip()

@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import base64
 from typing import Any, Callable
 
 from apps.mcp.tools._common import (
+    DEFAULT_MAX_BASE64_BYTES,
     is_error_payload,
     to_int,
     to_optional_bool,
@@ -23,6 +25,9 @@ from apps.mcp.tools.retrieval import register_retrieval_tools
 from apps.mcp.tools.subscriptions import register_subscription_tools
 from apps.mcp.tools.ui_audit import register_ui_audit_tools
 from apps.mcp.tools.workflows import register_workflow_tools
+
+UUID_1 = "11111111-1111-1111-1111-111111111111"
+UUID_2 = "22222222-2222-2222-2222-222222222222"
 
 
 def test_common_normalizers_handle_basic_types() -> None:
@@ -174,10 +179,10 @@ def test_subscriptions_manage_supports_list_upsert_remove() -> None:
     )["ok"] is True
     assert mcp.tools["vd.subscriptions.manage"](
         action="batch_update_category",
-        ids=["sub-1", "sub-2"],
+        ids=[UUID_1, UUID_2],
         category="macro",
     )["ok"] is True
-    assert mcp.tools["vd.subscriptions.manage"](action="remove", id="sub-1")["ok"] is True
+    assert mcp.tools["vd.subscriptions.manage"](action="remove", id=UUID_1)["ok"] is True
 
     assert calls[0]["method"] == "GET"
     assert calls[1]["method"] == "POST"
@@ -212,6 +217,16 @@ def test_notifications_manage_supports_get_set_send_daily_and_category_send() ->
     )
 
 
+def test_notifications_manage_rejects_invalid_action_with_standard_payload() -> None:
+    mcp = _FakeMCP()
+    register_notification_tools(mcp, lambda *_args, **_kwargs: {"ok": True})
+    payload = mcp.tools["vd.notifications.manage"](action="invalid")
+
+    assert payload["code"] == "INVALID_ARGUMENT"
+    assert payload["details"]["field"] == "action"
+    assert payload["details"]["path"] == "vd.notifications.manage"
+
+
 def test_artifacts_get_supports_markdown_and_asset() -> None:
     mcp = _FakeMCP()
 
@@ -223,8 +238,8 @@ def test_artifacts_get_supports_markdown_and_asset() -> None:
         raise AssertionError(path)
 
     register_artifact_tools(mcp, fake_api_call)
-    markdown = mcp.tools["vd.artifacts.get"](kind="markdown", job_id="job-1")
-    asset = mcp.tools["vd.artifacts.get"](kind="asset", job_id="job-1", path="frames/f1.png", include_base64=True)
+    markdown = mcp.tools["vd.artifacts.get"](kind="markdown", job_id=UUID_1)
+    asset = mcp.tools["vd.artifacts.get"](kind="asset", job_id=UUID_1, path="frames/f1.png", include_base64=True)
 
     assert markdown["found"] is True
     assert asset["exists"] is True
@@ -285,23 +300,24 @@ def test_computer_use_run_tool_posts_expected_body_and_normalizes_result() -> No
 
 def test_ui_audit_run_and_read_tools() -> None:
     mcp = _FakeMCP()
+    run_id = UUID_1
 
     def fake_api_call(method: str, path: str, **kwargs: Any) -> dict[str, Any]:
         if path == "/api/v1/ui-audit/run":
             return {
-                "run_id": "run-1",
+                "run_id": run_id,
                 "status": "completed",
                 "summary": {"artifact_count": 1, "finding_count": 1, "severity_counts": {"high": 1}},
             }
-        if path == "/api/v1/ui-audit/run-1":
+        if path == f"/api/v1/ui-audit/{run_id}":
             return {
-                "run_id": "run-1",
+                "run_id": run_id,
                 "status": "completed",
                 "summary": {"artifact_count": 1, "finding_count": 1, "severity_counts": {"high": 1}},
             }
-        if path == "/api/v1/ui-audit/run-1/findings":
+        if path == f"/api/v1/ui-audit/{run_id}/findings":
             return {"items": [{"id": "f-1", "severity": "high", "title": "contrast", "message": "bad"}]}
-        if path == "/api/v1/ui-audit/run-1/artifact":
+        if path == f"/api/v1/ui-audit/{run_id}/artifact":
             return {
                 "key": "axe.json",
                 "path": "/tmp/axe.json",
@@ -311,9 +327,9 @@ def test_ui_audit_run_and_read_tools() -> None:
                 "exists": True,
                 "base64": "e30=",
             }
-        if path == "/api/v1/ui-audit/run-1/autofix":
+        if path == f"/api/v1/ui-audit/{run_id}/autofix":
             return {
-                "run_id": "run-1",
+                "run_id": run_id,
                 "mode": "dry-run",
                 "autofix_applied": False,
                 "summary": {"finding_count": 1, "high_or_worse_count": 1},
@@ -324,15 +340,15 @@ def test_ui_audit_run_and_read_tools() -> None:
 
     register_ui_audit_tools(mcp, fake_api_call)
     run_payload = mcp.tools["vd.ui_audit.run"](artifact_root="/tmp")
-    get_payload = mcp.tools["vd.ui_audit.read"](action="get", run_id="run-1")
-    findings_payload = mcp.tools["vd.ui_audit.read"](action="list_findings", run_id="run-1")
+    get_payload = mcp.tools["vd.ui_audit.read"](action="get", run_id=run_id)
+    findings_payload = mcp.tools["vd.ui_audit.read"](action="list_findings", run_id=run_id)
     artifact_payload = mcp.tools["vd.ui_audit.read"](
-        action="get_artifact", run_id="run-1", key="axe.json", include_base64=True
+        action="get_artifact", run_id=run_id, key="axe.json", include_base64=True
     )
-    autofix_payload = mcp.tools["vd.ui_audit.read"](action="autofix", run_id="run-1", max_files=2)
+    autofix_payload = mcp.tools["vd.ui_audit.read"](action="autofix", run_id=run_id, max_files=2)
 
-    assert run_payload["run_id"] == "run-1"
-    assert get_payload["run_id"] == "run-1"
+    assert run_payload["run_id"] == run_id
+    assert get_payload["run_id"] == run_id
     assert findings_payload["items"][0]["severity"] == "high"
     assert artifact_payload["exists"] is True
     assert autofix_payload["summary"]["high_or_worse_count"] == 1
@@ -356,3 +372,134 @@ def test_videos_process_normalizes_missing_overrides_to_empty_object() -> None:
 
     assert response["ok"] is True
     assert calls[0]["kwargs"]["json_body"]["overrides"] == {}
+
+
+def test_artifacts_get_rejects_path_traversal_and_invalid_job_id() -> None:
+    mcp = _FakeMCP()
+    register_artifact_tools(mcp, lambda *_args, **_kwargs: {"ok": True})
+
+    invalid_id = mcp.tools["vd.artifacts.get"](kind="asset", job_id="job-1", path="frames/a.png")
+    traversal = mcp.tools["vd.artifacts.get"](kind="asset", job_id=UUID_1, path="../secret.txt")
+    absolute = mcp.tools["vd.artifacts.get"](kind="asset", job_id=UUID_1, path="/etc/passwd")
+    scheme = mcp.tools["vd.artifacts.get"](kind="asset", job_id=UUID_1, path="file:///tmp/x")
+
+    assert invalid_id["code"] == "INVALID_ARGUMENT"
+    assert traversal["code"] == "INVALID_ARGUMENT"
+    assert absolute["code"] == "INVALID_ARGUMENT"
+    assert scheme["code"] == "INVALID_ARGUMENT"
+
+
+def test_artifacts_get_preserves_non_404_errors_for_asset_reads() -> None:
+    mcp = _FakeMCP()
+
+    def fake_api_call(method: str, path: str, **kwargs: Any) -> dict[str, Any]:
+        assert method == "GET"
+        assert path == "/api/v1/artifacts/assets"
+        return {
+            "code": "UPSTREAM_HTTP_ERROR",
+            "message": "Unauthorized",
+            "details": {"method": "GET", "path": path, "status_code": 401},
+        }
+
+    register_artifact_tools(mcp, fake_api_call)
+    payload = mcp.tools["vd.artifacts.get"](kind="asset", job_id=UUID_1, path="frames/a.png")
+
+    assert payload["code"] == "UPSTREAM_HTTP_ERROR"
+    assert payload["details"]["status_code"] == 401
+    assert "exists" not in payload
+
+
+def test_artifacts_get_maps_404_asset_reads_to_exists_false() -> None:
+    mcp = _FakeMCP()
+
+    def fake_api_call(method: str, path: str, **kwargs: Any) -> dict[str, Any]:
+        assert method == "GET"
+        assert path == "/api/v1/artifacts/assets"
+        return {
+            "code": "UPSTREAM_HTTP_ERROR",
+            "message": "Not Found",
+            "details": {"method": "GET", "path": path, "status_code": 404},
+        }
+
+    register_artifact_tools(mcp, fake_api_call)
+    payload = mcp.tools["vd.artifacts.get"](kind="asset", job_id=UUID_1, path="frames/missing.png")
+
+    assert payload["code"] == "UPSTREAM_HTTP_ERROR"
+    assert payload["exists"] is False
+    assert payload["asset_url"] is None
+
+
+def test_jobs_get_rejects_invalid_job_id() -> None:
+    mcp = _FakeMCP()
+    register_job_tools(mcp, lambda *_args, **_kwargs: {"ok": True})
+    payload = mcp.tools["vd.jobs.get"](job_id="not-a-uuid")
+    assert payload["code"] == "INVALID_ARGUMENT"
+
+
+def test_workflows_run_rejects_unknown_payload_keys() -> None:
+    mcp = _FakeMCP()
+    register_workflow_tools(mcp, lambda *_args, **_kwargs: {"ok": True})
+    payload = mcp.tools["vd.workflows.run"](
+        workflow="daily_digest",
+        payload={"timezone_name": "UTC", "evil": True},
+    )
+    assert payload["code"] == "INVALID_ARGUMENT"
+
+
+def test_videos_process_rejects_unknown_overrides_keys() -> None:
+    mcp = _FakeMCP()
+    register_job_tools(mcp, lambda *_args, **_kwargs: {"ok": True})
+    payload = mcp.tools["vd.videos.process"](
+        video={"platform": "youtube", "url": "https://example.com"},
+        overrides={"llm": {}, "unexpected": {}},
+    )
+    assert payload["code"] == "INVALID_ARGUMENT"
+
+
+def test_subscriptions_remove_rejects_invalid_id() -> None:
+    mcp = _FakeMCP()
+    register_subscription_tools(mcp, lambda *_args, **_kwargs: {"ok": True})
+    payload = mcp.tools["vd.subscriptions.manage"](action="remove", id="sub-1")
+    assert payload["code"] == "INVALID_ARGUMENT"
+
+
+def test_ui_audit_read_rejects_invalid_run_id_and_oversized_base64() -> None:
+    mcp = _FakeMCP()
+    run_id = UUID_2
+    oversized_base64 = base64.b64encode(b"a" * (DEFAULT_MAX_BASE64_BYTES + 1)).decode("ascii")
+
+    def fake_api_call(method: str, path: str, **kwargs: Any) -> dict[str, Any]:
+        assert method == "GET"
+        assert path == f"/api/v1/ui-audit/{run_id}/artifact"
+        return {
+            "key": "axe.json",
+            "path": "/tmp/axe.json",
+            "mime_type": "application/json",
+            "size_bytes": DEFAULT_MAX_BASE64_BYTES + 1,
+            "category": "playwright",
+            "exists": True,
+            "base64": oversized_base64,
+        }
+
+    register_ui_audit_tools(mcp, fake_api_call)
+    invalid_id = mcp.tools["vd.ui_audit.read"](action="get", run_id="run-1")
+    oversized = mcp.tools["vd.ui_audit.read"](
+        action="get_artifact",
+        run_id=run_id,
+        key="axe.json",
+        include_base64=True,
+    )
+
+    assert invalid_id["code"] == "INVALID_ARGUMENT"
+    assert oversized["code"] == "PAYLOAD_TOO_LARGE"
+
+
+def test_computer_use_rejects_unknown_safety_fields() -> None:
+    mcp = _FakeMCP()
+    register_computer_use_tools(mcp, lambda *_args, **_kwargs: {"ok": True})
+    payload = mcp.tools["vd.computer_use.run"](
+        instruction="click",
+        screenshot_base64="ZmFrZQ==",
+        safety={"confirm_before_execute": True, "bad_field": True},
+    )
+    assert payload["code"] == "INVALID_ARGUMENT"

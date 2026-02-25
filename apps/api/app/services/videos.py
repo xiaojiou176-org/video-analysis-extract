@@ -1,24 +1,73 @@
 from __future__ import annotations
 
+import asyncio
 import hashlib
+import ipaddress
 import json
 import re
 from urllib.parse import parse_qs, urlparse
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from sqlalchemy.orm import Session
 
 from ..config import settings
+from ..errors import ApiTimeoutError
 from ..repositories import JobsRepository, VideosRepository
 
 YOUTUBE_HOSTS = {"youtube.com", "www.youtube.com", "m.youtube.com", "youtu.be"}
 BILIBILI_HOSTS = {"bilibili.com", "www.bilibili.com", "m.bilibili.com", "b23.tv"}
+ALLOWED_VIDEO_HOST_BASES = ("youtube.com", "youtu.be", "bilibili.com", "b23.tv")
+BLOCKED_HOSTS = {
+    "localhost",
+    "localhost.localdomain",
+    "metadata",
+    "metadata.google.internal",
+    "metadata.google.internal.",
+    "100.100.100.200",
+    "169.254.169.254",
+}
+BLOCKED_HOST_SUFFIXES = (".localhost", ".local", ".internal", ".home.arpa")
 SUPPORTED_MODES = {"full", "text_only", "refresh_comments", "refresh_llm"}
 MODE_ALIASES = {
     "text-only": "text_only",
     "refresh-comments": "refresh_comments",
     "refresh-llm": "refresh_llm",
 }
+
+
+def _is_allowed_video_host(host: str) -> bool:
+    return any(host == base or host.endswith(f".{base}") for base in ALLOWED_VIDEO_HOST_BASES)
+
+
+def _validate_video_source_url(raw_url: str) -> str:
+    value = str(raw_url or "").strip()
+    if not value:
+        raise ValueError("video_url_empty")
+
+    parsed = urlparse(value)
+    scheme = str(parsed.scheme or "").lower()
+    if scheme not in {"http", "https"}:
+        raise ValueError("video_url_invalid_scheme")
+
+    host = str(parsed.hostname or "").strip().lower()
+    if not host:
+        raise ValueError("video_url_host_required")
+
+    if host in BLOCKED_HOSTS or any(host.endswith(suffix) for suffix in BLOCKED_HOST_SUFFIXES):
+        raise ValueError("video_url_blocked_internal_host")
+
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        ip = None
+
+    if ip is not None:
+        raise ValueError("video_url_ip_literal_blocked")
+
+    if not _is_allowed_video_host(host):
+        raise ValueError("video_url_domain_not_allowed")
+
+    return value
 
 
 def _sha256(value: str) -> str:
@@ -31,7 +80,7 @@ def _url_hash(url: str) -> str:
 
 def _extract_video_uid(*, platform: str, url: str) -> str:
     parsed = urlparse(url)
-    host = parsed.netloc.lower()
+    host = str(parsed.hostname or "").strip().lower()
     path = parsed.path or ""
     query = parse_qs(parsed.query)
 
@@ -79,6 +128,10 @@ def _normalize_overrides(overrides: dict[str, object] | None) -> dict[str, objec
     return dict(overrides or {})
 
 
+def _build_process_workflow_id(job_id: UUID) -> str:
+    return f"process-job-{job_id}"
+
+
 class VideosService:
     def __init__(self, db: Session) -> None:
         self.video_repo = VideosRepository(db)
@@ -97,11 +150,12 @@ class VideosService:
         overrides: dict[str, object] | None,
         force: bool,
     ) -> dict[str, object]:
+        validated_url = _validate_video_source_url(url)
         normalized_mode = _normalize_mode(mode)
         normalized_overrides = _normalize_overrides(overrides)
         resolved_video_uid = (video_id or "").strip() or _extract_video_uid(
             platform=platform,
-            url=url,
+            url=validated_url,
         )
         base_idempotency_key = _build_process_idempotency_key(
             platform=platform,
@@ -116,9 +170,9 @@ class VideosService:
         video_row = self.video_repo.upsert_for_processing(
             platform=platform,
             video_uid=resolved_video_uid,
-            source_url=url,
+            source_url=validated_url,
         )
-        job_row, created = self.jobs_repo.create_or_reuse(
+        job_row, needs_dispatch = self.jobs_repo.create_or_reuse(
             video_id=video_row.id,
             kind="video_digest_v1",
             mode=normalized_mode,
@@ -128,23 +182,60 @@ class VideosService:
         )
 
         workflow_id: str | None = None
-        if created:
+        if needs_dispatch:
             try:
                 from temporalio.client import Client
+                from temporalio.common import WorkflowIDConflictPolicy, WorkflowIDReusePolicy
             except Exception as exc:  # pragma: no cover
                 raise RuntimeError(f"temporal client not available: {exc}") from exc
 
-            client = await Client.connect(
-                settings.temporal_target_host,
-                namespace=settings.temporal_namespace,
-            )
-            workflow_id = f"api-process-job-{job_row.id}-{uuid4()}"
-            await client.start_workflow(
-                "ProcessJobWorkflow",
-                str(job_row.id),
-                id=workflow_id,
-                task_queue=settings.temporal_task_queue,
-            )
+            try:
+                client = await asyncio.wait_for(
+                    Client.connect(
+                        settings.temporal_target_host,
+                        namespace=settings.temporal_namespace,
+                    ),
+                    timeout=settings.api_temporal_connect_timeout_seconds,
+                )
+            except TimeoutError as exc:
+                raise ApiTimeoutError(
+                    detail=(
+                        "temporal connect timed out "
+                        f"after {settings.api_temporal_connect_timeout_seconds:.1f}s"
+                    ),
+                    error_code="TEMPORAL_CONNECT_TIMEOUT",
+                ) from exc
+            workflow_id = _build_process_workflow_id(job_row.id)
+            try:
+                await asyncio.wait_for(
+                    client.start_workflow(
+                        "ProcessJobWorkflow",
+                        str(job_row.id),
+                        id=workflow_id,
+                        task_queue=settings.temporal_task_queue,
+                        id_reuse_policy=WorkflowIDReusePolicy.REJECT_DUPLICATE,
+                        id_conflict_policy=WorkflowIDConflictPolicy.USE_EXISTING,
+                    ),
+                    timeout=settings.api_temporal_start_timeout_seconds,
+                )
+            except TimeoutError as exc:
+                dispatch_error = (
+                    "temporal workflow start timed out "
+                    f"after {settings.api_temporal_start_timeout_seconds:.1f}s"
+                )
+                self.jobs_repo.mark_dispatch_failed(
+                    job_id=job_row.id,
+                    error_message=dispatch_error,
+                    reason="dispatch_timeout",
+                )
+                raise ApiTimeoutError(
+                    detail=dispatch_error,
+                    error_code="TEMPORAL_WORKFLOW_START_TIMEOUT",
+                ) from exc
+            except Exception as exc:
+                dispatch_error = str(exc)
+                self.jobs_repo.mark_dispatch_failed(job_id=job_row.id, error_message=dispatch_error)
+                raise RuntimeError(f"failed to start ProcessJobWorkflow: {dispatch_error}") from exc
 
         return {
             "job_id": job_row.id,
@@ -155,6 +246,6 @@ class VideosService:
             "mode": job_row.mode or normalized_mode,
             "overrides": normalized_overrides,
             "force": force,
-            "reused": not created,
+            "reused": not needs_dispatch,
             "workflow_id": workflow_id,
         }

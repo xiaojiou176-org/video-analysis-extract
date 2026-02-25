@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from ..db import get_db
+from ..security import require_write_access
 from ..services.ui_audit import UiAuditService
 
 router = APIRouter(prefix="/api/v1/ui-audit", tags=["ui-audit"])
@@ -83,7 +84,11 @@ class UiAuditAutofixResponse(BaseModel):
     suggested_actions: list[str]
 
 
-@router.post("/run", response_model=UiAuditRunResponse)
+@router.post(
+    "/run",
+    response_model=UiAuditRunResponse,
+    dependencies=[Depends(require_write_access)],
+)
 def run_ui_audit(payload: UiAuditRunRequest, db: Session = Depends(get_db)):
     if payload.job_id is None and not payload.artifact_root:
         raise HTTPException(status_code=400, detail="either job_id or artifact_root is required")
@@ -143,7 +148,11 @@ def get_ui_audit_artifact(
     return UiAuditArtifactPayload(**payload)
 
 
-@router.post("/{run_id}/autofix", response_model=UiAuditAutofixResponse)
+@router.post(
+    "/{run_id}/autofix",
+    response_model=UiAuditAutofixResponse,
+    dependencies=[Depends(require_write_access)],
+)
 def run_ui_audit_autofix(
     run_id: str,
     payload: UiAuditAutofixRequest,

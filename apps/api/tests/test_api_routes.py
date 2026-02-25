@@ -2,12 +2,16 @@ from __future__ import annotations
 
 import base64
 import sys
+import tempfile
 import types
 import uuid
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
+from starlette import status
+
+from apps.api.app.security import sanitize_exception_detail
 
 
 def test_healthz_returns_ok_status(api_client: TestClient) -> None:
@@ -55,6 +59,38 @@ def test_ingest_poll_returns_candidates(
     assert payload["candidates"][0]["job_id"] == str(job_id)
 
 
+def test_ingest_poll_maps_runtime_error_to_503(api_client: TestClient, monkeypatch) -> None:
+    async def fake_poll(self, *, subscription_id, platform, max_new_videos):
+        del self, subscription_id, platform, max_new_videos
+        raise RuntimeError("upstream timeout")
+
+    monkeypatch.setattr("apps.api.app.services.ingest.IngestService.poll", fake_poll)
+
+    response = api_client.post(
+        "/api/v1/ingest/poll",
+        json={"platform": "youtube", "max_new_videos": 10},
+    )
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == "upstream timeout"
+
+
+def test_ingest_poll_maps_value_error_to_404(api_client: TestClient, monkeypatch) -> None:
+    async def fake_poll(self, *, subscription_id, platform, max_new_videos):
+        del self, subscription_id, platform, max_new_videos
+        raise ValueError("subscription not found")
+
+    monkeypatch.setattr("apps.api.app.services.ingest.IngestService.poll", fake_poll)
+
+    response = api_client.post(
+        "/api/v1/ingest/poll",
+        json={"platform": "youtube", "max_new_videos": 10},
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "subscription not found"
+
+
 def test_video_process_maps_value_error_to_400(
     api_client: TestClient,
     monkeypatch,
@@ -79,6 +115,21 @@ def test_video_process_maps_value_error_to_400(
 
     assert response.status_code == 400
     assert response.json()["detail"] == "invalid_url"
+
+
+def test_video_process_rejects_non_whitelisted_video_url(api_client: TestClient) -> None:
+    response = api_client.post(
+        "/api/v1/videos/process",
+        json={
+            "video": {
+                "platform": "youtube",
+                "url": "https://example.com/watch?v=abc123",
+            }
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "video_url_domain_not_allowed"
 
 
 def test_video_process_returns_mode_field(
@@ -843,6 +894,459 @@ def test_workflows_run_returns_503_when_temporal_unavailable(api_client: TestCli
 
     assert response.status_code == 503
     assert "failed to connect temporal" in response.json()["detail"]
+
+
+def test_workflows_run_requires_write_access_when_api_key_configured(api_client: TestClient, monkeypatch) -> None:
+    monkeypatch.setenv("VD_API_KEY", "unit-test-token")
+
+    response = api_client.post(
+        "/api/v1/workflows/run",
+        json={
+            "workflow": "provider_canary",
+            "run_once": True,
+            "wait_for_result": False,
+            "payload": {},
+        },
+    )
+
+    assert response.status_code == status.HTTP_401_UNAUTHORIZED
+    assert response.json()["detail"] == "write access token required"
+
+
+def test_workflows_run_rejects_when_api_key_not_configured_and_unauth_switch_disabled(
+    api_client: TestClient,
+    monkeypatch,
+) -> None:
+    monkeypatch.delenv("VD_API_KEY", raising=False)
+    monkeypatch.delenv("VD_ALLOW_UNAUTH_WRITE", raising=False)
+
+    response = api_client.post(
+        "/api/v1/workflows/run",
+        json={
+            "workflow": "provider_canary",
+            "run_once": True,
+            "wait_for_result": False,
+            "payload": {},
+        },
+    )
+
+    assert response.status_code == status.HTTP_401_UNAUTHORIZED
+    assert response.json()["detail"] == "write access token required"
+
+
+def test_workflows_run_cleanup_rejects_parent_traversal_path(api_client: TestClient) -> None:
+    response = api_client.post(
+        "/api/v1/workflows/run",
+        json={
+            "workflow": "cleanup",
+            "run_once": True,
+            "wait_for_result": False,
+            "payload": {"workspace_dir": "../outside"},
+        },
+    )
+
+    assert response.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
+    assert "parent traversal" in response.text
+
+
+def test_subscriptions_write_endpoints_enforce_write_access(api_client: TestClient, monkeypatch) -> None:
+    now = datetime.now(timezone.utc)
+    monkeypatch.setenv("VD_API_KEY", "unit-test-token")
+    monkeypatch.setattr(
+        "apps.api.app.services.subscriptions.SubscriptionsService.upsert_subscription",
+        lambda self, **kwargs: (
+            SimpleNamespace(
+                id=uuid.uuid4(),
+                platform=kwargs["platform"],
+                source_type=kwargs["source_type"],
+                source_value=kwargs["source_value"],
+                adapter_type=kwargs["adapter_type"],
+                source_url=kwargs["source_url"],
+                rsshub_route=kwargs["rsshub_route"] or "/youtube/channel/demo",
+                category=kwargs["category"],
+                tags=kwargs["tags"],
+                priority=kwargs["priority"],
+                enabled=kwargs["enabled"],
+                created_at=now,
+                updated_at=now,
+            ),
+            True,
+        ),
+    )
+
+    payload = {
+        "platform": "youtube",
+        "source_type": "url",
+        "source_value": "https://youtube.com/@demo",
+        "rsshub_route": "/youtube/channel/demo",
+        "enabled": True,
+    }
+    unauth = api_client.post("/api/v1/subscriptions", json=payload)
+    forbidden = api_client.post("/api/v1/subscriptions", json=payload, headers={"X-API-Key": "wrong-token"})
+    authorized = api_client.post(
+        "/api/v1/subscriptions",
+        json=payload,
+        headers={"Authorization": "Bearer unit-test-token"},
+    )
+
+    assert unauth.status_code == status.HTTP_401_UNAUTHORIZED
+    assert forbidden.status_code == status.HTTP_403_FORBIDDEN
+    assert authorized.status_code == status.HTTP_200_OK
+
+
+def test_execution_endpoints_enforce_write_access(api_client: TestClient, monkeypatch) -> None:
+    now = datetime.now(timezone.utc)
+    monkeypatch.setenv("VD_API_KEY", "unit-test-token")
+
+    async def fake_ingest_poll(self, *, subscription_id, platform, max_new_videos):
+        del self, subscription_id, platform, max_new_videos
+        return 0, []
+
+    async def fake_process_video(self, **kwargs):
+        del self, kwargs
+        return {
+            "job_id": uuid.uuid4(),
+            "video_db_id": uuid.uuid4(),
+            "video_uid": "abc123",
+            "status": "queued",
+            "idempotency_key": "idem-key",
+            "mode": "full",
+            "overrides": {},
+            "force": False,
+            "reused": False,
+            "workflow_id": "wf-1",
+        }
+
+    monkeypatch.setattr("apps.api.app.services.ingest.IngestService.poll", fake_ingest_poll)
+    monkeypatch.setattr("apps.api.app.services.videos.VideosService.process_video", fake_process_video)
+    monkeypatch.setattr(
+        "apps.api.app.services.computer_use.ComputerUseService.run",
+        lambda self, **kwargs: {
+            "actions": [{"step": 1, "action": "click", "target": "#submit", "input_text": None, "reasoning": None}],
+            "require_confirmation": True,
+            "blocked_actions": [],
+            "final_text": "ok",
+            "thought_metadata": {},
+        },
+    )
+    monkeypatch.setattr(
+        "apps.api.app.services.ui_audit.UiAuditService.run",
+        lambda self, **kwargs: {
+            "run_id": "run-1",
+            "job_id": None,
+            "artifact_root": kwargs.get("artifact_root"),
+            "status": "completed",
+            "created_at": now.isoformat(),
+            "summary": {"artifact_count": 0, "finding_count": 0, "severity_counts": {}},
+        },
+    )
+    monkeypatch.setattr(
+        "apps.api.app.services.ui_audit.UiAuditService.autofix",
+        lambda self, **kwargs: {
+            "run_id": kwargs["run_id"],
+            "mode": "dry-run",
+            "autofix_applied": False,
+            "summary": {"finding_count": 0, "high_or_worse_count": 0},
+            "guardrails": {"max_files": 1, "max_changed_lines": 10, "note": "test"},
+            "suggested_actions": [],
+        },
+    )
+
+    endpoints = [
+        ("/api/v1/ingest/poll", {"platform": "youtube", "max_new_videos": 1}),
+        ("/api/v1/videos/process", {"video": {"platform": "youtube", "url": "https://www.youtube.com/watch?v=abc123"}}),
+        ("/api/v1/computer-use/run", {"instruction": "open submit button", "screenshot_base64": "ZmFrZQ=="}),
+        ("/api/v1/ui-audit/run", {"artifact_root": tempfile.gettempdir()}),
+        ("/api/v1/ui-audit/run-1/autofix", {"mode": "dry-run", "max_files": 1, "max_changed_lines": 10}),
+    ]
+
+    for path, payload in endpoints:
+        unauth = api_client.post(path, json=payload)
+        forbidden = api_client.post(path, json=payload, headers={"X-API-Key": "wrong-token"})
+        authorized = api_client.post(path, json=payload, headers={"Authorization": "Bearer unit-test-token"})
+
+        assert unauth.status_code == status.HTTP_401_UNAUTHORIZED
+        assert forbidden.status_code == status.HTTP_403_FORBIDDEN
+        assert authorized.status_code in {
+            status.HTTP_200_OK,
+            status.HTTP_202_ACCEPTED,
+        }
+
+
+def test_artifact_markdown_contract_switches_by_include_meta(api_client: TestClient, monkeypatch) -> None:
+    monkeypatch.setattr(
+        "apps.api.app.services.jobs.JobsService.get_artifact_payload",
+        lambda self, **kwargs: {"markdown": "# Digest", "meta": {"source": "test"}},
+    )
+
+    markdown_response = api_client.get(
+        "/api/v1/artifacts/markdown",
+        params={"job_id": str(uuid.uuid4())},
+    )
+    meta_response = api_client.get(
+        "/api/v1/artifacts/markdown",
+        params={"job_id": str(uuid.uuid4()), "include_meta": True},
+    )
+
+    assert markdown_response.status_code == status.HTTP_200_OK
+    assert markdown_response.text == "# Digest"
+    assert markdown_response.headers["content-type"].startswith("text/markdown")
+
+    assert meta_response.status_code == status.HTTP_200_OK
+    assert meta_response.json() == {"markdown": "# Digest", "meta": {"source": "test"}}
+    assert meta_response.headers["content-type"].startswith("application/json")
+
+
+def test_artifact_markdown_openapi_declares_dual_response_content(api_client: TestClient) -> None:
+    openapi = api_client.get("/openapi.json").json()
+    content = openapi["paths"]["/api/v1/artifacts/markdown"]["get"]["responses"]["200"]["content"]
+
+    assert "application/json" in content
+    assert "text/markdown" in content
+
+
+def test_ingest_poll_maps_value_error_to_404_for_missing_resource(api_client: TestClient, monkeypatch) -> None:
+    async def fake_poll(self, *, subscription_id, platform, max_new_videos):
+        del subscription_id, platform, max_new_videos
+        raise ValueError("subscription does not exist")
+
+    monkeypatch.setattr("apps.api.app.services.ingest.IngestService.poll", fake_poll)
+    response = api_client.post("/api/v1/ingest/poll", json={"platform": "youtube", "max_new_videos": 10})
+
+    assert response.status_code == status.HTTP_404_NOT_FOUND
+    assert response.json()["detail"] == "subscription does not exist"
+
+
+def test_ingest_poll_maps_value_error_to_400_for_invalid_argument(api_client: TestClient, monkeypatch) -> None:
+    async def fake_poll(self, *, subscription_id, platform, max_new_videos):
+        del subscription_id, platform, max_new_videos
+        raise ValueError("invalid poll filters")
+
+    monkeypatch.setattr("apps.api.app.services.ingest.IngestService.poll", fake_poll)
+    response = api_client.post("/api/v1/ingest/poll", json={"platform": "youtube", "max_new_videos": 10})
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert response.json()["detail"] == "invalid poll filters"
+
+
+def test_sanitize_exception_detail_redacts_basic_userinfo_and_common_tokens() -> None:
+    message = (
+        "upstream failed Authorization: Basic dXNlcjpwYXNz "
+        "https://alice:secret@example.com/cb?access_token=abc&id_token=def&refresh_token=ghi&jwt=xyz"
+    )
+    sanitized = sanitize_exception_detail(RuntimeError(message))
+
+    assert "Basic ***REDACTED***" in sanitized
+    assert "https://***:***@example.com" in sanitized
+    assert "access_token=***REDACTED***" in sanitized
+    assert "id_token=***REDACTED***" in sanitized
+    assert "refresh_token=***REDACTED***" in sanitized
+    assert "jwt=***REDACTED***" in sanitized
+    assert "dXNlcjpwYXNz" not in sanitized
+    assert "alice:secret" not in sanitized
+
+
+def test_workflows_run_returns_already_running_when_conflict(api_client: TestClient, monkeypatch) -> None:
+    import sys
+    import types
+
+    class FakeWorkflowAlreadyStartedError(Exception):
+        pass
+
+    class FakeClient:
+        @staticmethod
+        async def connect(*args, **kwargs):
+            del args, kwargs
+
+            class _Connected:
+                async def start_workflow(self, *a, **kw):
+                    del a, kw
+                    raise FakeWorkflowAlreadyStartedError()
+
+            return _Connected()
+
+    fake_temporalio = types.ModuleType("temporalio")
+    fake_client_module = types.ModuleType("temporalio.client")
+    fake_exceptions_module = types.ModuleType("temporalio.exceptions")
+    fake_client_module.Client = FakeClient
+    fake_exceptions_module.WorkflowAlreadyStartedError = FakeWorkflowAlreadyStartedError
+    fake_temporalio.client = fake_client_module  # type: ignore[attr-defined]
+    fake_temporalio.exceptions = fake_exceptions_module  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "temporalio", fake_temporalio)
+    monkeypatch.setitem(sys.modules, "temporalio.client", fake_client_module)
+    monkeypatch.setitem(sys.modules, "temporalio.exceptions", fake_exceptions_module)
+
+    response = api_client.post(
+        "/api/v1/workflows/run",
+        json={
+            "workflow": "provider_canary",
+            "run_once": False,
+            "wait_for_result": False,
+            "workflow_id": "provider-canary-workflow",
+            "payload": {},
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "already_running"
+    assert payload["workflow_id"] == "provider-canary-workflow"
+
+
+def test_workflows_run_maps_connect_timeout_to_504(api_client: TestClient, monkeypatch) -> None:
+    import sys
+    import types
+
+    class FakeWorkflowAlreadyStartedError(Exception):
+        pass
+
+    class FakeClient:
+        @staticmethod
+        async def connect(*args, **kwargs):
+            del args, kwargs
+            return object()
+
+    async def _timeout_wait_for(awaitable, timeout):
+        del timeout
+        close = getattr(awaitable, "close", None)
+        if callable(close):
+            close()
+        raise TimeoutError("connect timeout")
+
+    fake_temporalio = types.ModuleType("temporalio")
+    fake_client_module = types.ModuleType("temporalio.client")
+    fake_exceptions_module = types.ModuleType("temporalio.exceptions")
+    fake_client_module.Client = FakeClient
+    fake_exceptions_module.WorkflowAlreadyStartedError = FakeWorkflowAlreadyStartedError
+    fake_temporalio.client = fake_client_module  # type: ignore[attr-defined]
+    fake_temporalio.exceptions = fake_exceptions_module  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "temporalio", fake_temporalio)
+    monkeypatch.setitem(sys.modules, "temporalio.client", fake_client_module)
+    monkeypatch.setitem(sys.modules, "temporalio.exceptions", fake_exceptions_module)
+    monkeypatch.setattr("apps.api.app.routers.workflows.asyncio.wait_for", _timeout_wait_for)
+
+    response = api_client.post(
+        "/api/v1/workflows/run",
+        json={
+            "workflow": "provider_canary",
+            "run_once": True,
+            "wait_for_result": False,
+            "payload": {},
+        },
+    )
+
+    assert response.status_code == 504
+    assert response.json()["detail"] == "temporal connect timed out after 5.0s"
+
+
+def test_workflows_run_maps_start_timeout_to_504(api_client: TestClient, monkeypatch) -> None:
+    import sys
+    import types
+
+    class FakeWorkflowAlreadyStartedError(Exception):
+        pass
+
+    class _Connected:
+        async def start_workflow(self, *args, **kwargs):
+            del args, kwargs
+            return object()
+
+    class FakeClient:
+        @staticmethod
+        async def connect(*args, **kwargs):
+            del args, kwargs
+            return _Connected()
+
+    call_count = {"n": 0}
+
+    async def _start_timeout_wait_for(awaitable, timeout):
+        del timeout
+        call_count["n"] += 1
+        if call_count["n"] == 2:
+            close = getattr(awaitable, "close", None)
+            if callable(close):
+                close()
+            raise TimeoutError("start timeout")
+        return await awaitable
+
+    fake_temporalio = types.ModuleType("temporalio")
+    fake_client_module = types.ModuleType("temporalio.client")
+    fake_exceptions_module = types.ModuleType("temporalio.exceptions")
+    fake_client_module.Client = FakeClient
+    fake_exceptions_module.WorkflowAlreadyStartedError = FakeWorkflowAlreadyStartedError
+    fake_temporalio.client = fake_client_module  # type: ignore[attr-defined]
+    fake_temporalio.exceptions = fake_exceptions_module  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "temporalio", fake_temporalio)
+    monkeypatch.setitem(sys.modules, "temporalio.client", fake_client_module)
+    monkeypatch.setitem(sys.modules, "temporalio.exceptions", fake_exceptions_module)
+    monkeypatch.setattr("apps.api.app.routers.workflows.asyncio.wait_for", _start_timeout_wait_for)
+
+    response = api_client.post(
+        "/api/v1/workflows/run",
+        json={
+            "workflow": "provider_canary",
+            "run_once": True,
+            "wait_for_result": False,
+            "payload": {},
+        },
+    )
+
+    assert response.status_code == 504
+    assert response.json()["detail"] == "temporal workflow start timed out after 10.0s"
+
+
+def test_workflows_run_wait_for_result_maps_timeout_to_504(
+    api_client: TestClient,
+    monkeypatch,
+) -> None:
+    import sys
+    import types
+
+    class FakeWorkflowAlreadyStartedError(Exception):
+        pass
+
+    class _Handle:
+        id = "wf-id-1"
+        run_id = "run-id-1"
+        first_execution_run_id = "run-id-1"
+
+        async def result(self):
+            raise TimeoutError("workflow result timeout")
+
+    class _Connected:
+        async def start_workflow(self, *args, **kwargs):
+            del args, kwargs
+            return _Handle()
+
+    class FakeClient:
+        @staticmethod
+        async def connect(*args, **kwargs):
+            del args, kwargs
+            return _Connected()
+
+    fake_temporalio = types.ModuleType("temporalio")
+    fake_client_module = types.ModuleType("temporalio.client")
+    fake_exceptions_module = types.ModuleType("temporalio.exceptions")
+    fake_client_module.Client = FakeClient
+    fake_exceptions_module.WorkflowAlreadyStartedError = FakeWorkflowAlreadyStartedError
+    fake_temporalio.client = fake_client_module  # type: ignore[attr-defined]
+    fake_temporalio.exceptions = fake_exceptions_module  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "temporalio", fake_temporalio)
+    monkeypatch.setitem(sys.modules, "temporalio.client", fake_client_module)
+    monkeypatch.setitem(sys.modules, "temporalio.exceptions", fake_exceptions_module)
+
+    response = api_client.post(
+        "/api/v1/workflows/run",
+        json={
+            "workflow": "provider_canary",
+            "run_once": True,
+            "wait_for_result": True,
+            "payload": {},
+        },
+    )
+
+    assert response.status_code == 504
+    assert response.json()["detail"].startswith("workflow result timed out after ")
 
 
 def test_notification_html_renderer_supports_markdown() -> None:

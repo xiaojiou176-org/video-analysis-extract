@@ -1,10 +1,50 @@
 from __future__ import annotations
 
+import ipaddress
 import uuid
+from urllib.parse import urlparse
 
 from sqlalchemy.orm import Session
 
 from ..repositories import SubscriptionsRepository
+
+_BLOCKED_HOSTS = {
+    "localhost",
+    "localhost.localdomain",
+    "metadata",
+    "metadata.google.internal",
+    "metadata.google.internal.",
+    "100.100.100.200",
+    "169.254.169.254",
+}
+_BLOCKED_HOST_SUFFIXES = (".localhost", ".local", ".internal", ".home.arpa")
+
+
+def _validate_subscription_source_url(raw_url: str, *, field_name: str) -> str:
+    value = str(raw_url or "").strip()
+    if not value:
+        raise ValueError(f"{field_name} must not be empty")
+
+    parsed = urlparse(value)
+    scheme = str(parsed.scheme or "").lower()
+    if scheme not in {"http", "https"}:
+        raise ValueError(f"{field_name} must use http or https")
+
+    host = str(parsed.hostname or "").strip().lower()
+    if not host:
+        raise ValueError(f"{field_name} host is required")
+
+    if host in _BLOCKED_HOSTS or any(host.endswith(suffix) for suffix in _BLOCKED_HOST_SUFFIXES):
+        raise ValueError(f"{field_name} points to a blocked internal host")
+
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        return value
+
+    if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_multicast or ip.is_reserved or ip.is_unspecified:
+        raise ValueError(f"{field_name} points to a blocked internal address")
+    return value
 
 
 def _derive_rsshub_route(platform: str, source_type: str, source_value: str) -> str:
@@ -28,12 +68,21 @@ def _resolve_adapter(
 ) -> tuple[str, str | None, str]:
     normalized_adapter = str(adapter_type or "").strip().lower() or "rsshub_route"
     normalized_source_url = str(source_url or "").strip() or None
+    if normalized_source_url is not None:
+        normalized_source_url = _validate_subscription_source_url(
+            normalized_source_url,
+            field_name="source_url",
+        )
 
     if normalized_adapter == "rss_generic":
         resolved_source_url = normalized_source_url or source_value
         if not str(resolved_source_url or "").strip():
             raise ValueError("source_url is required for adapter_type=rss_generic")
-        return "rss_generic", str(resolved_source_url), str(resolved_source_url)
+        validated_source_url = _validate_subscription_source_url(
+            str(resolved_source_url),
+            field_name="source_url",
+        )
+        return "rss_generic", validated_source_url, validated_source_url
 
     if normalized_adapter != "rsshub_route":
         raise ValueError("adapter_type must be one of: rsshub_route, rss_generic")
@@ -43,7 +92,12 @@ def _resolve_adapter(
 
 
 class SubscriptionsService:
-    def __init__(self, db: Session) -> None:
+    def __init__(self, db: Session | None, repo: SubscriptionsRepository | None = None) -> None:
+        if repo is not None:
+            self.repo = repo
+            return
+        if db is None:
+            raise ValueError("db is required when repo is not provided")
         self.repo = SubscriptionsRepository(db)
 
     def list_subscriptions(
@@ -69,6 +123,8 @@ class SubscriptionsService:
         priority: int | None,
         enabled: bool,
     ):
+        if source_type == "url":
+            _validate_subscription_source_url(source_value, field_name="source_value")
         resolved_adapter_type, resolved_source_url, resolved_route = _resolve_adapter(
             adapter_type=adapter_type,
             source_type=source_type,

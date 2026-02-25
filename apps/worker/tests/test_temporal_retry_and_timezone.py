@@ -46,7 +46,7 @@ def test_retry_failed_deliveries_activity_schedules_retry_for_transient(monkeypa
     )
     monkeypatch.setattr(
         activities,
-        "_load_due_failed_deliveries",
+        "_claim_due_failed_deliveries",
         lambda _conn, *, limit: [
             {
                 "delivery_id": "delivery-1",
@@ -90,6 +90,7 @@ def test_retry_failed_deliveries_activity_schedules_retry_for_transient(monkeypa
         last_error_kind: str | None = None,
         next_retry_at: datetime | None = None,
         clear_retry_meta: bool = False,
+        **_: Any,
     ) -> dict[str, Any]:
         captured.append(
             {
@@ -152,7 +153,7 @@ def test_retry_failed_deliveries_activity_marks_sent_on_recovery(monkeypatch: An
     )
     monkeypatch.setattr(
         activities,
-        "_load_due_failed_deliveries",
+        "_claim_due_failed_deliveries",
         lambda _conn, *, limit: [
             {
                 "delivery_id": "delivery-2",
@@ -193,6 +194,7 @@ def test_retry_failed_deliveries_activity_marks_sent_on_recovery(monkeypatch: An
         last_error_kind: str | None = None,
         next_retry_at: datetime | None = None,
         clear_retry_meta: bool = False,
+        **_: Any,
     ) -> dict[str, Any]:
         captured.append(
             {

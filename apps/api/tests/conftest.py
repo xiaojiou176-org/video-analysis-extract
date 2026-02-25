@@ -33,6 +33,8 @@ def _isolated_api_test_env(
     monkeypatch.setenv("TEMPORAL_TASK_QUEUE", "video-analysis-worker")
     monkeypatch.setenv("SQLITE_STATE_PATH", str((env_root / "state.db").resolve()))
     monkeypatch.setenv("UI_AUDIT_GEMINI_ENABLED", "false")
+    # Keep historical test behavior unless a test explicitly overrides auth hardening.
+    monkeypatch.setenv("VD_ALLOW_UNAUTH_WRITE", "true")
 
 
 @pytest.fixture

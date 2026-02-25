@@ -4,10 +4,13 @@ import uuid
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from ..db import get_db
+from ..errors import ApiServiceError
+from ..security import require_write_access
 from ..security import sanitize_exception_detail
 from ..services import IngestService
 
@@ -35,7 +38,12 @@ class IngestPollResponse(BaseModel):
     candidates: list[IngestCandidate]
 
 
-@router.post("/poll", response_model=IngestPollResponse, status_code=status.HTTP_202_ACCEPTED)
+@router.post(
+    "/poll",
+    response_model=IngestPollResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    dependencies=[Depends(require_write_access)],
+)
 async def poll_ingest(payload: IngestPollRequest, db: Session = Depends(get_db)):
     service = IngestService(db)
     try:
@@ -44,10 +52,15 @@ async def poll_ingest(payload: IngestPollRequest, db: Session = Depends(get_db))
             platform=payload.platform,
             max_new_videos=payload.max_new_videos,
         )
+    except ApiServiceError as exc:
+        return JSONResponse(status_code=exc.status_code, content=exc.to_payload())
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=sanitize_exception_detail(exc)) from exc
     except ValueError as exc:
-        raise HTTPException(status_code=404, detail=sanitize_exception_detail(exc)) from exc
+        detail = sanitize_exception_detail(exc)
+        if "not found" in detail.lower() or "does not exist" in detail.lower():
+            raise HTTPException(status_code=404, detail=detail) from exc
+        raise HTTPException(status_code=400, detail=detail) from exc
 
     return IngestPollResponse(
         enqueued=enqueued,

@@ -5,10 +5,13 @@ from datetime import datetime
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from ..db import get_db
+from ..errors import ApiServiceError
+from ..security import require_write_access
 from ..security import sanitize_exception_detail
 from ..services import VideosService
 
@@ -80,7 +83,12 @@ def list_videos(
     ]
 
 
-@router.post("/process", response_model=VideoProcessResponse, status_code=status.HTTP_202_ACCEPTED)
+@router.post(
+    "/process",
+    response_model=VideoProcessResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    dependencies=[Depends(require_write_access)],
+)
 async def process_video(payload: VideoProcessRequest, db: Session = Depends(get_db)):
     service = VideosService(db)
     try:
@@ -94,6 +102,8 @@ async def process_video(payload: VideoProcessRequest, db: Session = Depends(get_
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=sanitize_exception_detail(exc)) from exc
+    except ApiServiceError as exc:
+        return JSONResponse(status_code=exc.status_code, content=exc.to_payload())
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=sanitize_exception_detail(exc)) from exc
 

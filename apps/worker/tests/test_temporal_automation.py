@@ -417,13 +417,14 @@ class _FakeClient:
         self._handle = handle
         self.calls: list[dict] = []
 
-    async def start_workflow(self, workflow_run, payload, *, id: str, task_queue: str):
+    async def start_workflow(self, workflow_run, payload, *, id: str, task_queue: str, **kwargs):
         self.calls.append(
             {
                 "workflow_run": workflow_run,
                 "payload": payload,
                 "id": id,
                 "task_queue": task_queue,
+                "kwargs": kwargs,
             }
         )
         self._handle.id = id

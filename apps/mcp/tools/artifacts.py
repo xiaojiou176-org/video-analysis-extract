@@ -5,7 +5,14 @@ from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
-from apps.mcp.tools._common import ApiCall, is_error_payload, to_optional_str
+from apps.mcp.tools._common import (
+    ApiCall,
+    invalid_argument,
+    is_error_payload,
+    parse_artifact_relative_path,
+    parse_uuid,
+    to_optional_str,
+)
 
 
 def _normalize_markdown_payload(payload: dict[str, Any]) -> dict[str, Any]:
@@ -25,6 +32,14 @@ def _normalize_markdown_payload(payload: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _is_not_found_error(payload: dict[str, Any]) -> bool:
+    details = payload.get("details")
+    if not isinstance(details, dict):
+        return False
+    status_code = details.get("status_code")
+    return isinstance(status_code, int) and status_code == 404
+
+
 def register_artifact_tools(mcp: FastMCP, api_call: ApiCall) -> None:
     @mcp.tool(
         name="vd.artifacts.get",
@@ -39,11 +54,22 @@ def register_artifact_tools(mcp: FastMCP, api_call: ApiCall) -> None:
     ) -> dict[str, Any]:
         normalized_kind = str(kind or "").strip().lower()
         if normalized_kind == "markdown":
+            normalized_job_id: str | None = None
+            if job_id is not None:
+                normalized_job_id = parse_uuid(job_id)
+                if normalized_job_id is None:
+                    return invalid_argument(
+                        "job_id must be a valid UUID when kind=markdown",
+                        method="GET",
+                        path="/api/v1/artifacts/markdown",
+                        field="job_id",
+                        value=job_id,
+                    )
             response = api_call(
                 "GET",
                 "/api/v1/artifacts/markdown",
                 params={
-                    "job_id": job_id,
+                    "job_id": normalized_job_id,
                     "video_url": video_url,
                 },
             )
@@ -51,18 +77,38 @@ def register_artifact_tools(mcp: FastMCP, api_call: ApiCall) -> None:
 
         if normalized_kind == "asset":
             if not job_id or not path:
-                return {
-                    "code": "INVALID_ARGUMENT",
-                    "message": "job_id and path are required when kind=asset",
-                    "details": {"method": "GET", "path": "/api/v1/artifacts/assets"},
-                }
+                return invalid_argument(
+                    "job_id and path are required when kind=asset",
+                    method="GET",
+                    path="/api/v1/artifacts/assets",
+                )
+            normalized_job_id = parse_uuid(job_id)
+            if normalized_job_id is None:
+                return invalid_argument(
+                    "job_id must be a valid UUID when kind=asset",
+                    method="GET",
+                    path="/api/v1/artifacts/assets",
+                    field="job_id",
+                    value=job_id,
+                )
+            normalized_path = parse_artifact_relative_path(path)
+            if normalized_path is None:
+                return invalid_argument(
+                    "path must be a safe relative artifact path",
+                    method="GET",
+                    path="/api/v1/artifacts/assets",
+                    field="path",
+                    value=path,
+                )
             response = api_call(
                 "GET",
                 "/api/v1/artifacts/assets",
-                params={"job_id": job_id, "path": path},
+                params={"job_id": normalized_job_id, "path": normalized_path},
                 return_bytes_base64=include_base64,
             )
             if is_error_payload(response):
+                if not _is_not_found_error(response):
+                    return response
                 return {
                     **response,
                     "exists": False,
@@ -71,7 +117,7 @@ def register_artifact_tools(mcp: FastMCP, api_call: ApiCall) -> None:
                     "base64": None,
                     "size_bytes": None,
                 }
-            query = urlencode({"job_id": job_id, "path": path})
+            query = urlencode({"job_id": normalized_job_id, "path": normalized_path})
             return {
                 "exists": True,
                 "asset_url": f"/api/v1/artifacts/assets?{query}",
@@ -80,8 +126,10 @@ def register_artifact_tools(mcp: FastMCP, api_call: ApiCall) -> None:
                 "size_bytes": response.get("size_bytes") if include_base64 else None,
             }
 
-        return {
-            "code": "INVALID_ARGUMENT",
-            "message": "kind must be one of: markdown, asset",
-            "details": {"method": "GET", "path": "vd.artifacts.get"},
-        }
+        return invalid_argument(
+            "kind must be one of: markdown, asset",
+            method="GET",
+            path="vd.artifacts.get",
+            field="kind",
+            value=kind,
+        )

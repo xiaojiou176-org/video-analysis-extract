@@ -171,11 +171,20 @@ class SQLiteStateStore:
                 (lock_key,),
             ).fetchone()
             if row is None:
-                conn.execute(
-                    "INSERT INTO locks (lock_key, owner, expires_at) VALUES (?, ?, ?)",
-                    (lock_key, owner, expires_at),
-                )
-                return True
+                try:
+                    conn.execute(
+                        "INSERT INTO locks (lock_key, owner, expires_at) VALUES (?, ?, ?)",
+                        (lock_key, owner, expires_at),
+                    )
+                    return True
+                except sqlite3.IntegrityError:
+                    # Another worker won the race between SELECT and INSERT.
+                    row = conn.execute(
+                        "SELECT owner, expires_at FROM locks WHERE lock_key = ?",
+                        (lock_key,),
+                    ).fetchone()
+                    if row is None:
+                        return False
 
             if row["owner"] != owner and not _is_expired(row["expires_at"]):
                 return False

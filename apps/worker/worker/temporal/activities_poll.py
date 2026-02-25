@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from os import getpid
 from typing import Any
 
@@ -22,6 +23,8 @@ except ModuleNotFoundError:  # pragma: no cover
 
     activity = _ActivityFallback()
 
+logger = logging.getLogger(__name__)
+
 
 async def run_poll_feeds_once(
     settings: Settings,
@@ -33,9 +36,24 @@ async def run_poll_feeds_once(
     pg_store = PostgresBusinessStore(settings.database_url)
     lock_owner = f"pid-{getpid()}"
     lock_key = "phase2.poll_feeds"
+    lock_backend: str | None = None
+    pg_lock_lease = None
 
-    if not sqlite_store.acquire_lock(lock_key, lock_owner, settings.lock_ttl_seconds):
-        return {"ok": True, "skipped": True, "reason": "lock_not_acquired"}
+    advisory_supported, pg_lock_lease, advisory_reason = pg_store.try_acquire_advisory_lock(
+        lock_key=lock_key
+    )
+    if advisory_supported:
+        if pg_lock_lease is None:
+            return {"ok": True, "skipped": True, "reason": "lock_not_acquired"}
+        lock_backend = "postgres_advisory"
+    else:
+        logger.warning(
+            "poll advisory lock unavailable, fallback to sqlite lock",
+            extra={"lock_key": lock_key, "reason": advisory_reason},
+        )
+        if not sqlite_store.acquire_lock(lock_key, lock_owner, settings.lock_ttl_seconds):
+            return {"ok": True, "skipped": True, "reason": "lock_not_acquired"}
+        lock_backend = "sqlite_local"
 
     filters = filters or {}
     try:
@@ -164,7 +182,10 @@ async def run_poll_feeds_once(
             "filters": filters,
         }
     finally:
-        sqlite_store.release_lock(lock_key, lock_owner)
+        if lock_backend == "postgres_advisory" and pg_lock_lease is not None:
+            pg_store.release_advisory_lock(pg_lock_lease)
+        elif lock_backend == "sqlite_local":
+            sqlite_store.release_lock(lock_key, lock_owner)
 
 
 def _resolve_platform(*, normalized: dict[str, Any], subscription: dict[str, Any]) -> str:

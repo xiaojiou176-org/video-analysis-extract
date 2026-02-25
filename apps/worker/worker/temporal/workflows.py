@@ -15,6 +15,7 @@ with workflow.unsafe.imports_passed_through():
         mark_succeeded_activity,
         poll_feeds_activity,
         provider_canary_activity,
+        reconcile_stale_queued_jobs_activity,
         retry_failed_deliveries_activity,
         resolve_daily_digest_timing_activity,
         run_pipeline_activity,
@@ -255,10 +256,21 @@ class NotificationRetryWorkflow:
         run_once = bool(config.get("run_once", False))
         interval_minutes = max(1, int(config.get("interval_minutes", 10)))
         retry_limit = max(1, int(config.get("retry_batch_limit", 50)))
+        queued_timeout_minutes = max(1, int(config.get("queued_timeout_minutes", 15)))
+        queued_reclaim_limit = max(1, int(config.get("queued_reclaim_limit", 200)))
 
         latest_result: dict[str, Any] = {"ok": True, "runs": 0}
         run_count = 0
         while True:
+            stale_jobs_result = await workflow.execute_activity(
+                reconcile_stale_queued_jobs_activity,
+                {
+                    "timeout_minutes": queued_timeout_minutes,
+                    "limit": queued_reclaim_limit,
+                },
+                start_to_close_timeout=timedelta(minutes=2),
+                retry_policy=RetryPolicy(maximum_attempts=1),
+            )
             activity_result = await workflow.execute_activity(
                 retry_failed_deliveries_activity,
                 {"limit": retry_limit},
@@ -268,6 +280,7 @@ class NotificationRetryWorkflow:
             run_count += 1
             latest_result = {
                 **activity_result,
+                "stale_queued_recovery": stale_jobs_result,
                 "runs": run_count,
             }
             if run_once:

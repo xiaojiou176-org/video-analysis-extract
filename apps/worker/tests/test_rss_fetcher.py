@@ -1,6 +1,10 @@
 from __future__ import annotations
 
-from worker.rss.fetcher import parse_feed
+import asyncio
+
+import pytest
+
+from worker.rss.fetcher import RSSHubFetcher, parse_feed
 
 
 def test_parse_rss_feed_extracts_title_link_and_guid() -> None:
@@ -45,3 +49,18 @@ def test_parse_atom_feed_extracts_link_href() -> None:
     assert entries[0]["title"] == "Video B"
     assert entries[0]["link"] == "https://www.bilibili.com/video/BV1xx411c7mD"
     assert entries[0]["guid"] == "tag:example.com,2024:2"
+
+
+def test_fetch_many_propagates_cancellation(monkeypatch: pytest.MonkeyPatch) -> None:
+    fetcher = RSSHubFetcher(retry_attempts=0)
+
+    async def _fake_fetch_one(*_args, **_kwargs):
+        raise asyncio.CancelledError()
+
+    monkeypatch.setattr(fetcher, "_fetch_one", _fake_fetch_one)
+
+    async def _run() -> None:
+        await fetcher.fetch_many(["https://rss.example.com/feed.xml"])
+
+    with pytest.raises(asyncio.CancelledError):
+        asyncio.run(_run())

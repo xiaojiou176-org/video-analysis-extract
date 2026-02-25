@@ -50,6 +50,7 @@ _DELIVERY_PATCHABLES = (
     "_insert_daily_digest_delivery",
     "_get_existing_video_digest",
     "_get_existing_daily_digest",
+    "_claim_due_failed_deliveries",
     "_load_due_failed_deliveries",
     "_extract_daily_digest_date",
     "_extract_timezone_name",

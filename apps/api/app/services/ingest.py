@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import uuid
 from uuid import uuid4
 
@@ -7,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..config import settings
+from ..errors import ApiTimeoutError
 from ..models import Job, Subscription, Video
 
 
@@ -33,10 +35,22 @@ class IngestService:
         except Exception as exc:  # pragma: no cover
             raise RuntimeError(f"temporal client not available: {exc}") from exc
 
-        client = await Client.connect(
-            settings.temporal_target_host,
-            namespace=settings.temporal_namespace,
-        )
+        try:
+            client = await asyncio.wait_for(
+                Client.connect(
+                    settings.temporal_target_host,
+                    namespace=settings.temporal_namespace,
+                ),
+                timeout=settings.api_temporal_connect_timeout_seconds,
+            )
+        except TimeoutError as exc:
+            raise ApiTimeoutError(
+                detail=(
+                    "temporal connect timed out "
+                    f"after {settings.api_temporal_connect_timeout_seconds:.1f}s"
+                ),
+                error_code="TEMPORAL_CONNECT_TIMEOUT",
+            ) from exc
 
         filters = {
             "subscription_id": str(subscription_id) if subscription_id else None,
@@ -44,13 +58,38 @@ class IngestService:
             "max_new_videos": max_new_videos,
         }
 
-        handle = await client.start_workflow(
-            "PollFeedsWorkflow",
-            filters,
-            id=f"api-poll-feeds-{uuid4()}",
-            task_queue=settings.temporal_task_queue,
-        )
-        result = await handle.result()
+        try:
+            handle = await asyncio.wait_for(
+                client.start_workflow(
+                    "PollFeedsWorkflow",
+                    filters,
+                    id=f"api-poll-feeds-{uuid4()}",
+                    task_queue=settings.temporal_task_queue,
+                ),
+                timeout=settings.api_temporal_start_timeout_seconds,
+            )
+        except TimeoutError as exc:
+            raise ApiTimeoutError(
+                detail=(
+                    "temporal workflow start timed out "
+                    f"after {settings.api_temporal_start_timeout_seconds:.1f}s"
+                ),
+                error_code="TEMPORAL_WORKFLOW_START_TIMEOUT",
+            ) from exc
+
+        try:
+            result = await asyncio.wait_for(
+                handle.result(),
+                timeout=settings.api_temporal_result_timeout_seconds,
+            )
+        except TimeoutError as exc:
+            raise ApiTimeoutError(
+                detail=(
+                    "temporal workflow result timed out "
+                    f"after {settings.api_temporal_result_timeout_seconds:.1f}s"
+                ),
+                error_code="TEMPORAL_WORKFLOW_RESULT_TIMEOUT",
+            ) from exc
 
         created_job_ids = [uuid.UUID(str(item)) for item in result.get("created_job_ids", [])]
         if not created_job_ids:

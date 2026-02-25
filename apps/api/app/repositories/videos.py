@@ -108,6 +108,50 @@ class VideosRepository:
         video_uid: str,
         source_url: str,
     ) -> Video:
+        dialect_name = (self.db.bind.dialect.name if self.db.bind is not None else "").lower()
+        if dialect_name == "postgresql":
+            now = datetime.now(timezone.utc)
+            row = self.db.execute(
+                text(
+                    """
+                    INSERT INTO videos (
+                        id,
+                        platform,
+                        video_uid,
+                        source_url,
+                        first_seen_at,
+                        last_seen_at
+                    )
+                    VALUES (
+                        CAST(:id AS UUID),
+                        :platform,
+                        :video_uid,
+                        :source_url,
+                        :now_ts,
+                        :now_ts
+                    )
+                    ON CONFLICT (platform, video_uid)
+                    DO UPDATE SET
+                        source_url = EXCLUDED.source_url,
+                        last_seen_at = EXCLUDED.last_seen_at
+                    RETURNING id
+                    """
+                ),
+                {
+                    "platform": platform,
+                    "id": str(uuid.uuid4()),
+                    "video_uid": video_uid,
+                    "source_url": source_url,
+                    "now_ts": now,
+                },
+            ).mappings().one()
+            self.db.commit()
+            existing = self.db.get(Video, row["id"])
+            if existing is None:
+                raise RuntimeError("failed to load video after upsert")
+            self.db.refresh(existing)
+            return existing
+
         existing = self.get_by_platform_uid(platform=platform, video_uid=video_uid)
         now = datetime.now(timezone.utc)
         if existing is not None:

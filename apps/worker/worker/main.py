@@ -28,6 +28,7 @@ async def run_temporal_worker(settings: Settings) -> None:
         mark_succeeded_activity,
         poll_feeds_activity,
         provider_canary_activity,
+        reconcile_stale_queued_jobs_activity,
         resolve_daily_digest_timing_activity,
         retry_failed_deliveries_activity,
         run_pipeline_activity,
@@ -58,6 +59,7 @@ async def run_temporal_worker(settings: Settings) -> None:
         activities=[
             poll_feeds_activity,
             mark_running_activity,
+            reconcile_stale_queued_jobs_activity,
             run_pipeline_activity,
             mark_succeeded_activity,
             mark_failed_activity,
@@ -97,14 +99,18 @@ async def start_poll_workflow(
 
 
 async def start_process_workflow(settings: Settings, job_id: str) -> dict:
+    from temporalio.common import WorkflowIDConflictPolicy, WorkflowIDReusePolicy
+
     from worker.temporal.workflows import ProcessJobWorkflow
 
     client = await _connect_temporal(settings)
     handle = await client.start_workflow(
         ProcessJobWorkflow.run,
         job_id,
-        id=f"process-job-{job_id}-{uuid4()}",
+        id=f"process-job-{job_id}",
         task_queue=settings.temporal_task_queue,
+        id_reuse_policy=WorkflowIDReusePolicy.REJECT_DUPLICATE,
+        id_conflict_policy=WorkflowIDConflictPolicy.USE_EXISTING,
     )
     return await handle.result()
 

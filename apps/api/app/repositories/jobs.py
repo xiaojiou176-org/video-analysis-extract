@@ -10,6 +10,7 @@ from ..models import Job
 
 
 ACTIVE_JOB_STATUSES = {"queued", "running", "succeeded"}
+RETRYABLE_DISPATCH_FAILURE_REASONS = {"dispatch_failed", "dispatch_timeout"}
 
 
 class JobsRepository:
@@ -55,6 +56,9 @@ class JobsRepository:
             existing = self.get_active_by_idempotency_key(idempotency_key)
             if existing is not None:
                 return existing, False
+            retryable = self.requeue_retryable_dispatch_failure(idempotency_key=idempotency_key)
+            if retryable is not None:
+                return retryable, True
 
         try:
             created = self.create(
@@ -68,10 +72,49 @@ class JobsRepository:
             return created, True
         except IntegrityError:
             self.db.rollback()
+            if not force:
+                retryable = self.requeue_retryable_dispatch_failure(idempotency_key=idempotency_key)
+                if retryable is not None:
+                    return retryable, True
             existing = self.get_by_idempotency_key(idempotency_key)
             if existing is None:
                 raise
             return existing, False
+
+    def requeue_retryable_dispatch_failure(self, *, idempotency_key: str) -> Job | None:
+        stmt = select(Job).where(
+            Job.idempotency_key == idempotency_key,
+            Job.status == "failed",
+            Job.hard_fail_reason.in_(RETRYABLE_DISPATCH_FAILURE_REASONS),
+        )
+        job = self.db.scalar(stmt)
+        if job is None:
+            return None
+        job.status = "queued"
+        job.error_message = None
+        job.hard_fail_reason = None
+        self.db.add(job)
+        self.db.commit()
+        self.db.refresh(job)
+        return job
+
+    def mark_dispatch_failed(
+        self,
+        *,
+        job_id: uuid.UUID,
+        error_message: str,
+        reason: str = "dispatch_failed",
+    ) -> Job:
+        job = self.get(job_id)
+        if job is None:
+            raise ValueError(f"job not found: {job_id}")
+        job.status = "failed"
+        job.error_message = error_message
+        job.hard_fail_reason = reason
+        self.db.add(job)
+        self.db.commit()
+        self.db.refresh(job)
+        return job
 
     def get(self, job_id: uuid.UUID) -> Job | None:
         return self.db.get(Job, job_id)

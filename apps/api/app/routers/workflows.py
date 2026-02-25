@@ -1,24 +1,19 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from ..config import settings
 from ..db import get_db
+from ..schemas.workflows import WorkflowRunRequest
+from ..security import require_write_access, sanitize_exception_detail
 
 router = APIRouter(prefix="/api/v1/workflows", tags=["workflows"])
-
-
-class WorkflowRunRequest(BaseModel):
-    workflow: str = Field(pattern=r"^(poll_feeds|daily_digest|notification_retry|cleanup|provider_canary)$")
-    run_once: bool = True
-    wait_for_result: bool = False
-    workflow_id: str | None = None
-    payload: dict = Field(default_factory=dict)
 
 
 class WorkflowRunResponse(BaseModel):
@@ -40,7 +35,7 @@ _WORKFLOW_NAME_MAP = {
 }
 
 
-@router.post("/run", response_model=WorkflowRunResponse)
+@router.post("/run", response_model=WorkflowRunResponse, dependencies=[Depends(require_write_access)])
 async def run_workflow(payload: WorkflowRunRequest, db: Session = Depends(get_db)):
     del db  # reserved for future authorization / audit persistence
 
@@ -48,7 +43,8 @@ async def run_workflow(payload: WorkflowRunRequest, db: Session = Depends(get_db
         from temporalio.client import Client
         from temporalio.exceptions import WorkflowAlreadyStartedError
     except Exception as exc:  # pragma: no cover
-        raise HTTPException(status_code=503, detail=f"temporal client not available: {exc}") from exc
+        detail = sanitize_exception_detail(exc)
+        raise HTTPException(status_code=503, detail=f"temporal client not available: {detail}") from exc
 
     workflow_name = _WORKFLOW_NAME_MAP[payload.workflow]
     request_payload = dict(payload.payload or {})
@@ -59,20 +55,43 @@ async def run_workflow(payload: WorkflowRunRequest, db: Session = Depends(get_db
         workflow_id = f"{payload.workflow}-workflow"
 
     try:
-        client = await Client.connect(
-            settings.temporal_target_host,
-            namespace=settings.temporal_namespace,
+        client = await asyncio.wait_for(
+            Client.connect(
+                settings.temporal_target_host,
+                namespace=settings.temporal_namespace,
+            ),
+            timeout=settings.api_temporal_connect_timeout_seconds,
         )
+    except TimeoutError as exc:
+        raise HTTPException(
+            status_code=504,
+            detail=(
+                "temporal connect timed out "
+                f"after {settings.api_temporal_connect_timeout_seconds:.1f}s"
+            ),
+        ) from exc
     except Exception as exc:
-        raise HTTPException(status_code=503, detail=f"failed to connect temporal: {exc}") from exc
+        detail = sanitize_exception_detail(exc)
+        raise HTTPException(status_code=503, detail=f"failed to connect temporal: {detail}") from exc
 
     try:
-        handle = await client.start_workflow(
-            workflow_name,
-            request_payload,
-            id=workflow_id,
-            task_queue=settings.temporal_task_queue,
+        handle = await asyncio.wait_for(
+            client.start_workflow(
+                workflow_name,
+                request_payload,
+                id=workflow_id,
+                task_queue=settings.temporal_task_queue,
+            ),
+            timeout=settings.api_temporal_start_timeout_seconds,
         )
+    except TimeoutError as exc:
+        raise HTTPException(
+            status_code=504,
+            detail=(
+                "temporal workflow start timed out "
+                f"after {settings.api_temporal_start_timeout_seconds:.1f}s"
+            ),
+        ) from exc
     except WorkflowAlreadyStartedError:
         return WorkflowRunResponse(
             workflow=payload.workflow,
@@ -83,15 +102,28 @@ async def run_workflow(payload: WorkflowRunRequest, db: Session = Depends(get_db
             result=None,
         )
     except Exception as exc:
-        raise HTTPException(status_code=503, detail=f"failed to start workflow: {exc}") from exc
+        detail = sanitize_exception_detail(exc)
+        raise HTTPException(status_code=503, detail=f"failed to start workflow: {detail}") from exc
 
     run_id = getattr(handle, "first_execution_run_id", None) or getattr(handle, "run_id", None)
 
     if payload.wait_for_result:
         try:
-            result = await handle.result()
+            result = await asyncio.wait_for(
+                handle.result(),
+                timeout=settings.api_temporal_result_timeout_seconds,
+            )
+        except TimeoutError as exc:
+            raise HTTPException(
+                status_code=504,
+                detail=(
+                    "workflow result timed out "
+                    f"after {settings.api_temporal_result_timeout_seconds:.1f}s"
+                ),
+            ) from exc
         except Exception as exc:
-            raise HTTPException(status_code=502, detail=f"workflow execution failed: {exc}") from exc
+            detail = sanitize_exception_detail(exc)
+            raise HTTPException(status_code=502, detail=f"workflow execution failed: {detail}") from exc
         return WorkflowRunResponse(
             workflow=payload.workflow,
             workflow_name=workflow_name,

@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from ..db import get_db
+from ..security import require_write_access, sanitize_exception_detail
 from ..services import SubscriptionsService
 from ..services.source_names import resolve_source_name
 
@@ -91,7 +92,12 @@ def list_subscriptions(
     return [_to_subscription_response(row) for row in rows]
 
 
-@router.post("", response_model=SubscriptionUpsertResponse, status_code=status.HTTP_200_OK)
+@router.post(
+    "",
+    response_model=SubscriptionUpsertResponse,
+    status_code=status.HTTP_200_OK,
+    dependencies=[Depends(require_write_access)],
+)
 def upsert_subscription(payload: SubscriptionUpsertRequest, db: Session = Depends(get_db)):
     service = SubscriptionsService(db)
     try:
@@ -108,7 +114,7 @@ def upsert_subscription(payload: SubscriptionUpsertRequest, db: Session = Depend
             enabled=payload.enabled,
         )
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise HTTPException(status_code=400, detail=sanitize_exception_detail(exc)) from exc
 
     return SubscriptionUpsertResponse(
         subscription=_to_subscription_response(row),
@@ -116,17 +122,21 @@ def upsert_subscription(payload: SubscriptionUpsertRequest, db: Session = Depend
     )
 
 
-@router.post("/batch-update-category", response_model=BatchUpdateCategoryResponse)
+@router.post(
+    "/batch-update-category",
+    response_model=BatchUpdateCategoryResponse,
+    dependencies=[Depends(require_write_access)],
+)
 def batch_update_category(payload: BatchUpdateCategoryRequest, db: Session = Depends(get_db)):
     service = SubscriptionsService(db)
     try:
         updated = service.batch_update_category(ids=payload.ids, category=payload.category)
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise HTTPException(status_code=400, detail=sanitize_exception_detail(exc)) from exc
     return BatchUpdateCategoryResponse(updated=updated)
 
 
-@router.delete("/{id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_write_access)])
 def delete_subscription(id: uuid.UUID, db: Session = Depends(get_db)):
     service = SubscriptionsService(db)
     deleted = service.delete_subscription(id)

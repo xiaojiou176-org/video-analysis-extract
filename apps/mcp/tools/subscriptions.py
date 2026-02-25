@@ -4,6 +4,8 @@ from typing import Any, Callable
 
 from mcp.server.fastmcp import FastMCP
 
+from apps.mcp.tools._common import invalid_argument, parse_uuid, url_path_segment
+
 ApiCall = Callable[..., dict[str, Any]]
 
 
@@ -57,24 +59,48 @@ def register_subscription_tools(mcp: FastMCP, api_call: ApiCall) -> None:
                 },
             )
         if normalized_action == "batch_update_category":
+            normalized_ids: list[str] = []
+            for item in ids or []:
+                normalized = parse_uuid(item)
+                if normalized is None:
+                    return invalid_argument(
+                        "ids must contain only UUID values",
+                        method="POST",
+                        path="/api/v1/subscriptions/batch-update-category",
+                        field="ids",
+                        value=item,
+                    )
+                normalized_ids.append(normalized)
             return api_call(
                 "POST",
                 "/api/v1/subscriptions/batch-update-category",
                 json_body={
-                    "ids": ids or [],
+                    "ids": normalized_ids,
                     "category": category,
                 },
             )
         if normalized_action == "remove":
             if not id:
-                return {
-                    "code": "INVALID_ARGUMENT",
-                    "message": "id is required when action=remove",
-                    "details": {"method": "DELETE", "path": "/api/v1/subscriptions/{id}"},
-                }
-            return api_call("DELETE", f"/api/v1/subscriptions/{id}")
-        return {
-            "code": "INVALID_ARGUMENT",
-            "message": "action must be one of: list, upsert, remove, batch_update_category",
-            "details": {"method": "POST", "path": "vd.subscriptions.manage"},
-        }
+                return invalid_argument(
+                    "id is required when action=remove",
+                    method="DELETE",
+                    path="/api/v1/subscriptions/{id}",
+                    field="id",
+                )
+            normalized_id = parse_uuid(id)
+            if normalized_id is None:
+                return invalid_argument(
+                    "id must be a valid UUID when action=remove",
+                    method="DELETE",
+                    path="/api/v1/subscriptions/{id}",
+                    field="id",
+                    value=id,
+                )
+            return api_call("DELETE", f"/api/v1/subscriptions/{url_path_segment(normalized_id)}")
+        return invalid_argument(
+            "action must be one of: list, upsert, remove, batch_update_category",
+            method="POST",
+            path="vd.subscriptions.manage",
+            field="action",
+            value=action,
+        )

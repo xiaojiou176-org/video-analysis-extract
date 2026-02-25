@@ -4,7 +4,19 @@ from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
-from apps.mcp.tools._common import ApiCall, is_error_payload, to_int, to_optional_bool, to_optional_str
+from apps.mcp.tools._common import (
+    DEFAULT_MAX_BASE64_BYTES,
+    ApiCall,
+    invalid_argument,
+    is_error_payload,
+    parse_artifact_relative_path,
+    parse_uuid,
+    to_int,
+    to_optional_bool,
+    to_optional_str,
+    url_path_segment,
+    validate_base64_size,
+)
 
 
 def _normalize_summary(value: Any) -> dict[str, Any]:
@@ -87,11 +99,22 @@ def register_ui_audit_tools(mcp: FastMCP, api_call: ApiCall) -> None:
         job_id: str | None = None,
         artifact_root: str | None = None,
     ) -> dict[str, Any]:
+        normalized_job_id: str | None = None
+        if job_id is not None:
+            normalized_job_id = parse_uuid(job_id)
+            if normalized_job_id is None:
+                return invalid_argument(
+                    "job_id must be a valid UUID",
+                    method="POST",
+                    path="/api/v1/ui-audit/run",
+                    field="job_id",
+                    value=job_id,
+                )
         response = api_call(
             "POST",
             "/api/v1/ui-audit/run",
             json_body={
-                "job_id": job_id,
+                "job_id": normalized_job_id,
                 "artifact_root": artifact_root,
             },
         )
@@ -112,15 +135,25 @@ def register_ui_audit_tools(mcp: FastMCP, api_call: ApiCall) -> None:
         max_changed_lines: int = 120,
     ) -> dict[str, Any]:
         normalized_action = str(action or "").strip().lower()
+        normalized_run_id = parse_uuid(run_id)
+        if normalized_run_id is None:
+            return invalid_argument(
+                "run_id must be a valid UUID",
+                method="POST",
+                path="vd.ui_audit.read",
+                field="run_id",
+                value=run_id,
+            )
+        encoded_run_id = url_path_segment(normalized_run_id)
 
         if normalized_action == "get":
-            response = api_call("GET", f"/api/v1/ui-audit/{run_id}")
+            response = api_call("GET", f"/api/v1/ui-audit/{encoded_run_id}")
             return _normalize_run_payload(response)
 
         if normalized_action == "list_findings":
             response = api_call(
                 "GET",
-                f"/api/v1/ui-audit/{run_id}/findings",
+                f"/api/v1/ui-audit/{encoded_run_id}/findings",
                 params={"severity": severity},
             )
             if is_error_payload(response):
@@ -128,23 +161,33 @@ def register_ui_audit_tools(mcp: FastMCP, api_call: ApiCall) -> None:
             items = response.get("items")
             raw_items = items if isinstance(items, list) else []
             return {
-                "run_id": run_id,
+                "run_id": normalized_run_id,
                 "severity": severity,
                 "items": [_normalize_finding(item) for item in raw_items],
             }
 
         if normalized_action == "get_artifact":
             if not key:
-                return {
-                    "code": "INVALID_ARGUMENT",
-                    "message": "key is required when action=get_artifact",
-                    "details": {"method": "GET", "path": "/api/v1/ui-audit/{run_id}/artifact"},
-                }
+                return invalid_argument(
+                    "key is required when action=get_artifact",
+                    method="GET",
+                    path="/api/v1/ui-audit/{run_id}/artifact",
+                    field="key",
+                )
+            normalized_key = parse_artifact_relative_path(key)
+            if normalized_key is None:
+                return invalid_argument(
+                    "key must be a safe relative artifact path",
+                    method="GET",
+                    path="/api/v1/ui-audit/{run_id}/artifact",
+                    field="key",
+                    value=key,
+                )
             response = api_call(
                 "GET",
-                f"/api/v1/ui-audit/{run_id}/artifact",
+                f"/api/v1/ui-audit/{encoded_run_id}/artifact",
                 params={
-                    "key": key,
+                    "key": normalized_key,
                     "include_base64": include_base64,
                 },
             )
@@ -152,13 +195,30 @@ def register_ui_audit_tools(mcp: FastMCP, api_call: ApiCall) -> None:
                 return response
             payload = _normalize_artifact(response)
             payload["exists"] = bool(response.get("exists", False))
-            payload["base64"] = to_optional_str(response.get("base64")) if include_base64 else None
+            if include_base64:
+                encoded = to_optional_str(response.get("base64"))
+                if encoded is not None:
+                    valid, error_message = validate_base64_size(encoded, max_bytes=DEFAULT_MAX_BASE64_BYTES)
+                    if not valid:
+                        return {
+                            "code": "PAYLOAD_TOO_LARGE",
+                            "message": error_message or "base64 payload exceeds configured limit",
+                            "details": {
+                                "method": "GET",
+                                "path": "/api/v1/ui-audit/{run_id}/artifact",
+                                "field": "base64",
+                                "max_size_bytes": DEFAULT_MAX_BASE64_BYTES,
+                            },
+                        }
+                payload["base64"] = encoded
+            else:
+                payload["base64"] = None
             return payload
 
         if normalized_action == "autofix":
             response = api_call(
                 "POST",
-                f"/api/v1/ui-audit/{run_id}/autofix",
+                f"/api/v1/ui-audit/{encoded_run_id}/autofix",
                 json_body={
                     "mode": mode,
                     "max_files": max_files,
@@ -167,8 +227,10 @@ def register_ui_audit_tools(mcp: FastMCP, api_call: ApiCall) -> None:
             )
             return _normalize_autofix_payload(response)
 
-        return {
-            "code": "INVALID_ARGUMENT",
-            "message": "action must be one of: get, list_findings, get_artifact, autofix",
-            "details": {"method": "POST", "path": "vd.ui_audit.read"},
-        }
+        return invalid_argument(
+            "action must be one of: get, list_findings, get_artifact, autofix",
+            method="POST",
+            path="vd.ui_audit.read",
+            field="action",
+            value=action,
+        )

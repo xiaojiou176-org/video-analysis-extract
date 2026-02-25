@@ -102,15 +102,16 @@ async def mark_running_activity(job_id: str) -> dict[str, Any]:
     sqlite_store.mark_step_running(job_id=job_id, step_name="mark_running", attempt=attempt)
 
     running_job = pg_store.mark_job_running(job_id=job_id)
-    if running_job.get("status") != "running":
+    if running_job.get("transitioned") is not True:
+        reason = str(running_job.get("conflict") or f"invalid_status:{running_job.get('status')}")
         sqlite_store.mark_step_finished(
             job_id=job_id,
             step_name="mark_running",
             attempt=attempt,
             status="failed",
-            error_payload={"reason": f"invalid_status:{running_job.get('status')}"},
+            error_payload={"reason": reason},
         )
-        raise ValueError(f"job {job_id} is not runnable, status={running_job.get('status')}")
+        raise ValueError(f"job {job_id} is not runnable, reason={reason}")
 
     sqlite_store.mark_step_finished(
         job_id=job_id,
@@ -120,6 +121,32 @@ async def mark_running_activity(job_id: str) -> dict[str, Any]:
     )
     sqlite_store.update_checkpoint(job_id=job_id, last_completed_step="mark_running")
     return {"job_id": job_id, "attempt": attempt, "status": "running"}
+
+
+@activity.defn(name="reconcile_stale_queued_jobs_activity")
+async def reconcile_stale_queued_jobs_activity(payload: dict[str, Any] | None = None) -> dict[str, Any]:
+    settings = Settings.from_env()
+    pg_store = PostgresBusinessStore(settings.database_url)
+    payload = payload or {}
+
+    timeout_minutes = _coerce_non_negative_int(payload.get("timeout_minutes"))
+    if timeout_minutes is None:
+        timeout_minutes = 15
+    limit = _coerce_non_negative_int(payload.get("limit"))
+    if limit is None or limit <= 0:
+        limit = 200
+
+    stale_jobs = pg_store.fail_stale_queued_jobs(
+        timeout_seconds=max(60, timeout_minutes * 60),
+        limit=limit,
+    )
+    return {
+        "ok": True,
+        "timeout_minutes": timeout_minutes,
+        "checked_limit": limit,
+        "recovered": len(stale_jobs),
+        "job_ids": [str(item["id"]) for item in stale_jobs],
+    }
 
 
 @activity.defn(name="run_pipeline_activity")
@@ -196,6 +223,16 @@ async def mark_succeeded_activity(payload: dict[str, Any]) -> dict[str, Any]:
         llm_gate_passed=llm_gate_passed,
         hard_fail_reason=hard_fail_reason,
     )
+    if job.get("transitioned", True) is not True:
+        reason = str(job.get("conflict") or f"invalid_status:{job.get('status')}")
+        sqlite_store.mark_step_finished(
+            job_id=job_id,
+            step_name=step_name,
+            attempt=attempt,
+            status="failed",
+            error_payload={"reason": reason},
+        )
+        raise ValueError(f"job {job_id} terminal update blocked, reason={reason}")
     sqlite_store.mark_step_finished(
         job_id=job_id,
         step_name=step_name,
@@ -253,6 +290,16 @@ async def mark_failed_activity(payload: dict[str, Any]) -> dict[str, Any]:
         llm_gate_passed=llm_gate_passed,
         hard_fail_reason=hard_fail_reason,
     )
+    if job.get("transitioned", True) is not True:
+        reason = str(job.get("conflict") or f"invalid_status:{job.get('status')}")
+        sqlite_store.mark_step_finished(
+            job_id=job_id,
+            step_name=step_name,
+            attempt=attempt,
+            status="failed",
+            error_payload={"reason": reason},
+        )
+        raise ValueError(f"job {job_id} terminal update blocked, reason={reason}")
     sqlite_store.mark_step_finished(
         job_id=job_id,
         step_name=step_name,

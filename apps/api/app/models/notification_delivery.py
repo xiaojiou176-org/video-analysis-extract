@@ -22,6 +22,10 @@ class NotificationDelivery(Base):
             "status IN ('queued', 'sent', 'failed', 'skipped')",
             name="notification_deliveries_status_check",
         ),
+        CheckConstraint(
+            "attempt_count >= 0",
+            name="notification_deliveries_attempt_count_check",
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
