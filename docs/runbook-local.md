@@ -139,7 +139,7 @@ OPS_CLEANUP_OLDER_THAN_HOURS=24 \
 - `OPS_CLEANUP_OLDER_THAN_HOURS`：媒体/帧文件保留小时（默认 `24`）。
 - `OPS_CLEANUP_CACHE_OLDER_THAN_HOURS`：可选，cache 文件按年龄清理阈值。
 - `OPS_CLEANUP_CACHE_MAX_SIZE_MB`：可选，cache 清理后体积上限。
-- `OPS_CLEANUP_WORKSPACE_DIR` / `OPS_CLEANUP_CACHE_DIR`：可选，覆盖默认目录。
+- `OPS_CLEANUP_WORKSPACE_DIR` / `OPS_CLEANUP_CACHE_DIR`：可选，覆盖默认目录。安全限制：仅允许落在 `${REPO_ROOT}/.runtime-cache`、`${REPO_ROOT}/cache`、`${REPO_ROOT}/.cache`、`/tmp/video-digestor*`、`/tmp/video-analysis*` 前缀下，超出白名单会直接失败。
 - `OPS_DAILY_WORKFLOW_ID` / `OPS_NOTIFICATION_WORKFLOW_ID` / `OPS_CANARY_WORKFLOW_ID` / `OPS_CLEANUP_WORKFLOW_ID`：固定 workflow id，用于“已运行则不重复启动”。
 - `OPS_DAILY_RUN_ONCE=1` / `OPS_NOTIFICATION_RUN_ONCE=1` / `OPS_CANARY_RUN_ONCE=1` / `OPS_CLEANUP_RUN_ONCE=1`：改为单次执行（排障时使用，生产常驻建议保持 `0`）。
 - `OPS_SHOW_HINTS=0`：关闭脚本启动摘要日志（默认 `1`）。

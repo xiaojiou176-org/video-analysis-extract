@@ -3,7 +3,7 @@
 ## Scope
 - RSSHub 订阅拉取与去重入库。
 - Temporal 编排 Poll + Process 两层 workflow。
-- Worker 端 8-step pipeline（下载/字幕/评论/抽帧/LLM/产物写入）。
+- Worker 端 9-step pipeline（metadata/下载/字幕/评论/抽帧/LLM/embedding/产物写入）。
 - MCP 薄封装暴露订阅、拉取、处理、产物读取。
 
 ## Components
@@ -17,7 +17,7 @@
 1. `POST /api/v1/ingest/poll` 启动 `PollFeedsWorkflow`。
 2. `poll_feeds_activity` 生成新 job（幂等键去重）。
 3. 每个新 job 触发 `ProcessJobWorkflow(job_id)`。
-4. `run_pipeline_activity` 执行 8-step，并将产物写到：
+4. `run_pipeline_activity` 执行 9-step，并将产物写到：
    - `${PIPELINE_ARTIFACT_ROOT}/{platform}/{video_uid}/{job_id}/`
 5. `mark_succeeded_activity` 把 `artifact_digest_md` 和 `artifact_root` 落库到 `jobs`。
 6. `GET /api/v1/artifacts/markdown` 根据 `job_id` 或 `video_url` 读取 digest。
@@ -52,6 +52,9 @@
 - `vd.videos.process` -> `/api/v1/videos/process`
 - `vd.artifacts.get(kind=markdown|asset)` -> `/api/v1/artifacts/markdown|/api/v1/artifacts/assets`
 - `vd.health.get(scope=system|providers|all)` -> `/healthz|/api/v1/health/providers`
+- `vd.workflows.run` -> `/api/v1/workflows/run`
+- `vd.retrieval.search` -> `/api/v1/retrieval/search`
+- `vd.computer_use.run` -> `/api/v1/computer-use/run`
 - `vd.notifications.manage(action=...)` -> `/api/v1/notifications/*|/api/v1/reports/daily/send`
 - `vd.ui_audit.run|vd.ui_audit.read(action=...)` -> `/api/v1/ui-audit/*`
 

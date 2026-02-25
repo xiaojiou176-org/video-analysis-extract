@@ -56,6 +56,44 @@ OPS_SHOW_HINTS="${OPS_SHOW_HINTS:-1}"
 DEV_WORKER_SHOW_HINTS="${DEV_WORKER_SHOW_HINTS:-0}"
 OPS_DRY_RUN="${OPS_DRY_RUN:-0}"
 
+validate_cleanup_dir() {
+  local name="$1"
+  local raw="$2"
+  if [[ -z "$raw" ]]; then
+    return 0
+  fi
+  if [[ "${raw:0:1}" != "/" ]]; then
+    echo "[start_ops_workflows] ${name} must be an absolute path: $raw" >&2
+    exit 2
+  fi
+  local resolved
+  resolved="$(
+    TARGET_PATH="$raw" python3 - <<'PY'
+import os
+import pathlib
+print(pathlib.Path(os.environ["TARGET_PATH"]).expanduser().resolve())
+PY
+  )"
+
+  local -a allowed_prefixes=(
+    "$ROOT_DIR/.runtime-cache"
+    "$ROOT_DIR/cache"
+    "$ROOT_DIR/.cache"
+    "/tmp/video-digestor"
+    "/tmp/video-analysis"
+  )
+  local prefix
+  for prefix in "${allowed_prefixes[@]}"; do
+    if [[ "$resolved" == "$prefix" || "$resolved" == "$prefix/"* ]]; then
+      printf '%s' "$resolved"
+      return 0
+    fi
+  done
+  echo "[start_ops_workflows] ${name} is outside allowed cleanup prefixes: $resolved" >&2
+  echo "[start_ops_workflows] allowed prefixes: ${allowed_prefixes[*]}" >&2
+  exit 2
+}
+
 print_help() {
   cat <<'EOM'
 Usage: ./scripts/start_ops_workflows.sh [--dry-run] [--help]
@@ -89,6 +127,13 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+if [[ -n "$OPS_CLEANUP_WORKSPACE_DIR" ]]; then
+  OPS_CLEANUP_WORKSPACE_DIR="$(validate_cleanup_dir OPS_CLEANUP_WORKSPACE_DIR "$OPS_CLEANUP_WORKSPACE_DIR")"
+fi
+if [[ -n "$OPS_CLEANUP_CACHE_DIR" ]]; then
+  OPS_CLEANUP_CACHE_DIR="$(validate_cleanup_dir OPS_CLEANUP_CACHE_DIR "$OPS_CLEANUP_CACHE_DIR")"
+fi
 
 if [[ "$OPS_SHOW_HINTS" == "1" ]]; then
   cat <<EOM

@@ -7,12 +7,15 @@ on:
       - main
       - codex/**
 
+permissions:
+  contents: read
+
 jobs:
   upstream-lock-validation:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Bash syntax check
         run: |
@@ -21,4 +24,3 @@ jobs:
 
       - name: Validate UPSTREAM.lock files
         run: bash scripts/vendor/validate_upstream_lock.sh --root .
-

@@ -53,6 +53,22 @@ gcloud compute instances create vd-server \
   --zone=us-west1-a
 ```
 
+可选：使用仓库脚本重建实例（高风险操作默认受保护）：
+
+```bash
+./scripts/recreate_gce_instance.sh \
+  --project YOUR_PROJECT \
+  --zone us-west1-b \
+  --instance vd-prod \
+  --repo https://github.com/YOUR_ORG/YOUR_REPO.git \
+  --force-delete-instance \
+  --force-replace-app-dir
+```
+
+说明：
+- 若实例已存在但未传 `--force-delete-instance`，脚本会拒绝删除并退出。
+- 若远端 `~/app` 已存在但未传 `--force-replace-app-dir`，脚本会拒绝覆盖并退出。
+
 ---
 
 ## 2. 防火墙规则
@@ -233,7 +249,7 @@ sudo systemctl reload nginx
 
 ```bash
 # API 健康检查
-curl http://YOUR_DOMAIN/api/v1/healthz
+curl http://YOUR_DOMAIN/healthz
 
 # 查看服务日志
 sudo journalctl -u vd-api    -f --no-pager

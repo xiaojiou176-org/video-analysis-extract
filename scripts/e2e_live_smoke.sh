@@ -88,6 +88,38 @@ trim_whitespace() {
   printf '%s' "$value"
 }
 
+resolve_local_script_path() {
+  local raw_path="$1"
+  local candidate
+  candidate="$(trim_whitespace "$raw_path")"
+  [[ -n "$candidate" ]] || fail "script path is empty"
+
+  if [[ "${candidate:0:1}" != "/" ]]; then
+    candidate="$ROOT_DIR/$candidate"
+  fi
+
+  local resolved
+  resolved="$(
+    SCRIPT_PATH="$candidate" python3 - <<'PY'
+import os
+import pathlib
+
+path = pathlib.Path(os.environ["SCRIPT_PATH"]).expanduser()
+print(path.resolve())
+PY
+  )"
+
+  case "$resolved" in
+    "$ROOT_DIR/scripts/"*) ;;
+    *)
+      fail "script path must be under $ROOT_DIR/scripts: $resolved"
+      ;;
+  esac
+  [[ -f "$resolved" ]] || fail "script file not found: $resolved"
+  [[ -x "$resolved" ]] || fail "script file is not executable: $resolved"
+  printf '%s' "$resolved"
+}
+
 api_post() {
   local path="$1"
   local payload="$2"
@@ -144,8 +176,9 @@ check_prerequisites() {
 
   log "API target: base=${VD_API_BASE_URL} port=${LIVE_SMOKE_API_PORT}"
   if [[ -z "$(trim_whitespace "$LIVE_SMOKE_COMPUTER_USE_CMD")" ]]; then
-    LIVE_SMOKE_COMPUTER_USE_CMD="bash \"$ROOT_DIR/scripts/smoke_computer_use_local.sh\" --api-base-url \"$VD_API_BASE_URL\""
+    LIVE_SMOKE_COMPUTER_USE_CMD="$ROOT_DIR/scripts/smoke_computer_use_local.sh"
   fi
+  LIVE_SMOKE_COMPUTER_USE_CMD="$(resolve_local_script_path "$LIVE_SMOKE_COMPUTER_USE_CMD")"
 
   local missing=()
   [[ -z "${GEMINI_API_KEY:-}" ]] && missing+=("GEMINI_API_KEY")
@@ -197,7 +230,7 @@ run_computer_use_smoke() {
   fi
 
   if [[ -z "$cmd" ]]; then
-    local message="computer_use smoke command is empty; set LIVE_SMOKE_COMPUTER_USE_CMD or skip with LIVE_SMOKE_COMPUTER_USE_SKIP=1 and reason"
+    local message="computer_use smoke command is empty; set LIVE_SMOKE_COMPUTER_USE_CMD to a script path or skip with LIVE_SMOKE_COMPUTER_USE_SKIP=1 and reason"
     if is_truthy "$strict_value"; then
       fail "$message"
     fi
@@ -206,7 +239,7 @@ run_computer_use_smoke() {
   fi
 
   log "Scenario: computer_use smoke"
-  if bash -lc "$cmd"; then
+  if "$cmd" --api-base-url "$VD_API_BASE_URL"; then
     log "computer_use smoke passed"
     return 0
   fi

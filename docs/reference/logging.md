@@ -31,6 +31,12 @@ touch logs/daily_digest.log logs/failure_alerts.log logs/ops/workflows.log
 - `AKIA*`（AWS key 形态）
 - URL query 中的 `api_key/token/secret/password/auth*`
 
+API 异常详情（`apps/api/app/security.py`）使用 `sanitize_exception_detail`，在返回 `HTTPException.detail` 前会额外脱敏：
+- `Basic <credential>`
+- URL 凭证段（`scheme://user:pass@host`）
+- query 中的 `access_token/refresh_token/id_token/jwt/client_secret/session/signature`
+- 脱敏后最大返回长度 `500` 字符（超出追加 `...[truncated]`）
+
 约束：
 - 禁止在日志中直接打印完整密钥与凭证。
 - 错误信息允许输出摘要，禁止输出原始敏感 payload。

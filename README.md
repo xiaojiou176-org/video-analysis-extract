@@ -154,6 +154,58 @@ uv run --with playwright python -m playwright install chromium
 uv run --with pytest --with playwright pytest apps/web/tests/e2e -q
 ```
 
+## API 路由与管理端点契约
+
+系统与业务路由（FastAPI）：
+- `GET /healthz`
+- `GET /api/v1/subscriptions`
+- `POST /api/v1/subscriptions`
+- `POST /api/v1/subscriptions/batch-update-category`
+- `DELETE /api/v1/subscriptions/{id}`
+- `GET /api/v1/feed/digests`
+- `POST /api/v1/ingest/poll`
+- `GET /api/v1/jobs/{job_id}`
+- `GET /api/v1/videos`
+- `POST /api/v1/videos/process`
+- `GET /api/v1/notifications/config`
+- `PUT /api/v1/notifications/config`
+- `POST /api/v1/notifications/test`
+- `POST /api/v1/notifications/category/send`
+- `POST /api/v1/reports/daily/send`
+- `GET /api/v1/artifacts/markdown`
+- `GET /api/v1/artifacts/assets`
+- `GET /api/v1/health/providers`
+- `POST /api/v1/workflows/run`
+- `POST /api/v1/retrieval/search`
+- `POST /api/v1/computer-use/run`
+- `POST /api/v1/ui-audit/run`
+- `GET /api/v1/ui-audit/{run_id}`
+- `GET /api/v1/ui-audit/{run_id}/findings`
+- `GET /api/v1/ui-audit/{run_id}/artifacts`
+- `GET /api/v1/ui-audit/{run_id}/artifact`
+- `POST /api/v1/ui-audit/{run_id}/autofix`
+
+管理端点鉴权（由 `VD_API_KEY` + `VD_ALLOW_UNAUTH_WRITE` 控制）：
+- 默认安全模式：即使 `VD_API_KEY` 为空或未设置，写操作也要求令牌。
+- 仅当 `VD_ALLOW_UNAUTH_WRITE=true` 且 `VD_API_KEY` 为空时，才允许无令牌写操作（本地兼容开关）。
+- 以下端点必须携带令牌，否则返回 `401/403`：
+  - `POST /api/v1/subscriptions`
+  - `POST /api/v1/subscriptions/batch-update-category`
+  - `DELETE /api/v1/subscriptions/{id}`
+  - `POST /api/v1/ingest/poll`
+  - `POST /api/v1/videos/process`
+  - `PUT /api/v1/notifications/config`
+  - `POST /api/v1/notifications/test`
+  - `POST /api/v1/notifications/category/send`
+  - `POST /api/v1/reports/daily/send`
+  - `POST /api/v1/workflows/run`
+  - `POST /api/v1/computer-use/run`
+  - `POST /api/v1/ui-audit/run`
+  - `POST /api/v1/ui-audit/{run_id}/autofix`
+- 支持两种传递方式：
+  - `Authorization: Bearer <VD_API_KEY>`
+  - `X-API-Key: <VD_API_KEY>`
+
 ## P1 新增能力（2026-02-23）
 
 - Subscriptions 支持分类与标签：

@@ -20,8 +20,8 @@
 - `aggregate-gate`：汇总上述五个作业结果，任一非 `success` 即失败。
 - `autofix-dry-run`：依赖 `python-tests` + `web-e2e`，仅在两者任一失败时运行（读取 `.runtime-cache` 诊断工件）。
 - `nightly-flaky-python` + `nightly-flaky-web-e2e`：仅 nightly schedule 触发，执行重复运行策略用于发现 flaky。
-- `live-smoke`：依赖 `aggregate-gate`，仅在必需 secrets 存在时运行。
-- `ci-final-gate`：最终门禁；始终检查 `aggregate-gate`，并在 nightly 强制 `nightly-flaky-*` 成功，在 `main` push / nightly schedule 强制 `live-smoke` 成功。
+- `live-smoke`：依赖 `aggregate-gate`，在 `main` push / nightly schedule 必跑；若缺少 `LIVE_SMOKE_API_BASE_URL` 或任一必需 secret 会直接失败（不再跳过放行）。
+- `ci-final-gate`：最终门禁；始终检查 `aggregate-gate`，并在 nightly 强制 `nightly-flaky-*` 成功，在 `main` push / nightly schedule 强制 `live-smoke` 成功且不得为 `skipped`。
 
 ## Run Commands
 

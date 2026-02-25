@@ -1,11 +1,8 @@
 #!/usr/bin/env bash
 # recreate_gce_instance.sh — 一键在 GCE 上重建全栈实例
-# 用法: ./scripts/recreate_gce_instance.sh [--project PROJECT_ID] [--zone ZONE] [--instance INSTANCE_NAME]
+# 用法: ./scripts/recreate_gce_instance.sh [--project PROJECT_ID] [--zone ZONE] [--instance INSTANCE_NAME] [--force-delete-instance] [--force-replace-app-dir]
 # 依赖: gcloud CLI 已安装并已 auth login
 set -euo pipefail
-
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # ── 默认参数（可通过 CLI flags 覆盖）──────────────────────────────────────────
 GCP_PROJECT="${GCP_PROJECT:-}"
@@ -16,6 +13,8 @@ DISK_SIZE="${DISK_SIZE:-50GB}"
 IMAGE_FAMILY="${IMAGE_FAMILY:-debian-12}"
 IMAGE_PROJECT="${IMAGE_PROJECT:-debian-cloud}"
 GITHUB_REPO_URL="${GITHUB_REPO_URL:-}"  # e.g. git@github.com:your-org/your-repo.git
+FORCE_DELETE_INSTANCE="${FORCE_DELETE_INSTANCE:-0}"
+FORCE_REPLACE_APP_DIR="${FORCE_REPLACE_APP_DIR:-0}"
 
 log() { printf '\033[1;36m[gce-recreate]\033[0m %s\n' "$*" >&2; }
 fail() { printf '\033[1;31m[gce-recreate] ERROR:\033[0m %s\n' "$*" >&2; exit 1; }
@@ -28,6 +27,8 @@ while [[ $# -gt 0 ]]; do
     --instance) INSTANCE_NAME="$2"; shift 2 ;;
     --machine)  MACHINE_TYPE="$2"; shift 2 ;;
     --repo)     GITHUB_REPO_URL="$2"; shift 2 ;;
+    --force-delete-instance) FORCE_DELETE_INSTANCE=1; shift ;;
+    --force-replace-app-dir) FORCE_REPLACE_APP_DIR=1; shift ;;
     *) fail "unknown flag: $1" ;;
   esac
 done
@@ -40,9 +41,29 @@ log "Zone    : $GCP_ZONE"
 log "Instance: $INSTANCE_NAME"
 log "Machine : $MACHINE_TYPE"
 
+validate_repo_url() {
+  local value="$1"
+  [[ -n "$value" ]] || return 0
+  [[ "$value" =~ ^https://github\.com/[A-Za-z0-9._-]+/[A-Za-z0-9._-]+(\.git)?$ ]] && return 0
+  [[ "$value" =~ ^git@github\.com:[A-Za-z0-9._-]+/[A-Za-z0-9._-]+(\.git)?$ ]] && return 0
+  fail "invalid --repo URL: must be a GitHub https://github.com/org/repo(.git) or git@github.com:org/repo(.git)"
+}
+
+validate_repo_url "$GITHUB_REPO_URL"
+
+if [[ "$FORCE_DELETE_INSTANCE" != "0" && "$FORCE_DELETE_INSTANCE" != "1" ]]; then
+  fail "FORCE_DELETE_INSTANCE must be 0 or 1"
+fi
+if [[ "$FORCE_REPLACE_APP_DIR" != "0" && "$FORCE_REPLACE_APP_DIR" != "1" ]]; then
+  fail "FORCE_REPLACE_APP_DIR must be 0 or 1"
+fi
+
 # ── Step 1: Delete old instance (if exists) ───────────────────────────────────
 if gcloud compute instances describe "$INSTANCE_NAME" \
     --project="$GCP_PROJECT" --zone="$GCP_ZONE" &>/dev/null; then
+  if [[ "$FORCE_DELETE_INSTANCE" != "1" ]]; then
+    fail "instance '$INSTANCE_NAME' already exists. Re-run with --force-delete-instance to allow deletion."
+  fi
   log "Deleting existing instance '$INSTANCE_NAME' …"
   gcloud compute instances delete "$INSTANCE_NAME" \
     --project="$GCP_PROJECT" --zone="$GCP_ZONE" --quiet
@@ -115,19 +136,28 @@ gcloud compute ssh "$INSTANCE_NAME" \
 # ── Step 6: Clone repo (if URL provided) ─────────────────────────────────────
 if [[ -n "$GITHUB_REPO_URL" ]]; then
   log "Cloning repo from $GITHUB_REPO_URL …"
+  REMOTE_REPO_URL_Q="$(printf '%q' "$GITHUB_REPO_URL")"
+  REMOTE_FORCE_REPLACE_Q="$(printf '%q' "$FORCE_REPLACE_APP_DIR")"
   gcloud compute ssh "$INSTANCE_NAME" \
     --project="$GCP_PROJECT" --zone="$GCP_ZONE" --quiet \
-    --command="
-      rm -rf ~/app
-      git clone '$GITHUB_REPO_URL' ~/app
-      cd ~/app
-      echo 'Repo cloned. Next steps:'
-      echo '  1. cp .env.example .env && edit .env with your secrets'
-      echo '  2. ./scripts/bootstrap_full_stack.sh'
-      echo '  3. sudo cp infra/systemd/*.service /etc/systemd/system/'
-      echo '  4. sudo systemctl daemon-reload && sudo systemctl enable vd-api vd-worker vd-web'
-      echo '  5. sudo cp infra/nginx/vd.conf /etc/nginx/sites-available/vd && sudo nginx -t && sudo systemctl reload nginx'
-    "
+    --command="set -euo pipefail;
+      GITHUB_REPO_URL=${REMOTE_REPO_URL_Q};
+      FORCE_REPLACE_APP_DIR=${REMOTE_FORCE_REPLACE_Q};
+      if [[ -d \"\$HOME/app\" ]]; then
+        if [[ \"\$FORCE_REPLACE_APP_DIR\" != \"1\" ]]; then
+          echo 'Refusing to remove \$HOME/app without --force-replace-app-dir.' >&2;
+          exit 12;
+        fi
+        rm -rf -- \"\$HOME/app\";
+      fi;
+      git clone -- \"\$GITHUB_REPO_URL\" \"\$HOME/app\";
+      cd \"\$HOME/app\";
+      echo 'Repo cloned. Next steps:';
+      echo '  1. cp .env.example .env && edit .env with your secrets';
+      echo '  2. ./scripts/bootstrap_full_stack.sh';
+      echo '  3. sudo cp infra/systemd/*.service /etc/systemd/system/';
+      echo '  4. sudo systemctl daemon-reload && sudo systemctl enable vd-api vd-worker vd-web';
+      echo '  5. sudo cp infra/nginx/vd.conf /etc/nginx/sites-available/vd && sudo nginx -t && sudo systemctl reload nginx';"
 fi
 
 # ── Done ──────────────────────────────────────────────────────────────────────

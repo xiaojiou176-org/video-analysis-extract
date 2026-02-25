@@ -38,6 +38,10 @@ Startup validation fails when:
 - `TEMPORAL_TARGET_HOST`
 - `TEMPORAL_NAMESPACE`
 - `TEMPORAL_TASK_QUEUE`
+- `API_TEMPORAL_CONNECT_TIMEOUT_SECONDS` (optional, API Temporal connect timeout, default `5`)
+- `API_TEMPORAL_START_TIMEOUT_SECONDS` (optional, API Temporal workflow start timeout, default `10`)
+- `API_TEMPORAL_RESULT_TIMEOUT_SECONDS` (optional, API Temporal workflow result timeout, default `180`)
+- `API_RETRIEVAL_EMBEDDING_TIMEOUT_SECONDS` (optional, API retrieval embedding timeout, default `8`)
 - `SQLITE_PATH`
 - `SQLITE_STATE_PATH`
 - `PIPELINE_WORKSPACE_DIR`
@@ -87,9 +91,44 @@ LLM generation is Gemini-only in this repository:
 
 ### API / MCP / Web
 
-- `VD_API_BASE_URL`, `VD_API_TIMEOUT_SEC`, `VD_API_KEY`
+- `VD_API_BASE_URL`, `VD_API_TIMEOUT_SEC`, `VD_API_KEY`, `VD_ALLOW_UNAUTH_WRITE`
 - `NEXT_PUBLIC_API_BASE_URL`
 - `UI_AUDIT_GEMINI_ENABLED` (API-side Gemini UI audit toggle, default `true`)
+- `UI_AUDIT_ARTIFACT_BASE_ROOT` (UI audit artifact directory whitelist root; only `artifact_root` paths within this base are accepted; defaults to OS temp directory when unset)
+- `VD_MCP_MAX_BASE64_BYTES` (MCP base64 payload size limit, bytes)
+- `WEB_ACTION_SESSION_TOKEN` (optional server-action session secret)
+
+Write auth behavior contract (`apps/api/app/security.py`):
+- Default secure mode: protected write routes require token auth, even when `VD_API_KEY` is unset/blank.
+- Compatibility override: write routes are allowed without token only when `VD_ALLOW_UNAUTH_WRITE=true`.
+- Recommended production posture: set `VD_API_KEY` and keep `VD_ALLOW_UNAUTH_WRITE=false`.
+- Accepted auth headers:
+  - `Authorization: Bearer <VD_API_KEY>`
+  - `X-API-Key: <VD_API_KEY>`
+- Protected routes:
+  - `POST /api/v1/subscriptions`
+  - `POST /api/v1/subscriptions/batch-update-category`
+  - `DELETE /api/v1/subscriptions/{id}`
+  - `POST /api/v1/ingest/poll`
+  - `POST /api/v1/videos/process`
+  - `PUT /api/v1/notifications/config`
+  - `POST /api/v1/notifications/test`
+  - `POST /api/v1/notifications/category/send`
+  - `POST /api/v1/reports/daily/send`
+  - `POST /api/v1/workflows/run`
+  - `POST /api/v1/computer-use/run`
+  - `POST /api/v1/ui-audit/run`
+  - `POST /api/v1/ui-audit/{run_id}/autofix`
+- If `VD_API_KEY` is unset/blank and `VD_ALLOW_UNAUTH_WRITE` is not explicitly true, write requests return `401`.
+
+Exception detail sanitization contract:
+- API routers using `sanitize_exception_detail` will redact sensitive substrings before returning error details.
+- Redaction patterns include:
+  - `Bearer ...`, `Basic ...`
+  - URL credentials (`scheme://user:pass@host`)
+  - `sk-*`, `ghp_*`, `AKIA*`
+  - query keys such as `api_key`, `token`, `access_token`, `refresh_token`, `jwt`, `secret`, `client_secret`, `password`, `session`, `authorization`, `signature`
+- Sanitized error detail is truncated to 500 characters.
 
 ### Script Runtime
 
@@ -98,9 +137,11 @@ LLM generation is Gemini-only in this repository:
 - `LIVE_SMOKE_*`
 - `OPS_*` (workflow bootstrap overrides for `scripts/start_ops_workflows.sh`, including `OPS_CLEANUP_*`, `OPS_SHOW_HINTS`, `OPS_DRY_RUN`)
 - `API_*`, `WORKER_*`, `MCP_*`, `OUTPUT_PATH`, `INIT_ENV_FORCE`
+- `GCP_PROJECT`, `GCP_ZONE`, `INSTANCE_NAME`, `MACHINE_TYPE`, `DISK_SIZE`, `IMAGE_FAMILY`, `IMAGE_PROJECT`, `GITHUB_REPO_URL`, `FORCE_DELETE_INSTANCE`, `FORCE_REPLACE_APP_DIR` (used by `scripts/recreate_gce_instance.sh`)
 - `WEB_BASE_URL` (web e2e target override)
 - `NEXT_DIST_DIR` (optional Next.js dist directory override for parallel web e2e workers)
 - `PYTEST_XDIST_WORKER` (optional worker id used by web e2e fixtures to isolate runtime dirs)
+- `CORE_POSTGRES_PORT`, `CORE_POSTGRES_DB`, `CORE_POSTGRES_USER`, `CORE_POSTGRES_PASSWORD`, `CORE_REDIS_PORT`, `CORE_TEMPORAL_PORT` (docker compose core-services overrides)
 
 `LIVE_SMOKE_*` includes strict computer-use controls:
 
