@@ -103,6 +103,12 @@ curl -sS -X POST http://127.0.0.1:8000/api/v1/ingest/poll \
 ./scripts/smoke_full_stack.sh
 ```
 
+### 3.8 安装 Git 门禁 Hooks（强制 pre-commit / pre-push）
+
+```bash
+./scripts/install_git_hooks.sh
+```
+
 说明：`smoke_full_stack.sh` 默认会执行内置 live smoke、feed/web 检查，并在默认配置下校验 reader 栈与 AI Feed 回写链路。
 
 ## 4. Safety 边界（强制）
@@ -146,7 +152,9 @@ curl -sS -X POST http://127.0.0.1:8000/api/v1/ingest/poll \
    - `PYTHONPATH="$PWD:$PWD/apps/worker" DATABASE_URL='sqlite+pysqlite:///:memory:' uv run pytest apps/worker/tests apps/api/tests apps/mcp/tests -q`
 4. 前端 lint 通过：
    - `npm --prefix apps/web run lint`
-5. 若改动启动/链路逻辑，至少完成一次 smoke：
+5. 假断言门禁通过：
+   - `python3 scripts/check_test_assertions.py`
+6. 若改动启动/链路逻辑，至少完成一次 smoke：
    - `./scripts/smoke_full_stack.sh`（或在说明中写明为何未执行）。
 
 ## 7. 交付格式（提交结果必须包含）

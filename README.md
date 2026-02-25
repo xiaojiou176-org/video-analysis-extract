@@ -146,6 +146,12 @@ curl -sS -X POST http://127.0.0.1:8000/api/v1/ingest/poll -H 'Content-Type: appl
 ## 测试入口
 
 ```bash
+python3 scripts/check_test_assertions.py
+
+./scripts/quality_gate.sh
+
+./scripts/install_git_hooks.sh
+
 PYTHONPATH="$PWD:$PWD/apps/worker" \
 DATABASE_URL='sqlite+pysqlite:///:memory:' \
 uv run pytest apps/worker/tests apps/api/tests apps/mcp/tests -q
@@ -153,6 +159,8 @@ uv run pytest apps/worker/tests apps/api/tests apps/mcp/tests -q
 uv run --with playwright python -m playwright install chromium
 uv run --with pytest --with playwright pytest apps/web/tests/e2e -q
 ```
+
+注：`scripts/check_test_assertions.py` 默认禁止 `toBeDefined()`；仅在特例场景下允许用注释标记 `allow-low-value-assertion: toBeDefined` 显式豁免。
 
 ## API 路由与管理端点契约
 

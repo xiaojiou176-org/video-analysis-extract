@@ -22,6 +22,18 @@ export default defineConfig([
             ":matches(IfStatement, ConditionalExpression, SwitchCase, CatchClause) CallExpression[callee.name='expect']",
           message: "Avoid conditional expect assertions to prevent false-green tests.",
         },
+        {
+          selector:
+            "CallExpression[callee.object.callee.name='expect'][callee.object.arguments.length=1][callee.object.arguments.0.type='Literal'][callee.property.name=/^(toBe|toEqual|toStrictEqual)$/][arguments.length=1][arguments.0.type='Literal']",
+          message:
+            "Literal-to-literal assertions are forbidden in tests. Assert business behavior, not constants.",
+        },
+        {
+          selector:
+            "CallExpression[callee.object.callee.name='expect'][callee.property.name='toBeDefined'][arguments.length=0]",
+          message:
+            "`toBeDefined()` is low-value by default. Use stronger assertions or add a documented one-line eslint disable for exceptional cases.",
+        },
       ],
     },
   },

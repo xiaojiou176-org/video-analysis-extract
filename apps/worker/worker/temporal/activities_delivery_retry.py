@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from typing import Any, Awaitable, Callable
+from datetime import datetime
+from typing import Any, Callable
 
 
 async def retry_failed_deliveries_activity_impl(

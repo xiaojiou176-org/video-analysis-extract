@@ -14,7 +14,7 @@
 ## CI Topology (GitHub Actions)
 
 - `preflight`：预检门禁（env contract、provider residual guard、schema parity、worker file line limits）。
-- `db-migration-smoke` / `python-tests` / `api-real-smoke` / `web-lint-build` / `web-e2e`：依赖 `preflight` 并行执行。
+- `db-migration-smoke` / `python-tests` / `api-real-smoke` / `backend-lint` / `frontend-lint` / `web-test-build` / `web-e2e`：依赖 `preflight` 并行执行。
 - `api-real-smoke`：PR 可运行的真实 API 轻量烟测（启动 FastAPI + Postgres，覆盖 `/healthz` 与 subscriptions 写读链路），不依赖外部 provider secrets。
 - `web-e2e`：增量浏览器策略。PR 仅跑 core（chromium/firefox）；`main` push 与 nightly schedule 跑 full（含 webkit）。
 - `aggregate-gate`：汇总上述五个作业结果，任一非 `success` 即失败。
@@ -24,6 +24,29 @@
 - `ci-final-gate`：最终门禁；始终检查 `aggregate-gate`，并在 nightly 强制 `nightly-flaky-*` 成功，在 `main` push / nightly schedule 强制 `live-smoke` 成功且不得为 `skipped`。
 
 ## Run Commands
+
+### 0) 假断言门禁（全仓）
+
+```bash
+python3 scripts/check_test_assertions.py
+```
+
+说明：
+- 默认禁止 `expect(true).toBe(true)`、`expect("x").toEqual("x")`、`expect(1).toBe(1)` 等左右同字面量断言。
+- 默认禁止 `toBeDefined()`；如确有必要，可在同一行或上一行添加注释标记：
+  `// allow-low-value-assertion: toBeDefined`
+
+### 0.1) 一键质量门禁（推荐）
+
+```bash
+./scripts/quality_gate.sh
+```
+
+### 0.2) Git Hook 强制门禁（pre-commit / pre-push）
+
+```bash
+./scripts/install_git_hooks.sh
+```
 
 ### 1) Python tests (worker/api/mcp, xdist=2)
 

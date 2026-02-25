@@ -18,6 +18,11 @@ from worker.temporal.activities_reports import (
     _load_daily_digest_jobs,
     _safe_read_text,
 )
+from worker.temporal.activities_delivery_retry import retry_failed_deliveries_activity_impl
+from worker.temporal.activities_delivery_send import (
+    send_daily_digest_activity_impl,
+    send_video_digest_activity_impl,
+)
 from worker.temporal.activities_timing import _coerce_int, _resolve_local_digest_date
 
 try:
@@ -602,13 +607,6 @@ def _build_retry_failure_payload(
         error_kind=error_kind,
     )
     return error_kind, next_retry_at
-
-
-from worker.temporal.activities_delivery_retry import retry_failed_deliveries_activity_impl
-from worker.temporal.activities_delivery_send import (
-    send_daily_digest_activity_impl,
-    send_video_digest_activity_impl,
-)
 
 
 @activity.defn(name="retry_failed_deliveries_activity")

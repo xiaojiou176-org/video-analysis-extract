@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+echo "[pre-commit] placebo assertion guard"
+python3 scripts/check_test_assertions.py
+
+echo "[pre-commit] frontend lint"
+npm --prefix apps/web run lint
+
+echo "[pre-commit] backend lint (ruff critical rules)"
+uv run --with ruff ruff check apps scripts --select E9,F63,F7,F82
+
+echo "[pre-commit] passed"

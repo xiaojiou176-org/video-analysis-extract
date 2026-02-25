@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib
 import json
 import os
 import sys
@@ -26,8 +27,18 @@ E2E_TESTS_ROOT = PROJECT_ROOT / "apps" / "web" / "tests" / "e2e"
 if str(E2E_TESTS_ROOT) not in sys.path:
     sys.path.insert(0, str(E2E_TESTS_ROOT))
 
-from apps.api.app.routers import artifacts, ingest, jobs, notifications, subscriptions, videos
-from support.mock_api import MockApiServer, MockApiState, start_mock_api_server, stop_mock_api_server
+artifacts = importlib.import_module("apps.api.app.routers.artifacts")
+ingest = importlib.import_module("apps.api.app.routers.ingest")
+jobs = importlib.import_module("apps.api.app.routers.jobs")
+notifications = importlib.import_module("apps.api.app.routers.notifications")
+subscriptions = importlib.import_module("apps.api.app.routers.subscriptions")
+videos = importlib.import_module("apps.api.app.routers.videos")
+
+mock_api = importlib.import_module("support.mock_api")
+MockApiServer = mock_api.MockApiServer
+MockApiState = mock_api.MockApiState
+start_mock_api_server = mock_api.start_mock_api_server
+stop_mock_api_server = mock_api.stop_mock_api_server
 
 
 def _json_request(base_url: str, method: str, path: str, payload: dict[str, Any] | None = None) -> tuple[int, Any]:
