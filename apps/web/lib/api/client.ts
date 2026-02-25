@@ -17,11 +17,19 @@ import type {
   VideoProcessRequest,
   VideoProcessResponse,
 } from "@/lib/api/types";
-import { resolveApiBaseUrl } from "@/lib/api/url";
+import { buildApiUrl, sanitizeExternalUrl } from "@/lib/api/url";
 
 type RequestOptions = Omit<RequestInit, "body"> & {
   body?: unknown;
 };
+
+function assertSafeIdentifier(raw: string): string {
+  const value = raw.trim();
+  if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(value)) {
+    throw new Error("ERR_INVALID_IDENTIFIER");
+  }
+  return value;
+}
 
 function normalizeStringMap(value: unknown): Record<string, string> {
   if (!value || typeof value !== "object") {
@@ -49,62 +57,33 @@ function normalizeJob(job: Job): Job {
   };
 }
 
-function buildUrl(path: string, query?: Record<string, string | number | boolean | null | undefined>): string {
-  const target = new URL(path, resolveApiBaseUrl({ allowFallback: true }));
-  if (!query) {
-    return target.toString();
+function assertSafeExternalUrl(raw: string): string {
+  const normalized = sanitizeExternalUrl(raw);
+  if (!normalized) {
+    throw new Error("ERR_INVALID_INPUT");
   }
-
-  for (const [key, value] of Object.entries(query)) {
-    if (value === null || value === undefined || value === "") {
-      continue;
-    }
-    target.searchParams.set(key, String(value));
-  }
-
-  return target.toString();
+  return normalized;
 }
 
 async function parseError(response: Response): Promise<string> {
-  const contentType = response.headers.get("content-type") ?? "";
-  let detailMessage: string | null = null;
-
-  if (contentType.includes("application/json")) {
-    const payload = (await response.json().catch(() => null)) as Record<string, unknown> | null;
-    if (payload && typeof payload === "object") {
-      const detail = payload["detail"];
-      if (typeof detail === "string") {
-        return detail;
-      }
-      const message = payload["message"];
-      if (typeof message === "string") {
-        detailMessage = message;
-      }
-    }
-  }
-
-  if (detailMessage) {
-    return detailMessage;
-  }
-
-  const text = (await response.text().catch(() => "")).trim();
+  void response.text().catch(() => "");
   if (response.status === 404) {
-    return "Requested resource was not found.";
+    return "ERR_REQUEST_FAILED";
   }
   if (response.status >= 500) {
-    return "Service is temporarily unavailable. Please try again.";
+    return "ERR_REQUEST_FAILED";
   }
   if (response.status === 401 || response.status === 403) {
-    return "You do not have permission to access this resource.";
+    return "ERR_AUTH_REQUIRED";
   }
   if (response.status === 400) {
-    return "Request payload is invalid. Please check your input.";
+    return "ERR_INVALID_INPUT";
   }
-  return text || `Request failed (${response.status})`;
+  return "ERR_REQUEST_FAILED";
 }
 
 async function requestJson<T>(path: string, options: RequestOptions = {}, query?: Record<string, string | number | boolean | null | undefined>): Promise<T> {
-  const response = await fetch(buildUrl(path, query), {
+  const response = await fetch(buildApiUrl(path, query), {
     ...options,
     cache: "no-store",
     headers: {
@@ -127,7 +106,7 @@ async function requestJson<T>(path: string, options: RequestOptions = {}, query?
 }
 
 async function requestText(path: string, query?: Record<string, string | number | boolean | null | undefined>): Promise<string> {
-  const response = await fetch(buildUrl(path, query), { cache: "no-store" });
+  const response = await fetch(buildApiUrl(path, query), { cache: "no-store" });
   if (!response.ok) {
     const reason = await parseError(response);
     throw new Error(reason);
@@ -150,11 +129,13 @@ function getArtifactMarkdown(params: {
   video_url?: string;
   include_meta?: boolean;
 }): Promise<ArtifactMarkdownWithMeta | string> {
+  const safeVideoUrl = params.video_url ? assertSafeExternalUrl(params.video_url) : undefined;
+  const safeParams = safeVideoUrl ? { ...params, video_url: safeVideoUrl } : params;
   if (params.include_meta) {
-    return requestJson<ArtifactMarkdownWithMeta>("/api/v1/artifacts/markdown", {}, params);
+    return requestJson<ArtifactMarkdownWithMeta>("/api/v1/artifacts/markdown", {}, safeParams);
   }
 
-  return requestText("/api/v1/artifacts/markdown", params);
+  return requestText("/api/v1/artifacts/markdown", safeParams);
 }
 
 export const apiClient = {
@@ -177,7 +158,8 @@ export const apiClient = {
   },
 
   deleteSubscription(id: string) {
-    return requestJson<void>(`/api/v1/subscriptions/${id}`, {
+    const safeId = encodeURIComponent(assertSafeIdentifier(id));
+    return requestJson<void>(`/api/v1/subscriptions/${safeId}`, {
       method: "DELETE",
     });
   },
@@ -205,7 +187,8 @@ export const apiClient = {
   },
 
   getJob(jobId: string) {
-    return requestJson<Job>(`/api/v1/jobs/${jobId}`).then(normalizeJob);
+    const safeJobId = encodeURIComponent(assertSafeIdentifier(jobId));
+    return requestJson<Job>(`/api/v1/jobs/${safeJobId}`).then(normalizeJob);
   },
 
   getArtifactMarkdown,

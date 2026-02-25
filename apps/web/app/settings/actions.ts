@@ -3,11 +3,12 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
+import { assertActionSession, isNextRedirectError, schemas, toActionErrorCode } from "@/app/action-security";
+import { toFlashQuery } from "@/app/flash-message";
 import { apiClient } from "@/lib/api/client";
 
-function statusUrl(status: "success" | "error", message: string): string {
-  const query = new URLSearchParams({ status, message });
-  return `/settings?${query.toString()}`;
+function statusUrl(status: "success" | "error", code: string): string {
+  return `/settings?${toFlashQuery(status, code)}`;
 }
 
 function toOptionalString(value: FormDataEntryValue | null): string | null {
@@ -19,54 +20,55 @@ function toOptionalString(value: FormDataEntryValue | null): string | null {
 }
 
 export async function updateNotificationConfigAction(formData: FormData) {
-  const enabled = formData.get("enabled") === "on";
-  const dailyDigestEnabled = formData.get("daily_digest_enabled") === "on";
-  const failureAlertEnabled = formData.get("failure_alert_enabled") === "on";
-  const toEmail = toOptionalString(formData.get("to_email"));
-  const hourRaw = toOptionalString(formData.get("daily_digest_hour_utc"));
-
-  let dailyDigestHourUtc: number | null = null;
-  if (hourRaw !== null) {
-    const parsed = Number.parseInt(hourRaw, 10);
-    if (!Number.isFinite(parsed) || parsed < 0 || parsed > 23) {
-      redirect(statusUrl("error", "daily_digest_hour_utc must be in [0, 23]"));
-    }
-    dailyDigestHourUtc = parsed;
-  }
-
   try {
+    await assertActionSession(formData);
+    const payload = schemas.notificationConfig.parse({
+      enabled: formData.get("enabled") === "on",
+      to_email: toOptionalString(formData.get("to_email")),
+      daily_digest_enabled: formData.get("daily_digest_enabled") === "on",
+      daily_digest_hour_utc: toOptionalString(formData.get("daily_digest_hour_utc")),
+      failure_alert_enabled: formData.get("failure_alert_enabled") === "on",
+    });
+
     await apiClient.updateNotificationConfig({
-      enabled,
-      to_email: toEmail,
-      daily_digest_enabled: dailyDigestEnabled,
-      daily_digest_hour_utc: dailyDigestHourUtc,
-      failure_alert_enabled: failureAlertEnabled,
+      enabled: payload.enabled,
+      to_email: payload.to_email,
+      daily_digest_enabled: payload.daily_digest_enabled,
+      daily_digest_hour_utc: payload.daily_digest_hour_utc,
+      failure_alert_enabled: payload.failure_alert_enabled,
     });
 
     revalidatePath("/settings");
-    redirect(statusUrl("success", "Notification config saved"));
+    redirect(statusUrl("success", "NOTIFICATION_CONFIG_SAVED"));
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Failed to update config";
-    redirect(statusUrl("error", message));
+    if (isNextRedirectError(error)) {
+      throw error;
+    }
+    redirect(statusUrl("error", toActionErrorCode(error)));
   }
 }
 
 export async function sendTestNotificationAction(formData: FormData) {
-  const toEmail = toOptionalString(formData.get("to_email"));
-  const subject = toOptionalString(formData.get("subject"));
-  const body = toOptionalString(formData.get("body"));
-
   try {
-    const result = await apiClient.sendNotificationTest({
-      to_email: toEmail,
-      subject,
-      body,
+    await assertActionSession(formData);
+    const payload = schemas.notificationTest.parse({
+      to_email: toOptionalString(formData.get("to_email")),
+      subject: toOptionalString(formData.get("subject")),
+      body: toOptionalString(formData.get("body")),
+    });
+
+    await apiClient.sendNotificationTest({
+      to_email: payload.to_email,
+      subject: payload.subject,
+      body: payload.body,
     });
 
     revalidatePath("/settings");
-    redirect(statusUrl("success", `Test notification status: ${result.status}`));
+    redirect(statusUrl("success", "NOTIFICATION_TEST_SENT"));
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Failed to send test notification";
-    redirect(statusUrl("error", message));
+    if (isNextRedirectError(error)) {
+      throw error;
+    }
+    redirect(statusUrl("error", toActionErrorCode(error)));
   }
 }

@@ -1,10 +1,12 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
+import { getFlashMessage, toErrorCode } from "@/app/flash-message";
 import { MarkdownPreview } from "@/components/markdown-preview";
 import { RelativeTime } from "@/components/relative-time";
 import { SyncNowButton } from "@/components/sync-now-button";
 import { apiClient } from "@/lib/api/client";
+import { sanitizeExternalUrl } from "@/lib/api/url";
 import { resolveSearchParams, type SearchParamsInput } from "@/lib/search-params";
 
 export const metadata: Metadata = { title: "AI 摘要" };
@@ -49,7 +51,7 @@ export default async function FeedPage({ searchParams }: FeedPageProps) {
   const isFiltered = Boolean(source.trim() || category);
 
   let feed: Awaited<ReturnType<typeof apiClient.getDigestFeed>> | null = null;
-  let error: string | null = null;
+  let errorCode: string | null = null;
   try {
     feed = await apiClient.getDigestFeed({
       source: source.trim() || undefined,
@@ -62,7 +64,7 @@ export default async function FeedPage({ searchParams }: FeedPageProps) {
       cursor: safeCursor,
     });
   } catch (err) {
-    error = err instanceof Error ? err.message : "加载 AI 摘要失败";
+    errorCode = toErrorCode(err);
   }
 
   const items = feed?.items ?? [];
@@ -118,10 +120,12 @@ export default async function FeedPage({ searchParams }: FeedPageProps) {
         </form>
       </section>
 
-      {error ? <p className="alert error">{error}</p> : null}
+      {errorCode ? (
+        <p className="alert error" role="alert" aria-live="assertive">{getFlashMessage(errorCode)}</p>
+      ) : null}
 
       {/* 空状态 */}
-      {!error && items.length === 0 ? (
+      {!errorCode && items.length === 0 ? (
         <section className="card empty-state-card">
           <p className="empty-state-title">暂无 AI 摘要内容</p>
           <p className="small">
@@ -138,8 +142,10 @@ export default async function FeedPage({ searchParams }: FeedPageProps) {
       ) : null}
 
       {/* Feed 内容卡列表 */}
-      {items.map((item) => (
-        <article className="card card-feed stack" key={item.feed_id} data-category={item.category}>
+      {items.map((item) => {
+        const safeVideoUrl = sanitizeExternalUrl(item.video_url);
+        return (
+          <article className="card card-feed stack" key={item.feed_id} data-category={item.category}>
           <div className="flex-between feed-item-header">
             <h3 className="m-0 feed-item-title">{item.title}</h3>
             <span className="feed-item-meta">
@@ -155,22 +161,29 @@ export default async function FeedPage({ searchParams }: FeedPageProps) {
 
           <div className="feed-item-footer">
             <div className="inline">
-              <Link href={`/artifacts?job_id=${item.job_id}`}>查看产物</Link>
-              <a href={item.video_url} target="_blank" rel="noreferrer">打开原始链接</a>
+              <Link href={`/artifacts?job_id=${encodeURIComponent(item.job_id)}`}>查看产物</Link>
+              {safeVideoUrl ? (
+                <a href={safeVideoUrl} target="_blank" rel="noreferrer noopener">
+                  打开原始链接
+                </a>
+              ) : (
+                <span className="small">原始链接不可用</span>
+              )}
             </div>
             <span className="small feed-item-ops">
               <code>{item.artifact_type}</code>
               {" · "}
-              <Link href={`/jobs?job_id=${item.job_id}`} className="job-id-link">
+              <Link href={`/jobs?job_id=${encodeURIComponent(item.job_id)}`} className="job-id-link">
                 {item.job_id.slice(0, 8)}…
               </Link>
             </span>
           </div>
-        </article>
-      ))}
+          </article>
+        );
+      })}
 
       {/* 分页 */}
-      {!error && items.length > 0 ? (
+      {!errorCode && items.length > 0 ? (
         <nav className="card feed-pagination" aria-label="分页">
           <div className="inline">
             {!isFirstPage && (

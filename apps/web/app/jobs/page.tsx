@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
+import { getFlashMessage, toErrorCode } from "@/app/flash-message";
 import { toDisplayStatus } from "@/app/status";
 
 export const metadata: Metadata = { title: "任务" };
@@ -15,14 +16,14 @@ export default async function JobsPage({ searchParams }: JobsPageProps) {
   const { job_id: jobId } = await resolveSearchParams(searchParams, ["job_id"] as const);
 
   let error: string | null = null;
-  const job = jobId
-    ? await apiClient
-        .getJob(jobId)
-        .catch((err) => {
-          error = err instanceof Error ? err.message : "Failed to load job";
-          return null;
-        })
-    : null;
+  let job: Awaited<ReturnType<typeof apiClient.getJob>> | null = null;
+  if (jobId) {
+    try {
+      job = await apiClient.getJob(jobId);
+    } catch (err) {
+      error = getFlashMessage(toErrorCode(err));
+    }
+  }
   const jobStatus = job ? toDisplayStatus(job.status) : null;
   const pipelineStatus = job?.pipeline_final_status ? toDisplayStatus(job.pipeline_final_status) : null;
 
@@ -55,7 +56,7 @@ export default async function JobsPage({ searchParams }: JobsPageProps) {
         </form>
       </section>
 
-      {error ? <p className="alert error">{error}</p> : null}
+      {error ? <p className="alert error" role="alert" aria-live="assertive">{error}</p> : null}
 
       {job ? (
         <>
@@ -92,7 +93,7 @@ export default async function JobsPage({ searchParams }: JobsPageProps) {
               </div>
             </div>
             <div className="inline">
-              <Link href={`/artifacts?job_id=${job.id}`}>查看产物页</Link>
+              <Link href={`/artifacts?job_id=${encodeURIComponent(job.id)}`}>查看产物页</Link>
             </div>
           </section>
 

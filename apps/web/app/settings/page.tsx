@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 
+import { getActionSessionTokenForForm } from "@/app/action-security";
+import { getFlashMessage } from "@/app/flash-message";
 import { sendTestNotificationAction, updateNotificationConfigAction } from "@/app/settings/actions";
 
 export const metadata: Metadata = { title: "设置" };
@@ -12,25 +14,36 @@ type SettingsPageProps = {
 };
 
 export default async function SettingsPage({ searchParams }: SettingsPageProps) {
-  const { status, message } = await resolveSearchParams(searchParams, ["status", "message"] as const);
+  const { status, code } = await resolveSearchParams(searchParams, ["status", "code"] as const);
+  const sessionToken = getActionSessionTokenForForm();
   const configResult = await apiClient
     .getNotificationConfig()
     .then((config) => ({ config, error: null as string | null }))
     .catch((err) => ({
       config: null,
-      error: err instanceof Error ? err.message : "Failed to load notification config",
+      error: err instanceof Error ? err.message : "ERR_REQUEST_FAILED",
     }));
   const { config, error: loadError } = configResult;
 
   const alert =
-    status && message ? (
-      <p className={status === "error" ? "alert error" : "alert success"}>{message}</p>
+    status && code ? (
+      <p
+        className={status === "error" ? "alert error" : "alert success"}
+        role={status === "error" ? "alert" : "status"}
+        aria-live="polite"
+      >
+        {getFlashMessage(code)}
+      </p>
     ) : null;
 
   return (
     <div className="stack">
       {alert}
-      {loadError ? <p className="alert error">{loadError}</p> : null}
+      {loadError ? (
+        <p className="alert error" role="alert" aria-live="assertive">
+          {getFlashMessage(loadError.startsWith("ERR_") ? loadError : "ERR_REQUEST_FAILED")}
+        </p>
+      ) : null}
 
       <section className="card stack">
         <h2>通知配置</h2>
@@ -40,6 +53,7 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
           </p>
         ) : null}
         <form action={updateNotificationConfigAction} className="stack">
+          <input type="hidden" name="session_token" value={sessionToken} />
           <label className="inline">
             <input name="enabled" type="checkbox" defaultChecked={config?.enabled ?? true} />
             启用通知
@@ -97,6 +111,7 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
       <section className="card stack">
         <h2>发送测试通知</h2>
         <form action={sendTestNotificationAction} className="stack">
+          <input type="hidden" name="session_token" value={sessionToken} />
           <label>
             覆盖收件人（可选）
             <input name="to_email" type="email" placeholder="留空则使用已配置的收件人" />

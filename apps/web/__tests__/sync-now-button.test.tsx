@@ -1,9 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor, act } from "@testing-library/react";
+
 import { SyncNowButton } from "@/components/sync-now-button";
 
+const mockRefresh = vi.fn();
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ refresh: vi.fn() }),
+  useRouter: () => ({ refresh: mockRefresh }),
 }));
 
 const mockPollIngest = vi.fn();
@@ -20,40 +22,69 @@ describe("SyncNowButton", () => {
     vi.restoreAllMocks();
   });
 
-  it("renders with idle label", () => {
+  it("renders idle label", () => {
     render(<SyncNowButton />);
-    expect(screen.getByRole("button", { name: /sync now/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "立即同步" })).toBeInTheDocument();
   });
 
-  it("shows 'Syncing…' while request is in-flight and disables button", async () => {
+  it("shows loading state and prevents duplicate requests while in flight", async () => {
     let resolve!: () => void;
-    mockPollIngest.mockReturnValue(new Promise<void>((r) => { resolve = r; }));
+    mockPollIngest.mockReturnValue(new Promise<void>((r) => {
+      resolve = r;
+    }));
 
     render(<SyncNowButton />);
-    fireEvent.click(screen.getByRole("button"));
+    const button = screen.getByRole("button", { name: "立即同步" });
 
-    await waitFor(() => expect(screen.getByText("Syncing…")).toBeInTheDocument());
-    expect(screen.getByRole("button")).toBeDisabled();
+    fireEvent.click(button);
+    fireEvent.click(button);
 
-    await act(async () => { resolve(); });
+    await waitFor(() => expect(screen.getByRole("button", { name: "同步中…" })).toBeInTheDocument());
+    expect(screen.getByRole("button", { name: "同步中…" })).toBeDisabled();
+    expect(mockPollIngest).toHaveBeenCalledTimes(1);
+    expect(mockPollIngest).toHaveBeenCalledWith({});
+
+    await act(async () => {
+      resolve();
+    });
   });
 
-  it("shows 'Done ✓' immediately after successful API call", async () => {
+  it("shows success state then returns to idle and refreshes router", async () => {
     mockPollIngest.mockResolvedValue(undefined);
     render(<SyncNowButton />);
 
-    await act(async () => { fireEvent.click(screen.getByRole("button")); });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "立即同步" }));
+    });
 
-    await waitFor(() => expect(screen.getByText("Done ✓")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole("button", { name: "完成 ✓" })).toBeInTheDocument());
+    expect(mockPollIngest).toHaveBeenCalledTimes(1);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "立即同步" })).toBeInTheDocument();
+      expect(mockRefresh).toHaveBeenCalled();
+    }, {
+      timeout: 2500,
+    });
   });
 
-  it("shows 'Error — retry?' with destructive style after failed API call", async () => {
+  it("shows error state, uses destructive style, then recovers to idle", async () => {
     mockPollIngest.mockRejectedValue(new Error("Network error"));
     render(<SyncNowButton />);
 
-    await act(async () => { fireEvent.click(screen.getByRole("button")); });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "立即同步" }));
+    });
 
-    await waitFor(() => expect(screen.getByText("Error — retry?")).toBeInTheDocument());
-    expect(screen.getByRole("button")).toHaveClass("destructive");
+    await waitFor(() => expect(screen.getByRole("button", { name: "出错，重试？" })).toBeInTheDocument());
+    expect(screen.getByRole("button", { name: "出错，重试？" })).toHaveClass("destructive");
+    expect(mockPollIngest).toHaveBeenCalledTimes(1);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "立即同步" })).toBeInTheDocument();
+    }, {
+      timeout: 3500,
+    });
+    expect(mockRefresh).not.toHaveBeenCalled();
   });
 });

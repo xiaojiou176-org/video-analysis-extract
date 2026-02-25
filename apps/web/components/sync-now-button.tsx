@@ -32,14 +32,20 @@ export function SyncNowButton() {
   };
 
   return (
-    <button
-      type="button"
-      onClick={handleSync}
-      disabled={state === "loading"}
-      className={state === "error" ? "destructive" : "primary"}
-      style={{ minWidth: "7rem" }}
-    >
-      {labels[state]}
-    </button>
+    <>
+      <button
+        type="button"
+        onClick={handleSync}
+        disabled={state === "loading"}
+        className={state === "error" ? "destructive" : "primary"}
+        style={{ minWidth: "7rem" }}
+        aria-describedby="sync-now-status"
+      >
+        {labels[state]}
+      </button>
+      <span id="sync-now-status" className="sr-only" role="status" aria-live="polite">
+        {labels[state]}
+      </span>
+    </>
   );
 }

@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { getFlashMessage, toErrorCode } from "@/app/flash-message";
 import { apiClient } from "@/lib/api/client";
 import { formatDateTime } from "@/lib/format";
 import type { Subscription, SubscriptionCategory } from "@/lib/api/types";
@@ -55,7 +56,7 @@ export function SubscriptionBatchPanel({ subscriptions }: Props) {
       });
       router.refresh();
     } catch (err) {
-      setApplyResult(`删除失败：${err instanceof Error ? err.message : "未知错误"}`);
+      setApplyResult(`删除失败：${getFlashMessage(toErrorCode(err))}`);
     } finally {
       setDeletingId(null);
     }
@@ -74,7 +75,7 @@ export function SubscriptionBatchPanel({ subscriptions }: Props) {
       setSelected(new Set());
       router.refresh();
     } catch (err) {
-      setApplyResult(`操作失败：${err instanceof Error ? err.message : "未知错误"}`);
+      setApplyResult(`操作失败：${getFlashMessage(toErrorCode(err))}`);
     } finally {
       setApplying(false);
     }
@@ -206,7 +207,11 @@ export function SubscriptionBatchPanel({ subscriptions }: Props) {
           )}
 
           {applyResult && (
-            <p className={applyResult.startsWith("操作失败") || applyResult.startsWith("删除失败") ? "alert error" : "alert success"}>
+            <p
+              className={applyResult.startsWith("操作失败") || applyResult.startsWith("删除失败") ? "alert error" : "alert success"}
+              role={applyResult.startsWith("操作失败") || applyResult.startsWith("删除失败") ? "alert" : "status"}
+              aria-live="polite"
+            >
               {applyResult}
             </p>
           )}

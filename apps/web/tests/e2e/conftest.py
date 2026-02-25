@@ -10,7 +10,7 @@ import pytest
 from playwright.sync_api import Browser, Page, sync_playwright
 
 from support.mock_api import MockApiServer, MockApiState, start_mock_api_server, stop_mock_api_server
-from support.runtime_utils import external_web_base_url_from_env, free_port, slugify_nodeid, wait_http_ok
+from support.runtime_utils import external_web_base_url_from_env, slugify_nodeid, wait_http_ok, with_free_port_retry
 
 PROJECT_ROOT = Path(__file__).resolve().parents[4]
 WEB_DIR = PROJECT_ROOT / "apps" / "web"
@@ -21,6 +21,10 @@ WEB_E2E_SCREENSHOT_DIR = WEB_E2E_ARTIFACT_ROOT / "screenshots"
 
 for artifact_dir in (WEB_E2E_VIDEO_DIR, WEB_E2E_TRACE_DIR, WEB_E2E_SCREENSHOT_DIR):
     artifact_dir.mkdir(parents=True, exist_ok=True)
+
+
+class _PortInUseStartupError(RuntimeError):
+    pass
 
 
 @pytest.hookimpl(hookwrapper=True)
@@ -52,55 +56,75 @@ def web_base_url(mock_api_server: MockApiServer) -> str:
     if not (WEB_DIR / "node_modules").exists():
         raise RuntimeError("apps/web/node_modules is missing. Run `npm ci` in apps/web before E2E.")
 
-    output_lines: list[str] = []
     worker_id = os.environ.get("PYTEST_XDIST_WORKER", "gw0")
     worker_slug = "".join(ch if ch.isalnum() else "-" for ch in worker_id.lower())
-    web_port = free_port()
-    base_url = f"http://127.0.0.1:{web_port}"
-    env = os.environ.copy()
-    env["NEXT_PUBLIC_API_BASE_URL"] = mock_api_server.base_url
-    env["VD_API_BASE_URL"] = mock_api_server.base_url
-    env["NEXT_DIST_DIR"] = f".next-e2e-{worker_slug}"
-    env["PORT"] = str(web_port)
-    env["HOSTNAME"] = "127.0.0.1"
-    env["CI"] = "1"
 
-    process = subprocess.Popen(
-        ["npm", "run", "dev", "--", "--hostname", "127.0.0.1", "--port", str(web_port)],
-        cwd=WEB_DIR,
-        env=env,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-        bufsize=1,
+    process: subprocess.Popen[str] | None = None
+    output_thread: threading.Thread | None = None
+    output_lines: list[str] = []
+
+    def _start_web_server_on_port(web_port: int) -> tuple[subprocess.Popen[str], threading.Thread, list[str]]:
+        nonlocal output_lines
+        output_lines = []
+        base_url = f"http://127.0.0.1:{web_port}"
+        env = os.environ.copy()
+        env["NEXT_PUBLIC_API_BASE_URL"] = mock_api_server.base_url
+        env["VD_API_BASE_URL"] = mock_api_server.base_url
+        env["NEXT_DIST_DIR"] = f".next-e2e-{worker_slug}"
+        env["PORT"] = str(web_port)
+        env["HOSTNAME"] = "127.0.0.1"
+        env["CI"] = "1"
+
+        local_process = subprocess.Popen(
+            ["npm", "run", "dev", "--", "--hostname", "127.0.0.1", "--port", str(web_port)],
+            cwd=WEB_DIR,
+            env=env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+        )
+
+        def _capture_output() -> None:
+            if local_process.stdout is None:
+                return
+            for line in local_process.stdout:
+                output_lines.append(line.rstrip())
+
+        local_output_thread = threading.Thread(target=_capture_output, daemon=True)
+        local_output_thread.start()
+
+        try:
+            wait_http_ok(f"{base_url}/")
+            return local_process, local_output_thread, output_lines
+        except Exception as exc:
+            local_process.terminate()
+            local_process.wait(timeout=10)
+            local_output_thread.join(timeout=2)
+            tail = "\n".join(output_lines[-60:])
+            message = f"Next.js web server failed to start on port {web_port}.\n--- server output ---\n{tail}"
+            if "EADDRINUSE" in tail:
+                raise _PortInUseStartupError(message) from exc
+            raise RuntimeError(message) from exc
+
+    (process, output_thread, output_lines), web_port = with_free_port_retry(
+        _start_web_server_on_port,
+        attempts=4,
+        retry_if=lambda exc: isinstance(exc, _PortInUseStartupError),
     )
-
-    def _capture_output() -> None:
-        if process.stdout is None:
-            return
-        for line in process.stdout:
-            output_lines.append(line.rstrip())
-
-    output_thread = threading.Thread(target=_capture_output, daemon=True)
-    output_thread.start()
-
-    try:
-        wait_http_ok(f"{base_url}/")
-    except Exception as exc:
-        process.terminate()
-        process.wait(timeout=10)
-        tail = "\n".join(output_lines[-60:])
-        raise RuntimeError(f"Next.js web server failed to start.\n--- server output ---\n{tail}") from exc
+    base_url = f"http://127.0.0.1:{web_port}"
 
     try:
         yield base_url
     finally:
+        assert process is not None
         process.terminate()
         try:
             process.wait(timeout=10)
         except subprocess.TimeoutExpired:
             process.kill()
             process.wait(timeout=5)
+        assert output_thread is not None
         output_thread.join(timeout=2)
 
 

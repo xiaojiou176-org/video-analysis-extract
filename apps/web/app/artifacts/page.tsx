@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 
+import { getFlashMessage, toErrorCode } from "@/app/flash-message";
 import { MarkdownPreview } from "@/components/markdown-preview";
 
 export const metadata: Metadata = { title: "产物" };
@@ -61,7 +62,7 @@ export default async function ArtifactsPage({ searchParams }: ArtifactsPageProps
   ] as const);
   const hasLookupParams = Boolean(jobId || videoUrl);
 
-  let error: string | null = null;
+  let errorCode: string | null = null;
   let payload: ArtifactMarkdownWithMeta | null = null;
 
   if (hasLookupParams) {
@@ -72,8 +73,7 @@ export default async function ArtifactsPage({ searchParams }: ArtifactsPageProps
         include_meta: true,
       })
       .catch((err) => {
-        const reason = err instanceof Error ? err.message : "Failed to load artifact";
-        error = `API error: ${reason}`;
+        errorCode = toErrorCode(err);
         return null;
       });
   }
@@ -128,7 +128,9 @@ export default async function ArtifactsPage({ searchParams }: ArtifactsPageProps
         </form>
       </section>
 
-      {error ? <p className="alert error">{error}</p> : null}
+      {errorCode ? (
+        <p className="alert error" role="alert" aria-live="assertive">{getFlashMessage(errorCode)}</p>
+      ) : null}
 
       {payload ? (
         <>
@@ -207,8 +209,8 @@ export default async function ArtifactsPage({ searchParams }: ArtifactsPageProps
         </>
       ) : !hasLookupParams ? (
         null
-      ) : !error ? (
-        <p className="small">产物请求已完成，但未返回 Markdown 内容。</p>
+      ) : !errorCode ? (
+        <p className="small" role="status" aria-live="polite">产物请求已完成，但未返回 Markdown 内容。</p>
       ) : (
         null
       )}

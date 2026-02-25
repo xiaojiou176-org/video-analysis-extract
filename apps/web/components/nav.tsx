@@ -25,6 +25,7 @@ export function AppNav() {
               key={item.href}
               href={item.href}
               className={active ? "nav-link nav-link-active" : "nav-link"}
+              aria-current={active ? "page" : undefined}
             >
               {item.label}
             </Link>

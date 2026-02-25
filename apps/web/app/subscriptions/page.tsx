@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 
+import { getActionSessionTokenForForm } from "@/app/action-security";
+import { getFlashMessage } from "@/app/flash-message";
 import { upsertSubscriptionAction } from "@/app/subscriptions/actions";
 
 export const metadata: Metadata = { title: "订阅管理" };
@@ -11,25 +13,42 @@ type SubscriptionsPageProps = {
   searchParams?: SearchParamsInput;
 };
 
-function renderAlert(status: string, message: string) {
-  if (!status || !message) {
+function renderAlert(status: string, code: string) {
+  if (!status || !code) {
     return null;
   }
   const className = status === "error" ? "alert error" : "alert success";
-  return <p className={className}>{message}</p>;
+  return (
+    <p className={className} role={status === "error" ? "alert" : "status"} aria-live="polite">
+      {getFlashMessage(code)}
+    </p>
+  );
 }
 
 export default async function SubscriptionsPage({ searchParams }: SubscriptionsPageProps) {
-  const { status, message } = await resolveSearchParams(searchParams, ["status", "message"] as const);
-  const subscriptions = await apiClient.listSubscriptions().catch(() => []);
+  const { status, code } = await resolveSearchParams(searchParams, ["status", "code"] as const);
+  const sessionToken = getActionSessionTokenForForm();
+  const subscriptionsResult = await apiClient.listSubscriptions()
+    .then((data) => ({ data, errorCode: null as string | null }))
+    .catch(() => ({
+      data: [] as Awaited<ReturnType<typeof apiClient.listSubscriptions>>,
+      errorCode: "ERR_REQUEST_FAILED",
+    }));
+  const subscriptions = subscriptionsResult.data;
 
   return (
     <div className="stack">
-      {renderAlert(status, message)}
+      {renderAlert(status, code)}
+      {subscriptionsResult.errorCode ? (
+        <p className="alert error" role="alert" aria-live="assertive">
+          {getFlashMessage(subscriptionsResult.errorCode)}
+        </p>
+      ) : null}
 
       <section className="card stack">
         <h2>创建或更新订阅</h2>
         <form action={upsertSubscriptionAction} className="grid grid-cols-2">
+          <input type="hidden" name="session_token" value={sessionToken} />
           <label>
             平台
             <select name="platform" defaultValue="youtube">

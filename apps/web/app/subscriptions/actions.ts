@@ -3,70 +3,71 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
+import { assertActionSession, isNextRedirectError, parseIdentifier, schemas, toActionErrorCode } from "@/app/action-security";
+import { toFlashQuery } from "@/app/flash-message";
 import { apiClient } from "@/lib/api/client";
 import type { Platform, SourceType, SubscriptionAdapterType, SubscriptionCategory } from "@/lib/api/types";
 
-function statusUrl(status: "success" | "error", message: string): string {
-  const query = new URLSearchParams({ status, message });
-  return `/subscriptions?${query.toString()}`;
+function statusUrl(status: "success" | "error", code: string): string {
+  return `/subscriptions?${toFlashQuery(status, code)}`;
 }
 
 export async function upsertSubscriptionAction(formData: FormData) {
-  const platform = String(formData.get("platform") ?? "youtube").trim() as Platform;
-  const sourceType = String(formData.get("source_type") ?? "url").trim() as SourceType;
-  const sourceValue = String(formData.get("source_value") ?? "").trim();
-  const adapterType = String(formData.get("adapter_type") ?? "rsshub_route").trim() as SubscriptionAdapterType;
-  const sourceUrlRaw = String(formData.get("source_url") ?? "").trim();
-  const rsshubRouteRaw = String(formData.get("rsshub_route") ?? "").trim();
-  const category = String(formData.get("category") ?? "misc").trim() as SubscriptionCategory;
-  const tagsRaw = String(formData.get("tags") ?? "").trim();
-  const tags = tagsRaw
-    .split(",")
-    .map((item) => item.trim())
-    .filter((item) => item.length > 0);
-  const priorityRaw = String(formData.get("priority") ?? "50").trim();
-  const parsedPriority = Number.parseInt(priorityRaw, 10);
-  const priority = Number.isFinite(parsedPriority) ? Math.max(0, Math.min(100, parsedPriority)) : 50;
-  const enabled = formData.get("enabled") === "on";
-
-  if (!sourceValue) {
-    redirect(statusUrl("error", "source_value is required"));
-  }
-
   try {
-    const result = await apiClient.upsertSubscription({
-      platform,
-      source_type: sourceType,
-      source_value: sourceValue,
-      adapter_type: adapterType,
+    await assertActionSession(formData);
+    const sourceUrlRaw = String(formData.get("source_url") ?? "").trim();
+    const rsshubRouteRaw = String(formData.get("rsshub_route") ?? "").trim();
+    const tagsRaw = String(formData.get("tags") ?? "").trim();
+    const payload = schemas.subscriptionUpsert.parse({
+      platform: String(formData.get("platform") ?? "youtube").trim(),
+      source_type: String(formData.get("source_type") ?? "url").trim(),
+      source_value: String(formData.get("source_value") ?? "").trim(),
+      adapter_type: String(formData.get("adapter_type") ?? "rsshub_route").trim(),
       source_url: sourceUrlRaw || null,
       rsshub_route: rsshubRouteRaw || null,
-      category,
-      tags,
-      priority,
-      enabled,
+      category: String(formData.get("category") ?? "misc").trim(),
+      tags: tagsRaw
+        .split(",")
+        .map((item) => item.trim())
+        .filter((item) => item.length > 0),
+      priority: String(formData.get("priority") ?? "50"),
+      enabled: formData.get("enabled") === "on",
+    });
+
+    const result = await apiClient.upsertSubscription({
+      platform: payload.platform as Platform,
+      source_type: payload.source_type as SourceType,
+      source_value: payload.source_value,
+      adapter_type: payload.adapter_type as SubscriptionAdapterType,
+      source_url: payload.source_url,
+      rsshub_route: payload.rsshub_route,
+      category: payload.category as SubscriptionCategory,
+      tags: payload.tags,
+      priority: payload.priority,
+      enabled: payload.enabled,
     });
 
     revalidatePath("/subscriptions");
-    redirect(statusUrl("success", result.created ? "Subscription created" : "Subscription updated"));
+    redirect(statusUrl("success", result.created ? "SUBSCRIPTION_CREATED" : "SUBSCRIPTION_UPDATED"));
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Failed to save subscription";
-    redirect(statusUrl("error", message));
+    if (isNextRedirectError(error)) {
+      throw error;
+    }
+    redirect(statusUrl("error", toActionErrorCode(error)));
   }
 }
 
 export async function deleteSubscriptionAction(formData: FormData) {
-  const id = String(formData.get("id") ?? "").trim();
-  if (!id) {
-    redirect(statusUrl("error", "Missing subscription id"));
-  }
-
   try {
+    await assertActionSession(formData);
+    const id = parseIdentifier(String(formData.get("id") ?? ""));
     await apiClient.deleteSubscription(id);
     revalidatePath("/subscriptions");
-    redirect(statusUrl("success", "Subscription deleted"));
+    redirect(statusUrl("success", "SUBSCRIPTION_DELETED"));
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Failed to delete subscription";
-    redirect(statusUrl("error", message));
+    if (isNextRedirectError(error)) {
+      throw error;
+    }
+    redirect(statusUrl("error", toActionErrorCode(error)));
   }
 }

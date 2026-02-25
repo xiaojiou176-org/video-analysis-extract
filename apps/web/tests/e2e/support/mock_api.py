@@ -11,7 +11,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
-from support.runtime_utils import free_port, utc_now, wait_http_ok
+from support.runtime_utils import utc_now, wait_http_ok
 
 PING_IMAGE_BYTES = base64.b64decode(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9sYfA8kAAAAASUVORK5CYII="
@@ -39,6 +39,7 @@ def _subscription_uuid(index: int) -> str:
 @dataclass
 class MockApiState:
     lock: threading.Lock = field(default_factory=threading.Lock)
+    condition: threading.Condition = field(init=False)
     subscriptions: list[dict[str, Any]] = field(default_factory=list)
     notification_config: dict[str, Any] = field(default_factory=dict)
     calls: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
@@ -48,10 +49,11 @@ class MockApiState:
     artifact_frame_files: list[str] = field(default_factory=list)
 
     def __post_init__(self) -> None:
+        self.condition = threading.Condition(self.lock)
         self.reset()
 
     def reset(self) -> None:
-        with self.lock:
+        with self.condition:
             now = utc_now()
             self.subscriptions = []
             self.notification_config = {
@@ -78,10 +80,12 @@ class MockApiState:
             self.health_status = int(HTTPStatus.OK)
             self.health_delay_seconds = 0.0
             self.artifact_frame_files = ["screenshots/frame_0001.png", "screenshots/frame_0002.webp"]
+            self.condition.notify_all()
 
     def record(self, key: str, payload: dict[str, Any]) -> None:
-        with self.lock:
+        with self.condition:
             self.calls[key].append(payload)
+            self.condition.notify_all()
 
     def call_count(self, key: str) -> int:
         with self.lock:
@@ -632,9 +636,9 @@ def _mock_handler(state: MockApiState) -> type[BaseHTTPRequestHandler]:
 
 
 def start_mock_api_server() -> RunningMockServer:
-    port = free_port()
     state = MockApiState()
-    server = ThreadingHTTPServer(("127.0.0.1", port), _mock_handler(state))
+    server = ThreadingHTTPServer(("127.0.0.1", 0), _mock_handler(state))
+    port = int(server.server_address[1])
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     base_url = f"http://127.0.0.1:{port}"
