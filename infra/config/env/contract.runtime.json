@@ -3,18 +3,6 @@
   "name": "runtime",
   "variables": [
     {
-      "name": "ANTHROPIC_API_KEY",
-      "scope": "shared",
-      "required": false,
-      "secret": true,
-      "default": null,
-      "consumer": [
-        "apps/api/app/config.py",
-        "apps/worker/worker/config.py"
-      ],
-      "description": "Compatibility-reserved Anthropic API key (not an active runtime provider path in Gemini-only mode)."
-    },
-    {
       "name": "API_INTEGRATION_DATABASE_URL",
       "scope": "test",
       "required": false,
@@ -531,18 +519,6 @@
         "apps/worker/worker/config.py"
       ],
       "description": "Enable outbound notification delivery."
-    },
-    {
-      "name": "OPENAI_API_KEY",
-      "scope": "shared",
-      "required": false,
-      "secret": true,
-      "default": null,
-      "consumer": [
-        "apps/api/app/config.py",
-        "apps/worker/worker/config.py"
-      ],
-      "description": "Compatibility-reserved OpenAI API key (not an active runtime provider path in Gemini-only mode)."
     },
     {
       "name": "PIPELINE_ARTIFACT_ROOT",
