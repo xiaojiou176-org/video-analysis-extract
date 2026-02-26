@@ -1,7 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+HOOK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "$HOOK_DIR/.." && pwd)"
+cd "$ROOT_DIR"
+
 echo "[pre-push] quality gate (mode=pre-push)"
-./scripts/quality_gate.sh --mode pre-push --heartbeat-seconds 20
+"$ROOT_DIR/scripts/quality_gate.sh" \
+  --mode pre-push \
+  --heartbeat-seconds 20 \
+  --mutation-min-score 0.60
 
 echo "[pre-push] passed"

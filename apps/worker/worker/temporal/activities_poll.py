@@ -48,8 +48,14 @@ async def run_poll_feeds_once(
         lock_backend = "postgres_advisory"
     else:
         logger.warning(
-            "poll advisory lock unavailable, fallback to sqlite lock",
-            extra={"lock_key": lock_key, "reason": advisory_reason},
+            "poll_advisory_lock_unavailable",
+            extra={
+                "trace_id": "missing_trace",
+                "user": "poll_feeds_activity",
+                "lock_key": lock_key,
+                "reason": advisory_reason,
+                "error": "advisory_lock_unavailable",
+            },
         )
         if not sqlite_store.acquire_lock(lock_key, lock_owner, settings.lock_ttl_seconds):
             return {"ok": True, "skipped": True, "reason": "lock_not_acquired"}

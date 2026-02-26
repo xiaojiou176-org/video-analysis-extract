@@ -113,7 +113,7 @@ def test_run_poll_feeds_once_falls_back_to_sqlite_when_pg_lock_unavailable(
     assert result["feeds_polled"] == 0
     assert calls["sqlite_acquire"] == 1
     assert calls["sqlite_release"] == 1
-    assert "fallback to sqlite lock" in caplog.text
+    assert "poll_advisory_lock_unavailable" in caplog.text
 
 
 def test_run_poll_feeds_once_releases_pg_lock_when_acquired(monkeypatch) -> None:

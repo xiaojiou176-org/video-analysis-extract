@@ -308,6 +308,37 @@ wait_async_gates_with_heartbeat() {
   return "$had_failure"
 }
 
+run_sync_gate_with_heartbeat() {
+  local gate_id="$1"
+  local gate_name="$2"
+  local gate_cmd="$3"
+  local gate_log="$TMP_DIR/${gate_id}.log"
+  local gate_pid running=true
+
+  echo "[quality-gate] start: $gate_name"
+  (
+    cd "$ROOT_DIR"
+    eval "$gate_cmd"
+  ) >"$gate_log" 2>&1 &
+  gate_pid="$!"
+
+  while $running; do
+    if kill -0 "$gate_pid" >/dev/null 2>&1; then
+      echo "[quality-gate][heartbeat] running: $gate_name"
+      sleep "$HEARTBEAT_SECONDS"
+    else
+      running=false
+    fi
+  done
+
+  if ! wait "$gate_pid"; then
+    report_gate_failure "$gate_name" "$gate_log"
+    return 1
+  fi
+
+  echo "[quality-gate] pass: $gate_name"
+}
+
 run_pre_commit_mode() {
   cleanup_mutation_artifacts
 
@@ -322,6 +353,10 @@ run_pre_commit_mode() {
     "run_secrets_scan"
   run_async_gate "hollow_log_guard" "hollow log message guard" \
     "run_hollow_log_guard"
+  run_async_gate "structured_log_guard" "structured log critical-path guard" \
+    "python3 scripts/check_structured_logs.py"
+  run_async_gate "iac_entrypoint_guard" "iac entrypoint guard" \
+    "bash scripts/check_iac_entrypoint.sh ."
   run_async_gate "web_lint" "frontend lint" \
     "npm --prefix apps/web run lint"
   run_async_gate "ruff_full" "backend lint (ruff full rules)" \
@@ -355,6 +390,10 @@ run_pre_push_mode() {
     "run_secrets_scan"
   run_async_gate "hollow_log_guard" "hollow log message guard" \
     "run_hollow_log_guard"
+  run_async_gate "structured_log_guard" "structured log critical-path guard" \
+    "python3 scripts/check_structured_logs.py"
+  run_async_gate "iac_entrypoint_guard" "iac entrypoint guard" \
+    "bash scripts/check_iac_entrypoint.sh ."
   run_async_gate "web_lint" "frontend lint" \
     "npm --prefix apps/web run lint"
   run_async_gate "ruff_full" "backend lint (ruff full rules)" \
@@ -397,8 +436,8 @@ run_pre_push_mode() {
     exit 1
   fi
 
-  echo "[quality-gate] phase=mutation-gate"
-  if ! run_mutation_gate; then
+  echo "[quality-gate] phase=mutation-gate (heartbeat=${HEARTBEAT_SECONDS}s)"
+  if ! run_sync_gate_with_heartbeat "mutation_gate" "mutation gate" "run_mutation_gate"; then
     echo "[quality-gate] pre-push failed in mutation-gate phase" >&2
     exit 1
   fi

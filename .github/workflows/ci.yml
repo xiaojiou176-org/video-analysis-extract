@@ -80,6 +80,12 @@ jobs:
         run: |
           ! rg -n 'cp \.env\.local\.example \.env\.local|source \.env\.local|自动加载 `?\.env\.local' README.md docs/runbook-local.md
 
+      - name: IaC entrypoint guard
+        run: bash scripts/check_iac_entrypoint.sh .
+
+      - name: Structured log critical-path guard
+        run: python3 scripts/check_structured_logs.py
+
       - name: Provider residual guard (blocking)
         run: bash scripts/guard_provider_residuals.sh .
 
