@@ -127,6 +127,19 @@ python3 scripts/check_env_contract.py --strict
 set -a; source .env; set +a
 ```
 
+### 3.2.1 环境分层与密钥注入策略（强制）
+
+- 必须采用 `core + profile overlay`：
+  - core：`.env`
+  - profile：`PROFILE=local|gce`
+  - overlay：`.env.reader-stack`（仅 reader 栈命令加载）
+- 密钥只允许通过 `.env` 或进程环境注入。
+- 禁止将 `.env.local` / `.env.bak` / shell 登录配置作为运行时密钥来源。
+- 迁移旧结构时必须执行：
+  - `cp .env.example .env`
+  - `cp .env.example .env.reader-stack`（仅启用 reader 栈时）
+  - `python3 scripts/check_env_contract.py --strict`
+
 ### 3.3 启动基础服务
 
 ```bash

@@ -334,6 +334,8 @@ OPS_CLEANUP_OLDER_THAN_HOURS=24 \
 - 本地运维：`docs/runbook-local.md`
 - 状态机：`docs/state-machine.md`
 - 环境治理：`ENVIRONMENT.md`
+- 环境分层与优先级：`ENVIRONMENT.md`（`Core/Profile Overlay Architecture`）
+- 旧环境迁移指引：`ENVIRONMENT.md`（`Migration Guide: Legacy .env.example -> Core/Profile Overlay`）
 - 引用文档：`docs/reference/logging.md`、`docs/reference/cache.md`、`docs/reference/dependency-governance.md`
 - MCP 路由：`docs/reference/mcp-tool-routing.md`（13 工具、action 路由、组合示例）
 - 仓库完善蓝图：`Repo_Next_Step_Plan.md`

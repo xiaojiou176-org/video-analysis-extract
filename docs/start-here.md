@@ -20,12 +20,27 @@
 - `docs/testing.md`
 - `ENVIRONMENT.md`
 
-## 你需要先知道的 4 件事
+## 你需要先知道的 5 件事
 
 1. 流程口径：`ProcessJobWorkflow = 3 阶段 + 9-step pipeline`（详见 `docs/state-machine.md`）。
-2. 环境文件：本地统一使用 `.env`；额外变量通过当前 shell 环境显式注入。
-3. Python 命令统一使用 `python3`。
-4. AI/自动化执行必须在标准环境：优先 `.devcontainer/devcontainer.json`，基础设施使用 `infra/compose/*.compose.yml`。
+2. 环境分层：采用 `core + profile overlay` 架构，`.env` 是 core，`.env.reader-stack` 是 reader 专用 overlay，`PROFILE` 控制 local/gce 行为。
+3. 密钥策略：只允许通过 `.env` 或进程环境注入；禁止依赖 `.env.local` / `.env.bak` / 登录配置作为密钥来源。
+4. Python 命令统一使用 `python3`。
+5. AI/自动化执行必须在标准环境：优先 `.devcontainer/devcontainer.json`，基础设施使用 `infra/compose/*.compose.yml`。
+
+## 旧环境文件迁移（必做）
+
+```bash
+cp .env.example .env
+# 可选：仅 reader 栈使用
+cp .env.example .env.reader-stack
+python3 scripts/check_env_contract.py --strict
+```
+
+迁移规则：
+- `.env`：放 core/runtime 与 provider 密钥。
+- `.env.reader-stack`：只放 Miniflux/Nextflux 相关变量。
+- 不再把 `.env.local` 作为默认运行时输入。
 
 ## 标准环境入口（AI 必须）
 

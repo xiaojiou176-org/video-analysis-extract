@@ -7,11 +7,43 @@ This repository uses a contract-first environment model:
 3. Runtime access: configuration modules (`apps/api/app/config.py`, `apps/worker/worker/config.py`, `apps/mcp/server.py`)
 4. Gate: `python3 scripts/check_env_contract.py --strict`
 
+## Core/Profile Overlay Architecture
+
+Environment configuration is split into one core layer plus profile overlays:
+
+1. Core baseline: `.env`
+2. Profile overlay:
+   - `PROFILE=local|gce` (used by bootstrap/runtime decisions)
+   - `.env.reader-stack` (reader-only overlay; loaded only by reader-related scripts)
+3. Process environment: explicit command/session overrides
+
+Overlay scope rules:
+
+- `.env` is the canonical runtime baseline for API/Worker/MCP/Web scripts.
+- `.env.reader-stack` is not global; it is applied only in reader-stack flows such as:
+  - `scripts/deploy_reader_stack.sh --env-file <path>`
+  - `scripts/smoke_full_stack.sh` (reader checks)
+  - `scripts/run_ai_feed_sync.sh` (reader sync path)
+- Process env is allowed for temporary overrides and CI injection.
+
 ## Loading Order
 
 1. Process environment variables
 2. `.env` (canonical local source, auto-loaded by `scripts/dev_*.sh` and `scripts/run_*.sh`)
 3. Code defaults (only for optional values; required variables must come from environment)
+
+### Effective Precedence (Important)
+
+Because most repo scripts call `load_repo_env` (which sources `.env` after shell startup), effective precedence is:
+
+1. Script-specific explicit override handling (highest; e.g. preserved vars in `e2e_live_smoke.sh`)
+2. `.env` values loaded by repo scripts
+3. Inherited parent-shell environment
+4. Code defaults for optional fields only
+
+Notes:
+- In general runtime scripts, `.env` can overwrite inherited shell variables.
+- For one-off overrides, use script-supported flags or explicit per-command env where documented.
 
 ## Fail-Fast Rules
 
@@ -95,8 +127,10 @@ Default model lane:
 ### Secret Source and Logging Policy
 
 - Secret keys must come from process environment or local `.env` file only.
+- Reader-stack secrets (if used) must come from `.env.reader-stack` only for reader-stack commands.
 - Do not hard-code keys in source code, tests, or documentation examples.
 - Runtime logs and diagnostics must never print full secret values; only masked summaries are allowed when needed for troubleshooting.
+- `.env.local`, `.env.bak`, shell login profiles, and documentation snippets are not allowed as secret sources for runtime/CI.
 
 ### Embedding / Retrieval Entry
 
@@ -204,6 +238,54 @@ Exception detail sanitization contract:
 cp .env.example .env
 # edit .env
 ```
+
+## Minimal Required Variables by Profile
+
+### Shared Core (all profiles)
+
+- `DATABASE_URL`
+- `TEMPORAL_TARGET_HOST`
+- `TEMPORAL_NAMESPACE`
+- `TEMPORAL_TASK_QUEUE`
+- `SQLITE_PATH`
+- `SQLITE_STATE_PATH`
+- `PIPELINE_WORKSPACE_DIR`
+- `PIPELINE_ARTIFACT_ROOT`
+
+### `local` profile
+
+- `PROFILE=local`
+- Core shared variables above
+- Optional features add their own required vars:
+  - Notifications: `NOTIFICATION_ENABLED=true` requires `RESEND_API_KEY` + `RESEND_FROM_EMAIL`
+  - Live smoke with strict secrets requires provider keys in `.env` or process env
+
+### `gce` profile
+
+- `PROFILE=gce`
+- Core shared variables above
+- Infra/recreate scripts additionally require corresponding `GCP_*` / instance settings when invoked
+
+### Reader overlay (`.env.reader-stack`, optional)
+
+Required only when enabling reader stack (`WITH_READER_STACK=1`) or running reader sync:
+- `MINIFLUX_DB_PASSWORD`
+- `MINIFLUX_ADMIN_PASSWORD`
+- `MINIFLUX_BASE_URL`
+
+## Migration Guide: Legacy `.env.example` -> Core/Profile Overlay
+
+1. Create canonical core env:
+   - `cp .env.example .env`
+2. Keep all app runtime/provider secrets in `.env` (or injected process env in CI).
+3. If using reader stack, create a dedicated overlay file:
+   - `cp .env.example .env.reader-stack`
+   - keep reader-only credentials in `.env.reader-stack`
+4. Stop relying on legacy fallback files (`.env.local`, `.env.bak`) as runtime secret inputs.
+5. Validate contract:
+   - `python3 scripts/check_env_contract.py --strict`
+6. For reader stack startup, use explicit env file flag:
+   - `./scripts/deploy_reader_stack.sh up --env-file .env.reader-stack`
 
 ## CI Gate
 

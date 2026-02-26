@@ -13,6 +13,24 @@
 devcontainer up --workspace-folder .
 ```
 
+## 环境分层与优先级（Core/Profile Overlay）
+
+- Core baseline：`.env`（API/Worker/MCP/Web 默认运行配置）
+- Profile overlay：
+  - `PROFILE=local|gce`（决定 bootstrap 运行画像）
+  - `.env.reader-stack`（仅 reader 相关命令加载）
+- Secret injection policy：密钥仅允许来自 `.env` 或进程环境；禁止依赖 `.env.local` / `.env.bak` / 登录配置。
+
+变量优先级（按当前脚本实现）：
+1. 脚本内显式保留/覆盖逻辑（如 `e2e_live_smoke.sh` 对 API 路由变量的保留）
+2. `.env`（`load_repo_env` 加载）
+3. 继承自父 shell 的同名变量
+4. 代码默认值（仅可选项）
+
+Reader overlay 规则：
+- `.env.reader-stack` 不会全局生效，仅在 reader 栈命令路径生效（`deploy_reader_stack.sh`、reader 检查/同步链路）。
+- 启用 reader 栈时，建议显式指定 `--env-file .env.reader-stack`。
+
 ## 标准启动链路（6 步）
 
 ### 1) 安装依赖与前置
