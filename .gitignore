@@ -3,10 +3,12 @@
 .pytest_cache/
 .coverage
 .coverage.*
+coverage.xml
 .venv/
 venv/
 __pycache__/
 *.pyc
+mutants/
 
 # Node / Next build artifacts
 apps/web/node_modules/
