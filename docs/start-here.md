@@ -37,6 +37,19 @@ cp .env.example .env.reader-stack
 python3 scripts/check_env_contract.py --strict
 ```
 
+## 一键迁移 + 验证（最短路径）
+
+```bash
+bash scripts/env/migrate_env_legacy.sh
+bash scripts/env/validate_profile.sh --profile local
+```
+
+可选排障命令：
+
+```bash
+bash scripts/env/compose_env.sh --profile local --write .runtime-cache/temp/.env.local.resolved
+```
+
 迁移规则：
 - `.env`：放 core/runtime 与 provider 密钥。
 - `.env.reader-stack`：只放 Miniflux/Nextflux 相关变量。

@@ -5,6 +5,7 @@ SCRIPT_NAME="compose_env"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 ENV_PROFILE="${ENV_PROFILE:-local}"
 WRITE_PATH=""
+PROFILE_INPUT="${ENV_PROFILE:-local}"
 
 usage() {
   cat <<'USAGE'
@@ -15,16 +16,26 @@ Compose effective env by order:
   env/profiles/<profile>.env
   .env
   shell overrides (highest priority)
+
+Examples:
+  bash scripts/env/compose_env.sh --profile local
+  bash scripts/env/compose_env.sh --profile local --write .runtime-cache/temp/.env.local.resolved
 USAGE
 }
+
+log() { printf '[%s] %s\n' "$SCRIPT_NAME" "$*" >&2; }
+die() { printf '[%s] error: %s\n' "$SCRIPT_NAME" "$*" >&2; exit 1; }
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --profile|--env-profile)
+      [[ $# -ge 2 ]] || die "missing value for $1"
       ENV_PROFILE="${2:-}"
+      PROFILE_INPUT="$ENV_PROFILE"
       shift 2
       ;;
     --write)
+      [[ $# -ge 2 ]] || die "missing value for --write"
       WRITE_PATH="${2:-}"
       shift 2
       ;;
@@ -33,7 +44,7 @@ while [[ $# -gt 0 ]]; do
       exit 0
       ;;
     *)
-      printf '[%s] unknown argument: %s\n' "$SCRIPT_NAME" "$1" >&2
+      log "error: unknown argument: $1"
       usage
       exit 1
       ;;
@@ -43,6 +54,10 @@ done
 # shellcheck source=./scripts/lib/load_env.sh
 source "$ROOT_DIR/scripts/lib/load_env.sh"
 ENV_PROFILE="$(normalize_env_profile "$ENV_PROFILE")"
+if [[ "$PROFILE_INPUT" != "$ENV_PROFILE" ]]; then
+  log "warning: profile '$PROFILE_INPUT' normalized to '$ENV_PROFILE' (allowed chars: A-Za-z0-9._-)."
+fi
+log "composing env for profile=$ENV_PROFILE"
 load_repo_env "$ROOT_DIR" "$SCRIPT_NAME" "$ENV_PROFILE"
 
 ENV_FILES=()
@@ -52,7 +67,8 @@ while IFS= read -r env_file; do
 done < <(get_repo_env_files "$ROOT_DIR" "$ENV_PROFILE")
 
 if (( ${#ENV_FILES[@]} == 0 )); then
-  printf '[%s] no env files discovered, nothing to compose.\n' "$SCRIPT_NAME" >&2
+  log "no env files discovered for profile=$ENV_PROFILE, nothing to compose."
+  log "hint: expected one or more of env/core.env(.example), env/profiles/${ENV_PROFILE}.env, .env"
   exit 0
 fi
 
@@ -69,8 +85,10 @@ sed -nE 's/^[[:space:]]*(export[[:space:]]+)?([A-Za-z_][A-Za-z0-9_]*)[[:space:]]
 if [[ -n "$WRITE_PATH" ]]; then
   mkdir -p "$(dirname "$WRITE_PATH")"
   cp "$TMP_OUT" "$WRITE_PATH"
-  printf '[%s] wrote resolved env: %s\n' "$SCRIPT_NAME" "$WRITE_PATH" >&2
+  log "wrote resolved env: $WRITE_PATH"
 fi
 
 cat "$TMP_OUT"
+resolved_keys="$(wc -l < "$TMP_OUT" | tr -d '[:space:]')"
+log "summary: profile=$ENV_PROFILE, files=${#ENV_FILES[@]}, resolved_keys=${resolved_keys:-0}"
 rm -f "$TMP_OUT"

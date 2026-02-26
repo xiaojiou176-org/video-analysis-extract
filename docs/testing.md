@@ -159,6 +159,18 @@ python3 scripts/check_test_assertions.py
 ./scripts/quality_gate.sh
 ```
 
+### 0.1.1) 一键最终门禁集成验收（profile -> pre-commit -> pre-push）
+
+```bash
+bash scripts/env/final_governance_check.sh
+```
+
+如需仅执行到 pre-commit（跳过 pre-push）：
+
+```bash
+bash scripts/env/final_governance_check.sh --skip-prepush
+```
+
 默认策略（阻断）：
 - 全仓 Lint 错误必须为 0（`npm --prefix apps/web run lint` + `uv run --with ruff ruff check apps scripts`）。
 - 禁止安慰剂断言（`python3 scripts/check_test_assertions.py --path .`）。

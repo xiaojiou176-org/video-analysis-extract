@@ -6,12 +6,15 @@ MODE="pre-push"
 HEARTBEAT_SECONDS="25"
 MUTATION_MIN_SCORE="0.60"
 PROFILE_ONLY="0"
+FINAL_CHECK="0"
+FINAL_SKIP_PREPUSH="0"
 PROFILES=()
 
 usage() {
   cat <<'USAGE'
 Usage:
   scripts/quality_gate.sh [--mode pre-commit|pre-push] [--heartbeat-seconds N] [--mutation-min-score N] [--profile NAME ...] [--profile-only]
+  scripts/quality_gate.sh --final-check [--skip-prepush] [--heartbeat-seconds N] [--mutation-min-score N]
 
 Modes:
   pre-commit  Run fast local commit gate (parallel checks + staged doc drift).
@@ -23,6 +26,8 @@ Profiles:
 Flags:
   --profile NAME   Append explicit profile checks (repeatable).
   --profile-only   Run profile checks only, skip other quality gates.
+  --final-check    Shortcut to run scripts/env/final_governance_check.sh.
+  --skip-prepush   Used with --final-check to skip final pre-push phase.
 
 Quality policy (blocking):
   - Lint errors must be zero (frontend + backend full lint).
@@ -56,6 +61,14 @@ while (($# > 0)); do
       PROFILE_ONLY="1"
       shift
       ;;
+    --final-check)
+      FINAL_CHECK="1"
+      shift
+      ;;
+    --skip-prepush)
+      FINAL_SKIP_PREPUSH="1"
+      shift
+      ;;
     -h|--help)
       usage
       exit 0
@@ -86,6 +99,26 @@ fi
 if [[ "$PROFILE_ONLY" != "0" && "$PROFILE_ONLY" != "1" ]]; then
   echo "[quality-gate] invalid --profile-only: $PROFILE_ONLY (expected flag)" >&2
   exit 2
+fi
+
+if [[ "$FINAL_SKIP_PREPUSH" == "1" && "$FINAL_CHECK" != "1" ]]; then
+  echo "[quality-gate] --skip-prepush can only be used with --final-check" >&2
+  exit 2
+fi
+
+if [[ "$FINAL_CHECK" == "1" ]]; then
+  final_cmd=(
+    bash
+    "$ROOT_DIR/scripts/env/final_governance_check.sh"
+    --heartbeat-seconds
+    "$HEARTBEAT_SECONDS"
+    --mutation-min-score
+    "$MUTATION_MIN_SCORE"
+  )
+  if [[ "$FINAL_SKIP_PREPUSH" == "1" ]]; then
+    final_cmd+=(--skip-prepush)
+  fi
+  exec "${final_cmd[@]}"
 fi
 
 if ((${#PROFILES[@]} == 0)); then

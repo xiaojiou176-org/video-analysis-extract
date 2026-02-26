@@ -108,8 +108,8 @@ curl -sS http://127.0.0.1:8000/api/v1/jobs/<job_id>
 
 常用覆盖参数：
 ```bash
-DIGEST_DATE=2026-02-21 DIGEST_TO_EMAIL="$NOTIFY_TO_EMAIL" ./scripts/run_daily_digest.sh
-FAILURE_LOOKBACK_HOURS=6 FAILURE_LIMIT=10 FAILURE_TO_EMAIL="$NOTIFY_TO_EMAIL" ./scripts/run_failure_alerts.sh
+DIGEST_DATE=2026-02-21 DIGEST_TO_EMAIL='you@example.com' ./scripts/run_daily_digest.sh
+FAILURE_LOOKBACK_HOURS=6 FAILURE_LIMIT=10 FAILURE_TO_EMAIL='you@example.com' ./scripts/run_failure_alerts.sh
 ```
 
 ### 清理 workflow（媒体与缓存）

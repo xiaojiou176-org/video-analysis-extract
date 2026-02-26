@@ -865,18 +865,6 @@
       "description": "Nextflux exposed port."
     },
     {
-      "name": "NOTIFY_TO_EMAIL",
-      "scope": "scripts",
-      "required": false,
-      "secret": false,
-      "default": null,
-      "consumer": [
-        "scripts/run_daily_digest.sh",
-        "scripts/run_failure_alerts.sh"
-      ],
-      "description": "Shared local default recipient for script overrides."
-    },
-    {
       "name": "OFFLINE_FALLBACK",
       "scope": "scripts",
       "required": false,
@@ -1240,6 +1228,17 @@
         "scripts/smoke_computer_use_local.sh"
       ],
       "description": "Retry attempts for local computer-use smoke HTTP requests (allowed range [1,2])."
+    },
+    {
+      "name": "TARGET_PATH",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": null,
+      "consumer": [
+        "scripts/env/migrate_env_legacy.sh"
+      ],
+      "description": "Internal target path passed to migrate_env_legacy inline python merger."
     },
     {
       "name": "WEB_PORT",

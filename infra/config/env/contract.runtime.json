@@ -1060,17 +1060,6 @@
       "description": "Browser engine for web E2E tests (chromium|firefox|webkit)."
     },
     {
-      "name": "WEB_E2E_EXPECT_TEXT",
-      "scope": "test",
-      "required": false,
-      "secret": false,
-      "default": null,
-      "consumer": [
-        "apps/web/tests/e2e/test_smoke_playwright.py"
-      ],
-      "description": "Expected response text for web E2E smoke tests."
-    },
-    {
       "name": "YOUTUBE_API_KEY",
       "scope": "worker",
       "required": false,

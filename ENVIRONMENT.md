@@ -83,7 +83,6 @@ Startup validation fails when:
 - `NOTIFICATION_ENABLED`
 - `RESEND_API_KEY` (secret)
 - `RESEND_FROM_EMAIL`
-- `NOTIFY_TO_EMAIL`
 
 ### Worker Optional
 
@@ -274,6 +273,19 @@ Required only when enabling reader stack (`WITH_READER_STACK=1`) or running read
 - `MINIFLUX_BASE_URL`
 
 ## Migration Guide: Legacy `.env.example` -> Core/Profile Overlay
+
+Fast path (recommended):
+
+```bash
+bash scripts/env/migrate_env_legacy.sh
+bash scripts/env/validate_profile.sh --profile local
+```
+
+Notes:
+- `migrate_env_legacy.sh` now prints phase heartbeat and migration summary.
+- `validate_profile.sh` writes resolved snapshot to `.runtime-cache/temp/.env.<profile>.resolved`.
+- For debugging resolved values, run:
+  - `bash scripts/env/compose_env.sh --profile local --write .runtime-cache/temp/.env.local.resolved`
 
 1. Create canonical core env:
    - `cp .env.example .env`
