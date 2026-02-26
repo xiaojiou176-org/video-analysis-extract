@@ -38,12 +38,5 @@ load_repo_env() {
     printf '[%s] root_dir is empty, skipping repo env load.\n' "$caller" >&2
     return 0
   fi
-  if [[ -f "$root_dir/.env" ]]; then
-    load_env_file "$root_dir/.env" "$caller"
-    if [[ -f "$root_dir/.env.local" ]]; then
-      printf '[%s] .env is present; skip loading .env.local to avoid overriding canonical local config.\n' "$caller" >&2
-    fi
-    return 0
-  fi
-  load_env_file "$root_dir/.env.local" "$caller"
+  load_env_file "$root_dir/.env" "$caller"
 }

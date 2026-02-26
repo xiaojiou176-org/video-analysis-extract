@@ -54,7 +54,9 @@ WRITE_OP_TRACE=""
 TEARDOWN_TRACE=""
 YOUTUBE_KEY_RESOLUTION_TRACE=""
 TEARDOWN_DONE=0
+LONG_PHASE_HEARTBEAT_PID=""
 WORKER_TMP_OUTPUTS=()
+SMOKE_TMP_FILES=()
 STARTED_AT_UTC="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 FAILURE_KIND="unknown"
 if [[ "${LIVE_SMOKE_DIAGNOSTICS_JSON:0:1}" != "/" ]]; then
@@ -69,6 +71,7 @@ log() {
 
 fail() {
   FAILURE_KIND="$(classify_failure "$*")"
+  stop_long_phase_heartbeat
   run_teardown
   write_diagnostics "failed" "$*"
   log "ERROR: $*"
@@ -121,22 +124,6 @@ classify_failure() {
       printf '%s' "code_logic_error"
       ;;
   esac
-}
-
-load_from_zsh_if_missing() {
-  local var_name="$1"
-  local current="${!var_name:-}"
-  if [[ -n "$current" ]]; then
-    return 0
-  fi
-  command -v zsh >/dev/null 2>&1 || return 0
-  local zsh_value
-  zsh_value="$(zsh -lc "printenv ${var_name}" 2>/dev/null || true)"
-  if [[ -n "$zsh_value" ]]; then
-    printf -v "$var_name" '%s' "$zsh_value"
-    export "$var_name"
-    log "Loaded ${var_name} from zsh login env fallback."
-  fi
 }
 
 mask_secret() {
@@ -301,14 +288,9 @@ ensure_valid_youtube_api_key() {
 
   add_candidate "${YOUTUBE_API_KEY:-}" ".env_or_shell_current"
   add_candidate "$(read_key_from_env_file "$ROOT_DIR/.env" "YOUTUBE_API_KEY" || true)" ".env_file"
-  add_candidate "$(read_key_from_env_file "$ROOT_DIR/.env.bak" "YOUTUBE_API_KEY" || true)" ".env.bak"
-  add_candidate "$(read_key_from_env_file "$ROOT_DIR/.env.local" "YOUTUBE_API_KEY" || true)" ".env.local"
-  if command -v zsh >/dev/null 2>&1; then
-    add_candidate "$(zsh -lc 'printenv YOUTUBE_API_KEY' 2>/dev/null || true)" "zsh_env"
-  fi
 
   if [[ "${#candidates[@]}" -eq 0 ]]; then
-    fail "YOUTUBE_API_KEY is missing in .env/.env.bak/.env.local/zsh; 需要用户提供有效key"
+    fail "YOUTUBE_API_KEY is missing in .env/current-shell; 需要用户提供有效key"
   fi
 
   for idx in "${!candidates[@]}"; do
@@ -345,7 +327,7 @@ ensure_valid_youtube_api_key() {
     fi
   done
 
-  fail "YOUTUBE_API_KEY 无效（已尝试 .env/.env.bak/.env.local/zsh），需要用户提供有效key"
+  fail "YOUTUBE_API_KEY 无效（已尝试 .env/current-shell），需要用户提供有效key"
 }
 
 record_scenario() {
@@ -390,6 +372,7 @@ run_teardown() {
   log "phase=teardown status=start"
   local removed=0
   local output_file
+  local tmp_file
   if [[ "${#WORKER_TMP_OUTPUTS[@]}" -eq 0 ]]; then
     record_teardown_step "remove_worker_tmp_output" "skipped" "no temp outputs registered"
   else
@@ -403,8 +386,41 @@ run_teardown() {
       fi
     done
   fi
+  if [[ "${#SMOKE_TMP_FILES[@]}" -eq 0 ]]; then
+    record_teardown_step "remove_smoke_tmp_file" "skipped" "no smoke temp files registered"
+  else
+    for tmp_file in "${SMOKE_TMP_FILES[@]}"; do
+      if [[ -f "$tmp_file" ]]; then
+        rm -f "$tmp_file"
+        ((removed += 1))
+        record_teardown_step "remove_smoke_tmp_file" "passed" "path=${tmp_file}"
+      else
+        record_teardown_step "remove_smoke_tmp_file" "skipped" "path=${tmp_file} missing"
+      fi
+    done
+  fi
   record_scenario "teardown" "passed" "removed_worker_tmp_outputs=${removed}"
   log "phase=teardown status=passed removed_worker_tmp_outputs=${removed}"
+}
+
+start_long_phase_heartbeat() {
+  local label="$1"
+  stop_long_phase_heartbeat
+  (
+    while true; do
+      log "heartbeat: phase=long_tests step=${label} still running..."
+      sleep "$LIVE_SMOKE_HEARTBEAT_SECONDS"
+    done
+  ) &
+  LONG_PHASE_HEARTBEAT_PID="$!"
+}
+
+stop_long_phase_heartbeat() {
+  if [[ -n "$LONG_PHASE_HEARTBEAT_PID" ]] && kill -0 "$LONG_PHASE_HEARTBEAT_PID" >/dev/null 2>&1; then
+    kill "$LONG_PHASE_HEARTBEAT_PID" >/dev/null 2>&1 || true
+    wait "$LONG_PHASE_HEARTBEAT_PID" 2>/dev/null || true
+  fi
+  LONG_PHASE_HEARTBEAT_PID=""
 }
 
 write_diagnostics() {
@@ -559,12 +575,18 @@ api_post() {
   local payload="$2"
   local tmp_body
   tmp_body="$(mktemp)"
+  local -a auth_headers=()
+  if [[ -n "${VD_API_KEY:-}" ]]; then
+    auth_headers+=(-H "X-API-Key: ${VD_API_KEY}")
+    auth_headers+=(-H "Authorization: Bearer ${VD_API_KEY}")
+  fi
   local status
   status="$(
     curl -sS -o "$tmp_body" -w '%{http_code}' \
       --retry "$((LIVE_SMOKE_MAX_RETRIES - 1))" --retry-delay 1 --retry-all-errors \
       -H 'Accept: application/json' \
       -H 'Content-Type: application/json' \
+      "${auth_headers[@]}" \
       -X POST "${VD_API_BASE_URL}${path}" \
       --data "$payload"
   )"
@@ -578,11 +600,17 @@ api_get() {
   local path="$1"
   local tmp_body
   tmp_body="$(mktemp)"
+  local -a auth_headers=()
+  if [[ -n "${VD_API_KEY:-}" ]]; then
+    auth_headers+=(-H "X-API-Key: ${VD_API_KEY}")
+    auth_headers+=(-H "Authorization: Bearer ${VD_API_KEY}")
+  fi
   local status
   status="$(
     curl -sS -o "$tmp_body" -w '%{http_code}' \
       --retry "$((LIVE_SMOKE_MAX_RETRIES - 1))" --retry-delay 1 --retry-all-errors \
       -H 'Accept: application/json' \
+      "${auth_headers[@]}" \
       "${VD_API_BASE_URL}${path}"
   )"
   local body
@@ -624,10 +652,6 @@ check_prerequisites() {
     LIVE_SMOKE_COMPUTER_USE_CMD="$ROOT_DIR/scripts/smoke_computer_use_local.sh"
   fi
   LIVE_SMOKE_COMPUTER_USE_CMD="$(resolve_local_script_path "$LIVE_SMOKE_COMPUTER_USE_CMD")"
-  load_from_zsh_if_missing "GEMINI_API_KEY"
-  load_from_zsh_if_missing "RESEND_API_KEY"
-  load_from_zsh_if_missing "RESEND_FROM_EMAIL"
-  load_from_zsh_if_missing "YOUTUBE_API_KEY"
   ensure_valid_youtube_api_key
   local missing=()
   [[ -z "${GEMINI_API_KEY:-}" ]] && missing+=("GEMINI_API_KEY")
@@ -673,6 +697,7 @@ probe_external_dependencies() {
   gemini_tmp="$(mktemp)"
   youtube_tmp="$(mktemp)"
   bilibili_tmp="$(mktemp)"
+  SMOKE_TMP_FILES+=("$gemini_tmp" "$youtube_tmp" "$bilibili_tmp")
 
   probe_url="https://generativelanguage.googleapis.com/v1beta/models?key=${GEMINI_API_KEY}"
   log "phase=short_tests step=external_probe_gemini"
@@ -751,7 +776,10 @@ run_computer_use_smoke() {
   fi
 
   log "Scenario: computer_use smoke"
-  if "$cmd" --api-base-url "$VD_API_BASE_URL"; then
+  if "$cmd" \
+    --api-base-url "$VD_API_BASE_URL" \
+    --retries "$LIVE_SMOKE_MAX_RETRIES" \
+    --heartbeat-seconds "$LIVE_SMOKE_HEARTBEAT_SECONDS"; then
     log "computer_use smoke passed"
     record_scenario "computer_use_smoke" "passed" "cmd=${cmd}"
     record_write_operation \
@@ -914,6 +942,7 @@ PY
     "$idempotency_key" \
     "remove temp output file during teardown" \
     "args=$* output=${output_path}"
+  start_long_phase_heartbeat "worker.main ${command_name}"
   (
     cd "$ROOT_DIR/apps/worker"
     if command -v uv >/dev/null 2>&1; then
@@ -923,7 +952,11 @@ PY
       PYTHONPATH="$ROOT_DIR/apps/worker:$ROOT_DIR:${PYTHONPATH:-}" \
         python3 -m worker.main "$command_name" --run-once "$@" >"$output_path"
     fi
-  ) || fail "worker command failed: ${command_name}"
+  ) || {
+    stop_long_phase_heartbeat
+    fail "worker command failed: ${command_name}"
+  }
+  stop_long_phase_heartbeat
   WORKER_TMP_OUTPUTS+=("$output_path")
 }
 

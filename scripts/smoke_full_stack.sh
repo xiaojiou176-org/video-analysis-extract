@@ -19,6 +19,7 @@ FALLBACK_MARKER_FILE="$ROOT_DIR/.runtime-cache/full-stack/offline-fallback.flag"
 HEARTBEAT_SECONDS="${FULL_STACK_SMOKE_HEARTBEAT_SECONDS:-30}"
 LIVE_DIAGNOSTICS_JSON="${LIVE_SMOKE_DIAGNOSTICS_JSON:-.runtime-cache/e2e-live-smoke-result.json}"
 heartbeat_pid=""
+AI_FEED_SYNC_TMP_OUTPUT=""
 
 log() { printf '[%s] %s\n' "$SCRIPT_NAME" "$*" >&2; }
 fail() { log "ERROR: $*"; exit 1; }
@@ -61,7 +62,18 @@ stop_heartbeat() {
   fi
   heartbeat_pid=""
 }
-trap stop_heartbeat EXIT
+
+cleanup_temp_files() {
+  if [[ -n "$AI_FEED_SYNC_TMP_OUTPUT" ]] && [[ -f "$AI_FEED_SYNC_TMP_OUTPUT" ]]; then
+    rm -f "$AI_FEED_SYNC_TMP_OUTPUT"
+  fi
+}
+
+cleanup() {
+  stop_heartbeat
+  cleanup_temp_files
+}
+trap cleanup EXIT
 
 log "phase=short_tests status=start"
 log "Checking API health"
@@ -132,10 +144,13 @@ if is_truthy "$REQUIRE_READER"; then
   check_http_200 "$nextflux_base"
 
   log "Running AI feed -> Miniflux sync"
+  AI_FEED_SYNC_TMP_OUTPUT="$(mktemp)"
   start_heartbeat "run_ai_feed_sync"
-  (cd "$ROOT_DIR" && ./scripts/run_ai_feed_sync.sh >/tmp/ai-feed-sync.out)
+  (cd "$ROOT_DIR" && ./scripts/run_ai_feed_sync.sh >"$AI_FEED_SYNC_TMP_OUTPUT")
   stop_heartbeat
-  log "AI feed sync result: $(cat /tmp/ai-feed-sync.out)"
+  log "AI feed sync result: $(cat "$AI_FEED_SYNC_TMP_OUTPUT")"
+  cleanup_temp_files
+  AI_FEED_SYNC_TMP_OUTPUT=""
 fi
 
 log "phase=long_tests status=passed"

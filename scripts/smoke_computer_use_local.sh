@@ -2,18 +2,75 @@
 set -euo pipefail
 
 API_BASE_URL="http://127.0.0.1:8000"
+RETRIES="${SMOKE_COMPUTER_USE_RETRIES:-2}"
+HEARTBEAT_SECONDS="${SMOKE_COMPUTER_USE_HEARTBEAT_SECONDS:-30}"
+heartbeat_pid=""
+TMP_FILES=()
+
+log() {
+  printf '[smoke_computer_use_local] %s\n' "$*" >&2
+}
+
+fail() {
+  log "ERROR: $*"
+  exit 1
+}
+
+start_heartbeat() {
+  (
+    while true; do
+      log "heartbeat: computer-use request still running..."
+      sleep "$HEARTBEAT_SECONDS"
+    done
+  ) &
+  heartbeat_pid="$!"
+}
+
+stop_heartbeat() {
+  if [[ -n "$heartbeat_pid" ]] && kill -0 "$heartbeat_pid" >/dev/null 2>&1; then
+    kill "$heartbeat_pid" >/dev/null 2>&1 || true
+    wait "$heartbeat_pid" 2>/dev/null || true
+  fi
+  heartbeat_pid=""
+}
+
+run_teardown() {
+  stop_heartbeat
+  local file_path
+  if (( ${#TMP_FILES[@]} > 0 )); then
+    for file_path in "${TMP_FILES[@]}"; do
+      [[ -f "$file_path" ]] && rm -f "$file_path"
+    done
+  fi
+}
+trap run_teardown EXIT
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --api-base-url)
       API_BASE_URL="$2"
       shift 2
       ;;
+    --retries)
+      RETRIES="$2"
+      shift 2
+      ;;
+    --heartbeat-seconds)
+      HEARTBEAT_SECONDS="$2"
+      shift 2
+      ;;
     *)
-      echo "[smoke_computer_use_local] unknown arg: $1" >&2
+      log "unknown arg: $1"
       exit 2
       ;;
   esac
 done
+
+[[ "$RETRIES" =~ ^[0-9]+$ ]] || fail "--retries must be a positive integer"
+(( RETRIES > 0 )) || fail "--retries must be > 0"
+(( RETRIES <= 2 )) || fail "--retries must be <= 2 for live smoke policy"
+[[ "$HEARTBEAT_SECONDS" =~ ^[0-9]+$ ]] || fail "--heartbeat-seconds must be a positive integer"
+(( HEARTBEAT_SECONDS > 0 )) || fail "--heartbeat-seconds must be > 0"
 
 payload="$(
   python3 - <<'PY'
@@ -55,18 +112,32 @@ PY
 )"
 
 tmp_body="$(mktemp)"
-status="$(
-  curl -sS -o "$tmp_body" -w '%{http_code}' \
-    -H 'Accept: application/json' \
-    -H 'Content-Type: application/json' \
-    -X POST "${API_BASE_URL}/api/v1/computer-use/run" \
-    --data "$payload"
-)"
+TMP_FILES+=("$tmp_body")
+curl_cmd=(curl -sS -o "$tmp_body" -w '%{http_code}')
+if [[ -n "${VD_API_KEY:-}" ]]; then
+  curl_cmd+=(-H "X-API-Key: ${VD_API_KEY}")
+  curl_cmd+=(-H "Authorization: Bearer ${VD_API_KEY}")
+fi
+curl_cmd+=(
+  --retry "$((RETRIES - 1))" --retry-delay 1 --retry-all-errors
+  -H 'Accept: application/json'
+  -H 'Content-Type: application/json'
+  -X POST "${API_BASE_URL}/api/v1/computer-use/run"
+  --data "$payload"
+)
+start_heartbeat
+curl_exit=0
+status="$("${curl_cmd[@]}")" || curl_exit=$?
+stop_heartbeat
 body="$(cat "$tmp_body")"
-rm -f "$tmp_body"
+
+if [[ "$curl_exit" -ne 0 ]]; then
+  log "curl request failed: exit=${curl_exit} body=${body}"
+  exit 1
+fi
 
 if [[ "$status" != "200" ]]; then
-  echo "[smoke_computer_use_local] status=${status} body=${body}" >&2
+  log "status=${status} body=${body}"
   exit 1
 fi
 

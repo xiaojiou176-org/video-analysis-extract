@@ -78,21 +78,11 @@ done
 
 mkdir -p "$(dirname "$DIAGNOSTICS_JSON")"
 
-# Live smoke env priority:
-# 1) repo .env/.env.local (already loaded above)
-# 2) zsh login env fallback
+# Live smoke env source:
+# 1) repo .env (already loaded above)
+# 2) current process environment variables
 if [[ -n "${GEMINI_API_KEY:-}" ]]; then
   KEY_SOURCE="repo_env"
-fi
-
-if [[ -z "${GEMINI_API_KEY:-}" ]] && command -v zsh >/dev/null 2>&1; then
-  zsh_key="$(zsh -lc 'printenv GEMINI_API_KEY' 2>/dev/null || true)"
-  if [[ -n "$zsh_key" ]]; then
-    GEMINI_API_KEY="$zsh_key"
-    export GEMINI_API_KEY
-    KEY_SOURCE="zsh_login_env"
-    echo "[$SCRIPT_NAME] Loaded GEMINI_API_KEY from zsh login environment." >&2
-  fi
 fi
 
 if [[ -z "${GEMINI_API_KEY:-}" ]]; then
