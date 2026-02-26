@@ -5,15 +5,24 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 MODE="pre-push"
 HEARTBEAT_SECONDS="25"
 MUTATION_MIN_SCORE="0.60"
+PROFILE_ONLY="0"
+PROFILES=()
 
 usage() {
   cat <<'USAGE'
 Usage:
-  scripts/quality_gate.sh [--mode pre-commit|pre-push] [--heartbeat-seconds N] [--mutation-min-score N]
+  scripts/quality_gate.sh [--mode pre-commit|pre-push] [--heartbeat-seconds N] [--mutation-min-score N] [--profile NAME ...] [--profile-only]
 
 Modes:
   pre-commit  Run fast local commit gate (parallel checks + staged doc drift).
   pre-push    Run short checks first, then long tests with heartbeat logs.
+Profiles:
+  local       Validate local profile governance.
+  ci          Validate CI profile governance.
+  live-smoke  Validate live-smoke profile governance.
+Flags:
+  --profile NAME   Append explicit profile checks (repeatable).
+  --profile-only   Run profile checks only, skip other quality gates.
 
 Quality policy (blocking):
   - Lint errors must be zero (frontend + backend full lint).
@@ -38,6 +47,14 @@ while (($# > 0)); do
     --mutation-min-score)
       MUTATION_MIN_SCORE="${2:-}"
       shift 2
+      ;;
+    --profile)
+      PROFILES+=("${2:-}")
+      shift 2
+      ;;
+    --profile-only)
+      PROFILE_ONLY="1"
+      shift
       ;;
     -h|--help)
       usage
@@ -65,6 +82,26 @@ if ! [[ "$MUTATION_MIN_SCORE" =~ ^0(\.[0-9]+)?$|^1(\.0+)?$ ]]; then
   echo "[quality-gate] invalid --mutation-min-score: $MUTATION_MIN_SCORE (expected 0.0..1.0)" >&2
   exit 2
 fi
+
+if [[ "$PROFILE_ONLY" != "0" && "$PROFILE_ONLY" != "1" ]]; then
+  echo "[quality-gate] invalid --profile-only: $PROFILE_ONLY (expected flag)" >&2
+  exit 2
+fi
+
+if ((${#PROFILES[@]} == 0)); then
+  if [[ "$MODE" == "pre-commit" ]]; then
+    PROFILES=("local")
+  else
+    PROFILES=("ci" "live-smoke")
+  fi
+fi
+
+for profile in "${PROFILES[@]}"; do
+  if [[ "$profile" != "local" && "$profile" != "ci" && "$profile" != "live-smoke" ]]; then
+    echo "[quality-gate] invalid --profile: $profile (expected local|ci|live-smoke)" >&2
+    exit 2
+  fi
+done
 
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
@@ -339,10 +376,129 @@ run_sync_gate_with_heartbeat() {
   echo "[quality-gate] pass: $gate_name"
 }
 
+run_profile_gate() {
+  local profile_name="$1"
+
+  echo "[quality-gate] profile gate start: ${profile_name}"
+
+  case "$profile_name" in
+    local)
+      python3 - <<'PY'
+import json
+import re
+from pathlib import Path
+
+contract = json.loads(Path("infra/config/env.contract.json").read_text(encoding="utf-8"))
+variables = {item["name"]: item for item in contract.get("variables", [])}
+profile = variables.get("PROFILE")
+if profile is None:
+    raise SystemExit("local profile gate failed: PROFILE missing in env.contract")
+if profile.get("default") != "local":
+    raise SystemExit("local profile gate failed: PROFILE default must be 'local'")
+
+env_example = Path(".env.example").read_text(encoding="utf-8")
+match = re.search(r"^\s*export\s+PROFILE\s*=\s*['\"]?([^'\"\n]+)['\"]?\s*$", env_example, re.MULTILINE)
+if not match:
+    raise SystemExit("local profile gate failed: PROFILE missing in .env.example")
+if match.group(1).strip() != "local":
+    raise SystemExit("local profile gate failed: .env.example PROFILE must be local")
+print("local profile gate passed")
+PY
+      ;;
+    ci)
+      python3 - <<'PY'
+import json
+from pathlib import Path
+
+contract = json.loads(Path("infra/config/env.contract.json").read_text(encoding="utf-8"))
+variables = {item["name"]: item for item in contract.get("variables", [])}
+required = {
+    "DATABASE_URL",
+    "TEMPORAL_TARGET_HOST",
+    "TEMPORAL_NAMESPACE",
+    "TEMPORAL_TASK_QUEUE",
+    "SQLITE_PATH",
+    "SQLITE_STATE_PATH",
+    "PIPELINE_WORKSPACE_DIR",
+    "PIPELINE_ARTIFACT_ROOT",
+    "UI_AUDIT_GEMINI_ENABLED",
+    "NOTIFICATION_ENABLED",
+    "VD_ALLOW_UNAUTH_WRITE",
+}
+missing = sorted(name for name in required if name not in variables)
+if missing:
+    raise SystemExit("ci profile gate failed: missing env contract vars: " + ", ".join(missing))
+print("ci profile gate passed")
+PY
+      ;;
+    live-smoke)
+      python3 - <<'PY'
+import json
+from pathlib import Path
+
+contract = json.loads(Path("infra/config/env.contract.json").read_text(encoding="utf-8"))
+variables = {item["name"]: item for item in contract.get("variables", [])}
+required = {
+    "LIVE_SMOKE_API_BASE_URL",
+    "LIVE_SMOKE_REQUIRE_API",
+    "LIVE_SMOKE_REQUIRE_SECRETS",
+    "LIVE_SMOKE_COMPUTER_USE_STRICT",
+    "LIVE_SMOKE_COMPUTER_USE_SKIP",
+    "LIVE_SMOKE_COMPUTER_USE_SKIP_REASON",
+    "LIVE_SMOKE_COMPUTER_USE_CMD",
+    "LIVE_SMOKE_HEARTBEAT_SECONDS",
+    "LIVE_SMOKE_DIAGNOSTICS_JSON",
+    "GEMINI_API_KEY",
+    "RESEND_API_KEY",
+    "RESEND_FROM_EMAIL",
+    "YOUTUBE_API_KEY",
+}
+missing = sorted(name for name in required if name not in variables)
+if missing:
+    raise SystemExit("live-smoke profile gate failed: missing env contract vars: " + ", ".join(missing))
+if str(variables["LIVE_SMOKE_COMPUTER_USE_STRICT"].get("default")) != "1":
+    raise SystemExit("live-smoke profile gate failed: LIVE_SMOKE_COMPUTER_USE_STRICT default must be '1'")
+print("live-smoke profile gate passed")
+PY
+      ;;
+  esac
+
+  echo "[quality-gate] profile gate passed: ${profile_name}"
+}
+
+run_profile_gates_parallel() {
+  local phase_name="$1"
+  local profile
+
+  if ((${#PROFILES[@]} < 2)); then
+    for profile in "${PROFILES[@]}"; do
+      run_profile_gate "$profile"
+    done
+    return 0
+  fi
+
+  reset_async_buffers
+  for profile in "${PROFILES[@]}"; do
+    run_async_gate "profile_${profile//-/_}" "profile gate (${profile})" "run_profile_gate '${profile}'"
+  done
+
+  ensure_parallel_batch "$phase_name"
+  if ! wait_async_gates; then
+    echo "[quality-gate] profile gate phase failed: ${phase_name}" >&2
+    exit 1
+  fi
+}
+
 run_pre_commit_mode() {
   cleanup_mutation_artifacts
 
   echo "[quality-gate] mode=pre-commit"
+  echo "[quality-gate] phase=profile-gates (parallel)"
+  run_profile_gates_parallel "pre-commit/profile-gates"
+  if [[ "$PROFILE_ONLY" == "1" ]]; then
+    echo "[quality-gate] profile-only passed"
+    exit 0
+  fi
   reset_async_buffers
 
   run_async_gate "doc_drift_staged" "documentation drift gate (staged)" \
@@ -376,6 +532,12 @@ run_pre_push_mode() {
   cleanup_mutation_artifacts
 
   echo "[quality-gate] mode=pre-push"
+  echo "[quality-gate] phase=profile-gates (parallel)"
+  run_profile_gates_parallel "pre-push/profile-gates"
+  if [[ "$PROFILE_ONLY" == "1" ]]; then
+    echo "[quality-gate] profile-only passed"
+    exit 0
+  fi
 
   echo "[quality-gate] phase=short-checks (parallel)"
   reset_async_buffers

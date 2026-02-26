@@ -121,6 +121,36 @@ jobs:
           print("Schema parity check passed.")
           PY
 
+  profile-governance:
+    runs-on: ubuntu-latest
+    needs: preflight
+    strategy:
+      fail-fast: false
+      matrix:
+        gate_profile: [local, ci-live-smoke]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Setup Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+
+      - name: Profile governance gate (${{ matrix.gate_profile }})
+        run: |
+          if [[ "${{ matrix.gate_profile }}" == "local" ]]; then
+            ./scripts/quality_gate.sh --mode pre-commit --profile local --profile-only
+          else
+            ./scripts/quality_gate.sh \
+              --mode pre-push \
+              --profile ci \
+              --profile live-smoke \
+              --profile-only \
+              --heartbeat-seconds 20 \
+              --mutation-min-score 0.60
+          fi
+
   db-migration-smoke:
     runs-on: ubuntu-latest
     needs: preflight
@@ -778,6 +808,7 @@ jobs:
     if: always()
     needs:
       - preflight
+      - profile-governance
       - db-migration-smoke
       - python-tests
       - api-real-smoke
@@ -793,6 +824,7 @@ jobs:
         run: |
           declare -A results
           results[preflight]="${{ needs.preflight.result }}"
+          results[profile_governance]="${{ needs.profile-governance.result }}"
           results[db_migration_smoke]="${{ needs.db-migration-smoke.result }}"
           results[python_tests]="${{ needs.python-tests.result }}"
           results[api_real_smoke]="${{ needs.api-real-smoke.result }}"
@@ -805,7 +837,7 @@ jobs:
           results[dependency_vuln_scan]="${{ needs.dependency-vuln-scan.result }}"
 
           failed=0
-          for job in preflight db_migration_smoke python_tests api_real_smoke backend_lint frontend_lint web_test_build web_e2e external_playwright_smoke dependency_vuln_scan; do
+          for job in preflight profile_governance db_migration_smoke python_tests api_real_smoke backend_lint frontend_lint web_test_build web_e2e external_playwright_smoke dependency_vuln_scan; do
             result="${results[$job]}"
             echo "$job=$result"
             if [[ "$result" != "success" ]]; then

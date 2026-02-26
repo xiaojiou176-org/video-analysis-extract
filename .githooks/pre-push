@@ -8,6 +8,8 @@ cd "$ROOT_DIR"
 echo "[pre-push] quality gate (mode=pre-push)"
 "$ROOT_DIR/scripts/quality_gate.sh" \
   --mode pre-push \
+  --profile ci \
+  --profile live-smoke \
   --heartbeat-seconds 20 \
   --mutation-min-score 0.60
 
