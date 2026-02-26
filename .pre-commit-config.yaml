@@ -1,0 +1,277 @@
+minimum_pre_commit_version: "3.6.0"
+default_stages: [pre-commit]
+default_install_hook_types: [pre-commit, commit-msg, pre-push]
+fail_fast: false
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: check-yaml
+        files: ^(apps|scripts|infra|docs|env|\.github|\.githooks)/.*\.(yaml|yml)$|^\.pre-commit-config\.yaml$
+      - id: end-of-file-fixer
+        files: ^(apps|scripts|infra|docs|env|\.github|\.githooks)/|^(\.pre-commit-config\.yaml|\.gitleaks\.toml)$
+      - id: trailing-whitespace
+        files: ^(apps|scripts|infra|docs|env|\.github|\.githooks)/|^(\.pre-commit-config\.yaml|\.gitleaks\.toml)$
+        exclude: ^apps/web/package-lock\.json$
+
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.9.0
+    hooks:
+      - id: gitleaks
+        args: ["--config=.gitleaks.toml"]
+        files: ^(apps|scripts|infra|docs|env|\.github|\.githooks|packages)/|^(\.env\.example|\.gitleaks\.toml)$
+
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.5.0
+    hooks:
+      - id: detect-secrets
+        args: ["--baseline", ".secrets.baseline"]
+        files: ^(apps|scripts|infra|docs|env|\.github|\.githooks|packages)/|^(\.env\.example|\.secrets\.baseline|\.pre-commit-config\.yaml)$
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.9.10
+    hooks:
+      - id: ruff
+        args: [--fix, --exit-non-zero-on-fix]
+        files: ^(apps/(api|worker|mcp)|scripts)/.*\.(py|pyi)$
+      - id: ruff-format
+        files: ^(apps/(api|worker|mcp)|scripts)/.*\.(py|pyi)$
+
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.15.0
+    hooks:
+      - id: mypy
+        args:
+          [
+            "--config-file=pyproject.toml",
+            "--ignore-missing-imports",
+            "--follow-imports=silent",
+            "--disable-error-code=attr-defined",
+            "--disable-error-code=assignment",
+            "--disable-error-code=arg-type",
+            "--disable-error-code=dict-item",
+            "--disable-error-code=index",
+            "--disable-error-code=union-attr",
+            "--disable-error-code=call-arg",
+            "apps/api/app/config.py",
+            "apps/worker/worker/config.py",
+            "scripts/check_env_contract.py",
+            "scripts/check_worker_line_limits.py",
+          ]
+        pass_filenames: false
+        files: ^(apps/(api|worker|mcp)|scripts)/.*\.(py|pyi)$
+
+  - repo: https://github.com/sqlfluff/sqlfluff
+    rev: 3.4.2
+    hooks:
+      - id: sqlfluff-lint
+        args: ["--dialect", "postgres", "--exclude-rules", "LT01,LT02,LT05,CP03,CP05,RF06,PRS"]
+        files: ^infra/migrations/.*\.sql$
+
+  - repo: https://github.com/biomejs/pre-commit
+    rev: v2.4.4
+    hooks:
+      - id: biome-check
+        args: ["--unsafe"]
+        files: ^apps/web/.*\.(js|jsx|ts|tsx|cjs|cts|mjs|mts|json|jsonc|css)$
+
+  - repo: https://github.com/thibaudcolas/pre-commit-stylelint
+    rev: v16.24.0
+    hooks:
+      - id: stylelint
+        args: ["--fix", "--allow-empty-input"]
+        files: ^apps/web/.*\.(css|scss|sass)$
+        additional_dependencies:
+          - stylelint@16.24.0
+          - stylelint-config-standard@36.0.1
+
+  - repo: https://github.com/antonbabenko/pre-commit-terraform
+    rev: v1.105.0
+    hooks:
+      - id: terraform_fmt
+        files: ^(infra|env|terraform)/.*\.tf$
+      - id: terraform_tfsec
+        files: ^(infra|env|terraform)/.*\.tf$
+
+  - repo: https://github.com/commitizen-tools/commitizen
+    rev: v3.31.0
+    hooks:
+      - id: commitizen
+        stages: [commit-msg]
+
+  - repo: https://github.com/crate-ci/typos
+    rev: v1.35.5
+    hooks:
+      - id: typos
+        files: ^(apps|scripts|infra|docs|env|\.github|\.githooks|packages)/|^(AGENTS\.md|CLAUDE\.md|README\.md|ENVIRONMENT\.md)$
+
+  - repo: https://github.com/DavidAnson/markdownlint-cli2
+    rev: v0.18.1
+    hooks:
+      - id: markdownlint-cli2
+        args: ["--fix"]
+        additional_dependencies: ["markdownlint-cli2@0.18.1"]
+        files: ^(docs/.*\.md|apps/.*/.*\.md|README\.md|AGENTS\.md|CLAUDE\.md|ENVIRONMENT\.md)$
+
+  - repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: v0.11.0.1
+    hooks:
+      - id: shellcheck
+        args: ["-e", "SC2011,SC2012,SC2034,SC2053,SC2097,SC2098"]
+        files: ^(scripts|\.githooks|infra)/.*\.(sh|bash)$|(^|/)(entrypoint|bootstrap|setup)\.sh$
+
+  - repo: https://github.com/rhysd/actionlint
+    rev: v1.7.7
+    hooks:
+      - id: actionlint
+        args:
+          [
+            "-ignore",
+            "shellcheck",
+            "-ignore",
+            "context \"secrets\" is not allowed here",
+          ]
+        files: ^\.github/workflows/.*\.(yml|yaml)$
+
+  - repo: https://github.com/hadolint/hadolint
+    rev: v2.13.1-beta
+    hooks:
+      - id: hadolint-docker
+        args: ["--ignore", "DL3008"]
+        files: (^|/)([Dd]ockerfile|[Dd]ockerfile\.[^/]+)$
+
+  - repo: local
+    hooks:
+      - id: no-todo
+        name: block TODO/FIXME in code
+        entry: bash -c 'if rg -n "(TODO|FIXME)" "$@"; then echo "TODO/FIXME found. Resolve before commit."; exit 1; fi'
+        language: system
+        files: ^(apps|scripts|infra|packages)/.*\.(py|pyi|ts|tsx|js|jsx|sh|bash|sql|yaml|yml)$
+
+      - id: no-console-log
+        name: block console.log in frontend source
+        entry: bash -c 'if rg -n "console\\.log\\(" "$@"; then echo "console.log is not allowed in committed frontend source."; exit 1; fi'
+        language: system
+        files: ^apps/web/.*\.(js|jsx|ts|tsx)$
+
+      - id: jscpd
+        name: duplicate code guard (jscpd)
+        entry: bash -c 'if command -v jscpd >/dev/null 2>&1; then jscpd --silent --threshold 3 --min-lines 20 --min-tokens 100 --ignore "apps/**/tests/**,apps/web/__tests__/**" "$@"; else npx --yes jscpd --silent --threshold 3 --min-lines 20 --min-tokens 100 --ignore "apps/**/tests/**,apps/web/__tests__/**" "$@"; fi'
+        language: system
+        files: ^(apps|scripts|packages)/.*\.(py|pyi|ts|tsx|js|jsx)$
+        stages: [pre-push]
+
+      - id: check-ai-context-files
+        name: ensure AI context files exist
+        entry: bash -c 'test -f AGENTS.md && test -f CLAUDE.md && test -f .cursorrules'
+        language: system
+        pass_filenames: false
+        files: ^(AGENTS\.md|CLAUDE\.md|\.cursorrules|\.pre-commit-config\.yaml)$
+
+      - id: check-iac-exists
+        name: IaC entrypoint guard
+        entry: bash scripts/check_iac_entrypoint.sh .
+        language: system
+        pass_filenames: false
+        files: ^(infra/compose/.*\.ya?ml|\.devcontainer/.*|flake\.nix|flake\.lock|scripts/check_iac_entrypoint\.sh)$
+
+      - id: check-env-count
+        name: env contract guard
+        entry: python3 scripts/check_env_contract.py --strict
+        language: system
+        pass_filenames: false
+        files: ^(\.env\.example|ENVIRONMENT\.md|infra/config/env\.contract\.json|scripts/check_env_contract\.py|env/.*\.env)$
+
+      - id: check-no-real-dotenv-committed
+        name: block real dotenv file commit
+        entry: bash -c 'if git diff --cached --name-only | rg -n "(^|/)\\.env($|\\.)|(^|/)env/.*\\.env$" | rg -v "\\.env\\.example$|\\.env\\.sample$|\\.env\\.template$|env/core\\.env\\.example$|^env/profiles/"; then echo "real .env-like file detected in staged changes"; exit 1; fi'
+        language: system
+        pass_filenames: false
+        files: ^(\.env|\.env\..*|env/.*\.env)$
+
+      - id: dotenv-linter
+        name: dotenv-linter (local)
+        entry: bash -c 'if command -v dotenv-linter >/dev/null 2>&1; then dotenv-linter "$@"; else echo "dotenv-linter not installed, skip"; fi' --
+        language: system
+        files: ^(\.env(\..*)?|\.env\.example|env/.*\.env(\.example)?)$
+
+      - id: check-no-direct-env-access
+        name: block direct env access in frontend app code
+        entry: bash -c 'if rg -n "process\\.env\\." "$@" | rg -v "apps/web/(tests|__tests__)/|apps/web/lib/api/url\\.ts|ENVIRONMENT\\.md"; then echo "direct env access found; use centralized config/env loader"; exit 1; fi'
+        language: system
+        files: ^apps/web/.*\.(ts|tsx|js|jsx)$
+
+      - id: gemini-ui-ux-audit
+        name: gemini ui/ux semantic audit (gemini-3.0-flash)
+        entry: uv run python scripts/gemini_ui_ux_audit.py
+        language: system
+        files: ^apps/web/(app|components)/.*\.(ts|tsx|js|jsx|css|scss|sass|html)$
+        stages: [pre-push]
+
+      - id: check-pre-commit-outdated
+        name: check pre-commit version floor
+        entry: >-
+          bash -c '
+          need=$(rg -o "minimum_pre_commit_version:\\s*\"?[0-9]+\\.[0-9]+\\.[0-9]+\"?" .pre-commit-config.yaml | rg -o "[0-9]+\\.[0-9]+\\.[0-9]+" | head -n1);
+          have=$(pre-commit --version | rg -o "[0-9]+\\.[0-9]+\\.[0-9]+" | head -n1);
+          if [ -z "$need" ] || [ -z "$have" ]; then echo "cannot determine pre-commit versions"; exit 1; fi;
+          if [ "$(printf "%s\n%s\n" "$need" "$have" | sort -V | head -n1)" != "$need" ]; then echo "pre-commit outdated: have $have, need >= $need"; exit 1; fi'
+        language: system
+        pass_filenames: false
+        files: ^(\.pre-commit-config\.yaml)$
+
+      - id: kube-linter
+        name: kube-linter (k8s manifests)
+        entry: bash -c 'if command -v kube-linter >/dev/null 2>&1; then kube-linter lint "$@"; else echo "kube-linter not installed, skip"; fi'
+        language: system
+        files: ^(infra/k8s|k8s|deploy/k8s|helm)/.*\.(yaml|yml)$
+
+      - id: gofumpt
+        name: gofumpt
+        entry: bash -c 'if command -v gofumpt >/dev/null 2>&1; then gofumpt -w "$@"; else echo "gofumpt not installed, skip"; fi'
+        language: system
+        files: ^(apps|packages|cmd|internal|pkg)/.*\.go$
+
+      - id: golangci-lint
+        name: golangci-lint
+        entry: bash -c 'if command -v golangci-lint >/dev/null 2>&1; then golangci-lint run; else echo "golangci-lint not installed, skip"; fi'
+        language: system
+        pass_filenames: false
+        files: (^|/)go\.mod$|^(apps|packages|cmd|internal|pkg)/.*\.go$
+
+      - id: rust-fmt
+        name: cargo fmt
+        entry: bash -c 'if command -v cargo >/dev/null 2>&1; then cargo fmt --all -- --check; else echo "cargo not installed, skip"; fi'
+        language: system
+        pass_filenames: false
+        files: (^|/)Cargo\.toml$|^(apps|packages|crates|src)/.*\.rs$
+
+      - id: cargo-check
+        name: cargo check
+        entry: bash -c 'if command -v cargo >/dev/null 2>&1; then cargo check --workspace --all-targets; else echo "cargo not installed, skip"; fi'
+        language: system
+        pass_filenames: false
+        files: (^|/)Cargo\.toml$|^(apps|packages|crates|src)/.*\.rs$
+
+      - id: clippy-local
+        name: cargo clippy
+        entry: bash -c 'if command -v cargo >/dev/null 2>&1; then cargo clippy --workspace --all-targets -- -D warnings; else echo "cargo not installed, skip"; fi'
+        language: system
+        pass_filenames: false
+        files: (^|/)Cargo\.toml$|^(apps|packages|crates|src)/.*\.rs$
+
+      - id: quality-gate-pre-commit
+        name: quality gate (existing scripts/quality_gate.sh)
+        entry: ./scripts/quality_gate.sh --mode pre-commit
+        language: system
+        pass_filenames: false
+        files: ^(apps|scripts|infra|docs|env|\.githooks|\.github|packages)/|^(AGENTS\.md|CLAUDE\.md|README\.md|ENVIRONMENT\.md|\.env\.example|\.pre-commit-config\.yaml|\.gitleaks\.toml)$
+
+      - id: quality-gate-pre-push
+        name: quality gate pre-push
+        entry: ./scripts/quality_gate.sh --mode pre-push --heartbeat-seconds 20 --mutation-min-score 0.60
+        language: system
+        pass_filenames: false
+        stages: [pre-push]
+        files: ^(apps|scripts|infra|docs|env|\.githooks|\.github|packages)/|^(AGENTS\.md|CLAUDE\.md|README\.md|ENVIRONMENT\.md|\.env\.example|\.pre-commit-config\.yaml|\.gitleaks\.toml)$
