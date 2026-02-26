@@ -546,6 +546,8 @@ run_pre_commit_mode() {
     "python3 scripts/check_structured_logs.py"
   run_async_gate "iac_entrypoint_guard" "iac entrypoint guard" \
     "bash scripts/check_iac_entrypoint.sh ."
+  run_async_gate "env_budget_guard" "env budget guard" \
+    "python3 scripts/check_env_budget.py"
   run_async_gate "web_lint" "frontend lint" \
     "npm --prefix apps/web run lint"
   run_async_gate "ruff_full" "backend lint (ruff full rules)" \
@@ -577,6 +579,8 @@ run_pre_push_mode() {
 
   run_async_gate "env_contract" "env contract" \
     "python3 scripts/check_env_contract.py --strict"
+  run_async_gate "env_budget_guard" "env budget guard" \
+    "python3 scripts/check_env_budget.py"
   run_async_gate "doc_drift_push" "documentation drift gate (push range)" \
     "bash scripts/ci_or_local_gate_doc_drift.sh --scope push"
   run_async_gate "placebo" "placebo assertion guard" \

@@ -180,6 +180,7 @@ bash scripts/env/final_governance_check.sh --skip-prepush
 - 覆盖率阈值：总覆盖率 `>=80%`，核心模块覆盖率 `>=95%`（worker pipeline + api 核心 router/service）。
 - 变异测试门禁强制执行（Python 核心模块）：mutation score `>=0.60`（默认，可通过 `--mutation-min-score` 覆盖）。
 - `pre-push` 采用 fail-fast：先短检查，再长测试；长测试并行执行并输出 heartbeat。
+- Env 预算门禁强制执行（防反弹）：`core<=20`、`runtime<=100`、`scripts<=120`、`universe<=216`（`python3 scripts/check_env_budget.py`）。
 
 ### 0.2) Git Hook 强制门禁（commit-msg / pre-commit / pre-push）
 
@@ -203,6 +204,7 @@ echo "feat(api): add ingest health guard" > /tmp/commit-msg-ok.txt
   - 规则基于 Conventional Commits（例如 `feat: ...`、`fix(scope): ...`）。
   - 仓库根目录无 `package.json` 时，使用 `npx --yes` 临时拉取 `commitlint` + hook 内置最小规则配置，无需新增根依赖即可运行。
 - `pre-commit`：
+  - `python3 scripts/check_env_budget.py`
   - `python3 scripts/check_test_assertions.py --path .`
   - secrets 泄漏扫描（阻断）
   - `bash scripts/ci_or_local_gate_doc_drift.sh --scope staged`
@@ -210,6 +212,7 @@ echo "feat(api): add ingest health guard" > /tmp/commit-msg-ok.txt
   - `uv run --with ruff ruff check apps scripts`
 - `pre-push`：
   - `python3 scripts/check_env_contract.py --strict`
+  - `python3 scripts/check_env_budget.py`
   - `bash scripts/ci_or_local_gate_doc_drift.sh --scope push`
   - `python3 scripts/check_test_assertions.py --path .`
   - secrets 泄漏扫描（阻断）

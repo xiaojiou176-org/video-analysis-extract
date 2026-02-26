@@ -299,6 +299,21 @@ Notes:
 6. For reader stack startup, use explicit env file flag:
    - `./scripts/deploy_reader_stack.sh up --env-file .env.reader-stack`
 
+## Env Budget Guard (Anti-Bloat)
+
+Quality gates enforce hard ceilings through `python3 scripts/check_env_budget.py`:
+
+- `core <= 20`
+- `runtime <= 100`
+- `scripts <= 120`
+- `universe <= 216`
+
+If a change must exceed any limit, raise a governance PR that includes:
+- rationale for the new variable(s),
+- merge/reuse alternatives considered,
+- synchronized updates to contract/profile/docs,
+- and updated budget thresholds.
+
 ## CI Gate
 
 GitHub Actions workflow: `.github/workflows/env-governance.yml`
