@@ -197,7 +197,7 @@ Exception detail sanitization contract:
 
 `LIVE_SMOKE_*` includes strict computer-use controls:
 
-- `LIVE_SMOKE_API_BASE_URL` / `LIVE_SMOKE_API_PORT`: API target override for live smoke. Leave `LIVE_SMOKE_API_BASE_URL` empty to follow `API_PORT`. Parent shell values have higher priority than values loaded from `.env`.
+- `LIVE_SMOKE_API_BASE_URL`: API target override for live smoke. Leave empty to follow `API_PORT` (fallback: `http://127.0.0.1:${API_PORT:-8000}`). Parent shell values have higher priority than values loaded from `.env`.
 - `LIVE_SMOKE_HEALTH_PATH`: Health endpoint path used by live smoke (default `/healthz`).
 - `LIVE_SMOKE_EXTERNAL_PROBE_TIMEOUT_SECONDS`: timeout seconds for provider endpoint probes in preflight (default `20`).
 - `LIVE_SMOKE_HEARTBEAT_SECONDS`: heartbeat interval seconds for long-running live smoke polling logs (default `30`).

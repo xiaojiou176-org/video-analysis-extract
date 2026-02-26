@@ -26,8 +26,6 @@ SHELL_VD_API_BASE_URL="${VD_API_BASE_URL-}"
 SHELL_VD_API_BASE_URL_SET="${VD_API_BASE_URL+x}"
 SHELL_LIVE_SMOKE_API_BASE_URL="${LIVE_SMOKE_API_BASE_URL-}"
 SHELL_LIVE_SMOKE_API_BASE_URL_SET="${LIVE_SMOKE_API_BASE_URL+x}"
-SHELL_LIVE_SMOKE_API_PORT="${LIVE_SMOKE_API_PORT-}"
-SHELL_LIVE_SMOKE_API_PORT_SET="${LIVE_SMOKE_API_PORT+x}"
 
 # shellcheck source=./scripts/lib/load_env.sh
 source "$ROOT_DIR/scripts/lib/load_env.sh"
@@ -39,14 +37,10 @@ fi
 if [[ -n "$SHELL_LIVE_SMOKE_API_BASE_URL_SET" ]]; then
   LIVE_SMOKE_API_BASE_URL="$SHELL_LIVE_SMOKE_API_BASE_URL"
 fi
-if [[ -n "$SHELL_LIVE_SMOKE_API_PORT_SET" ]]; then
-  LIVE_SMOKE_API_PORT="$SHELL_LIVE_SMOKE_API_PORT"
-fi
 
-LIVE_SMOKE_API_PORT="${LIVE_SMOKE_API_PORT:-${API_PORT:-8000}}"
 LIVE_SMOKE_API_BASE_URL="${LIVE_SMOKE_API_BASE_URL:-${VD_API_BASE_URL:-}}"
 if [[ -z "$LIVE_SMOKE_API_BASE_URL" ]]; then
-  LIVE_SMOKE_API_BASE_URL="http://127.0.0.1:${LIVE_SMOKE_API_PORT}"
+  LIVE_SMOKE_API_BASE_URL="http://127.0.0.1:${API_PORT:-8000}"
 fi
 VD_API_BASE_URL="$LIVE_SMOKE_API_BASE_URL"
 
@@ -640,9 +634,6 @@ check_prerequisites() {
   require_cmd curl
   require_cmd python3
 
-  if ! [[ "$LIVE_SMOKE_API_PORT" =~ ^[0-9]+$ ]] || (( LIVE_SMOKE_API_PORT < 1 || LIVE_SMOKE_API_PORT > 65535 )); then
-    fail "invalid LIVE_SMOKE_API_PORT=${LIVE_SMOKE_API_PORT}; expected integer in [1,65535]"
-  fi
   if ! [[ "$LIVE_SMOKE_HEARTBEAT_SECONDS" =~ ^[0-9]+$ ]] || (( LIVE_SMOKE_HEARTBEAT_SECONDS <= 0 )); then
     fail "invalid LIVE_SMOKE_HEARTBEAT_SECONDS=${LIVE_SMOKE_HEARTBEAT_SECONDS}; expected positive integer"
   fi
@@ -664,7 +655,7 @@ check_prerequisites() {
   computer_use_skip="$(printf '%s' "$LIVE_SMOKE_COMPUTER_USE_SKIP" | tr '[:upper:]' '[:lower:]')"
   require_enum "LIVE_SMOKE_COMPUTER_USE_SKIP" "$computer_use_skip" 0 1 true false yes no on off
 
-  log "API target: base=${VD_API_BASE_URL} port=${LIVE_SMOKE_API_PORT}"
+  log "API target: base=${VD_API_BASE_URL}"
   if [[ -z "$(trim_whitespace "$LIVE_SMOKE_COMPUTER_USE_CMD")" ]]; then
     LIVE_SMOKE_COMPUTER_USE_CMD="$ROOT_DIR/scripts/smoke_computer_use_local.sh"
   fi
