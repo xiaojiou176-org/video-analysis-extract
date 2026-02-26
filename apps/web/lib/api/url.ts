@@ -6,15 +6,13 @@ type ResolveOptions = {
 
 export function resolveApiBaseUrl(options: ResolveOptions = {}): string {
   const { allowFallback = false } = options;
-  const rawBase = process.env.NEXT_PUBLIC_API_BASE_URL ?? process.env.VD_API_BASE_URL;
+  const rawBase = process.env.NEXT_PUBLIC_API_BASE_URL;
   const base = rawBase?.trim();
   if (!base) {
     if (allowFallback) {
       return "http://127.0.0.1:8000";
     }
-    throw new Error(
-      "API base URL is not configured. Set NEXT_PUBLIC_API_BASE_URL (preferred) or VD_API_BASE_URL.",
-    );
+    throw new Error("API base URL is not configured. Set NEXT_PUBLIC_API_BASE_URL.");
   }
 
   let parsed: URL;
@@ -22,7 +20,7 @@ export function resolveApiBaseUrl(options: ResolveOptions = {}): string {
     parsed = new URL(base);
   } catch {
     throw new Error(
-      `Invalid API base URL '${base}'. NEXT_PUBLIC_API_BASE_URL or VD_API_BASE_URL must be an absolute http(s) URL.`,
+      `Invalid API base URL '${base}'. NEXT_PUBLIC_API_BASE_URL must be an absolute http(s) URL.`,
     );
   }
 

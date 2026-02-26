@@ -15,18 +15,23 @@ describe("api url core", () => {
     vi.restoreAllMocks();
   });
 
-  it("prefers NEXT_PUBLIC_API_BASE_URL and trims trailing slash", () => {
+  it("uses NEXT_PUBLIC_API_BASE_URL and trims trailing slash", () => {
     process.env.NEXT_PUBLIC_API_BASE_URL = "https://api.example.com/";
-    process.env.VD_API_BASE_URL = "https://fallback.example.com";
 
     expect(resolveApiBaseUrl()).toBe("https://api.example.com");
   });
 
   it("throws when base url is missing without fallback", () => {
     delete process.env.NEXT_PUBLIC_API_BASE_URL;
-    delete process.env.VD_API_BASE_URL;
 
     expect(() => resolveApiBaseUrl()).toThrow("API base URL is not configured");
+  });
+
+  it("does not fallback to VD_API_BASE_URL", () => {
+    delete process.env.NEXT_PUBLIC_API_BASE_URL;
+    process.env.VD_API_BASE_URL = "https://fallback.example.com";
+
+    expect(() => resolveApiBaseUrl()).toThrow("Set NEXT_PUBLIC_API_BASE_URL");
   });
 
   it("rejects invalid or non-http base urls", () => {

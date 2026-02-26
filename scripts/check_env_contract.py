@@ -22,7 +22,6 @@ IGNORE_REFS = {
     "ENV_PROFILE",
     "GITHUB_ACTOR",
     "HOME",
-    "LEGACY_READER_ENV_FILE",
     "PATH",
     "PWD",
     "PYTHONPATH",

@@ -21,9 +21,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-# Keep parent-shell overrides for API routing knobs before loading repo .env files.
-SHELL_VD_API_BASE_URL="${VD_API_BASE_URL-}"
-SHELL_VD_API_BASE_URL_SET="${VD_API_BASE_URL+x}"
+# Keep parent-shell overrides for live smoke API routing before loading repo .env files.
 SHELL_LIVE_SMOKE_API_BASE_URL="${LIVE_SMOKE_API_BASE_URL-}"
 SHELL_LIVE_SMOKE_API_BASE_URL_SET="${LIVE_SMOKE_API_BASE_URL+x}"
 
@@ -31,18 +29,15 @@ SHELL_LIVE_SMOKE_API_BASE_URL_SET="${LIVE_SMOKE_API_BASE_URL+x}"
 source "$ROOT_DIR/scripts/lib/load_env.sh"
 load_repo_env "$ROOT_DIR" "$SCRIPT_NAME" "$ENV_PROFILE"
 
-if [[ -n "$SHELL_VD_API_BASE_URL_SET" ]]; then
-  VD_API_BASE_URL="$SHELL_VD_API_BASE_URL"
-fi
 if [[ -n "$SHELL_LIVE_SMOKE_API_BASE_URL_SET" ]]; then
   LIVE_SMOKE_API_BASE_URL="$SHELL_LIVE_SMOKE_API_BASE_URL"
 fi
 
-LIVE_SMOKE_API_BASE_URL="${LIVE_SMOKE_API_BASE_URL:-${VD_API_BASE_URL:-}}"
+LIVE_SMOKE_API_BASE_URL="${LIVE_SMOKE_API_BASE_URL:-}"
 if [[ -z "$LIVE_SMOKE_API_BASE_URL" ]]; then
   LIVE_SMOKE_API_BASE_URL="http://127.0.0.1:${API_PORT:-8000}"
 fi
-VD_API_BASE_URL="$LIVE_SMOKE_API_BASE_URL"
+API_BASE_URL="$LIVE_SMOKE_API_BASE_URL"
 
 LIVE_SMOKE_TIMEOUT_SECONDS="${LIVE_SMOKE_TIMEOUT_SECONDS:-180}"
 LIVE_SMOKE_REQUIRE_API="${LIVE_SMOKE_REQUIRE_API:-1}"
@@ -447,7 +442,7 @@ write_diagnostics() {
   DIAGNOSTICS_PATH="$DIAGNOSTICS_PATH" \
   STARTED_AT_UTC="$STARTED_AT_UTC" \
   FINISHED_AT_UTC="$finished_at" \
-  API_BASE_URL="$VD_API_BASE_URL" \
+  API_BASE_URL="$API_BASE_URL" \
   TIMEOUT_SECONDS="$LIVE_SMOKE_TIMEOUT_SECONDS" \
   HEARTBEAT_SECONDS="$LIVE_SMOKE_HEARTBEAT_SECONDS" \
   SCENARIO_TRACE="$SCENARIO_TRACE" \
@@ -598,7 +593,7 @@ api_post() {
       -H 'Accept: application/json' \
       -H 'Content-Type: application/json' \
       "${auth_headers[@]}" \
-      -X POST "${VD_API_BASE_URL}${path}" \
+      -X POST "${API_BASE_URL}${path}" \
       --data "$payload"
   )"
   local body
@@ -622,7 +617,7 @@ api_get() {
       --retry "$((LIVE_SMOKE_MAX_RETRIES - 1))" --retry-delay 1 --retry-all-errors \
       -H 'Accept: application/json' \
       "${auth_headers[@]}" \
-      "${VD_API_BASE_URL}${path}"
+      "${API_BASE_URL}${path}"
   )"
   local body
   body="$(cat "$tmp_body")"
@@ -655,7 +650,7 @@ check_prerequisites() {
   computer_use_skip="$(printf '%s' "$LIVE_SMOKE_COMPUTER_USE_SKIP" | tr '[:upper:]' '[:lower:]')"
   require_enum "LIVE_SMOKE_COMPUTER_USE_SKIP" "$computer_use_skip" 0 1 true false yes no on off
 
-  log "API target: base=${VD_API_BASE_URL}"
+  log "API target: base=${API_BASE_URL}"
   if [[ -z "$(trim_whitespace "$LIVE_SMOKE_COMPUTER_USE_CMD")" ]]; then
     LIVE_SMOKE_COMPUTER_USE_CMD="$ROOT_DIR/scripts/smoke_computer_use_local.sh"
   fi
@@ -692,7 +687,7 @@ check_prerequisites() {
     if is_truthy "$LIVE_SMOKE_REQUIRE_API"; then
       fail "API health check failed: status=${status} body=${body}"
     fi
-    log "SKIP: API is unavailable at ${VD_API_BASE_URL} (status=${status})"
+    log "SKIP: API is unavailable at ${API_BASE_URL} (status=${status})"
     exit 0
   fi
 
@@ -785,14 +780,14 @@ run_computer_use_smoke() {
 
   log "Scenario: computer_use smoke"
   if "$cmd" \
-    --api-base-url "$VD_API_BASE_URL" \
+    --api-base-url "$API_BASE_URL" \
     --retries "$LIVE_SMOKE_MAX_RETRIES" \
     --heartbeat-seconds "$LIVE_SMOKE_HEARTBEAT_SECONDS"; then
     log "computer_use smoke passed"
     record_scenario "computer_use_smoke" "passed" "cmd=${cmd}"
     record_write_operation \
       "computer_use_smoke_script" \
-      "computer-use:${VD_API_BASE_URL}" \
+      "computer-use:${API_BASE_URL}" \
       "delegated script handles safe teardown and keeps audit-friendly records" \
       "cmd=${cmd}"
     return 0
@@ -972,7 +967,7 @@ main() {
   check_prerequisites
   log "Diagnostics output: $DIAGNOSTICS_PATH"
   log "phase=short_tests status=start"
-  record_scenario "init" "passed" "api_base_url=${VD_API_BASE_URL}"
+  record_scenario "init" "passed" "api_base_url=${API_BASE_URL}"
   probe_external_dependencies
   run_external_browser_probe
   log "phase=short_tests status=passed"

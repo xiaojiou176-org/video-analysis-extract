@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import concurrent.futures
+import importlib
 import json
 import re
 from pathlib import Path
@@ -206,8 +207,8 @@ class RetrievalService:
             return None
         model = (settings.gemini_embedding_model or "gemini-embedding-001").strip() or "gemini-embedding-001"
         try:
-            from google import genai  # type: ignore
-            from google.genai import types as genai_types  # type: ignore
+            genai = importlib.import_module("google.genai")  # type: ignore[assignment]
+            genai_types = importlib.import_module("google.genai.types")  # type: ignore[assignment]
         except Exception:
             return None
 
@@ -219,20 +220,22 @@ class RetrievalService:
                 config=genai_types.EmbedContentConfig(output_dimensionality=_EMBEDDING_DIMENSION),
             )
 
+        def _raise_embedding_timeout(timeout_seconds: float, exc: Exception) -> None:
+            raise ApiTimeoutError(
+                detail=f"retrieval embedding timed out after {timeout_seconds:.1f}s",
+                error_code="RETRIEVAL_EMBEDDING_TIMEOUT",
+            ) from exc
+
         try:
             with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
                 response = executor.submit(_embed_content).result(
                     timeout=settings.api_retrieval_embedding_timeout_seconds
                 )
         except concurrent.futures.TimeoutError as exc:
-            raise ApiTimeoutError(
-                detail=(
-                    "retrieval embedding timed out "
-                    f"after {settings.api_retrieval_embedding_timeout_seconds:.1f}s"
-                ),
-                error_code="RETRIEVAL_EMBEDDING_TIMEOUT",
-            ) from exc
-        except Exception:
+            _raise_embedding_timeout(settings.api_retrieval_embedding_timeout_seconds, exc)
+        except Exception as exc:
+            if isinstance(exc, TimeoutError) or exc.__class__.__name__ == "TimeoutError":
+                _raise_embedding_timeout(settings.api_retrieval_embedding_timeout_seconds, exc)
             return None
         return self._extract_embedding_values(response)
 

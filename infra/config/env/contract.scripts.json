@@ -1137,9 +1137,11 @@
       "default": "env/profiles/reader.env",
       "consumer": [
         "scripts/bootstrap_full_stack.sh",
-        "scripts/smoke_full_stack.sh"
+        "scripts/smoke_full_stack.sh",
+        "scripts/deploy_reader_stack.sh",
+        "scripts/run_ai_feed_sync.sh"
       ],
-      "description": "Reader stack profile env path (legacy .env.reader-stack remains compatible via script fallback)."
+      "description": "Reader stack profile env path. Default: env/profiles/reader.env."
     },
     {
       "name": "SMOKE_COMPUTER_USE_HEARTBEAT_SECONDS",

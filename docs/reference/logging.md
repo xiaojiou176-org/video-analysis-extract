@@ -47,7 +47,7 @@ API 异常详情（`apps/api/app/security.py`）使用 `sanitize_exception_detai
 约束：
 - 禁止在日志中直接打印完整密钥与凭证。
 - 错误信息允许输出摘要，禁止输出原始敏感 payload。
-- 密钥来源仅允许 `.env`、`.env.reader-stack`（仅 reader 命令）或进程环境注入；日志中不得输出其原值。
+- 密钥来源仅允许 `.env`、`env/profiles/reader.env`（reader profile 模板）或进程环境注入；日志中不得输出其原值。
 - 禁止将 `.env.local` / `.env.bak` / shell 登录配置作为运行时密钥输入来源。
 
 ## Recommended Operations
@@ -76,7 +76,7 @@ rg -n "function_calling|termination_reason|max_function_call_rounds|tool_not_all
 
 定位缓存自愈与缓存来源：
 ```bash
-rg -n "cache_hit|cache_recreate|cache_bypass_reason|legacy_cache_hit|checkpoint_recovered|cache_meta|cache_key" logs -g '*.log'
+rg -n "cache_hit|cache_recreate|cache_bypass_reason|checkpoint_recovered|cache_meta|cache_key" logs -g '*.log'
 ```
 
 定位 thought metadata/signatures（来自 job read model）：

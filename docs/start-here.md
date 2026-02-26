@@ -23,24 +23,23 @@
 ## 你需要先知道的 5 件事
 
 1. 流程口径：`ProcessJobWorkflow = 3 阶段 + 9-step pipeline`（详见 `docs/state-machine.md`）。
-2. 环境分层：采用 `core + profile overlay` 架构，`.env` 是 core，`.env.reader-stack` 是 reader 专用 overlay，`PROFILE` 控制 local/gce 行为。
+2. 环境分层：采用 `core + profile overlay` 架构，`.env` 是 core，`env/profiles/reader.env` 是 reader profile 模板，`PROFILE` 控制 local/gce 行为。
 3. 密钥策略：只允许通过 `.env` 或进程环境注入；禁止依赖 `.env.local` / `.env.bak` / 登录配置作为密钥来源。
 4. Python 命令统一使用 `python3`。
 5. AI/自动化执行必须在标准环境：优先 `.devcontainer/devcontainer.json`，基础设施使用 `infra/compose/*.compose.yml`。
 
-## 旧环境文件迁移（必做）
+## 环境文件准备（必做）
 
 ```bash
 cp .env.example .env
 # 可选：仅 reader 栈使用
-cp .env.example .env.reader-stack
+cp env/profiles/reader.env env/profiles/reader.local.env
 python3 scripts/check_env_contract.py --strict
 ```
 
-## 一键迁移 + 验证（最短路径）
+## 一键验证（最短路径）
 
 ```bash
-bash scripts/env/migrate_env_legacy.sh
 bash scripts/env/validate_profile.sh --profile local
 ```
 
@@ -52,7 +51,7 @@ bash scripts/env/compose_env.sh --profile local --write .runtime-cache/temp/.env
 
 迁移规则：
 - `.env`：放 core/runtime 与 provider 密钥。
-- `.env.reader-stack`：只放 Miniflux/Nextflux 相关变量。
+- `env/profiles/reader.local.env`：只放 Miniflux/Nextflux 相关变量。
 - 不再把 `.env.local` 作为默认运行时输入。
 
 ## 标准环境入口（AI 必须）
@@ -115,8 +114,8 @@ curl -sS -X POST http://127.0.0.1:8000/api/v1/ingest/poll -H 'Content-Type: appl
 可选阅读栈（Miniflux + Nextflux）：
 
 ```bash
-cp .env.example .env.reader-stack
-./scripts/bootstrap_full_stack.sh --with-reader-stack 1 --reader-env-file .env.reader-stack
+cp env/profiles/reader.env env/profiles/reader.local.env
+./scripts/bootstrap_full_stack.sh --with-reader-stack 1 --reader-env-file env/profiles/reader.local.env
 ```
 
 ## 下一步看哪里

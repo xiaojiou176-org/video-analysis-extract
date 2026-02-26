@@ -32,7 +32,6 @@ MINIFLUX_BASE="${MINIFLUX_BASE_URL:-}"
 NEXTFLUX_PORT="${NEXTFLUX_PORT:-3000}"
 OFFLINE_FALLBACK="${OFFLINE_FALLBACK:-1}"
 READER_ENV_FILE="${READER_ENV_FILE:-$ROOT_DIR/env/profiles/reader.env}"
-LEGACY_READER_ENV_FILE="${LEGACY_READER_ENV_FILE:-$ROOT_DIR/.env.reader-stack}"
 FALLBACK_MARKER_FILE="$ROOT_DIR/.runtime-cache/full-stack/offline-fallback.flag"
 HEARTBEAT_SECONDS="${FULL_STACK_SMOKE_HEARTBEAT_SECONDS:-30}"
 LIVE_DIAGNOSTICS_JSON="${LIVE_SMOKE_DIAGNOSTICS_JSON:-.runtime-cache/e2e-live-smoke-result.json}"
@@ -141,11 +140,6 @@ stop_heartbeat
 log "e2e_live_smoke diagnostics_path=$ROOT_DIR/$LIVE_DIAGNOSTICS_JSON"
 
 if is_truthy "$REQUIRE_READER"; then
-  if [[ -z "$MINIFLUX_BASE" && ! -f "$READER_ENV_FILE" && -f "$LEGACY_READER_ENV_FILE" ]]; then
-    log "Reader env profile missing; using legacy env file: $LEGACY_READER_ENV_FILE"
-    log "Migration tip: run ./scripts/env/migrate_env_legacy.sh"
-    READER_ENV_FILE="$LEGACY_READER_ENV_FILE"
-  fi
   if [[ -z "$MINIFLUX_BASE" && -f "$READER_ENV_FILE" ]]; then
     load_env_file "$READER_ENV_FILE" "$SCRIPT_NAME"
     MINIFLUX_BASE="${MINIFLUX_BASE_URL:-}"

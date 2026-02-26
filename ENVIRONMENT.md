@@ -14,14 +14,14 @@ Environment configuration is split into one core layer plus profile overlays:
 1. Core baseline: `.env`
 2. Profile overlay:
    - `PROFILE=local|gce` (used by bootstrap/runtime decisions)
-   - `.env.reader-stack` (reader-only overlay; loaded only by reader-related scripts)
+   - `env/profiles/reader.env` (reader-only overlay; loaded only by reader-related scripts)
 3. Process environment: explicit command/session overrides
 
 Overlay scope rules:
 
 - `.env` is the canonical runtime baseline for API/Worker/MCP/Web scripts.
-- `.env.reader-stack` is not global; it is applied only in reader-stack flows such as:
-  - `scripts/deploy_reader_stack.sh --env-file <path>`
+- `env/profiles/reader.env` is not global; it is applied only in reader-stack flows such as:
+  - `scripts/deploy_reader_stack.sh` (default path: `env/profiles/reader.env`)
   - `scripts/smoke_full_stack.sh` (reader checks)
   - `scripts/run_ai_feed_sync.sh` (reader sync path)
 - Process env is allowed for temporary overrides and CI injection.
@@ -58,8 +58,7 @@ Startup validation fails when:
    - `SQLITE_PATH`, `PIPELINE_WORKSPACE_DIR`, `PIPELINE_ARTIFACT_ROOT` (Worker)
 2. `NOTIFICATION_ENABLED=true` but either `RESEND_API_KEY` or `RESEND_FROM_EMAIL` is missing/blank.
 3. Web API client cannot resolve a valid base URL:
-   - `NEXT_PUBLIC_API_BASE_URL` (preferred) or
-   - `VD_API_BASE_URL` (compat fallback)
+   - `NEXT_PUBLIC_API_BASE_URL` (required for web runtime)
 
 ## Variable Tiers
 
@@ -86,7 +85,7 @@ Startup validation fails when:
 
 ### Worker Optional
 
-- `RSSHUB_BASE_URL`, `RSSHUB_PUBLIC_FALLBACK_BASE_URL`, `RSSHUB_FALLBACK_BASE_URLS`, `FEED_URLS`, `FEED_PATHS`
+- `RSSHUB_BASE_URL`, `RSSHUB_PUBLIC_FALLBACK_BASE_URL`, `RSSHUB_FALLBACK_BASE_URLS`, `FEED_URLS`
 - `REQUEST_TIMEOUT_SECONDS`, `REQUEST_RETRY_ATTEMPTS`, `REQUEST_RETRY_BACKOFF_SECONDS`
 - `COMMENTS_TOP_N`, `COMMENTS_REPLIES_PER_COMMENT`, `COMMENTS_REQUEST_TIMEOUT_SECONDS`
 - `PIPELINE_LLM_INPUT_MODE`, `PIPELINE_LLM_INCLUDE_FRAMES`
@@ -95,7 +94,6 @@ Startup validation fails when:
 - `LLM_PROVIDER` (must be `gemini` in current runtime)
 - `GEMINI_API_KEY`, `GEMINI_MODEL`, `GEMINI_OUTLINE_MODEL`, `GEMINI_DIGEST_MODEL`
 - `GEMINI_FAST_MODEL`, `GEMINI_COMPUTER_USE_MODEL`, `GEMINI_EMBEDDING_MODEL`, `YOUTUBE_API_KEY`
-- `OPENAI_API_KEY`, `ANTHROPIC_API_KEY` (compat reserved only, not active provider path)
 - `GEMINI_THINKING_LEVEL`, `GEMINI_INCLUDE_THOUGHTS`, `GEMINI_STRICT_SCHEMA_MODE`
 - `GEMINI_CONTEXT_CACHE_ENABLED`, `GEMINI_CONTEXT_CACHE_TTL_SECONDS`, `GEMINI_CONTEXT_CACHE_MIN_CHARS`, `GEMINI_CONTEXT_CACHE_MAX_KEYS`, `GEMINI_CONTEXT_CACHE_LOCAL_TTL_SECONDS`, `GEMINI_CONTEXT_CACHE_SWEEP_INTERVAL_SECONDS`
 - `GEMINI_COMPUTER_USE_ENABLED`, `GEMINI_COMPUTER_USE_REQUIRE_CONFIRMATION`
@@ -107,7 +105,6 @@ LLM generation is Gemini-only in this repository:
 
 1. Provider: `gemini`
    - Runtime guard: `LLM_PROVIDER` must resolve to `gemini`
-   - Compatibility retainers: `OPENAI_API_KEY` and `ANTHROPIC_API_KEY` may exist but are not executed as current provider routes
 2. Structured output: `response_mime_type=application/json` + strict Pydantic schema validation
 3. Function calling: enabled for `llm_outline` and `llm_digest`; disabled in translation fallback
 4. Thinking control: `GEMINI_THINKING_LEVEL` plus per-request override `overrides.llm.thinking_level`
@@ -126,7 +123,7 @@ Default model lane:
 ### Secret Source and Logging Policy
 
 - Secret keys must come from process environment or local `.env` file only.
-- Reader-stack secrets (if used) must come from `.env.reader-stack` only for reader-stack commands.
+- Reader-stack secrets (if used) must come from `env/profiles/reader.env` (or an explicit `READER_ENV_FILE` path) for reader-stack commands.
 - Do not hard-code keys in source code, tests, or documentation examples.
 - Runtime logs and diagnostics must never print full secret values; only masked summaries are allowed when needed for troubleshooting.
 - `.env.local`, `.env.bak`, shell login profiles, and documentation snippets are not allowed as secret sources for runtime/CI.
@@ -139,8 +136,8 @@ Default model lane:
 
 ### API / MCP / Web
 
-- `VD_API_BASE_URL`, `VD_API_TIMEOUT_SEC`, `VD_API_KEY`, `VD_ALLOW_UNAUTH_WRITE`
-- `NEXT_PUBLIC_API_BASE_URL`
+- API/MCP runtime: `VD_API_BASE_URL`, `VD_API_TIMEOUT_SEC`, `VD_API_KEY`, `VD_ALLOW_UNAUTH_WRITE`
+- Web runtime: `NEXT_PUBLIC_API_BASE_URL` (web client only reads this variable for API base URL)
 - `UI_AUDIT_GEMINI_ENABLED` (API-side Gemini UI audit toggle, default `true`)
 - `UI_AUDIT_ARTIFACT_BASE_ROOT` (UI audit artifact directory whitelist root; only `artifact_root` paths within this base are accepted; defaults to OS temp directory when unset)
 - `VD_MCP_MAX_BASE64_BYTES` (MCP base64 payload size limit, bytes)
@@ -265,7 +262,7 @@ cp .env.example .env
 - Core shared variables above
 - Infra/recreate scripts additionally require corresponding `GCP_*` / instance settings when invoked
 
-### Reader overlay (`.env.reader-stack`, optional)
+### Reader overlay (`env/profiles/reader.env`, optional)
 
 Required only when enabling reader stack (`WITH_READER_STACK=1`) or running reader sync:
 - `MINIFLUX_DB_PASSWORD`
@@ -291,14 +288,15 @@ Notes:
 1. Create canonical core env:
    - `cp .env.example .env`
 2. Keep all app runtime/provider secrets in `.env` (or injected process env in CI).
-3. If using reader stack, create a dedicated overlay file:
-   - `cp .env.example .env.reader-stack`
-   - keep reader-only credentials in `.env.reader-stack`
+3. If using reader stack, update the dedicated overlay file:
+   - `env/profiles/reader.env`
+   - keep reader-only credentials in `env/profiles/reader.env`
 4. Stop relying on legacy fallback files (`.env.local`, `.env.bak`) as runtime secret inputs.
 5. Validate contract:
    - `python3 scripts/check_env_contract.py --strict`
 6. For reader stack startup, use explicit env file flag:
-   - `./scripts/deploy_reader_stack.sh up --env-file .env.reader-stack`
+   - default: `./scripts/deploy_reader_stack.sh up`
+   - custom path: `./scripts/deploy_reader_stack.sh up --env-file <path>`
 
 ## Env Budget Guard (Anti-Bloat)
 
@@ -365,6 +363,5 @@ When `live-smoke` is required (`main` push / nightly schedule), these secrets mu
 - `RESEND_API_KEY`
 - `RESEND_FROM_EMAIL`
 - `YOUTUBE_API_KEY`
-- `LIVE_SMOKE_API_BASE_URL`
 
 Without any of the above, `live-smoke` fails and `ci-final-gate` blocks merge/release.

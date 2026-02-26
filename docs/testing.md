@@ -15,7 +15,7 @@
 
 - 测试配置采用 `core + profile overlay`：
   - core：`.env`
-  - overlay：`.env.reader-stack`（仅 reader 相关 smoke）
+  - overlay：`env/profiles/reader.env`（reader profile 模板，仅 reader 相关 smoke）
   - profile：`PROFILE=local|gce`
 - 密钥只允许来自 `.env` 或进程环境注入（CI secrets / 当前 shell export）。
 - 禁止把 `.env.local` / `.env.bak` / shell 登录配置作为测试密钥来源。
@@ -30,7 +30,7 @@
 - `aggregate-gate`：汇总 `preflight + 10` 个核心作业（`db-migration-smoke` / `python-tests` / `api-real-smoke` / `pr-llm-real-smoke` / `backend-lint` / `frontend-lint` / `web-test-build` / `web-e2e` / `external-playwright-smoke` / `dependency-vuln-scan`）；其中 `pr-llm-real-smoke` 允许 `success/skipped`，其余任一非 `success` 即失败。
 - `autofix-dry-run`：依赖 `python-tests` + `web-e2e`，仅在两者任一失败时运行（读取 `.runtime-cache` 诊断工件）。
 - `nightly-flaky-python` + `nightly-flaky-web-e2e`：仅 nightly schedule 触发，执行重复运行策略用于发现 flaky。
-- `live-smoke`：依赖 `aggregate-gate`，在 `main` push / nightly schedule 必跑；执行真实 LLM + 真实外部视频 URL（YouTube/Bilibili）链路。若缺少 `LIVE_SMOKE_API_BASE_URL` 或任一必需 secret 会直接失败（不再跳过放行）。
+- `live-smoke`：依赖 `aggregate-gate`，在 `main` push / nightly schedule 必跑；执行真实 LLM + 真实外部视频 URL（YouTube/Bilibili）链路。`LIVE_SMOKE_API_BASE_URL` 为空时会自动回落到 `http://127.0.0.1:${API_PORT:-8000}`；若缺少任一必需 secret 会直接失败（不再跳过放行）。
 - `ci-final-gate`：最终门禁；始终检查 `aggregate-gate`，并在 nightly 强制 `nightly-flaky-*` 成功，在 `main` push / nightly schedule 强制 `live-smoke` 成功且不得为 `skipped`。
 
 ## 测试类型与依赖边界（避免误解）
@@ -55,7 +55,6 @@ CI `live-smoke` 必需 secrets（`main` push / nightly schedule）：
 - `RESEND_API_KEY`
 - `RESEND_FROM_EMAIL`
 - `YOUTUBE_API_KEY`
-- `LIVE_SMOKE_API_BASE_URL`
 
 ## 真实 Smoke 默认值与触发边界（与 CI 对齐）
 

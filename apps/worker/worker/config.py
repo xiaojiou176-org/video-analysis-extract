@@ -129,8 +129,6 @@ class Settings:
     gemini_computer_use_require_confirmation: bool = True
     gemini_computer_use_max_steps: int = 3
     gemini_computer_use_timeout_seconds: float = 30.0
-    openai_api_key: str | None = None
-    anthropic_api_key: str | None = None
     youtube_api_key: str | None = None
     notification_enabled: bool = False
     resend_api_key: str | None = None
@@ -156,8 +154,7 @@ class Settings:
 
     @classmethod
     def from_env(cls) -> "Settings":
-        feed_urls = _split_csv(os.getenv("FEED_URLS"))
-        feed_paths = feed_urls or _split_csv(os.getenv("FEED_PATHS"))
+        feed_paths = _split_csv(os.getenv("FEED_URLS"))
         settings = cls(
             rsshub_base_url=os.getenv("RSSHUB_BASE_URL", "https://rsshub.app"),
             rsshub_public_fallback_base_url=(
@@ -317,8 +314,6 @@ class Settings:
             gemini_computer_use_timeout_seconds=float(
                 os.getenv("GEMINI_COMPUTER_USE_TIMEOUT_SECONDS", "30")
             ),
-            openai_api_key=os.getenv("OPENAI_API_KEY"),
-            anthropic_api_key=os.getenv("ANTHROPIC_API_KEY"),
             youtube_api_key=os.getenv("YOUTUBE_API_KEY"),
             notification_enabled=_parse_bool(
                 os.getenv("NOTIFICATION_ENABLED"),

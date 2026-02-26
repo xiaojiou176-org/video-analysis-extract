@@ -61,8 +61,6 @@ class Settings:
     gemini_computer_use_model: str
     gemini_embedding_model: str
     gemini_thinking_level: str
-    openai_api_key: str | None
-    anthropic_api_key: str | None
     ui_audit_gemini_enabled: bool
 
     @classmethod
@@ -106,8 +104,6 @@ class Settings:
             ),
             gemini_embedding_model=os.getenv("GEMINI_EMBEDDING_MODEL", "gemini-embedding-001"),
             gemini_thinking_level=os.getenv("GEMINI_THINKING_LEVEL", "high"),
-            openai_api_key=os.getenv("OPENAI_API_KEY"),
-            anthropic_api_key=os.getenv("ANTHROPIC_API_KEY"),
             ui_audit_gemini_enabled=_parse_bool(
                 os.getenv("UI_AUDIT_GEMINI_ENABLED"),
                 default=True,

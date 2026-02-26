@@ -3,7 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 COMPOSE_FILE="$ROOT_DIR/infra/compose/miniflux-nextflux.compose.yml"
-ENV_FILE="$ROOT_DIR/.env.reader-stack"
+ENV_FILE="${READER_ENV_FILE:-$ROOT_DIR/env/profiles/reader.env}"
 
 usage() {
   cat <<'EOF'
@@ -17,9 +17,10 @@ Commands:
   logs     Tail stack logs
 
 Notes:
-  1) Default env file: .env.reader-stack
+  1) Default env file: env/profiles/reader.env
   2) Copy env template:
-     cp .env.example .env.reader-stack
+     cp env/profiles/reader.env env/profiles/reader.local.env
+     ./scripts/deploy_reader_stack.sh up --env-file env/profiles/reader.local.env
   3) Required before first `up`:
      - MINIFLUX_DB_PASSWORD
      - MINIFLUX_ADMIN_PASSWORD
@@ -41,7 +42,7 @@ ensure_compose() {
 read_env_file() {
   if [[ ! -f "$ENV_FILE" ]]; then
     echo "[reader-stack] env file not found: $ENV_FILE" >&2
-    echo "[reader-stack] create one from template, e.g. cp .env.example .env.reader-stack" >&2
+    echo "[reader-stack] create one from template, e.g. cp env/profiles/reader.env env/profiles/reader.local.env" >&2
     exit 1
   fi
 }

@@ -132,12 +132,12 @@ set -a; source .env; set +a
 - 必须采用 `core + profile overlay`：
   - core：`.env`
   - profile：`PROFILE=local|gce`
-  - overlay：`.env.reader-stack`（仅 reader 栈命令加载）
+  - overlay：`env/profiles/reader.env`（reader 栈 profile 模板）
 - 密钥只允许通过 `.env` 或进程环境注入。
 - 禁止将 `.env.local` / `.env.bak` / shell 登录配置作为运行时密钥来源。
 - 迁移旧结构时必须执行：
   - `cp .env.example .env`
-  - `cp .env.example .env.reader-stack`（仅启用 reader 栈时）
+  - `cp env/profiles/reader.env env/profiles/reader.local.env`（仅启用 reader 栈时）
   - `python3 scripts/check_env_contract.py --strict`
 
 ### 3.3 启动基础服务

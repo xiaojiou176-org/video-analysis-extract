@@ -11,10 +11,10 @@
 3. Clone this repo to the VM.
 
 ## 2) Create Reader Stack Env
-Create `.env.reader-stack` in repo root:
+Create a local reader env from template:
 
 ```bash
-cp .env.example .env.reader-stack
+cp env/profiles/reader.env env/profiles/reader.local.env
 ```
 
 Then edit at least:
@@ -30,8 +30,8 @@ NEXTFLUX_PORT=3000
 ## 3) Start Stack
 
 ```bash
-./scripts/deploy_reader_stack.sh up --env-file .env.reader-stack
-./scripts/deploy_reader_stack.sh status --env-file .env.reader-stack
+./scripts/deploy_reader_stack.sh up --env-file env/profiles/reader.local.env
+./scripts/deploy_reader_stack.sh status --env-file env/profiles/reader.local.env
 ```
 
 ## 4) GCE Firewall
@@ -60,7 +60,7 @@ Two practical modes:
 ## 8) Operations
 
 ```bash
-./scripts/deploy_reader_stack.sh logs --env-file .env.reader-stack
-./scripts/deploy_reader_stack.sh restart --env-file .env.reader-stack
-./scripts/deploy_reader_stack.sh down --env-file .env.reader-stack
+./scripts/deploy_reader_stack.sh logs --env-file env/profiles/reader.local.env
+./scripts/deploy_reader_stack.sh restart --env-file env/profiles/reader.local.env
+./scripts/deploy_reader_stack.sh down --env-file env/profiles/reader.local.env
 ```

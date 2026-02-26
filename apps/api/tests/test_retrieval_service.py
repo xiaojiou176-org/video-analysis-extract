@@ -12,7 +12,6 @@ from typing import Any
 import pytest
 from sqlalchemy.exc import DBAPIError
 
-from apps.api.app.errors import ApiTimeoutError
 from apps.api.app.services.retrieval import RetrievalService
 
 
@@ -336,9 +335,15 @@ def test_build_query_embedding_handles_import_error(monkeypatch) -> None:
 
 
 def test_build_query_embedding_timeout_raises_api_timeout(monkeypatch) -> None:
-    service = RetrievalService(_FakeDB([]))  # type: ignore[arg-type]
+    retrieval_module = __import__(
+        "apps.api.app.services.retrieval",
+        fromlist=["RetrievalService", "Settings", "ApiTimeoutError"],
+    )
+    retrieval_module = __import__("importlib").reload(retrieval_module)
+    service = retrieval_module.RetrievalService(_FakeDB([]))  # type: ignore[arg-type]
     monkeypatch.setattr(
-        "apps.api.app.services.retrieval.Settings.from_env",
+        retrieval_module.Settings,
+        "from_env",
         lambda: types.SimpleNamespace(
             gemini_api_key="key",
             gemini_embedding_model="gemini-embedding-001",
@@ -351,18 +356,25 @@ def test_build_query_embedding_timeout_raises_api_timeout(monkeypatch) -> None:
             self.api_key = api_key
             self.models = types.SimpleNamespace(embed_content=lambda **kwargs: {"values": [0.1, 0.2]})
 
-    class _FakeTypes:
-        class EmbedContentConfig:
-            def __init__(self, output_dimensionality: int):
-                self.output_dimensionality = output_dimensionality
+    fake_types_module = types.ModuleType("google.genai.types")
 
+    class _EmbedContentConfig:
+        def __init__(self, output_dimensionality: int):
+            self.output_dimensionality = output_dimensionality
+
+    fake_types_module.EmbedContentConfig = _EmbedContentConfig
     fake_genai_module = types.ModuleType("google.genai")
     fake_genai_module.Client = _FakeClient
-    fake_genai_module.types = _FakeTypes
-    fake_google_module = types.ModuleType("google")
-    fake_google_module.genai = fake_genai_module
-    monkeypatch.setitem(sys.modules, "google", fake_google_module)
-    monkeypatch.setitem(sys.modules, "google.genai", fake_genai_module)
+    fake_genai_module.types = fake_types_module
+    fake_genai_module.__path__ = []
+    def _fake_import(name: str):
+        if name == "google.genai":
+            return fake_genai_module
+        if name == "google.genai.types":
+            return fake_types_module
+        raise ImportError(name)
+
+    monkeypatch.setattr(retrieval_module.importlib, "import_module", _fake_import)
 
     class _Future:
         def result(self, timeout: float):
@@ -383,9 +395,9 @@ def test_build_query_embedding_timeout_raises_api_timeout(monkeypatch) -> None:
             del fn
             return _Future()
 
-    monkeypatch.setattr(concurrent.futures, "ThreadPoolExecutor", _Executor)
+    monkeypatch.setattr(retrieval_module.concurrent.futures, "ThreadPoolExecutor", _Executor)
 
-    with pytest.raises(ApiTimeoutError, match="retrieval embedding timed out"):
+    with pytest.raises(retrieval_module.ApiTimeoutError, match="retrieval embedding timed out"):
         service._build_query_embedding("hello")
 
 
@@ -405,18 +417,25 @@ def test_build_query_embedding_returns_none_on_runtime_exception(monkeypatch) ->
             self.api_key = api_key
             self.models = types.SimpleNamespace(embed_content=lambda **kwargs: {"values": [0.1, 0.2]})
 
-    class _FakeTypes:
-        class EmbedContentConfig:
-            def __init__(self, output_dimensionality: int):
-                self.output_dimensionality = output_dimensionality
+    fake_types_module = types.ModuleType("google.genai.types")
 
+    class _EmbedContentConfig:
+        def __init__(self, output_dimensionality: int):
+            self.output_dimensionality = output_dimensionality
+
+    fake_types_module.EmbedContentConfig = _EmbedContentConfig
     fake_genai_module = types.ModuleType("google.genai")
     fake_genai_module.Client = _FakeClient
-    fake_genai_module.types = _FakeTypes
-    fake_google_module = types.ModuleType("google")
-    fake_google_module.genai = fake_genai_module
-    monkeypatch.setitem(sys.modules, "google", fake_google_module)
-    monkeypatch.setitem(sys.modules, "google.genai", fake_genai_module)
+    fake_genai_module.types = fake_types_module
+    fake_genai_module.__path__ = []
+    def _fake_import(name: str):
+        if name == "google.genai":
+            return fake_genai_module
+        if name == "google.genai.types":
+            return fake_types_module
+        raise ImportError(name)
+
+    monkeypatch.setattr("apps.api.app.services.retrieval.importlib.import_module", _fake_import)
 
     class _Future:
         def result(self, timeout: float):

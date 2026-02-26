@@ -69,7 +69,6 @@ def web_base_url(mock_api_server: MockApiServer) -> str:
         base_url = f"http://127.0.0.1:{web_port}"
         env = os.environ.copy()
         env["NEXT_PUBLIC_API_BASE_URL"] = mock_api_server.base_url
-        env["VD_API_BASE_URL"] = mock_api_server.base_url
         env["NEXT_DIST_DIR"] = f".next-e2e-{worker_slug}"
         env["PORT"] = str(web_port)
         env["HOSTNAME"] = "127.0.0.1"

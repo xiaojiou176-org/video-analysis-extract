@@ -39,7 +39,6 @@ def test_worker_from_env_parses_csv_optional_values_and_retry_floor(
         monkeypatch,
         tmp_path,
         FEED_URLS=" /youtube/channel/demo , https://rss.example/feed ",
-        FEED_PATHS="/should/not/use",
         PIPELINE_LLM_MAX_RETRIES="-5",
         PIPELINE_RETRY_TRANSIENT_ATTEMPTS="invalid",
         PIPELINE_RETRY_TRANSIENT_BACKOFF_SECONDS="bad-float",
@@ -57,7 +56,7 @@ def test_worker_from_env_parses_csv_optional_values_and_retry_floor(
     assert settings.pipeline_retry_transient_backoff_seconds is None
 
 
-def test_worker_from_env_uses_feed_paths_when_feed_urls_absent(
+def test_worker_from_env_ignores_feed_paths_when_feed_urls_absent(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -70,8 +69,8 @@ def test_worker_from_env_uses_feed_paths_when_feed_urls_absent(
 
     settings = config_module.Settings.from_env()
 
-    assert settings.feed_paths == ["/a", "/b"]
-    assert settings.feed_urls == ["https://rsshub.app/a", "https://rsshub.app/b"]
+    assert settings.feed_paths == []
+    assert settings.feed_urls == []
 
 
 @pytest.mark.parametrize(

@@ -18,7 +18,7 @@ devcontainer up --workspace-folder .
 - Core baseline：`.env`（API/Worker/MCP/Web 默认运行配置）
 - Profile overlay：
   - `PROFILE=local|gce`（决定 bootstrap 运行画像）
-  - `.env.reader-stack`（仅 reader 相关命令加载）
+  - `env/profiles/reader.env`（reader profile 模板）
 - Secret injection policy：密钥仅允许来自 `.env` 或进程环境；禁止依赖 `.env.local` / `.env.bak` / 登录配置。
 
 变量优先级（按当前脚本实现）：
@@ -28,8 +28,8 @@ devcontainer up --workspace-folder .
 4. 代码默认值（仅可选项）
 
 Reader overlay 规则：
-- `.env.reader-stack` 不会全局生效，仅在 reader 栈命令路径生效（`deploy_reader_stack.sh`、reader 检查/同步链路）。
-- 启用 reader 栈时，建议显式指定 `--env-file .env.reader-stack`。
+- reader env 不会全局生效，仅在 reader 栈命令路径生效（`deploy_reader_stack.sh`、reader 检查/同步链路）。
+- 启用 reader 栈时，建议显式指定 `--env-file env/profiles/reader.local.env`。
 
 ## 标准启动链路（6 步）
 
@@ -271,7 +271,7 @@ curl -sS -X POST http://127.0.0.1:8000/api/v1/videos/process \
 
 - API：`GET /api/v1/jobs/<job_id>` 的 `steps[].result.llm_meta.thinking` 可见 `thought_signatures` / `thought_signature_digest` / `usage`。
 - MCP：`vd.jobs.get` 保留相同结构。
-- 兼容字段：`steps[].thought_metadata` 为归一化兼容提取位（含 `llm_meta.thinking`），未命中时返回空结构（非 `null`）。
+- `steps[].thought_metadata` 为归一化提取字段（含 `llm_meta.thinking`），未命中时返回空结构（非 `null`）。
 
 ## 文档联动规则
 以下改动必须同步本文件：

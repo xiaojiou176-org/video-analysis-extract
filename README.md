@@ -58,8 +58,8 @@ devcontainer up --workspace-folder .
 ./scripts/smoke_full_stack.sh
 ```
 
-兼容性与风险说明：
-- 兼容性：现有 `scripts/deploy_core_services.sh` 与 `scripts/deploy_reader_stack.sh` 已直接绑定上述 compose 文件，不需要改脚本。
+运行风险说明：
+- 现有 `scripts/deploy_core_services.sh` 与 `scripts/deploy_reader_stack.sh` 已直接绑定上述 compose 文件，不需要改脚本。
 - 风险 1：DevContainer 依赖宿主 Docker（通过 `/var/run/docker.sock`），若宿主未启动 Docker，容器内 compose 无法拉起。
 - 风险 2：live smoke 依赖真实外部 API Key（如 `GEMINI_API_KEY`），标准环境只保证执行一致性，不保证外部资源可用。
 - 风险 3：本地裸机与容器混用时，端口/数据库残留状态可能不一致；建议同一轮验证只使用一种环境执行。
@@ -294,10 +294,10 @@ uv run --with pytest --with playwright pytest apps/web/tests/e2e -q
 
 快速启动：
 ```bash
-cp .env.example .env.reader-stack
-# 编辑 .env.reader-stack，至少设置 MINIFLUX_DB_PASSWORD / MINIFLUX_ADMIN_PASSWORD / MINIFLUX_BASE_URL
-./scripts/deploy_reader_stack.sh up --env-file .env.reader-stack
-./scripts/deploy_reader_stack.sh status --env-file .env.reader-stack
+cp env/profiles/reader.env env/profiles/reader.local.env
+# 编辑 env/profiles/reader.local.env，至少设置 MINIFLUX_DB_PASSWORD / MINIFLUX_ADMIN_PASSWORD / MINIFLUX_BASE_URL
+./scripts/deploy_reader_stack.sh up --env-file env/profiles/reader.local.env
+./scripts/deploy_reader_stack.sh status --env-file env/profiles/reader.local.env
 ```
 
 ## 可选：实时稳定推送 workflow
