@@ -43,6 +43,15 @@ RULES = [
         message="Asserting a literal against the exact same literal is forbidden.",
     ),
     PatternRule(
+        name="js-self-identifier-assertion",
+        regex=re.compile(
+            r"expect\s*\(\s*(?P<ident>[A-Za-z_$][A-Za-z0-9_$.]*)\s*\)"
+            r"\s*\.\s*(?:toBe|toEqual|toStrictEqual)\s*\(\s*(?P=ident)\s*\)",
+            re.IGNORECASE,
+        ),
+        message="Asserting an identifier against itself is forbidden.",
+    ),
+    PatternRule(
         name="js-low-value-toBeDefined",
         regex=re.compile(r"expect\s*\(\s*.+?\s*\)\s*\.\s*toBeDefined\s*\(\s*\)"),
         message=(
@@ -109,8 +118,8 @@ def main() -> int:
     )
     parser.add_argument(
         "--path",
-        default="apps",
-        help="Path to scan (relative to repo root). Default: apps",
+        default=".",
+        help="Path to scan (relative to repo root). Default: .",
     )
     args = parser.parse_args()
 
@@ -119,8 +128,9 @@ def main() -> int:
         print(f"scan path does not exist: {scan_root}", file=sys.stderr)
         return 2
 
+    files = iter_test_files(scan_root)
     violations: list[str] = []
-    for file_path in iter_test_files(scan_root):
+    for file_path in files:
         try:
             text = file_path.read_text(encoding="utf-8")
         except UnicodeDecodeError:
@@ -140,9 +150,15 @@ def main() -> int:
         print("Placebo assertion guard failed. Found forbidden assertions:")
         for item in violations:
             print(f"- {item}")
+        print(
+            f"Evidence: scanned_files={len(files)}, rules={len(RULES)}, violations={len(violations)}"
+        )
         return 1
 
-    print("Placebo assertion guard passed: no forbidden assertions found.")
+    print(
+        "Placebo assertion guard passed: "
+        f"scanned_files={len(files)}, rules={len(RULES)}, violations=0."
+    )
     return 0
 
 

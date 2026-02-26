@@ -49,6 +49,13 @@ npm --prefix apps/web run build
   - `docs/runbook-local.md`
   - `ENVIRONMENT.md`（如涉及 env）
 
+## Doc-Drift Enforcement
+- Pre-commit / pre-push 会校验依赖治理文档联动：
+  - 触发文件：`pyproject.toml`、`uv.lock`、`requirements*.txt`、`requirements/*.txt`、
+    `apps/*/package.json`、`apps/*/package-lock.json`、`apps/*/pnpm-lock.yaml`
+  - 必须同步更新：`docs/reference/dependency-governance.md`
+- 校验脚本：`scripts/ci_or_local_gate_doc_drift.sh`
+
 ## Suggested Security Checks
 ```bash
 python scripts/check_env_contract.py --strict

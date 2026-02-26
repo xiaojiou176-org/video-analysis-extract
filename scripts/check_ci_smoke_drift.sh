@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+workflow_file=".github/workflows/ci.yml"
+
+[[ -f "$workflow_file" ]] || {
+  echo "[check_ci_smoke_drift] missing workflow file: $workflow_file" >&2
+  exit 1
+}
+
+required_patterns=(
+  "pr-llm-real-smoke:"
+  "scripts/smoke_llm_real_local.sh"
+  "--api-base-url \"http://127.0.0.1:18081\""
+  "--diagnostics-json"
+  "PR_LLM_REAL_SMOKE_DIAGNOSTICS_JSON"
+  "ci-failure-diagnostics-pr-llm-real-smoke"
+  "external-playwright-smoke:"
+  "EXTERNAL_SMOKE_URL"
+  "EXTERNAL_SMOKE_EXPECT_TEXT"
+  "EXTERNAL_SMOKE_TIMEOUT_MS"
+  "EXTERNAL_SMOKE_RETRIES"
+  "scripts/external_playwright_smoke.sh"
+)
+
+missing=()
+for pattern in "${required_patterns[@]}"; do
+  if ! rg -n --fixed-strings -- "$pattern" "$workflow_file" >/dev/null; then
+    missing+=("$pattern")
+  fi
+done
+
+if [[ ${#missing[@]} -gt 0 ]]; then
+  {
+    echo "[check_ci_smoke_drift] missing required CI smoke fields:"
+    for item in "${missing[@]}"; do
+      echo "  - $item"
+    done
+  } >&2
+  exit 1
+fi
+
+echo "[check_ci_smoke_drift] passed"

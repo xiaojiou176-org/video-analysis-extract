@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ $# -ne 1 ]]; then
+  echo "[commit-msg] usage: $0 <commit-msg-file>" >&2
+  exit 2
+fi
+
+MSG_FILE="$1"
+
+if [[ ! -f "$MSG_FILE" ]]; then
+  echo "[commit-msg] commit message file not found: $MSG_FILE" >&2
+  exit 2
+fi
+
+if command -v npx >/dev/null 2>&1; then
+  TMP_CONFIG="$(mktemp /tmp/commitlint.config.XXXXXX.cjs)"
+  trap 'rm -f "$TMP_CONFIG"' EXIT
+  cat >"$TMP_CONFIG" <<'EOF'
+module.exports = {
+  rules: {
+    "type-empty": [2, "never"],
+    "subject-empty": [2, "never"],
+    "type-enum": [
+      2,
+      "always",
+      [
+        "build",
+        "chore",
+        "ci",
+        "docs",
+        "feat",
+        "fix",
+        "perf",
+        "refactor",
+        "revert",
+        "style",
+        "test",
+      ],
+    ],
+    "header-max-length": [2, "always", 100],
+  },
+};
+EOF
+  npx --yes \
+    --package @commitlint/cli \
+    commitlint \
+    --config "$TMP_CONFIG" \
+    --edit "$MSG_FILE"
+  echo "[commit-msg] passed (Conventional Commits)"
+  exit 0
+fi
+
+echo "[commit-msg] npx is required to run commitlint. please install Node.js/npm." >&2
+exit 1

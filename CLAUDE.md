@@ -1,47 +1,139 @@
-# CLAUDE.md
+# 仓库协作规范
 
-## Role / Scope
-- 你是本仓库的 Claude Code 执行代理，职责是执行用户任务、最小化改动、保持可验证结果。
-- 本文件只定义执行策略、命令入口、安全与测试闸门，不重复业务设计文档。
-- 优先做与请求直接相关的最小变更；避免无关重构。
+本文件定义本仓库的人类/AI 协作协议，目标是让接手者在 1 分钟定位真相源，在 10 分钟完成本地启动与最小验收。
 
-## Truth Sources
-- 项目事实真相源以 `AGENTS.md` 为准；若本文件与 `AGENTS.md` 冲突，**一律以 `AGENTS.md` 优先**。
-- 文档优先级遵循 `AGENTS.md`：
-  1. `docs/start-here.md`
-  2. `docs/runbook-local.md`
-  3. `docs/state-machine.md`
-  4. `ENVIRONMENT.md` + `infra/config/env.contract.json`
-  5. `docs/testing.md`
-  6. `docs/reference/*.md`
-  7. `README.md`
-- 涉及运行、迁移、环境变量、状态机行为的结论，必须可回溯到上述文档。
+## -1. 14 条强制标准（MUST）
 
-## Golden Commands
-以下命令需与仓库当前标准保持一致。
+以下 14 条为仓库强制标准，`AGENTS.md` 与 `CLAUDE.md` 必须保持一致，且必须使用 MUST/必须语气：
 
-### 安装依赖
+1. **项目目的/技术栈/导航入口必须明确。**
+2. **文档真相源与冲突优先级必须明确。**
+3. **启动模式必须提供双路径（手动 6 步 + 一键 full-stack）。**
+4. **Golden Commands 必须可直接执行且与仓库脚本一致。**
+5. **Safety 边界必须明确列出禁止项与确认项。**
+6. **文档漂移触发器必须定义且与代码变更联动。**
+7. **Git Hooks 对齐规则必须明确并可追溯到实际脚本。**
+8. **最小 DoD 必须定义且包含标准环境 + env/test/lint/smoke 门禁。**
+9. **交付格式必须固定为 4 段：修改文件/执行命令/结果/风险与后续。**
+10. **大型模块（`apps/api`、`apps/worker`、`apps/web`）必须同时维护 `AGENTS.md` 与 `CLAUDE.md`，且内容一致。**
+11. **Live 测试在链路涉及外部依赖时必须使用真实 Key、真实浏览器、真实外部 API/网页。**
+12. **Pre-Commit 必须拦截所有 Linter Error 与安慰剂断言。**
+13. **覆盖率与变异测试门禁必须满足：总覆盖率 `>=80%`、重要模块覆盖率 `>=95%`、Python 核心模块 mutation score `>=0.60`。**
+14. **长测试必须输出 heartbeat，且必须先短测后长测；可并发任务必须并发执行。**
+
+## 0. 项目目的、技术栈与导航入口
+
+### 0.1 项目目的
+
+本项目用于把视频内容（YouTube/Bilibili 等）转成可检索、可订阅、可分发的结构化信息流，核心目标是：
+- 自动拉取与分析视频内容（metadata / subtitles / comments / frames / LLM digest）。
+- 统一通过 API/MCP/Web 暴露处理结果与操作入口。
+- 保持本地优先可运行，并具备可验证质量门禁（env/test/lint/smoke）。
+
+### 0.2 技术栈（当前）
+
+- Backend/API：Python + FastAPI + SQLAlchemy
+- Worker：Python + Temporal + pipeline steps
+- MCP：FastMCP 工具层
+- Frontend：Next.js（`apps/web`）
+- Data：PostgreSQL + SQLite（状态存储）+ Redis（可选）
+- Tooling：uv、pytest、Playwright、npm lint/test、ruff
+
+### 0.3 导航入口（先后顺序）
+
+1. `docs/start-here.md`（唯一 1 分钟入口）
+2. `README.md`（仓库前门）
+3. `docs/runbook-local.md`（本地运行权威手册）
+4. `docs/state-machine.md`（3 阶段 + 9-step 契约）
+5. `docs/testing.md`（CI/Hook/Smoke 口径）
+
+## 0.4 AI 导航索引（Lazy-Load）
+
+按需加载，先根后模块：
+
+1. **Root Governance**（全局规则与命令）
+   - `AGENTS.md`
+   - `CLAUDE.md`
+2. **Start Here**（最短启动路径）
+   - `docs/start-here.md`
+3. **API Module**（仅在涉及 API 改动时加载）
+   - `apps/api/AGENTS.md`
+   - `apps/api/CLAUDE.md`
+4. **Worker Module**（仅在涉及流水线/Temporal 改动时加载）
+   - `apps/worker/AGENTS.md`
+   - `apps/worker/CLAUDE.md`
+5. **Web Module**（仅在涉及前端/UI/E2E 改动时加载）
+   - `apps/web/AGENTS.md`
+   - `apps/web/CLAUDE.md`
+
+## 1. 文档真相源（优先级）
+
+1. `docs/start-here.md`：唯一 1 分钟入口。
+2. `docs/runbook-local.md`：本地运行权威手册。
+3. `docs/state-machine.md`：状态机与处理流程契约。
+4. `ENVIRONMENT.md` + `infra/config/env.contract.json`：环境变量真相源与严格契约。
+5. `docs/testing.md`：测试分层、smoke/live-smoke 口径。
+6. 模块文档：`apps/*/(AGENTS.md|CLAUDE.md)`（模块级执行约束）。
+7. `README.md`：仓库前门与导航。
+
+冲突处理原则：按上述优先级覆盖，低优先级文档必须回写修正。
+
+## 2. 启动模式（双路径）
+
+### 模式 A：手动标准 6 步
+
+1) 安装依赖  
+2) 启动基础服务  
+3) 初始化环境  
+4) 执行迁移  
+5) 启动 API/Worker/MCP  
+6) 最小验收
+
+### 模式 B：一键 full-stack
+
+- `./scripts/bootstrap_full_stack.sh`
+- `./scripts/full_stack.sh up`
+- `./scripts/smoke_full_stack.sh`
+
+### 模式 C：标准环境（AI 执行必须）
+
+- DevContainer：`.devcontainer/devcontainer.json`
+- 基础设施 Compose：`infra/compose/core-services.compose.yml`、`infra/compose/miniflux-nextflux.compose.yml`
+- 进入标准环境后再执行模式 A/B 的命令，避免“宿主机漂移”导致门禁结果不一致。
+
+补充命令：
+- 查看状态：`./scripts/full_stack.sh status`
+- 查看日志：`./scripts/full_stack.sh logs`
+- 停止栈：`./scripts/full_stack.sh down`
+
+## 3. Golden Commands（只保留仓库内已验证命令）
+
+### 3.1 安装依赖
+
 ```bash
 uv sync --frozen --extra dev --extra e2e
 npm --prefix apps/web ci
 ```
 
-### 初始化环境
+### 3.2 初始化环境
+
 ```bash
 ./scripts/init_env_example.sh
 cp .env.example .env
 python3 scripts/check_env_contract.py --strict
+set -a; source .env; set +a
 ```
-说明：运行时优先读取仓库根 `.env`，仅在 `.env` 缺失时回退 `.env.local`。
 
-### 启动基础服务
+### 3.3 启动基础服务
+
 ```bash
 brew services start postgresql@16
 brew services start redis
 temporal server start-dev --ip 127.0.0.1 --port 7233
 ```
 
-### 执行迁移
+### 3.4 执行迁移
+
 ```bash
 createdb video_analysis 2>/dev/null || true
 for migration in $(ls infra/migrations/*.sql | sort); do
@@ -50,49 +142,97 @@ done
 sqlite3 "$SQLITE_PATH" < infra/sql/sqlite_state_init.sql
 ```
 
-### 启动服务
+### 3.5 启动服务（手动模式）
+
 ```bash
 ./scripts/dev_api.sh
 ./scripts/dev_worker.sh
 ./scripts/dev_mcp.sh
 ```
 
-## Agent Collaboration
-- 可将独立子任务并发处理（如：文档核对、代码修改、测试验证），但同一文件写操作必须串行。
-- 推荐执行顺序：
-  1. 读取真相源并确认约束
-  2. 实施最小改动
-  3. 运行强制闸门
-  4. 汇总证据（改动文件、命令、结果）
-- 输出时给出可追溯证据，不只给结论。
-
-## Mandatory Validation Gates
-每次涉及代码、配置、流程变更时，至少执行以下门禁：
+### 3.6 最小验收
 
 ```bash
-python3 scripts/check_env_contract.py --strict
-PYTHONPATH="$PWD:$PWD/apps/worker" DATABASE_URL='sqlite+pysqlite:///:memory:' uv run pytest apps/worker/tests apps/api/tests apps/mcp/tests -q
-npm --prefix apps/web run lint
+curl -sS http://127.0.0.1:8000/healthz
+curl -sS -X POST http://127.0.0.1:8000/api/v1/ingest/poll \
+  -H 'Content-Type: application/json' \
+  -d '{"max_new_videos": 20}'
 ```
 
-- 若因环境限制无法完整执行，必须明确说明未执行项、原因与风险。
+### 3.7 全链路烟测（full-stack）
 
-## Security Guardrails
-- 禁止危险命令：`git push --force`、`git reset --hard`、`git clean -fd`、绕过校验的 `--no-verify`。
-- 不得在代码、日志、文档、提交记录中暴露密钥（如 API Key、Token、密码、私钥）。
-- `.env` 仅用于本地；对外只提供 `.env.example`。
-- 涉及删除数据、破坏性迁移、生产操作时，先停下并请求明确确认。
+```bash
+./scripts/bootstrap_full_stack.sh
+./scripts/full_stack.sh up
+./scripts/smoke_full_stack.sh
+```
 
-## Docs Drift Rules
-出现以下变更时，必须同步更新文档：
-- 变更 `infra/migrations/*.sql`：同步 `README.md` 与 `docs/runbook-local.md` 的迁移说明。
+### 3.8 安装 Git 门禁 Hooks
+
+```bash
+./scripts/install_git_hooks.sh
+```
+
+## 4. Safety 边界（强制）
+
+### 4.1 Git 与文件系统红线
+
+- 禁止危险 Git 命令：`git push --force`、`git reset --hard`、`git clean -fd`。
+- 禁止未确认的破坏性删除：`rm -rf`、批量覆盖、不可逆清理。
+- 未经明确要求，不执行 commit/amend/push。
+
+### 4.2 生产/高风险操作红线
+
+- 未经明确授权，不连接或修改生产环境资源。
+- 涉及密钥/令牌/密码时先确认再执行。
+- 涉及数据库破坏性动作（drop/truncate/不可逆迁移）时先确认再执行。
+
+## 5. 文档漂移触发器（必须同步更新）
+
+- 变更 `infra/migrations/*.sql`：同步 `README.md` 与 `docs/runbook-local.md`。
 - 变更 `apps/worker/worker/pipeline/types.py` 的 `PIPELINE_STEPS`：同步 `docs/state-machine.md`。
 - 新增/修改环境变量：同步 `.env.example`、`ENVIRONMENT.md`、`infra/config/env.contract.json`。
-- 调整日志/缓存/依赖策略：同步 `docs/reference/logging.md`、`docs/reference/cache.md`、`docs/reference/dependency-governance.md`。
+- 调整本地启动脚本参数/默认值：同步 `docs/start-here.md`、`docs/runbook-local.md`、`README.md`。
+- 调整 `infra/compose/*.compose.yml` 或 `.devcontainer/**`：同步 `README.md`、`docs/start-here.md`、`docs/runbook-local.md`。
+- 调整日志策略：同步 `docs/reference/logging.md`。
+- 调整缓存策略：同步 `docs/reference/cache.md`。
+- 调整依赖策略：同步 `docs/reference/dependency-governance.md`。
 
-## Done Criteria
-满足以下条件才可判定完成：
-- 请求范围内改动已完成，且仅包含必要文件。
-- Mandatory Validation Gates 已通过；或未通过项已记录原因与风险。
-- 文档联动更新已完成（若触发 Docs Drift Rules）。
-- 输出包含：变更摘要、验证结果、残余风险（如有）。
+### 5.1 与 Git Hooks 对齐（必须遵守）
+
+- `.githooks/commit-msg` → `npx --yes --package @commitlint/cli commitlint --config <tmp-config> --edit <commit-msg-file>`
+  - Conventional Commits 强制门禁（无根级 `package.json` 依赖时，使用 `npx --yes` + hook 内置最小规则配置）
+- `.githooks/pre-commit` → `./scripts/quality_gate.sh --mode pre-commit`
+  - 包含：`scripts/ci_or_local_gate_doc_drift.sh --scope staged`
+  - 包含：`check_test_assertions`、`web lint`、`ruff critical`
+- `.githooks/pre-push` → `./scripts/quality_gate.sh --mode pre-push --heartbeat-seconds 20 --mutation-min-score 0.60`
+  - 包含：`scripts/ci_or_local_gate_doc_drift.sh --scope push`
+  - 包含：`mutmut` 变异测试门禁（工具不可用或无有效突变体一律阻断）
+  - 门禁解释：AI 与自动化提交默认基于标准环境（DevContainer 或等价隔离环境）执行上述检查。
+
+## 6. 最小 DoD（Definition of Done）
+
+满足以下条件才算完成：
+
+1. 文档联动已完成（触发器对应文档已同步）。
+2. 变更由标准环境执行（`.devcontainer/devcontainer.json` 或等价隔离环境）并保留命令证据。
+3. 环境契约校验通过：`python3 scripts/check_env_contract.py --strict`。
+4. 后端测试通过：
+   - `PYTHONPATH="$PWD:$PWD/apps/worker" DATABASE_URL='sqlite+pysqlite:///:memory:' uv run pytest apps/worker/tests apps/api/tests apps/mcp/tests -q`
+5. 前端 lint 通过：`npm --prefix apps/web run lint`。
+6. 假断言门禁通过：`python3 scripts/check_test_assertions.py`。
+7. 改动启动或链路逻辑时至少执行一次 smoke：`./scripts/smoke_full_stack.sh`。
+8. 变异测试门禁通过：`DATABASE_URL='sqlite+pysqlite:///:memory:' uv run --extra dev --with mutmut mutmut run` 且 score `>=0.60`。
+
+## 7. 交付格式（提交结果必须包含）
+
+每次任务交付至少包含以下四段：
+
+1. 修改文件：列出实际变更路径。
+2. 执行命令：列出实际执行命令（含关键参数）。
+3. 结果：逐条给出成功/失败与关键输出摘要。
+4. 风险与后续：说明未覆盖验证项、潜在影响、建议下一步。
+
+---
+
+维护要求：任何人更新本文件时，必须保证命令可在仓库根目录直接执行，并与 `docs/start-here.md`、`docs/runbook-local.md` 保持一致。

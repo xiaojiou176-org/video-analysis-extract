@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-echo "[pre-push] quality gate"
-./scripts/quality_gate.sh
+echo "[pre-push] quality gate (mode=pre-push)"
+./scripts/quality_gate.sh --mode pre-push --heartbeat-seconds 20
 
 echo "[pre-push] passed"

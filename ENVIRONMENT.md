@@ -62,8 +62,10 @@ Startup validation fails when:
 - `PIPELINE_LLM_INPUT_MODE`, `PIPELINE_LLM_INCLUDE_FRAMES`
 - `PIPELINE_LLM_HARD_REQUIRED`, `PIPELINE_LLM_FAIL_ON_PROVIDER_ERROR`, `PIPELINE_LLM_MAX_RETRIES`
 - `PIPELINE_RETRY_TRANSIENT_*`, `PIPELINE_RETRY_RATE_LIMIT_*`, `PIPELINE_RETRY_AUTH_*`, `PIPELINE_RETRY_FATAL_ATTEMPTS`
+- `LLM_PROVIDER` (must be `gemini` in current runtime)
 - `GEMINI_API_KEY`, `GEMINI_MODEL`, `GEMINI_OUTLINE_MODEL`, `GEMINI_DIGEST_MODEL`
-- `GEMINI_FAST_MODEL`, `GEMINI_EMBEDDING_MODEL`, `YOUTUBE_API_KEY`
+- `GEMINI_FAST_MODEL`, `GEMINI_COMPUTER_USE_MODEL`, `GEMINI_EMBEDDING_MODEL`, `YOUTUBE_API_KEY`
+- `OPENAI_API_KEY`, `ANTHROPIC_API_KEY` (compat reserved only, not active provider path)
 - `GEMINI_THINKING_LEVEL`, `GEMINI_INCLUDE_THOUGHTS`, `GEMINI_STRICT_SCHEMA_MODE`
 - `GEMINI_CONTEXT_CACHE_ENABLED`, `GEMINI_CONTEXT_CACHE_TTL_SECONDS`, `GEMINI_CONTEXT_CACHE_MIN_CHARS`, `GEMINI_CONTEXT_CACHE_MAX_KEYS`, `GEMINI_CONTEXT_CACHE_LOCAL_TTL_SECONDS`, `GEMINI_CONTEXT_CACHE_SWEEP_INTERVAL_SECONDS`
 - `GEMINI_COMPUTER_USE_ENABLED`, `GEMINI_COMPUTER_USE_REQUIRE_CONFIRMATION`
@@ -74,6 +76,8 @@ Startup validation fails when:
 LLM generation is Gemini-only in this repository:
 
 1. Provider: `gemini`
+   - Runtime guard: `LLM_PROVIDER` must resolve to `gemini`
+   - Compatibility retainers: `OPENAI_API_KEY` and `ANTHROPIC_API_KEY` may exist but are not executed as current provider routes
 2. Structured output: `response_mime_type=application/json` + strict Pydantic schema validation
 3. Function calling: enabled for `llm_outline` and `llm_digest`; disabled in translation fallback
 4. Thinking control: `GEMINI_THINKING_LEVEL` plus per-request override `overrides.llm.thinking_level`
@@ -82,6 +86,12 @@ LLM generation is Gemini-only in this repository:
    - `PIPELINE_LLM_INPUT_MODE` (`auto|text|video_text|frames_text`)
    - `PIPELINE_MAX_FRAMES` and `overrides.frames.max_frames`
    - runtime `llm_media_input` (`video_available`, `frame_count`)
+
+Default model lane:
+- Default selected: `gemini-3.1-pro-preview`
+- Supported alternates: `gemini-3.0-pro`, `gemini-3.0-flash`
+- Embedding: `gemini-embedding-001`
+- Computer use: `GEMINI_COMPUTER_USE_MODEL` (default `gemini-3.1-pro-preview`; can follow dedicated computer-use model when adopted)
 
 ### Embedding / Retrieval Entry
 
@@ -135,8 +145,12 @@ Exception detail sanitization contract:
 - `DIGEST_*`
 - `FAILURE_*`
 - `LIVE_SMOKE_*`
+- `PR_LLM_REAL_SMOKE_*` (local PR real LLM smoke helper defaults)
+- `EXTERNAL_SMOKE_*` (external Playwright smoke internal handoff env, mapped from CLI flags)
 - `OPS_*` (workflow bootstrap overrides for `scripts/start_ops_workflows.sh`, including `OPS_CLEANUP_*`, `OPS_SHOW_HINTS`, `OPS_DRY_RUN`)
 - `API_*`, `WORKER_*`, `MCP_*`, `OUTPUT_PATH`, `INIT_ENV_FORCE`
+- `DEV_API_RELOAD` (controls `scripts/dev_api.sh` reload mode; `scripts/full_stack.sh up` forces `0` for stable background startup)
+- `API_HEALTH_URL` (optional full-stack readiness probe URL; defaults to `http://127.0.0.1:${API_PORT}/healthz`)
 - `GCP_PROJECT`, `GCP_ZONE`, `INSTANCE_NAME`, `MACHINE_TYPE`, `DISK_SIZE`, `IMAGE_FAMILY`, `IMAGE_PROJECT`, `GITHUB_REPO_URL`, `FORCE_DELETE_INSTANCE`, `FORCE_REPLACE_APP_DIR` (used by `scripts/recreate_gce_instance.sh`)
 - `WEB_BASE_URL` (web e2e target override)
 - `NEXT_DIST_DIR` (optional Next.js dist directory override for parallel web e2e workers)
@@ -147,9 +161,29 @@ Exception detail sanitization contract:
 
 - `LIVE_SMOKE_API_BASE_URL` / `LIVE_SMOKE_API_PORT`: API target override for live smoke. Leave `LIVE_SMOKE_API_BASE_URL` empty to follow `API_PORT`. Parent shell values have higher priority than values loaded from `.env`.
 - `LIVE_SMOKE_HEALTH_PATH`: Health endpoint path used by live smoke (default `/healthz`).
+- `LIVE_SMOKE_EXTERNAL_PROBE_TIMEOUT_SECONDS`: timeout seconds for provider endpoint probes in preflight (default `20`).
+- `LIVE_SMOKE_HEARTBEAT_SECONDS`: heartbeat interval seconds for long-running live smoke polling logs (default `30`).
+- `LIVE_SMOKE_DIAGNOSTICS_JSON`: diagnostics JSON output path (default `.runtime-cache/e2e-live-smoke-result.json`).
 - `LIVE_SMOKE_COMPUTER_USE_STRICT`: defaults to strict mode (`1`) so missing/failing computer-use smoke command fails the run.
 - `LIVE_SMOKE_COMPUTER_USE_SKIP`: optional explicit skip switch; when `1`, `LIVE_SMOKE_COMPUTER_USE_SKIP_REASON` must be non-empty.
 - `LIVE_SMOKE_COMPUTER_USE_CMD`: optional shell command override for computer-use smoke. By default, the script runs `scripts/smoke_computer_use_local.sh`.
+
+`EXTERNAL_SMOKE_*` defaults (used by `scripts/external_playwright_smoke.sh` embedded runner):
+
+- `EXTERNAL_SMOKE_URL=https://example.com`
+- `EXTERNAL_SMOKE_BROWSER=chromium`
+- `EXTERNAL_SMOKE_TIMEOUT_MS=45000`
+- `EXTERNAL_SMOKE_EXPECT_TEXT=Example Domain`
+- `EXTERNAL_SMOKE_OUTPUT_DIR=.runtime-cache/external-playwright-smoke`
+- `EXTERNAL_SMOKE_RETRIES=2`
+- `EXTERNAL_SMOKE_DIAGNOSTICS_JSON=.runtime-cache/external-playwright-smoke-result.json`
+- `EXTERNAL_SMOKE_HEARTBEAT_SECONDS=30`
+
+`PR_LLM_REAL_SMOKE_*` defaults (used by `scripts/smoke_llm_real_local.sh`):
+
+- `PR_LLM_REAL_SMOKE_API_BASE_URL=http://127.0.0.1:8000`
+- `PR_LLM_REAL_SMOKE_DIAGNOSTICS_JSON=.runtime-cache/pr-llm-real-smoke-result.json`
+- `PR_LLM_REAL_SMOKE_HEARTBEAT_SECONDS=30`
 
 `WEB_BASE_URL` controls web e2e target mode:
 
@@ -193,12 +227,30 @@ GitHub Actions workflow: `.github/workflows/env-governance.yml`
 
 - Job topology:
   - `preflight` is the primary prerequisite gate.
-  - `db-migration-smoke` / `python-tests` / `web-lint-build` / `web-e2e` all depend on `preflight`.
-  - `aggregate-gate` depends on the four jobs above and blocks when any required job is not `success`.
-  - `live-smoke` depends on `aggregate-gate` and runs only when required secrets are present.
+  - `db-migration-smoke` / `python-tests` / `api-real-smoke` / `pr-llm-real-smoke` / `backend-lint` / `frontend-lint` / `web-test-build` / `web-e2e` / `external-playwright-smoke` / `dependency-vuln-scan` all depend on `preflight` (directly or through shared setup).
+  - `aggregate-gate` depends on `preflight` and all jobs above. It allows `pr-llm-real-smoke` to be `success` or `skipped`; all other listed jobs must be `success`.
+  - `live-smoke` depends on `aggregate-gate`; it is required on `main` push and nightly schedule. Missing required secrets fails the job (not skipped).
   - `autofix-dry-run` depends on `python-tests` and `web-e2e`, and runs only when either one fails.
   - `ci-final-gate` is the final gate: it always checks `aggregate-gate`, and additionally enforces `live-smoke` on `main` push / nightly schedule.
 - Cache and artifacts:
   - Node deps: `actions/setup-node@v4` with `cache: npm` and `apps/web/package-lock.json`.
   - Python deps: deterministic `uv sync --frozen --extra dev --extra e2e` + explicit `actions/cache@v4` for `~/.cache/uv`.
   - Test diagnostics: `.runtime-cache/*.xml` and `.runtime-cache/*.log` are uploaded as CI artifacts; web e2e traces/videos are uploaded from `.runtime-cache/web-e2e-artifacts`.
+
+### CI Trigger Boundary (PR vs main vs nightly)
+
+- `pull_request`: runs aggregate test/lint/build gates (including `external-playwright-smoke`), while `live-smoke` is optional (`skipped` is allowed). It may also run conditional real LLM smoke `pr-llm-real-smoke` only when all are true: same-repo PR (`head.repo.full_name == github.repository`) and non-empty `GEMINI_API_KEY`; otherwise `skipped`.
+- `push` to `main`: `live-smoke` becomes mandatory and must be `success`.
+- `schedule` nightly: both `live-smoke` and `nightly-flaky-*` subsets are mandatory.
+
+### Live Smoke Secret Contract (CI Required)
+
+When `live-smoke` is required (`main` push / nightly schedule), these secrets must be configured:
+
+- `GEMINI_API_KEY`
+- `RESEND_API_KEY`
+- `RESEND_FROM_EMAIL`
+- `YOUTUBE_API_KEY`
+- `LIVE_SMOKE_API_BASE_URL`
+
+Without any of the above, `live-smoke` fails and `ci-final-gate` blocks merge/release.

@@ -6,6 +6,21 @@
 - `apps/mcp`：FastMCP 工具层，转发 API 能力
 - `apps/web`：Next.js 管理台
 
+## 项目目的
+
+- 将视频内容处理为可操作的结构化信息：拉取、解析、摘要、检索、分发。
+- 提供统一入口给自动化与人工操作：API（服务）、MCP（工具）、Web（管理台）。
+- 保持本地优先与可验证交付：命令可复现，测试/门禁可追溯。
+
+## 技术栈总览
+
+- 后端：Python、FastAPI、SQLAlchemy
+- 任务执行：Temporal Worker（9-step pipeline）
+- 工具层：FastMCP
+- 前端：Next.js
+- 存储：PostgreSQL + SQLite（状态）+ Redis（可选）
+- 质量门禁：uv、pytest、Playwright、ruff、npm lint/test、git hooks
+
 ## 1 分钟入口
 
 先读 `docs/start-here.md`。它是唯一上手入口，聚合了启动命令、口径说明和后续文档导航。
@@ -24,6 +39,30 @@
 - `bootstrap_full_stack.sh` 默认会拉起 core services（Postgres/Redis/Temporal）和 reader stack（Miniflux/Nextflux）。
 - `smoke_full_stack.sh` 默认会校验 reader stack，并执行一次 `AI Feed -> Miniflux` 回写检查。
 - 若你临时不想检查 reader：`FULL_STACK_REQUIRE_READER=0 ./scripts/smoke_full_stack.sh`
+
+## IaC 与标准环境（AI 必须）
+
+仓库当前可复现环境方案：
+- Docker Compose（基础设施真相源）：`infra/compose/core-services.compose.yml`、`infra/compose/miniflux-nextflux.compose.yml`
+- DevContainer（AI/自动化标准执行环境）：`.devcontainer/devcontainer.json`
+
+推荐进入标准环境后再执行 lint/test/live smoke：
+```bash
+# 1) 在 VS Code 里执行: Dev Containers: Reopen in Container
+# 或使用 devcontainer CLI:
+devcontainer up --workspace-folder .
+
+# 2) 在容器内执行（统一口径）
+./scripts/bootstrap_full_stack.sh
+./scripts/full_stack.sh up
+./scripts/smoke_full_stack.sh
+```
+
+兼容性与风险说明：
+- 兼容性：现有 `scripts/deploy_core_services.sh` 与 `scripts/deploy_reader_stack.sh` 已直接绑定上述 compose 文件，不需要改脚本。
+- 风险 1：DevContainer 依赖宿主 Docker（通过 `/var/run/docker.sock`），若宿主未启动 Docker，容器内 compose 无法拉起。
+- 风险 2：live smoke 依赖真实外部 API Key（如 `GEMINI_API_KEY`），标准环境只保证执行一致性，不保证外部资源可用。
+- 风险 3：本地裸机与容器混用时，端口/数据库残留状态可能不一致；建议同一轮验证只使用一种环境执行。
 
 ## 处理流程（统一口径）
 
@@ -161,6 +200,18 @@ uv run --with pytest --with playwright pytest apps/web/tests/e2e -q
 ```
 
 注：`scripts/check_test_assertions.py` 默认禁止 `toBeDefined()`；仅在特例场景下允许用注释标记 `allow-low-value-assertion: toBeDefined` 显式豁免。
+
+测试口径补充（与 CI 对齐）：
+- `web-e2e` 默认是 Playwright + mock API，不是“真实外部网站 smoke”。
+- `external-playwright-smoke` 是独立作业，会在 CI 里真实访问外部站点（当前为 `https://example.com`），用于验证浏览器外网可达性。
+  默认参数：`browser=chromium`、`expect_text="Example Domain"`、`timeout_ms=45000`、`retries=2`。
+- `pr-llm-real-smoke` 只在 PR 场景按条件运行：同仓 PR 且配置了 `GEMINI_API_KEY`；否则允许 `skipped` 不阻塞 aggregate gate。
+  触发表达式与 CI 一致：`pull_request && same-repo-pr && GEMINI_API_KEY != ''`。
+- 若要复用外部 Web 实例，可用：`WEB_BASE_URL='http://127.0.0.1:3000' uv run --with pytest --with playwright pytest apps/web/tests/e2e -q`。
+- PR 不强制 `live-smoke`；`main` push 与 nightly schedule 强制 `live-smoke=success`。
+- `live-smoke` 为真实 LLM/provider 链路，CI 需要：`GEMINI_API_KEY`、`RESEND_API_KEY`、`RESEND_FROM_EMAIL`、`YOUTUBE_API_KEY`、`LIVE_SMOKE_API_BASE_URL`。
+- `scripts/smoke_full_stack.sh` 是本地联调用 smoke，不等同于 CI 强制 `live-smoke` 门禁。
+- 两类真实 smoke 的本地复现命令见 `docs/testing.md` 的“本地复现两类真实 Smoke（CI 同口径）”。
 
 ## API 路由与管理端点契约
 
