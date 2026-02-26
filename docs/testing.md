@@ -75,6 +75,10 @@ Live 诊断与执行策略（本地/CI 一致）：
 - `YOUTUBE_API_KEY` 失效修复：`e2e_live_smoke.sh` 会按 `.env` → 当前 shell 环境变量自动探测可用 key，并在修复成功后回写 `.env`（日志仅展示脱敏 key 片段）。
 - 若所有来源都无效：脚本直接失败，并输出“需要用户提供有效key”。
 - 失败分类：诊断 JSON 必须携带 `failure_kind`，取值为 `code_logic_error` 或 `network_or_environment_timeout`。
+- `OFFLINE_FALLBACK` 口径（去除假通过）：
+  - `local` / `ci` profile 默认 `OFFLINE_FALLBACK=0`，核心服务或 reader 栈异常时立即失败（fail-fast，不自动降级为绿灯）。
+  - 仅在显式设置 `OFFLINE_FALLBACK=1` 时允许降级路径；此时若命中 `.runtime-cache/full-stack/offline-fallback.flag`，`smoke_full_stack.sh` 会跳过 reader checks 并输出 degraded 信息。
+  - 降级路径不改变 `e2e_live_smoke` 的失败分类枚举；`failure_kind` 仍仅使用上述两类值。
 - 长任务可观测：live 脚本输出 heartbeat 与 phase 进度日志（`phase=short_tests` / `phase=long_tests`）。
 - 顺序规则：先 short tests 再 long tests，再执行 `phase=teardown`（仅做安全清理，不做破坏性操作）。
 - 写操作约束：live smoke 仅执行可重复验证写入；诊断 JSON 必须包含 `write_operations[].idempotency_key`、`write_operations[].cleanup_action`、`teardown.steps[]`、`youtube_key_resolution[]`。

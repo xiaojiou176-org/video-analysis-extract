@@ -1,5 +1,7 @@
 # Runtime caches and virtual envs
 .runtime-cache/
+cache/
+.cache/
 .pytest_cache/
 .coverage
 .coverage.*
@@ -16,6 +18,8 @@ apps/web/.next/
 apps/web/.next-e2e-*/
 apps/web/out/
 apps/web/coverage/
+build/
+dist/
 
 # Logs and temp outputs
 logs/
@@ -24,6 +28,7 @@ logs/
 # Local env files
 .env*
 !.env.example
+env/profiles/*.local.env
 
 # Local/editor/system noise
 .DS_Store

@@ -150,6 +150,7 @@ set -a; source .env; set +a
 ```
 
 说明：`scripts/dev_*.sh` 和 `scripts/run_*.sh` 只自动加载仓库根目录 `.env`；额外配置请通过当前 shell 环境变量显式注入。
+补充：`.env.example` 已精简为最小可启动模板；脚本参数全集请查看 `docs/reference/env-script-overrides.md`。
 
 ### 4) 初始化数据库
 ```bash

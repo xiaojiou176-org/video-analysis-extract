@@ -7,6 +7,8 @@ This repository uses a contract-first environment model:
 3. Runtime access: configuration modules (`apps/api/app/config.py`, `apps/worker/worker/config.py`, `apps/mcp/server.py`)
 4. Gate: `python3 scripts/check_env_contract.py --strict`
 
+`.env.example` is intentionally minimal (required + critical + high-frequency overrides). For the full script override catalog, see `docs/reference/env-script-overrides.md`.
+
 ## Core/Profile Overlay Architecture
 
 Environment configuration is split into one core layer plus profile overlays:
@@ -177,6 +179,7 @@ Exception detail sanitization contract:
 
 ### Script Runtime
 
+- Full script override catalog: `docs/reference/env-script-overrides.md`
 - `DIGEST_*`
 - `FAILURE_*`
 - `LIVE_SMOKE_*`
@@ -204,6 +207,13 @@ Exception detail sanitization contract:
 - `LIVE_SMOKE_COMPUTER_USE_CMD`: optional shell command override for computer-use smoke. By default, the script runs `scripts/smoke_computer_use_local.sh`.
 - `SMOKE_COMPUTER_USE_RETRIES` / `SMOKE_COMPUTER_USE_HEARTBEAT_SECONDS`: retry and heartbeat defaults consumed by `scripts/smoke_computer_use_local.sh`.
 - `YOUTUBE_API_KEY` resolution for live smoke: current environment / `.env`; no `.env.local` / `.env.bak` / shell login fallback probing.
+- `OFFLINE_FALLBACK`: profile-layer fallback switch for full-stack bootstrap/smoke (`scripts/bootstrap_full_stack.sh`, `scripts/smoke_full_stack.sh`):
+  - default in `env/profiles/local.env`: `0`
+  - default in `env/profiles/ci.env`: `0`
+  - default in `env/profiles/live-smoke.env`: `0`
+  - behavior when `0`: fail-fast on core service/reader stack issues (preferred to expose real failures)
+  - behavior when `1`: allow degraded path via `.runtime-cache/full-stack/offline-fallback.flag` (reader checks can be skipped)
+- Failure-kind contract alignment: `e2e_live_smoke` diagnostics keep `failure_kind` in `{code_logic_error, network_or_environment_timeout}`; enabling offline fallback does not add new `failure_kind` enum values.
 
 `EXTERNAL_SMOKE_*` defaults (used by `scripts/external_playwright_smoke.sh` embedded runner):
 

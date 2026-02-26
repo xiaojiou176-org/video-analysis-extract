@@ -35,6 +35,10 @@ cp .env.example .env
 python3 scripts/check_env_contract.py --strict
 ```
 
+说明：
+- `.env.example` 现在只保留最小可启动键和少量高频覆盖键，默认足够完成一次本地启动。
+- 脚本参数全集见 `docs/reference/env-script-overrides.md`（按需覆盖，不必全量写入 `.env`）。
+
 ## 一键验证（最短路径）
 
 ```bash

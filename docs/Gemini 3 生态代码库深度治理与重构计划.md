@@ -1,5 +1,7 @@
 # Gemini 3 生态代码库深度治理与重构计划（Plan版执行手册）
 
+> 历史记录说明：本文件为 2026-02-23 的阶段性治理计划归档，仅用于回溯决策背景；其中出现的 `legacy/compat/fallback` 等措辞不代表当前运行时策略。当前运行时请以 `docs/start-here.md`、`docs/runbook-local.md`、`docs/state-machine.md` 与 `ENVIRONMENT.md` 为准。
+
 版本: v3.0（Plan Integrator 合并版）
 日期: 2026-02-23
 方法: 多轮并发审计 + 主控验收
