@@ -9,7 +9,7 @@
 - TypeScript
 - Playwright + Vitest
 
-## 2. 导航入口（Lazy-Load）
+## 2. 导航索引（Lazy-Load）
 1. `apps/web/app/`（App Router 页面与 server actions）
 2. `apps/web/components/`（可复用组件）
 3. `apps/web/lib/`（API client/工具）

@@ -4,7 +4,7 @@
 本系统运行前置固定为同一套流程：
 1. 安装依赖（`uv sync --frozen --extra dev --extra e2e`）
 2. 启动 PostgreSQL / Temporal
-3. 初始化 `.env` 并校验 env contract（仅 `.env` 缺失时回退 `.env.local`）
+3. 初始化 `.env` 并校验 env contract（禁止 `.env.local` 自动回退）
 4. 执行全部 SQL 迁移 + SQLite 初始化
 5. 启动 API / Worker / MCP
 6. 触发最小验收请求

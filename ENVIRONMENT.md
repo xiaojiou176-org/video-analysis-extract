@@ -11,8 +11,7 @@ This repository uses a contract-first environment model:
 
 1. Process environment variables
 2. `.env` (canonical local source, auto-loaded by `scripts/dev_*.sh` and `scripts/run_*.sh`)
-3. `.env.local` (legacy fallback only when `.env` is absent)
-4. Code defaults (only for optional values; required variables must come from environment)
+3. Code defaults (only for optional values; required variables must come from environment)
 
 ## Fail-Fast Rules
 
@@ -93,6 +92,12 @@ Default model lane:
 - Embedding: `gemini-embedding-001`
 - Computer use: `GEMINI_COMPUTER_USE_MODEL` (default `gemini-3.1-pro-preview`; can follow dedicated computer-use model when adopted)
 
+### Secret Source and Logging Policy
+
+- Secret keys must come from process environment or local `.env` file only.
+- Do not hard-code keys in source code, tests, or documentation examples.
+- Runtime logs and diagnostics must never print full secret values; only masked summaries are allowed when needed for troubleshooting.
+
 ### Embedding / Retrieval Entry
 
 - Embedding model entry: `GEMINI_EMBEDDING_MODEL` (env contract + worker settings).
@@ -167,6 +172,8 @@ Exception detail sanitization contract:
 - `LIVE_SMOKE_COMPUTER_USE_STRICT`: defaults to strict mode (`1`) so missing/failing computer-use smoke command fails the run.
 - `LIVE_SMOKE_COMPUTER_USE_SKIP`: optional explicit skip switch; when `1`, `LIVE_SMOKE_COMPUTER_USE_SKIP_REASON` must be non-empty.
 - `LIVE_SMOKE_COMPUTER_USE_CMD`: optional shell command override for computer-use smoke. By default, the script runs `scripts/smoke_computer_use_local.sh`.
+- `SMOKE_COMPUTER_USE_RETRIES` / `SMOKE_COMPUTER_USE_HEARTBEAT_SECONDS`: retry and heartbeat defaults consumed by `scripts/smoke_computer_use_local.sh`.
+- `YOUTUBE_API_KEY` resolution for live smoke: current environment / `.env`; no `.env.local` / `.env.bak` / shell login fallback probing.
 
 `EXTERNAL_SMOKE_*` defaults (used by `scripts/external_playwright_smoke.sh` embedded runner):
 
@@ -196,9 +203,6 @@ Exception detail sanitization contract:
 ./scripts/init_env_example.sh
 cp .env.example .env
 # edit .env
-# optional legacy fallback:
-# cp .env .env.local
-# (only used when .env is missing)
 ```
 
 ## CI Gate

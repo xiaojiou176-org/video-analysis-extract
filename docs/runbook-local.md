@@ -47,7 +47,7 @@ set -a; source .env; set +a
 
 说明：
 - `scripts/dev_api.sh`、`scripts/dev_worker.sh`、`scripts/dev_mcp.sh`、`scripts/run_daily_digest.sh`、`scripts/run_failure_alerts.sh` 均会优先自动加载 `.env`。
-- 只有 `.env` 不存在时才回退加载 `.env.local`（兼容路径）。
+- 运行脚本仅自动加载 `.env`；若需覆盖，请在当前 shell 中显式导出环境变量。
 - 环境契约真相源：`ENVIRONMENT.md` + `infra/config/env.contract.json`。
 
 ### 4) 初始化数据库（统一迁移命令）
@@ -193,8 +193,8 @@ bash -n scripts/start_ops_workflows.sh
 - `status` 会在 PID 文件失真时回退按进程特征探测并自愈 PID 文件。
 
 Live smoke 执行约束（2026-02 更新）：
-- 环境变量加载顺序：优先仓库 `.env`（无 `.env` 时 `.env.local`），缺失时回退读取 `zsh` login 环境变量。
-- `YOUTUBE_API_KEY` 失效自修复：按 `.env` → `.env.bak` → `.env.local` → `zsh` 顺序尝试可用 key；命中后自动回写 `.env`（日志仅输出脱敏片段，不输出完整 key）。
+- 环境变量加载顺序：优先仓库 `.env`，缺失项仅使用当前 shell 环境变量。
+- `YOUTUBE_API_KEY` 失效自修复：按 `.env` → 当前 shell 环境变量顺序尝试可用 key；命中后自动回写 `.env`（日志仅输出脱敏片段，不输出完整 key）。
 - 若上述来源全部无效：live smoke 会明确失败并提示“需要用户提供有效key”。
 - 外部真实交互：`e2e_live_smoke.sh` 会先执行真实外部 API 探测，再执行真实浏览器外站探测（`external_playwright_smoke.sh`）。
 - 重试上限：live 脚本网络重试最多 2 次（含首轮）。
@@ -208,7 +208,7 @@ Live smoke 执行约束（2026-02 更新）：
 
 ## 常见故障
 - `API health check failed`：确认 `./scripts/dev_api.sh` 已运行，且 `VD_API_BASE_URL` 可访问。
-- `RESEND_API_KEY is not configured` / `RESEND_FROM_EMAIL is not configured`：`NOTIFICATION_ENABLED=true` 时需补齐 `.env`（或仅在兼容模式下补齐 `.env.local`）。
+- `RESEND_API_KEY is not configured` / `RESEND_FROM_EMAIL is not configured`：`NOTIFICATION_ENABLED=true` 时需补齐 `.env`（或在当前 shell 中显式导出）。
 - 404 报表路由：`run_daily_digest.sh` / `run_failure_alerts.sh` 会按脚本内 fallback 流程回退发送。
 
 ## LLM 能力入口（Gemini-only）

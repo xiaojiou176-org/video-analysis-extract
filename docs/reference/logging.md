@@ -16,6 +16,7 @@
 - 关键日志字段至少包含：`trace_id`、`user`、`error`（异常路径还需 stack，使用 `logger.exception(...)`）。
 - 禁止空洞日志文案（如 `Something went wrong`、`unexpected error`、`error occurred`、`unknown error`）。
 - 质量门禁包含空洞日志检查：`./scripts/quality_gate.sh --mode pre-commit`。
+- 质量门禁包含结构化日志关键路径检查：`python3 scripts/check_structured_logs.py`（由 `quality_gate.sh` 与 CI `preflight` 执行）。
 
 ## Log Directory Initialization
 首次启用定时任务或常驻 ops workflow 前，先创建日志目录：

@@ -15,7 +15,7 @@
 7. **Git Hooks 对齐规则必须明确并可追溯到实际脚本。**
 8. **最小 DoD 必须定义且包含标准环境 + env/test/lint/smoke 门禁。**
 9. **交付格式必须固定为 4 段：修改文件/执行命令/结果/风险与后续。**
-10. **大型模块（`apps/api`、`apps/worker`、`apps/web`）必须同时维护 `AGENTS.md` 与 `CLAUDE.md`，且内容一致。**
+10. **大型模块（`apps/api`、`apps/worker`、`apps/mcp`、`apps/web`）必须同时维护 `AGENTS.md` 与 `CLAUDE.md`，且内容一致。**
 11. **Live 测试在链路涉及外部依赖时必须使用真实 Key、真实浏览器、真实外部 API/网页。**
 12. **Pre-Commit 必须拦截所有 Linter Error 与安慰剂断言。**
 13. **覆盖率与变异测试门禁必须满足：总覆盖率 `>=80%`、重要模块覆盖率 `>=95%`、Python 核心模块 mutation score `>=0.60`。**
@@ -62,7 +62,10 @@
 4. **Worker Module**（仅在涉及流水线/Temporal 改动时加载）
    - `apps/worker/AGENTS.md`
    - `apps/worker/CLAUDE.md`
-5. **Web Module**（仅在涉及前端/UI/E2E 改动时加载）
+5. **MCP Module**（仅在涉及 MCP 工具层改动时加载）
+   - `apps/mcp/AGENTS.md`
+   - `apps/mcp/CLAUDE.md`
+6. **Web Module**（仅在涉及前端/UI/E2E 改动时加载）
    - `apps/web/AGENTS.md`
    - `apps/web/CLAUDE.md`
 

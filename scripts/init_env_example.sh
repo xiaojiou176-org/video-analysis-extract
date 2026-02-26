@@ -4,7 +4,7 @@ set -euo pipefail
 SCRIPT_NAME="init_env_example"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-OUTPUT_PATH="${OUTPUT_PATH:-$ROOT_DIR/.env.local.example}"
+OUTPUT_PATH="${OUTPUT_PATH:-$ROOT_DIR/.env.generated.example}"
 INIT_ENV_FORCE="${INIT_ENV_FORCE:-0}"
 SOURCE_ENV_TEMPLATE="$ROOT_DIR/.env.example"
 
@@ -45,7 +45,7 @@ print_next_steps() {
 [${SCRIPT_NAME}]   1) cp "$OUTPUT_PATH" "$ROOT_DIR/.env"
 [${SCRIPT_NAME}]   2) edit "$ROOT_DIR/.env" and fill RESEND_* values
 [${SCRIPT_NAME}]   3) source "$ROOT_DIR/.env"
-[${SCRIPT_NAME}]   4) optional legacy fallback: copy .env to .env.local (used only when .env is missing)
+[${SCRIPT_NAME}]   4) if needed, export temporary overrides in current shell
 [${SCRIPT_NAME}]   5) run scripts/run_daily_digest.sh or scripts/run_failure_alerts.sh
 EOF
 }

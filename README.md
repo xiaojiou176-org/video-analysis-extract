@@ -149,7 +149,7 @@ python3 scripts/check_env_contract.py --strict
 set -a; source .env; set +a
 ```
 
-说明：`scripts/dev_*.sh` 和 `scripts/run_*.sh` 会优先自动加载仓库根目录 `.env`；仅当 `.env` 缺失时才回退 `.env.local`。
+说明：`scripts/dev_*.sh` 和 `scripts/run_*.sh` 只自动加载仓库根目录 `.env`；额外配置请通过当前 shell 环境变量显式注入。
 
 ### 4) 初始化数据库
 ```bash

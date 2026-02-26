@@ -62,8 +62,8 @@ CI `live-smoke` 必需 secrets（`main` push / nightly schedule）：
   - `--retries` 未显式传入时使用脚本默认值 `2`，且 live 策略强制最大值 `2`
 
 Live 诊断与执行策略（本地/CI 一致）：
-- 环境变量优先级：先读仓库 `.env`（无 `.env` 才读 `.env.local`），仅在缺失时回退 `zsh` login 环境变量。
-- `YOUTUBE_API_KEY` 失效修复：`e2e_live_smoke.sh` 会按 `.env` → `.env.bak` → `.env.local` → `zsh` 自动探测可用 key，并在修复成功后回写 `.env`（日志仅展示脱敏 key 片段）。
+- 环境变量优先级：先读仓库 `.env`，缺失项仅使用当前 shell 环境变量。
+- `YOUTUBE_API_KEY` 失效修复：`e2e_live_smoke.sh` 会按 `.env` → 当前 shell 环境变量自动探测可用 key，并在修复成功后回写 `.env`（日志仅展示脱敏 key 片段）。
 - 若所有来源都无效：脚本直接失败，并输出“需要用户提供有效key”。
 - 失败分类：诊断 JSON 必须携带 `failure_kind`，取值为 `code_logic_error` 或 `network_or_environment_timeout`。
 - 长任务可观测：live 脚本输出 heartbeat 与 phase 进度日志（`phase=short_tests` / `phase=long_tests`）。

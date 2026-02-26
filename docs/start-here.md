@@ -11,6 +11,7 @@
 2. 模块按需加载（只在改对应模块时再读）
 - API：`apps/api/AGENTS.md`、`apps/api/CLAUDE.md`
 - Worker：`apps/worker/AGENTS.md`、`apps/worker/CLAUDE.md`
+- MCP：`apps/mcp/AGENTS.md`、`apps/mcp/CLAUDE.md`
 - Web：`apps/web/AGENTS.md`、`apps/web/CLAUDE.md`
 
 3. 运行与契约（按问题深度继续）
@@ -22,7 +23,7 @@
 ## 你需要先知道的 4 件事
 
 1. 流程口径：`ProcessJobWorkflow = 3 阶段 + 9-step pipeline`（详见 `docs/state-machine.md`）。
-2. 环境文件：本地以 `.env` 为主；仅当 `.env` 缺失时才回退 `.env.local`。
+2. 环境文件：本地统一使用 `.env`；额外变量通过当前 shell 环境显式注入。
 3. Python 命令统一使用 `python3`。
 4. AI/自动化执行必须在标准环境：优先 `.devcontainer/devcontainer.json`，基础设施使用 `infra/compose/*.compose.yml`。
 

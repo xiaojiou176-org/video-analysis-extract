@@ -9,7 +9,7 @@
 - FastAPI + Pydantic + SQLAlchemy
 - pytest
 
-## 2. 导航入口（Lazy-Load）
+## 2. 导航索引（Lazy-Load）
 1. `apps/api/app/main.py`（FastAPI 入口）
 2. `apps/api/app/routers/`（路由层）
 3. `apps/api/app/services/`（业务服务层）

@@ -9,7 +9,7 @@
 - Temporal worker
 - pytest
 
-## 2. 导航入口（Lazy-Load）
+## 2. 导航索引（Lazy-Load）
 1. `apps/worker/worker/main.py`（worker 入口）
 2. `apps/worker/worker/pipeline/`（流程编排）
 3. `apps/worker/worker/temporal/`（workflow/activities）
