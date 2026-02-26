@@ -3,17 +3,6 @@
   "name": "scripts",
   "variables": [
     {
-      "name": "AI_FEED_SYNC_LIMIT",
-      "scope": "scripts",
-      "required": false,
-      "secret": false,
-      "default": "20",
-      "consumer": [
-        "scripts/sync_ai_feed_to_miniflux.py"
-      ],
-      "description": "Max feed items per AI sync batch."
-    },
-    {
       "name": "API_APP",
       "scope": "scripts",
       "required": false,
@@ -796,17 +785,6 @@
         "infra/compose/miniflux-nextflux.compose.yml"
       ],
       "description": "PostgreSQL username for Miniflux container."
-    },
-    {
-      "name": "MINIFLUX_IMPORT_FEED_URL",
-      "scope": "scripts",
-      "required": false,
-      "secret": false,
-      "default": "https://miniflux.app/feed.xml",
-      "consumer": [
-        "scripts/sync_ai_feed_to_miniflux.py"
-      ],
-      "description": "Seed feed URL used to create target feed for AI imports."
     },
     {
       "name": "MINIFLUX_PORT",

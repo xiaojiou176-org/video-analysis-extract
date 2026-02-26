@@ -10,6 +10,9 @@ from datetime import datetime, timezone
 from typing import Any
 from urllib import error, parse, request
 
+DEFAULT_IMPORT_FEED_URL = "https://miniflux.app/feed.xml"
+DEFAULT_SYNC_LIMIT = 20
+
 
 def env(name: str, default: str | None = None) -> str:
     value = os.getenv(name, default)
@@ -49,7 +52,7 @@ def http_json(method: str, url: str, headers: dict[str, str], payload: dict[str,
 
 
 def ensure_category_and_feed(base: str, headers: dict[str, str]) -> int:
-    seed_feed_url = os.getenv("MINIFLUX_IMPORT_FEED_URL", "https://miniflux.app/feed.xml")
+    seed_feed_url = DEFAULT_IMPORT_FEED_URL
     categories = http_json("GET", f"{base}/v1/categories", headers) or []
     category_id = None
     for c in categories:
@@ -129,7 +132,7 @@ def import_entries(base: str, headers: dict[str, str], feed_id: int, items: list
 def main() -> int:
     miniflux_base = env("MINIFLUX_BASE_URL", "http://127.0.0.1:8080").rstrip("/")
     api_base = env("VD_API_BASE_URL", f"http://127.0.0.1:{os.getenv('API_PORT', '8000')}").rstrip("/")
-    limit = int(os.getenv("AI_FEED_SYNC_LIMIT", "20"))
+    limit = DEFAULT_SYNC_LIMIT
 
     headers = build_headers()
     feed_id = ensure_category_and_feed(miniflux_base, headers)
