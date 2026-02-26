@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime, timezone
+import logging
 import re
 from typing import Any
 from urllib.parse import parse_qs, urlparse
+from uuid import uuid4
 
 import httpx
 
@@ -19,6 +21,7 @@ DEFAULT_HEADERS = {
     "Referer": "https://www.bilibili.com/",
     "Origin": "https://www.bilibili.com",
 }
+logger = logging.getLogger(__name__)
 
 
 def _utc_now_iso() -> str:
@@ -83,6 +86,8 @@ class BilibiliCommentCollector:
         source_url: str | None,
         video_uid: str | None,
     ) -> dict[str, Any]:
+        self._log_trace_id = uuid4().hex
+        self._log_user = "bilibili_comment_collector"
         timeout = httpx.Timeout(self._request_timeout_seconds)
         headers = dict(DEFAULT_HEADERS)
         if self._cookie:
@@ -132,6 +137,8 @@ class BilibiliCommentCollector:
         *,
         params: dict[str, Any],
     ) -> dict[str, Any]:
+        trace_id = str(getattr(self, "_log_trace_id", "missing_trace"))
+        user = str(getattr(self, "_log_user", "bilibili_comment_collector"))
         last_error: Exception | None = None
         for attempt in range(self._retry_attempts + 1):
             await self._throttle()
@@ -159,11 +166,26 @@ class BilibiliCommentCollector:
                 return {}
             except (httpx.TimeoutException, httpx.RequestError, httpx.HTTPStatusError, ValueError) as exc:
                 last_error = exc
+                logger.warning(
+                    "bilibili_api_request_retry",
+                    extra={
+                        "trace_id": trace_id,
+                        "user": user,
+                        "path": path,
+                        "attempt": attempt + 1,
+                        "max_attempts": self._retry_attempts + 1,
+                        "error": str(exc),
+                    },
+                )
                 if attempt >= self._retry_attempts:
                     break
                 await asyncio.sleep(self._retry_backoff_seconds * float(2**attempt))
 
         if last_error is not None:
+            logger.error(
+                "bilibili_api_request_failed",
+                extra={"trace_id": trace_id, "user": user, "path": path, "error": str(last_error)},
+            )
             raise last_error
         raise RuntimeError("bilibili_request_failed")
 
@@ -226,7 +248,12 @@ class BilibiliCommentCollector:
             "replies": [],
         }
 
-    async def _fetch_top_comments(self, *, client: httpx.AsyncClient, aid: int) -> list[dict[str, Any]]:
+    async def _fetch_top_comments(
+        self,
+        *,
+        client: httpx.AsyncClient,
+        aid: int,
+    ) -> list[dict[str, Any]]:
         data = await self._request_json(
             client,
             "/x/v2/reply/main",

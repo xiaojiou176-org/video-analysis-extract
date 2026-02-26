@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import logging
 import os
 import re
 import secrets
@@ -9,6 +11,7 @@ from fastapi.security import APIKeyHeader, HTTPAuthorizationCredentials, HTTPBea
 
 _bearer_security = HTTPBearer(auto_error=False)
 _api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
+logger = logging.getLogger(__name__)
 
 _SENSITIVE_TEXT_PATTERNS = (
     (re.compile(r"Bearer\s+[A-Za-z0-9._\-]+", re.IGNORECASE), "Bearer ***REDACTED***"),
@@ -58,14 +61,57 @@ def _allow_unauth_write() -> bool:
     return value in {"1", "true", "yes", "on"}
 
 
+def _actor_label(
+    bearer: HTTPAuthorizationCredentials | None,
+    api_key_header: str | None,
+) -> str:
+    if bearer is not None and bearer.credentials:
+        digest = hashlib.sha256(str(bearer.credentials).encode("utf-8")).hexdigest()[:12]
+        return f"bearer_sha256:{digest}"
+    if isinstance(api_key_header, str) and api_key_header.strip():
+        digest = hashlib.sha256(api_key_header.strip().encode("utf-8")).hexdigest()[:12]
+        return f"api_key_sha256:{digest}"
+    return "anonymous"
+
+
+def _log_write_access_denied(
+    *,
+    trace_id: str,
+    actor: str,
+    reason: str,
+    status_code: int,
+) -> None:
+    logger.warning(
+        "auth_write_access_denied",
+        extra={
+            "trace_id": trace_id,
+            "user": actor,
+            "error": reason,
+            "status_code": status_code,
+        },
+    )
+
+
 def require_write_access(
     bearer: HTTPAuthorizationCredentials | None = Security(_bearer_security),
     api_key_header: str | None = Security(_api_key_header),
 ) -> None:
+    trace_id = "missing_trace"
+    actor = _actor_label(bearer, api_key_header)
     expected = _configured_api_key()
     if expected is None:
         if _allow_unauth_write():
+            logger.info(
+                "auth_write_access_bypassed",
+                extra={"trace_id": trace_id, "user": actor, "reason": "allow_unauth_write"},
+            )
             return
+        _log_write_access_denied(
+            trace_id=trace_id,
+            actor=actor,
+            reason="api_key_not_configured",
+            status_code=status.HTTP_401_UNAUTHORIZED,
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="write access token required",
@@ -78,11 +124,23 @@ def require_write_access(
         provided = api_key_header.strip()
 
     if provided is None:
+        _log_write_access_denied(
+            trace_id=trace_id,
+            actor=actor,
+            reason="missing_write_token",
+            status_code=status.HTTP_401_UNAUTHORIZED,
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="write access token required",
         )
     if not secrets.compare_digest(provided, expected):
+        _log_write_access_denied(
+            trace_id=trace_id,
+            actor=actor,
+            reason="invalid_write_token",
+            status_code=status.HTTP_403_FORBIDDEN,
+        )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="invalid write access token",

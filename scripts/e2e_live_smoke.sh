@@ -36,21 +36,43 @@ VD_API_BASE_URL="$LIVE_SMOKE_API_BASE_URL"
 LIVE_SMOKE_TIMEOUT_SECONDS="${LIVE_SMOKE_TIMEOUT_SECONDS:-180}"
 LIVE_SMOKE_REQUIRE_API="${LIVE_SMOKE_REQUIRE_API:-1}"
 LIVE_SMOKE_POLL_INTERVAL_SECONDS="${LIVE_SMOKE_POLL_INTERVAL_SECONDS:-3}"
+LIVE_SMOKE_HEARTBEAT_SECONDS="${LIVE_SMOKE_HEARTBEAT_SECONDS:-30}"
 LIVE_SMOKE_HEALTH_PATH="${LIVE_SMOKE_HEALTH_PATH:-/healthz}"
 LIVE_SMOKE_COMPUTER_USE_STRICT="${LIVE_SMOKE_COMPUTER_USE_STRICT:-1}"
 LIVE_SMOKE_COMPUTER_USE_SKIP="${LIVE_SMOKE_COMPUTER_USE_SKIP:-0}"
 LIVE_SMOKE_COMPUTER_USE_SKIP_REASON="${LIVE_SMOKE_COMPUTER_USE_SKIP_REASON:-}"
 LIVE_SMOKE_COMPUTER_USE_CMD="${LIVE_SMOKE_COMPUTER_USE_CMD:-}"
 LIVE_SMOKE_REQUIRE_SECRETS="${LIVE_SMOKE_REQUIRE_SECRETS:-0}"
+LIVE_SMOKE_EXTERNAL_PROBE_TIMEOUT_SECONDS="${LIVE_SMOKE_EXTERNAL_PROBE_TIMEOUT_SECONDS:-20}"
+LIVE_SMOKE_MAX_RETRIES="${LIVE_SMOKE_MAX_RETRIES:-2}"
+LIVE_SMOKE_DIAGNOSTICS_JSON="${LIVE_SMOKE_DIAGNOSTICS_JSON:-.runtime-cache/e2e-live-smoke-result.json}"
 YOUTUBE_SMOKE_URL="${YOUTUBE_SMOKE_URL:-https://www.youtube.com/watch?v=dQw4w9WgXcQ}"
 BILIBILI_SMOKE_URL="${BILIBILI_SMOKE_URL:-https://www.bilibili.com/video/BV1xx411c7mD}"
+DIAGNOSTICS_PATH=""
+SCENARIO_TRACE=""
+WRITE_OP_TRACE=""
+TEARDOWN_TRACE=""
+YOUTUBE_KEY_RESOLUTION_TRACE=""
+TEARDOWN_DONE=0
+WORKER_TMP_OUTPUTS=()
+STARTED_AT_UTC="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+FAILURE_KIND="unknown"
+if [[ "${LIVE_SMOKE_DIAGNOSTICS_JSON:0:1}" != "/" ]]; then
+  DIAGNOSTICS_PATH="$ROOT_DIR/$LIVE_SMOKE_DIAGNOSTICS_JSON"
+else
+  DIAGNOSTICS_PATH="$LIVE_SMOKE_DIAGNOSTICS_JSON"
+fi
 
 log() {
   printf '[%s] %s\n' "$SCRIPT_NAME" "$*" >&2
 }
 
 fail() {
+  FAILURE_KIND="$(classify_failure "$*")"
+  run_teardown
+  write_diagnostics "failed" "$*"
   log "ERROR: $*"
+  log "failure_kind=${FAILURE_KIND} diagnostics_path=${DIAGNOSTICS_PATH}"
   exit 1
 }
 
@@ -86,6 +108,418 @@ trim_whitespace() {
   value="${value#"${value%%[![:space:]]*}"}"
   value="${value%"${value##*[![:space:]]}"}"
   printf '%s' "$value"
+}
+
+classify_failure() {
+  local reason
+  reason="$(printf '%s' "${1:-}" | tr '[:upper:]' '[:lower:]')"
+  case "$reason" in
+    *timeout*|*timed*out*|*unreachable*|*external*probe*failed*|*curl*exit*|*connection*|*api*health*check*failed*)
+      printf '%s' "network_or_environment_timeout"
+      ;;
+    *)
+      printf '%s' "code_logic_error"
+      ;;
+  esac
+}
+
+load_from_zsh_if_missing() {
+  local var_name="$1"
+  local current="${!var_name:-}"
+  if [[ -n "$current" ]]; then
+    return 0
+  fi
+  command -v zsh >/dev/null 2>&1 || return 0
+  local zsh_value
+  zsh_value="$(zsh -lc "printenv ${var_name}" 2>/dev/null || true)"
+  if [[ -n "$zsh_value" ]]; then
+    printf -v "$var_name" '%s' "$zsh_value"
+    export "$var_name"
+    log "Loaded ${var_name} from zsh login env fallback."
+  fi
+}
+
+mask_secret() {
+  local value="${1:-}"
+  local len="${#value}"
+  if (( len <= 8 )); then
+    printf '%s' "***"
+    return 0
+  fi
+  printf '%s...%s' "${value:0:4}" "${value:len-4:4}"
+}
+
+read_key_from_env_file() {
+  local file_path="$1"
+  local var_name="$2"
+  [[ -f "$file_path" ]] || return 1
+
+  local key_value
+  key_value="$(
+    FILE_PATH="$file_path" VAR_NAME="$var_name" python3 - <<'PY'
+import os
+import re
+import shlex
+from pathlib import Path
+
+file_path = Path(os.environ["FILE_PATH"])
+var_name = os.environ["VAR_NAME"]
+pattern = re.compile(r"^\s*(?:export\s+)?%s\s*=\s*(.+?)\s*$" % re.escape(var_name))
+result = ""
+
+for line in file_path.read_text(encoding="utf-8").splitlines():
+    if not line.strip() or line.lstrip().startswith("#"):
+        continue
+    match = pattern.match(line)
+    if not match:
+        continue
+    raw = match.group(1).strip()
+    if raw:
+        if (raw.startswith("'") and raw.endswith("'")) or (raw.startswith('"') and raw.endswith('"')):
+            try:
+                parsed = shlex.split(f"x={raw}", posix=True)
+                if parsed and "=" in parsed[0]:
+                    raw = parsed[0].split("=", 1)[1]
+            except ValueError:
+                raw = raw[1:-1]
+        result = raw
+
+if result:
+    print(result)
+PY
+  )"
+  key_value="$(trim_whitespace "$key_value")"
+  [[ -n "$key_value" ]] || return 1
+  printf '%s' "$key_value"
+}
+
+write_key_to_env_file() {
+  local env_path="$1"
+  local var_name="$2"
+  local var_value="$3"
+  [[ -n "$env_path" ]] || fail "cannot write ${var_name}: empty env path"
+
+  ENV_PATH="$env_path" VAR_NAME="$var_name" VAR_VALUE="$var_value" python3 - <<'PY'
+import os
+import re
+from pathlib import Path
+
+env_path = Path(os.environ["ENV_PATH"])
+var_name = os.environ["VAR_NAME"]
+var_value = os.environ["VAR_VALUE"]
+pattern = re.compile(r"^(\s*(?:export\s+)?)%s\s*=.*$" % re.escape(var_name))
+
+if env_path.exists():
+    lines = env_path.read_text(encoding="utf-8").splitlines()
+else:
+    lines = []
+
+def shell_quote(value: str) -> str:
+    return "'" + value.replace("'", "'\"'\"'") + "'"
+
+new_line = f"export {var_name}={shell_quote(var_value)}"
+updated = False
+for idx, line in enumerate(lines):
+    if pattern.match(line):
+        lines[idx] = new_line
+        updated = True
+        break
+
+if not updated:
+    lines.append(new_line)
+
+content = "\n".join(lines).rstrip() + "\n"
+env_path.write_text(content, encoding="utf-8")
+PY
+}
+
+probe_youtube_key() {
+  local key_value="$1"
+  local tmp_file
+  tmp_file="$(mktemp)"
+  local status curl_exit
+  curl_exit=0
+  status="$(
+    curl -sS -o "$tmp_file" -w '%{http_code}' \
+      --max-time "$LIVE_SMOKE_EXTERNAL_PROBE_TIMEOUT_SECONDS" \
+      --retry "$((LIVE_SMOKE_MAX_RETRIES - 1))" --retry-delay 1 --retry-all-errors \
+      "https://www.googleapis.com/youtube/v3/videos?part=id&id=dQw4w9WgXcQ&maxResults=1&key=${key_value}"
+  )" || curl_exit=$?
+  local body
+  body="$(cat "$tmp_file" 2>/dev/null || true)"
+  rm -f "$tmp_file"
+
+  if [[ "$curl_exit" -ne 0 ]]; then
+    printf '%s\t%s\t%s\n' "transport_error" "$status" "$curl_exit"
+    return 2
+  fi
+  if [[ "$status" == "200" ]]; then
+    printf '%s\t%s\t%s\n' "valid" "$status" "0"
+    return 0
+  fi
+
+  local reason="invalid_or_restricted"
+  local lowered
+  lowered="$(printf '%s' "$body" | tr '[:upper:]' '[:lower:]')"
+  case "$lowered" in
+    *apikeynotvalid*|*badrequest*|*invalid*api*key*|*key*invalid*)
+      reason="invalid_key"
+      ;;
+    *accessnotconfigured*|*forbidden*|*permission*|*quota*)
+      reason="quota_or_permission"
+      ;;
+  esac
+  printf '%s\t%s\t%s\n' "$reason" "$status" "0"
+  return 1
+}
+
+record_youtube_key_resolution() {
+  local source_name="$1"
+  local status="$2"
+  local detail="${3:-}"
+  local ts
+  ts="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+  local line
+  line="$(printf '%s\t%s\t%s\t%s\n' "$ts" "$source_name" "$status" "$detail")"
+  YOUTUBE_KEY_RESOLUTION_TRACE+="${line}"$'\n'
+}
+
+ensure_valid_youtube_api_key() {
+  local repo_env_file="$ROOT_DIR/.env"
+  local -a candidates=()
+  local -a labels=()
+  local candidate label masked probe_result reason status_code curl_exit
+
+  add_candidate() {
+    local value="${1:-}"
+    local source="${2:-unknown}"
+    value="$(trim_whitespace "$value")"
+    [[ -n "$value" ]] || return 0
+    candidates+=("$value")
+    labels+=("$source")
+  }
+
+  add_candidate "${YOUTUBE_API_KEY:-}" ".env_or_shell_current"
+  add_candidate "$(read_key_from_env_file "$ROOT_DIR/.env" "YOUTUBE_API_KEY" || true)" ".env_file"
+  add_candidate "$(read_key_from_env_file "$ROOT_DIR/.env.bak" "YOUTUBE_API_KEY" || true)" ".env.bak"
+  add_candidate "$(read_key_from_env_file "$ROOT_DIR/.env.local" "YOUTUBE_API_KEY" || true)" ".env.local"
+  if command -v zsh >/dev/null 2>&1; then
+    add_candidate "$(zsh -lc 'printenv YOUTUBE_API_KEY' 2>/dev/null || true)" "zsh_env"
+  fi
+
+  if [[ "${#candidates[@]}" -eq 0 ]]; then
+    fail "YOUTUBE_API_KEY is missing in .env/.env.bak/.env.local/zsh; 需要用户提供有效key"
+  fi
+
+  for idx in "${!candidates[@]}"; do
+    candidate="${candidates[$idx]}"
+    label="${labels[$idx]}"
+    masked="$(mask_secret "$candidate")"
+    probe_result="$(probe_youtube_key "$candidate")" || true
+    reason="${probe_result%%$'\t'*}"
+    probe_result="${probe_result#*$'\t'}"
+    status_code="${probe_result%%$'\t'*}"
+    curl_exit="${probe_result#*$'\t'}"
+
+    if [[ "$reason" == "valid" ]]; then
+      YOUTUBE_API_KEY="$candidate"
+      export YOUTUBE_API_KEY
+      record_youtube_key_resolution "$label" "valid" "status=${status_code} masked=${masked}"
+      log "YOUTUBE_API_KEY validated from ${label} (${masked})"
+      if [[ "$label" != ".env_or_shell_current" && -f "$repo_env_file" ]]; then
+        write_key_to_env_file "$repo_env_file" "YOUTUBE_API_KEY" "$candidate"
+        record_write_operation \
+          "repair_env_youtube_api_key" \
+          "env:youtube_api_key:${label}" \
+          "persist valid key into .env for deterministic next runs" \
+          "source=${label} masked=${masked}"
+        log "YOUTUBE_API_KEY repaired from ${label} and persisted to .env"
+      fi
+      return 0
+    fi
+
+    record_youtube_key_resolution "$label" "invalid" "reason=${reason} status=${status_code} curl_exit=${curl_exit} masked=${masked}"
+    log "YOUTUBE_API_KEY rejected from ${label} (${masked}) reason=${reason} status=${status_code} curl_exit=${curl_exit}"
+    if [[ "$reason" == "transport_error" ]]; then
+      fail "external probe failed while validating YOUTUBE_API_KEY from ${label}: status=${status_code} curl_exit=${curl_exit}"
+    fi
+  done
+
+  fail "YOUTUBE_API_KEY 无效（已尝试 .env/.env.bak/.env.local/zsh），需要用户提供有效key"
+}
+
+record_scenario() {
+  local name="$1"
+  local status="$2"
+  local detail="${3:-}"
+  local ts
+  ts="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+  local line
+  line="$(printf '%s\t%s\t%s\t%s\n' "$ts" "$name" "$status" "$detail")"
+  SCENARIO_TRACE+="${line}"$'\n'
+}
+
+record_write_operation() {
+  local name="$1"
+  local idempotency_key="$2"
+  local cleanup_action="$3"
+  local detail="${4:-}"
+  local ts
+  ts="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+  local line
+  line="$(printf '%s\t%s\t%s\t%s\t%s\n' "$ts" "$name" "$idempotency_key" "$cleanup_action" "$detail")"
+  WRITE_OP_TRACE+="${line}"$'\n'
+}
+
+record_teardown_step() {
+  local name="$1"
+  local status="$2"
+  local detail="${3:-}"
+  local ts
+  ts="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+  local line
+  line="$(printf '%s\t%s\t%s\t%s\n' "$ts" "$name" "$status" "$detail")"
+  TEARDOWN_TRACE+="${line}"$'\n'
+}
+
+run_teardown() {
+  if [[ "$TEARDOWN_DONE" == "1" ]]; then
+    return 0
+  fi
+  TEARDOWN_DONE=1
+  log "phase=teardown status=start"
+  local removed=0
+  local output_file
+  if [[ "${#WORKER_TMP_OUTPUTS[@]}" -eq 0 ]]; then
+    record_teardown_step "remove_worker_tmp_output" "skipped" "no temp outputs registered"
+  else
+    for output_file in "${WORKER_TMP_OUTPUTS[@]}"; do
+      if [[ -f "$output_file" ]]; then
+        rm -f "$output_file"
+        ((removed += 1))
+        record_teardown_step "remove_worker_tmp_output" "passed" "path=${output_file}"
+      else
+        record_teardown_step "remove_worker_tmp_output" "skipped" "path=${output_file} missing"
+      fi
+    done
+  fi
+  record_scenario "teardown" "passed" "removed_worker_tmp_outputs=${removed}"
+  log "phase=teardown status=passed removed_worker_tmp_outputs=${removed}"
+}
+
+write_diagnostics() {
+  local status="$1"
+  local reason="${2:-}"
+  local finished_at
+  finished_at="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+  mkdir -p "$(dirname "$DIAGNOSTICS_PATH")"
+
+  STATUS="$status" \
+  FAILURE_KIND="$FAILURE_KIND" \
+  REASON="$reason" \
+  DIAGNOSTICS_PATH="$DIAGNOSTICS_PATH" \
+  STARTED_AT_UTC="$STARTED_AT_UTC" \
+  FINISHED_AT_UTC="$finished_at" \
+  API_BASE_URL="$VD_API_BASE_URL" \
+  TIMEOUT_SECONDS="$LIVE_SMOKE_TIMEOUT_SECONDS" \
+  HEARTBEAT_SECONDS="$LIVE_SMOKE_HEARTBEAT_SECONDS" \
+  SCENARIO_TRACE="$SCENARIO_TRACE" \
+  WRITE_OP_TRACE="$WRITE_OP_TRACE" \
+  TEARDOWN_TRACE="$TEARDOWN_TRACE" \
+  YOUTUBE_KEY_RESOLUTION_TRACE="$YOUTUBE_KEY_RESOLUTION_TRACE" \
+  MAX_RETRIES="$LIVE_SMOKE_MAX_RETRIES" \
+  python3 - <<'PY'
+import json
+import os
+from pathlib import Path
+
+entries = []
+for raw in (os.environ.get("SCENARIO_TRACE", "") or "").splitlines():
+    parts = raw.split("\t", 3)
+    if len(parts) != 4:
+        continue
+    ts, name, status, detail = parts
+    entries.append(
+        {
+            "timestamp": ts,
+            "scenario": name,
+            "status": status,
+            "detail": detail,
+        }
+    )
+
+write_ops = []
+for raw in (os.environ.get("WRITE_OP_TRACE", "") or "").splitlines():
+    parts = raw.split("\t", 4)
+    if len(parts) != 5:
+        continue
+    ts, name, idempotency_key, cleanup_action, detail = parts
+    write_ops.append(
+        {
+            "timestamp": ts,
+            "operation": name,
+            "idempotency_key": idempotency_key,
+            "cleanup_action": cleanup_action,
+            "detail": detail,
+        }
+    )
+
+teardown_steps = []
+for raw in (os.environ.get("TEARDOWN_TRACE", "") or "").splitlines():
+    parts = raw.split("\t", 3)
+    if len(parts) != 4:
+        continue
+    ts, name, status, detail = parts
+    teardown_steps.append(
+        {
+            "timestamp": ts,
+            "step": name,
+            "status": status,
+            "detail": detail,
+        }
+    )
+
+youtube_key_resolution = []
+for raw in (os.environ.get("YOUTUBE_KEY_RESOLUTION_TRACE", "") or "").splitlines():
+    parts = raw.split("\t", 3)
+    if len(parts) != 4:
+        continue
+    ts, source_name, status, detail = parts
+    youtube_key_resolution.append(
+        {
+            "timestamp": ts,
+            "source": source_name,
+            "status": status,
+            "detail": detail,
+        }
+    )
+
+payload = {
+    "status": os.environ.get("STATUS", "failed"),
+    "failure_kind": os.environ.get("FAILURE_KIND", "unknown"),
+    "reason": os.environ.get("REASON", ""),
+    "api_base_url": os.environ.get("API_BASE_URL", ""),
+    "started_at_utc": os.environ.get("STARTED_AT_UTC", ""),
+    "finished_at_utc": os.environ.get("FINISHED_AT_UTC", ""),
+    "timeout_seconds": int(os.environ.get("TIMEOUT_SECONDS", "0") or "0"),
+    "heartbeat_seconds": int(os.environ.get("HEARTBEAT_SECONDS", "0") or "0"),
+    "retry_policy": {"max_attempts": int(os.environ.get("MAX_RETRIES", "2") or "2")},
+    "write_policy": {
+        "idempotency": "each live write operation includes a deterministic idempotency key in write_operations",
+        "teardown": "safe teardown removes only this script's temporary files and keeps business records intact",
+    },
+    "scenarios": entries,
+    "write_operations": write_ops,
+    "teardown": {"steps": teardown_steps},
+    "youtube_key_resolution": youtube_key_resolution,
+    "diagnostics_path": os.environ.get("DIAGNOSTICS_PATH", ""),
+}
+
+Path(os.environ["DIAGNOSTICS_PATH"]).write_text(
+    json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+    encoding="utf-8",
+)
+PY
 }
 
 resolve_local_script_path() {
@@ -128,6 +562,7 @@ api_post() {
   local status
   status="$(
     curl -sS -o "$tmp_body" -w '%{http_code}' \
+      --retry "$((LIVE_SMOKE_MAX_RETRIES - 1))" --retry-delay 1 --retry-all-errors \
       -H 'Accept: application/json' \
       -H 'Content-Type: application/json' \
       -X POST "${VD_API_BASE_URL}${path}" \
@@ -146,6 +581,7 @@ api_get() {
   local status
   status="$(
     curl -sS -o "$tmp_body" -w '%{http_code}' \
+      --retry "$((LIVE_SMOKE_MAX_RETRIES - 1))" --retry-delay 1 --retry-all-errors \
       -H 'Accept: application/json' \
       "${VD_API_BASE_URL}${path}"
   )"
@@ -161,6 +597,15 @@ check_prerequisites() {
 
   if ! [[ "$LIVE_SMOKE_API_PORT" =~ ^[0-9]+$ ]] || (( LIVE_SMOKE_API_PORT < 1 || LIVE_SMOKE_API_PORT > 65535 )); then
     fail "invalid LIVE_SMOKE_API_PORT=${LIVE_SMOKE_API_PORT}; expected integer in [1,65535]"
+  fi
+  if ! [[ "$LIVE_SMOKE_HEARTBEAT_SECONDS" =~ ^[0-9]+$ ]] || (( LIVE_SMOKE_HEARTBEAT_SECONDS <= 0 )); then
+    fail "invalid LIVE_SMOKE_HEARTBEAT_SECONDS=${LIVE_SMOKE_HEARTBEAT_SECONDS}; expected positive integer"
+  fi
+  if ! [[ "$LIVE_SMOKE_EXTERNAL_PROBE_TIMEOUT_SECONDS" =~ ^[0-9]+$ ]] || (( LIVE_SMOKE_EXTERNAL_PROBE_TIMEOUT_SECONDS <= 0 )); then
+    fail "invalid LIVE_SMOKE_EXTERNAL_PROBE_TIMEOUT_SECONDS=${LIVE_SMOKE_EXTERNAL_PROBE_TIMEOUT_SECONDS}; expected positive integer"
+  fi
+  if ! [[ "$LIVE_SMOKE_MAX_RETRIES" =~ ^[0-9]+$ ]] || (( LIVE_SMOKE_MAX_RETRIES <= 0 || LIVE_SMOKE_MAX_RETRIES > 2 )); then
+    fail "invalid LIVE_SMOKE_MAX_RETRIES=${LIVE_SMOKE_MAX_RETRIES}; expected integer in [1,2]"
   fi
   if [[ -z "$LIVE_SMOKE_HEALTH_PATH" || "${LIVE_SMOKE_HEALTH_PATH:0:1}" != "/" ]]; then
     fail "invalid LIVE_SMOKE_HEALTH_PATH=${LIVE_SMOKE_HEALTH_PATH}; expected absolute path (e.g. /healthz)"
@@ -179,7 +624,11 @@ check_prerequisites() {
     LIVE_SMOKE_COMPUTER_USE_CMD="$ROOT_DIR/scripts/smoke_computer_use_local.sh"
   fi
   LIVE_SMOKE_COMPUTER_USE_CMD="$(resolve_local_script_path "$LIVE_SMOKE_COMPUTER_USE_CMD")"
-
+  load_from_zsh_if_missing "GEMINI_API_KEY"
+  load_from_zsh_if_missing "RESEND_API_KEY"
+  load_from_zsh_if_missing "RESEND_FROM_EMAIL"
+  load_from_zsh_if_missing "YOUTUBE_API_KEY"
+  ensure_valid_youtube_api_key
   local missing=()
   [[ -z "${GEMINI_API_KEY:-}" ]] && missing+=("GEMINI_API_KEY")
   [[ -z "${RESEND_API_KEY:-}" ]] && missing+=("RESEND_API_KEY")
@@ -214,6 +663,67 @@ check_prerequisites() {
     log "SKIP: API is unavailable at ${VD_API_BASE_URL} (status=${status})"
     exit 0
   fi
+
+  record_scenario "api_healthz" "passed" "status=${status}"
+}
+
+probe_external_dependencies() {
+  local gemini_status youtube_status bilibili_status probe_url
+  local gemini_tmp youtube_tmp bilibili_tmp
+  gemini_tmp="$(mktemp)"
+  youtube_tmp="$(mktemp)"
+  bilibili_tmp="$(mktemp)"
+
+  probe_url="https://generativelanguage.googleapis.com/v1beta/models?key=${GEMINI_API_KEY}"
+  log "phase=short_tests step=external_probe_gemini"
+  gemini_status="$(curl -sS -o "$gemini_tmp" -w '%{http_code}' --max-time "$LIVE_SMOKE_EXTERNAL_PROBE_TIMEOUT_SECONDS" \
+    --retry "$((LIVE_SMOKE_MAX_RETRIES - 1))" --retry-delay 1 --retry-all-errors \
+    "$probe_url")" || fail "external probe failed: gemini models endpoint unreachable"
+  if [[ "$gemini_status" != "200" ]]; then
+    fail "external probe failed: gemini models status=${gemini_status} body=$(head -c 300 "$gemini_tmp")"
+  fi
+  record_scenario "external_probe_gemini" "passed" "status=${gemini_status}"
+
+  log "phase=short_tests step=external_probe_youtube_api"
+  youtube_status="$(
+    curl -sS -o "$youtube_tmp" -w '%{http_code}' --max-time "$LIVE_SMOKE_EXTERNAL_PROBE_TIMEOUT_SECONDS" \
+      --retry "$((LIVE_SMOKE_MAX_RETRIES - 1))" --retry-delay 1 --retry-all-errors \
+      "https://www.googleapis.com/youtube/v3/videos?part=id&id=dQw4w9WgXcQ&maxResults=1&key=${YOUTUBE_API_KEY}"
+  )" || fail "external probe failed: youtube data api unreachable"
+  if [[ "$youtube_status" != "200" ]]; then
+    fail "external probe failed: youtube data api status=${youtube_status} body=$(head -c 300 "$youtube_tmp")"
+  fi
+  record_scenario "external_probe_youtube_api" "passed" "status=${youtube_status}"
+
+  log "phase=short_tests step=external_probe_bilibili_web"
+  bilibili_status="$(
+    curl -sS -L -o "$bilibili_tmp" -w '%{http_code}' --max-time "$LIVE_SMOKE_EXTERNAL_PROBE_TIMEOUT_SECONDS" \
+      --retry "$((LIVE_SMOKE_MAX_RETRIES - 1))" --retry-delay 1 --retry-all-errors \
+      "$BILIBILI_SMOKE_URL"
+  )" || fail "external probe failed: bilibili webpage unreachable"
+  if [[ ! "$bilibili_status" =~ ^[23] ]]; then
+    fail "external probe failed: bilibili webpage status=${bilibili_status}"
+  fi
+  record_scenario "external_probe_bilibili_web" "passed" "status=${bilibili_status}"
+  rm -f "$gemini_tmp" "$youtube_tmp" "$bilibili_tmp"
+}
+
+run_external_browser_probe() {
+  local cmd="$ROOT_DIR/scripts/external_playwright_smoke.sh"
+  [[ -x "$cmd" ]] || fail "external playwright smoke script missing or not executable: $cmd"
+  log "phase=short_tests step=external_browser_real_probe"
+  if "$cmd" \
+    --url "https://example.com" \
+    --browser "chromium" \
+    --expect-text "Example Domain" \
+    --timeout-ms "45000" \
+    --retries "2" \
+    --output-dir ".runtime-cache/external-playwright-smoke" \
+    --diagnostics-json ".runtime-cache/external-playwright-smoke-result.json"; then
+    record_scenario "external_browser_real_probe" "passed" "url=https://example.com browser=chromium"
+    return 0
+  fi
+  fail "external browser real probe failed"
 }
 
 run_computer_use_smoke() {
@@ -226,6 +736,7 @@ run_computer_use_smoke() {
   if is_truthy "$skip_value"; then
     [[ -n "$skip_reason" ]] || fail "LIVE_SMOKE_COMPUTER_USE_SKIP=1 requires LIVE_SMOKE_COMPUTER_USE_SKIP_REASON"
     log "Scenario: computer_use smoke skipped; reason=${skip_reason}"
+    record_scenario "computer_use_smoke" "skipped" "$skip_reason"
     return 0
   fi
 
@@ -235,12 +746,19 @@ run_computer_use_smoke() {
       fail "$message"
     fi
     log "Scenario: computer_use smoke non-strict skip; reason=${message}"
+    record_scenario "computer_use_smoke" "skipped" "$message"
     return 0
   fi
 
   log "Scenario: computer_use smoke"
   if "$cmd" --api-base-url "$VD_API_BASE_URL"; then
     log "computer_use smoke passed"
+    record_scenario "computer_use_smoke" "passed" "cmd=${cmd}"
+    record_write_operation \
+      "computer_use_smoke_script" \
+      "computer-use:${VD_API_BASE_URL}" \
+      "delegated script handles safe teardown and keeps audit-friendly records" \
+      "cmd=${cmd}"
     return 0
   fi
 
@@ -248,6 +766,7 @@ run_computer_use_smoke() {
     fail "computer_use smoke failed: cmd=${cmd}"
   fi
   log "Scenario: computer_use smoke non-strict skip; reason=command failed cmd=${cmd}"
+  record_scenario "computer_use_smoke" "skipped" "command failed cmd=${cmd}"
 }
 
 process_video() {
@@ -255,6 +774,24 @@ process_video() {
   local url="$2"
   local mode="$3"
   local label="$4"
+  local idempotency_key
+  idempotency_key="$(
+    PLATFORM="$platform" URL="$url" MODE="$mode" python3 - <<'PY'
+import hashlib
+import os
+
+raw = "|".join(
+    (
+        "video_process",
+        os.environ["PLATFORM"],
+        os.environ["URL"],
+        os.environ["MODE"],
+        "force=true",
+    )
+)
+print(hashlib.sha256(raw.encode("utf-8")).hexdigest()[:24])
+PY
+  )"
 
   local payload
   payload="$(
@@ -285,6 +822,12 @@ PY
   )"
   [[ -z "$job_id" ]] && fail "${label} missing job_id: body=${body}"
   log "${label}: queued job_id=${job_id}"
+  record_scenario "${label}" "queued" "job_id=${job_id}"
+  record_write_operation \
+    "POST /api/v1/videos/process:${label}" \
+    "$idempotency_key" \
+    "no destructive cleanup; keep traceable job records for audit" \
+    "force=true mode=${mode} platform=${platform} job_id=${job_id}"
   printf '%s\n' "$job_id"
 }
 
@@ -296,6 +839,7 @@ wait_for_terminal_status() {
   local pipeline_final_status=""
   local effective_final_status=""
   local error_message=""
+  local next_heartbeat=$((SECONDS + LIVE_SMOKE_HEARTBEAT_SECONDS))
 
   while (( SECONDS < deadline )); do
     local response http_status body parsed
@@ -330,9 +874,15 @@ PY
         fail "${label}: terminal status failed for job_id=${job_id}, status=${status}, pipeline_final_status=${pipeline_final_status:-null}, error=${error_message:-null}"
       fi
       log "${label}: terminal status reached for job_id=${job_id}, status=${status}, pipeline_final_status=${pipeline_final_status:-null}"
+      record_scenario "$label" "passed" "job_id=${job_id} status=${status} pipeline_final_status=${pipeline_final_status:-null}"
       return 0
     fi
 
+    if (( SECONDS >= next_heartbeat )); then
+      log "heartbeat: ${label} waiting job_id=${job_id} status=${status} pipeline_final_status=${pipeline_final_status:-null}"
+      record_scenario "$label" "running" "job_id=${job_id} status=${status} pipeline_final_status=${pipeline_final_status:-null}"
+      next_heartbeat=$((SECONDS + LIVE_SMOKE_HEARTBEAT_SECONDS))
+    fi
     sleep "$LIVE_SMOKE_POLL_INTERVAL_SECONDS"
   done
 
@@ -342,20 +892,51 @@ PY
 run_worker_workflow_once() {
   local command_name="$1"
   shift
+  local output_path="/tmp/${SCRIPT_NAME}.${command_name}.json"
+  local idempotency_key
+  idempotency_key="$(
+    COMMAND_NAME="$command_name" EXTRA_ARGS="$*" python3 - <<'PY'
+import hashlib
+import os
+
+raw = "|".join(
+    (
+        "worker_run_once",
+        os.environ["COMMAND_NAME"],
+        os.environ.get("EXTRA_ARGS", ""),
+    )
+)
+print(hashlib.sha256(raw.encode("utf-8")).hexdigest()[:24])
+PY
+  )"
+  record_write_operation \
+    "worker.main ${command_name} --run-once" \
+    "$idempotency_key" \
+    "remove temp output file during teardown" \
+    "args=$* output=${output_path}"
   (
     cd "$ROOT_DIR/apps/worker"
     if command -v uv >/dev/null 2>&1; then
       PYTHONPATH="$ROOT_DIR/apps/worker:$ROOT_DIR:${PYTHONPATH:-}" \
-        uv run python -m worker.main "$command_name" --run-once "$@" >/tmp/"$SCRIPT_NAME"."$command_name".json
+        uv run python -m worker.main "$command_name" --run-once "$@" >"$output_path"
     else
       PYTHONPATH="$ROOT_DIR/apps/worker:$ROOT_DIR:${PYTHONPATH:-}" \
-        python3 -m worker.main "$command_name" --run-once "$@" >/tmp/"$SCRIPT_NAME"."$command_name".json
+        python3 -m worker.main "$command_name" --run-once "$@" >"$output_path"
     fi
   ) || fail "worker command failed: ${command_name}"
+  WORKER_TMP_OUTPUTS+=("$output_path")
 }
 
 main() {
   check_prerequisites
+  log "Diagnostics output: $DIAGNOSTICS_PATH"
+  log "phase=short_tests status=start"
+  record_scenario "init" "passed" "api_base_url=${VD_API_BASE_URL}"
+  probe_external_dependencies
+  run_external_browser_probe
+  log "phase=short_tests status=passed"
+
+  log "phase=long_tests status=start"
   log "Scenario: YouTube full"
   local youtube_job_id
   youtube_job_id="$(process_video "youtube" "$YOUTUBE_SMOKE_URL" "full" "youtube_full")"
@@ -382,8 +963,10 @@ main() {
   run_worker_workflow_once "start-provider-canary-workflow" --timeout-seconds "$LIVE_SMOKE_TIMEOUT_SECONDS"
 
   run_computer_use_smoke
-
-  log "LIVE SMOKE DONE"
+  log "phase=long_tests status=passed"
+  run_teardown
+  write_diagnostics "passed" ""
+  log "LIVE SMOKE DONE failure_kind=none diagnostics_path=${DIAGNOSTICS_PATH}"
 }
 
 main "$@"

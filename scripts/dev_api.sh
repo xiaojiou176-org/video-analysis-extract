@@ -9,6 +9,7 @@ load_repo_env "$ROOT_DIR" "dev_api"
 API_APP="${API_APP:-apps.api.app.main:app}"
 API_HOST="${API_HOST:-127.0.0.1}"
 API_PORT="${API_PORT:-8000}"
+DEV_API_RELOAD="${DEV_API_RELOAD:-1}"
 
 if [[ ! -d "$ROOT_DIR/apps/api" ]]; then
   echo "[dev_api] API directory not found: $ROOT_DIR/apps/api" >&2
@@ -18,8 +19,13 @@ fi
 export PYTHONPATH="$ROOT_DIR:${PYTHONPATH:-}"
 cd "$ROOT_DIR"
 
-if command -v uv >/dev/null 2>&1; then
-  exec uv run uvicorn "$API_APP" --reload --host "$API_HOST" --port "$API_PORT"
+uvicorn_args=("$API_APP" "--host" "$API_HOST" "--port" "$API_PORT")
+if [[ "$DEV_API_RELOAD" == "1" ]]; then
+  uvicorn_args+=("--reload")
 fi
 
-exec python -m uvicorn "$API_APP" --reload --host "$API_HOST" --port "$API_PORT"
+if command -v uv >/dev/null 2>&1; then
+  exec uv run uvicorn "${uvicorn_args[@]}"
+fi
+
+exec python -m uvicorn "${uvicorn_args[@]}"

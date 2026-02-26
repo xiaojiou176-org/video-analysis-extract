@@ -4,6 +4,7 @@ import asyncio
 import hashlib
 import ipaddress
 import json
+import logging
 import re
 from urllib.parse import parse_qs, urlparse
 from uuid import UUID, uuid4
@@ -33,6 +34,7 @@ MODE_ALIASES = {
     "refresh-comments": "refresh_comments",
     "refresh-llm": "refresh_llm",
 }
+logger = logging.getLogger(__name__)
 
 
 def _is_allowed_video_host(host: str) -> bool:
@@ -149,7 +151,11 @@ class VideosService:
         mode: str,
         overrides: dict[str, object] | None,
         force: bool,
+        trace_id: str | None = None,
+        user: str | None = None,
     ) -> dict[str, object]:
+        trace = str(trace_id or "missing_trace")
+        actor = str(user or "system")
         validated_url = _validate_video_source_url(url)
         normalized_mode = _normalize_mode(mode)
         normalized_overrides = _normalize_overrides(overrides)
@@ -183,10 +189,24 @@ class VideosService:
 
         workflow_id: str | None = None
         if needs_dispatch:
+            logger.info(
+                "video_process_dispatch_started",
+                extra={
+                    "trace_id": trace,
+                    "user": actor,
+                    "platform": platform,
+                    "video_uid": resolved_video_uid,
+                    "job_id": str(job_row.id),
+                },
+            )
             try:
                 from temporalio.client import Client
                 from temporalio.common import WorkflowIDConflictPolicy, WorkflowIDReusePolicy
             except Exception as exc:  # pragma: no cover
+                logger.exception(
+                    "video_process_temporal_client_import_failed",
+                    extra={"trace_id": trace, "user": actor, "error": str(exc)},
+                )
                 raise RuntimeError(f"temporal client not available: {exc}") from exc
 
             try:
@@ -198,6 +218,16 @@ class VideosService:
                     timeout=settings.api_temporal_connect_timeout_seconds,
                 )
             except TimeoutError as exc:
+                logger.error(
+                    "video_process_temporal_connect_timeout",
+                    extra={
+                        "trace_id": trace,
+                        "user": actor,
+                        "job_id": str(job_row.id),
+                        "timeout_seconds": settings.api_temporal_connect_timeout_seconds,
+                        "error": str(exc),
+                    },
+                )
                 raise ApiTimeoutError(
                     detail=(
                         "temporal connect timed out "
@@ -223,6 +253,17 @@ class VideosService:
                     "temporal workflow start timed out "
                     f"after {settings.api_temporal_start_timeout_seconds:.1f}s"
                 )
+                logger.error(
+                    "video_process_temporal_start_timeout",
+                    extra={
+                        "trace_id": trace,
+                        "user": actor,
+                        "job_id": str(job_row.id),
+                        "workflow_id": workflow_id,
+                        "timeout_seconds": settings.api_temporal_start_timeout_seconds,
+                        "error": str(exc),
+                    },
+                )
                 self.jobs_repo.mark_dispatch_failed(
                     job_id=job_row.id,
                     error_message=dispatch_error,
@@ -234,8 +275,29 @@ class VideosService:
                 ) from exc
             except Exception as exc:
                 dispatch_error = str(exc)
+                logger.exception(
+                    "video_process_temporal_start_failed",
+                    extra={
+                        "trace_id": trace,
+                        "user": actor,
+                        "job_id": str(job_row.id),
+                        "workflow_id": workflow_id,
+                        "error": dispatch_error,
+                    },
+                )
                 self.jobs_repo.mark_dispatch_failed(job_id=job_row.id, error_message=dispatch_error)
                 raise RuntimeError(f"failed to start ProcessJobWorkflow: {dispatch_error}") from exc
+        else:
+            logger.info(
+                "video_process_reused_existing_job",
+                extra={
+                    "trace_id": trace,
+                    "user": actor,
+                    "platform": platform,
+                    "video_uid": resolved_video_uid,
+                    "job_id": str(job_row.id),
+                },
+            )
 
         return {
             "job_id": job_row.id,

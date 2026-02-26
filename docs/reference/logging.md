@@ -11,6 +11,12 @@
 - 计划任务（cron/launchd）场景，日志应重定向到 `logs/`（该目录已在 `.gitignore`）。
 - 脚本日志必须带前缀（如 `[run_daily_digest]`、`[dev_worker]`）以便 grep。
 
+## No Logs No Merge
+- 关键路径（鉴权、第三方 API 调用、异常处理）必须输出结构化日志，否则不得合并。
+- 关键日志字段至少包含：`trace_id`、`user`、`error`（异常路径还需 stack，使用 `logger.exception(...)`）。
+- 禁止空洞日志文案（如 `Something went wrong`、`unexpected error`、`error occurred`、`unknown error`）。
+- 质量门禁包含空洞日志检查：`./scripts/quality_gate.sh --mode pre-commit`。
+
 ## Log Directory Initialization
 首次启用定时任务或常驻 ops workflow 前，先创建日志目录：
 ```bash

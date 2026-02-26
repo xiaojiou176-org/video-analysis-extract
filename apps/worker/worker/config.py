@@ -108,11 +108,13 @@ class Settings:
     pipeline_retry_auth_backoff_seconds: float | None = None
     pipeline_retry_auth_max_backoff_seconds: float | None = None
     pipeline_retry_fatal_attempts: int | None = None
+    llm_provider: str = "gemini"
     gemini_api_key: str | None = None
     gemini_model: str = "gemini-3.1-pro-preview"
     gemini_outline_model: str = "gemini-3.1-pro-preview"
     gemini_digest_model: str = "gemini-3.1-pro-preview"
-    gemini_fast_model: str = "gemini-3-flash-preview"
+    gemini_fast_model: str = "gemini-3.0-flash"
+    gemini_computer_use_model: str = "gemini-3.1-pro-preview"
     gemini_embedding_model: str = "gemini-embedding-001"
     gemini_thinking_level: str = "high"
     gemini_include_thoughts: bool = True
@@ -127,6 +129,8 @@ class Settings:
     gemini_computer_use_require_confirmation: bool = True
     gemini_computer_use_max_steps: int = 3
     gemini_computer_use_timeout_seconds: float = 30.0
+    openai_api_key: str | None = None
+    anthropic_api_key: str | None = None
     youtube_api_key: str | None = None
     notification_enabled: bool = False
     resend_api_key: str | None = None
@@ -251,6 +255,7 @@ class Settings:
             pipeline_retry_fatal_attempts=_parse_optional_int(
                 os.getenv("PIPELINE_RETRY_FATAL_ATTEMPTS")
             ),
+            llm_provider=(os.getenv("LLM_PROVIDER", "gemini") or "gemini").strip().lower(),
             gemini_api_key=os.getenv("GEMINI_API_KEY"),
             gemini_model=os.getenv("GEMINI_MODEL", "gemini-3.1-pro-preview"),
             gemini_outline_model=os.getenv(
@@ -261,7 +266,11 @@ class Settings:
                 "GEMINI_DIGEST_MODEL",
                 os.getenv("GEMINI_MODEL", "gemini-3.1-pro-preview"),
             ),
-            gemini_fast_model=os.getenv("GEMINI_FAST_MODEL", "gemini-3-flash-preview"),
+            gemini_fast_model=os.getenv("GEMINI_FAST_MODEL", "gemini-3.0-flash"),
+            gemini_computer_use_model=os.getenv(
+                "GEMINI_COMPUTER_USE_MODEL",
+                os.getenv("GEMINI_MODEL", "gemini-3.1-pro-preview"),
+            ),
             gemini_embedding_model=os.getenv(
                 "GEMINI_EMBEDDING_MODEL",
                 "gemini-embedding-001",
@@ -308,6 +317,8 @@ class Settings:
             gemini_computer_use_timeout_seconds=float(
                 os.getenv("GEMINI_COMPUTER_USE_TIMEOUT_SECONDS", "30")
             ),
+            openai_api_key=os.getenv("OPENAI_API_KEY"),
+            anthropic_api_key=os.getenv("ANTHROPIC_API_KEY"),
             youtube_api_key=os.getenv("YOUTUBE_API_KEY"),
             notification_enabled=_parse_bool(
                 os.getenv("NOTIFICATION_ENABLED"),
@@ -350,6 +361,8 @@ class Settings:
             raise RuntimeError("BILIBILI_DOWNLOADER must be one of: auto, yt-dlp, bbdown")
         if _is_blank(self.asr_model_size):
             raise RuntimeError("ASR_MODEL_SIZE is not configured")
+        if self.llm_provider != "gemini":
+            raise RuntimeError("LLM_PROVIDER must be 'gemini' in Gemini-only mode")
         if _is_blank(self.gemini_outline_model):
             raise RuntimeError("GEMINI_OUTLINE_MODEL is not configured")
         if _is_blank(self.gemini_digest_model):

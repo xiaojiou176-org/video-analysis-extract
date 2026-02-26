@@ -44,7 +44,10 @@ class IngestPollResponse(BaseModel):
     status_code=status.HTTP_202_ACCEPTED,
     dependencies=[Depends(require_write_access)],
 )
-async def poll_ingest(payload: IngestPollRequest, db: Session = Depends(get_db)):
+async def poll_ingest(
+    payload: IngestPollRequest,
+    db: Session = Depends(get_db),
+):
     service = IngestService(db)
     try:
         enqueued, candidates = await service.poll(

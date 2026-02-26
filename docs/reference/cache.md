@@ -93,3 +93,10 @@ OPS_CLEANUP_OLDER_THAN_HOURS=24 \
   - `--cache-max-size-mb`
 - 修改缓存签名算法、路径或保留策略后，必须同步更新 `docs/state-machine.md`。
 - 调度模式必须二选一：使用 `start_ops_workflows.sh` 常驻 workflow 时，不要再用 cron 重复触发 cleanup。
+
+## Doc-Drift Enforcement
+- 触发文件：
+  - `scripts/start_ops_workflows.sh`
+  - `scripts/cleanup_workspace.sh`
+- 触发后必须同步更新：`docs/reference/cache.md`
+- 校验脚本：`scripts/ci_or_local_gate_doc_drift.sh`

@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime, timezone
+import logging
 from typing import Any
 from urllib.parse import parse_qs, urlparse
+from uuid import uuid4
 
 import httpx
 
@@ -14,6 +16,7 @@ YOUTUBE_HOSTS = {
     "m.youtube.com",
     "youtu.be",
 }
+logger = logging.getLogger(__name__)
 
 
 def _utc_now_iso() -> str:
@@ -88,6 +91,8 @@ class YouTubeCommentCollector:
         *,
         params: dict[str, Any],
     ) -> dict[str, Any]:
+        trace_id = str(getattr(self, "_log_trace_id", "missing_trace"))
+        user = str(getattr(self, "_log_user", "youtube_comment_collector"))
         last_error: Exception | None = None
         for attempt in range(self._retry_attempts + 1):
             try:
@@ -100,10 +105,25 @@ class YouTubeCommentCollector:
                 return {}
             except (httpx.TimeoutException, httpx.RequestError, httpx.HTTPStatusError) as exc:
                 last_error = exc
+                logger.warning(
+                    "youtube_api_request_retry",
+                    extra={
+                        "trace_id": trace_id,
+                        "user": user,
+                        "path": path,
+                        "attempt": attempt + 1,
+                        "max_attempts": self._retry_attempts + 1,
+                        "error": str(exc),
+                    },
+                )
                 if attempt >= self._retry_attempts:
                     break
                 await asyncio.sleep(self._retry_backoff_seconds * float(2**attempt))
         if last_error is not None:
+            logger.error(
+                "youtube_api_request_failed",
+                extra={"trace_id": trace_id, "user": user, "path": path, "error": str(last_error)},
+            )
             raise last_error
         raise RuntimeError("youtube_request_failed")
 
@@ -191,6 +211,8 @@ class YouTubeCommentCollector:
         source_url: str | None,
         video_uid: str | None,
     ) -> dict[str, Any]:
+        self._log_trace_id = uuid4().hex
+        self._log_user = "youtube_comment_collector"
         if not self._api_key:
             raise ValueError("youtube_api_key_missing")
 

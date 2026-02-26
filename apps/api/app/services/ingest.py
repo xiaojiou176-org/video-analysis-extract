@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import uuid
 from uuid import uuid4
 
@@ -10,6 +11,8 @@ from sqlalchemy.orm import Session
 from ..config import settings
 from ..errors import ApiTimeoutError
 from ..models import Job, Subscription, Video
+
+logger = logging.getLogger(__name__)
 
 
 class IngestService:
@@ -22,7 +25,21 @@ class IngestService:
         subscription_id: uuid.UUID | None,
         platform: str | None,
         max_new_videos: int,
+        trace_id: str | None = None,
+        user: str | None = None,
     ) -> tuple[int, list[dict[str, object]]]:
+        trace = str(trace_id or "missing_trace")
+        actor = str(user or "system")
+        logger.info(
+            "ingest_poll_started",
+            extra={
+                "trace_id": trace,
+                "user": actor,
+                "subscription_id": str(subscription_id) if subscription_id else None,
+                "platform": platform,
+                "max_new_videos": max_new_videos,
+            },
+        )
         if subscription_id is not None:
             exists = self.db.scalar(
                 select(Subscription.id).where(Subscription.id == subscription_id)
@@ -33,6 +50,10 @@ class IngestService:
         try:
             from temporalio.client import Client
         except Exception as exc:  # pragma: no cover
+            logger.exception(
+                "ingest_temporal_client_import_failed",
+                extra={"trace_id": trace, "user": actor, "error": str(exc)},
+            )
             raise RuntimeError(f"temporal client not available: {exc}") from exc
 
         try:
@@ -44,6 +65,15 @@ class IngestService:
                 timeout=settings.api_temporal_connect_timeout_seconds,
             )
         except TimeoutError as exc:
+            logger.error(
+                "ingest_temporal_connect_timeout",
+                extra={
+                    "trace_id": trace,
+                    "user": actor,
+                    "timeout_seconds": settings.api_temporal_connect_timeout_seconds,
+                    "error": str(exc),
+                },
+            )
             raise ApiTimeoutError(
                 detail=(
                     "temporal connect timed out "
@@ -69,6 +99,15 @@ class IngestService:
                 timeout=settings.api_temporal_start_timeout_seconds,
             )
         except TimeoutError as exc:
+            logger.error(
+                "ingest_temporal_start_timeout",
+                extra={
+                    "trace_id": trace,
+                    "user": actor,
+                    "timeout_seconds": settings.api_temporal_start_timeout_seconds,
+                    "error": str(exc),
+                },
+            )
             raise ApiTimeoutError(
                 detail=(
                     "temporal workflow start timed out "
@@ -83,6 +122,15 @@ class IngestService:
                 timeout=settings.api_temporal_result_timeout_seconds,
             )
         except TimeoutError as exc:
+            logger.error(
+                "ingest_temporal_result_timeout",
+                extra={
+                    "trace_id": trace,
+                    "user": actor,
+                    "timeout_seconds": settings.api_temporal_result_timeout_seconds,
+                    "error": str(exc),
+                },
+            )
             raise ApiTimeoutError(
                 detail=(
                     "temporal workflow result timed out "
@@ -93,6 +141,10 @@ class IngestService:
 
         created_job_ids = [uuid.UUID(str(item)) for item in result.get("created_job_ids", [])]
         if not created_job_ids:
+            logger.info(
+                "ingest_poll_completed",
+                extra={"trace_id": trace, "user": actor, "enqueued": 0, "candidates": 0},
+            )
             return 0, []
 
         stmt = (
@@ -116,4 +168,13 @@ class IngestService:
             }
             for job, video in rows
         ]
+        logger.info(
+            "ingest_poll_completed",
+            extra={
+                "trace_id": trace,
+                "user": actor,
+                "enqueued": len(candidates),
+                "candidates": len(candidates),
+            },
+        )
         return len(candidates), candidates

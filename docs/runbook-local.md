@@ -2,6 +2,17 @@
 
 本文是本仓库本地运行的权威步骤文档，和 `README.md` 保持同一套 6 步口径。
 
+## 标准环境约束（AI/自动化必须）
+
+- AI 执行 lint/test/live smoke 必须在标准环境完成：`.devcontainer/devcontainer.json`。
+- 基础设施编排真相源固定为：`infra/compose/core-services.compose.yml` 与 `infra/compose/miniflux-nextflux.compose.yml`。
+- 若不使用 DevContainer，必须提供等价隔离环境（依赖版本、工具链、Compose 服务拓扑一致），否则验证结果不具备门禁效力。
+
+进入标准环境：
+```bash
+devcontainer up --workspace-folder .
+```
+
 ## 标准启动链路（6 步）
 
 ### 1) 安装依赖与前置
@@ -174,8 +185,22 @@ bash -n scripts/start_ops_workflows.sh
 
 脚本说明：
 - `bootstrap_full_stack.sh`：依赖安装、环境校验、数据库迁移、可选 reader stack。
-- `full_stack.sh`：统一起停 API/Worker/MCP/Web。
+- `full_stack.sh`：统一起停 API/Worker/MCP/Web；`up` 会等待 API health(`GET /healthz`) 与 Web 端口就绪，失败时输出关键服务日志片段。
 - `smoke_full_stack.sh`：执行端到端 smoke（含 feed/web 检查，可选 reader 检查）。
+
+`full_stack.sh` 运行约束（稳定性修复）：
+- `up` 后台拉起 API 时会强制 `DEV_API_RELOAD=0`，避免 `uvicorn --reload` 父子进程漂移导致 `status`/`down` 误判。
+- `status` 会在 PID 文件失真时回退按进程特征探测并自愈 PID 文件。
+
+Live smoke 执行约束（2026-02 更新）：
+- 环境变量加载顺序：优先仓库 `.env`（无 `.env` 时 `.env.local`），缺失时回退读取 `zsh` login 环境变量。
+- `YOUTUBE_API_KEY` 失效自修复：按 `.env` → `.env.bak` → `.env.local` → `zsh` 顺序尝试可用 key；命中后自动回写 `.env`（日志仅输出脱敏片段，不输出完整 key）。
+- 若上述来源全部无效：live smoke 会明确失败并提示“需要用户提供有效key”。
+- 外部真实交互：`e2e_live_smoke.sh` 会先执行真实外部 API 探测，再执行真实浏览器外站探测（`external_playwright_smoke.sh`）。
+- 重试上限：live 脚本网络重试最多 2 次（含首轮）。
+- 诊断输出：失败时会写入结构化 JSON，并区分 `code_logic_error` 与 `network_or_environment_timeout`。
+- 执行顺序：`short tests first`（health/feed/web/external probe）→ `long tests`（全链路视频处理与同步）→ `teardown`（仅安全清理临时产物）。
+- 写操作策略：live 写入仅用于可重复 smoke 验证；诊断 JSON 必须落地 `write_operations[].idempotency_key`、`write_operations[].cleanup_action`、`teardown.steps[]`。
 
 当前默认：
 - `bootstrap_full_stack.sh` 默认启用 `WITH_CORE_SERVICES=1` 和 `WITH_READER_STACK=1`。

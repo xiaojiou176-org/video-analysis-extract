@@ -55,10 +55,14 @@ class Settings:
     notification_enabled: bool
     resend_api_key: str | None
     resend_from_email: str | None
+    llm_provider: str
     gemini_api_key: str | None
     gemini_model: str
+    gemini_computer_use_model: str
     gemini_embedding_model: str
     gemini_thinking_level: str
+    openai_api_key: str | None
+    anthropic_api_key: str | None
     ui_audit_gemini_enabled: bool
 
     @classmethod
@@ -93,10 +97,17 @@ class Settings:
             ),
             resend_api_key=os.getenv("RESEND_API_KEY"),
             resend_from_email=os.getenv("RESEND_FROM_EMAIL"),
+            llm_provider=(os.getenv("LLM_PROVIDER", "gemini") or "gemini").strip().lower(),
             gemini_api_key=os.getenv("GEMINI_API_KEY"),
             gemini_model=os.getenv("GEMINI_MODEL", "gemini-3.1-pro-preview"),
+            gemini_computer_use_model=os.getenv(
+                "GEMINI_COMPUTER_USE_MODEL",
+                os.getenv("GEMINI_MODEL", "gemini-3.1-pro-preview"),
+            ),
             gemini_embedding_model=os.getenv("GEMINI_EMBEDDING_MODEL", "gemini-embedding-001"),
             gemini_thinking_level=os.getenv("GEMINI_THINKING_LEVEL", "high"),
+            openai_api_key=os.getenv("OPENAI_API_KEY"),
+            anthropic_api_key=os.getenv("ANTHROPIC_API_KEY"),
             ui_audit_gemini_enabled=_parse_bool(
                 os.getenv("UI_AUDIT_GEMINI_ENABLED"),
                 default=True,
@@ -120,6 +131,8 @@ class Settings:
                 raise RuntimeError("RESEND_API_KEY is not configured")
             if _is_blank(self.resend_from_email):
                 raise RuntimeError("RESEND_FROM_EMAIL is not configured")
+        if self.llm_provider != "gemini":
+            raise RuntimeError("LLM_PROVIDER must be 'gemini' in Gemini-only mode")
         return self
 
 

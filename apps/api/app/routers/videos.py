@@ -89,7 +89,10 @@ def list_videos(
     status_code=status.HTTP_202_ACCEPTED,
     dependencies=[Depends(require_write_access)],
 )
-async def process_video(payload: VideoProcessRequest, db: Session = Depends(get_db)):
+async def process_video(
+    payload: VideoProcessRequest,
+    db: Session = Depends(get_db),
+):
     service = VideosService(db)
     try:
         result = await service.process_video(
