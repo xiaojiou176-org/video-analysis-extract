@@ -765,28 +765,6 @@
       "description": "Miniflux API token for AI sync."
     },
     {
-      "name": "MINIFLUX_CLEANUP_ARCHIVE_READ_DAYS",
-      "scope": "scripts",
-      "required": false,
-      "secret": false,
-      "default": "30",
-      "consumer": [
-        "infra/compose/miniflux-nextflux.compose.yml"
-      ],
-      "description": "Miniflux cleanup retention for read archived entries."
-    },
-    {
-      "name": "MINIFLUX_CLEANUP_REMOVE_SESSIONS_DAYS",
-      "scope": "scripts",
-      "required": false,
-      "secret": false,
-      "default": "30",
-      "consumer": [
-        "infra/compose/miniflux-nextflux.compose.yml"
-      ],
-      "description": "Miniflux cleanup retention for inactive sessions."
-    },
-    {
       "name": "MINIFLUX_DB_NAME",
       "scope": "scripts",
       "required": false,
@@ -829,17 +807,6 @@
         "scripts/sync_ai_feed_to_miniflux.py"
       ],
       "description": "Seed feed URL used to create target feed for AI imports."
-    },
-    {
-      "name": "MINIFLUX_POLLING_FREQUENCY",
-      "scope": "scripts",
-      "required": false,
-      "secret": false,
-      "default": "30",
-      "consumer": [
-        "infra/compose/miniflux-nextflux.compose.yml"
-      ],
-      "description": "Miniflux polling frequency in minutes."
     },
     {
       "name": "MINIFLUX_PORT",

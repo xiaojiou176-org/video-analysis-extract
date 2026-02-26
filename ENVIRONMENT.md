@@ -271,6 +271,7 @@ Required only when enabling reader stack (`WITH_READER_STACK=1`) or running read
 - `MINIFLUX_DB_PASSWORD`
 - `MINIFLUX_ADMIN_PASSWORD`
 - `MINIFLUX_BASE_URL`
+- Miniflux polling/cleanup values use defaults in `infra/compose/miniflux-nextflux.compose.yml` and are no longer contract-managed env keys.
 
 ## Migration Guide: Legacy `.env.example` -> Core/Profile Overlay
 
