@@ -120,4 +120,3 @@ def test_gemini_schema_retry_enabled_when_strict_mode_off(monkeypatch: Any) -> N
     assert len(calls) == 2
     assert "response_json_schema" in calls[0]
     assert "response_json_schema" not in calls[1]
-

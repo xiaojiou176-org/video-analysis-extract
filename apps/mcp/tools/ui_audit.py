@@ -198,7 +198,9 @@ def register_ui_audit_tools(mcp: FastMCP, api_call: ApiCall) -> None:
             if include_base64:
                 encoded = to_optional_str(response.get("base64"))
                 if encoded is not None:
-                    valid, error_message = validate_base64_size(encoded, max_bytes=DEFAULT_MAX_BASE64_BYTES)
+                    valid, error_message = validate_base64_size(
+                        encoded, max_bytes=DEFAULT_MAX_BASE64_BYTES
+                    )
                     if not valid:
                         return {
                             "code": "PAYLOAD_TOO_LARGE",

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Any, Awaitable, Callable
+from collections.abc import Awaitable, Callable
+from typing import Any
 
 from worker.pipeline.policies import coerce_int
 from worker.pipeline.types import CommandResult, PipelineContext, StepExecution, StepStatus
@@ -26,7 +27,9 @@ async def step_extract_frames(
     frame_method = str(frame_policy.get("method") or "fps").strip().lower()
     if frame_method not in {"fps", "scene"}:
         frame_method = "fps"
-    max_frames = max(1, coerce_int(frame_policy.get("max_frames"), int(ctx.settings.pipeline_max_frames)))
+    max_frames = max(
+        1, coerce_int(frame_policy.get("max_frames"), int(ctx.settings.pipeline_max_frames))
+    )
 
     output_pattern = str((ctx.frames_dir / "frame_%03d.jpg").resolve())
     cmd = [

@@ -10,13 +10,13 @@ source "$ROOT_DIR/scripts/lib/http_api.sh"
 load_repo_env "$ROOT_DIR" "$SCRIPT_NAME"
 
 VD_API_BASE_URL="${VD_API_BASE_URL:-http://127.0.0.1:8000}"
-FAILURE_LOOKBACK_HOURS="${FAILURE_LOOKBACK_HOURS:-24}"
-FAILURE_LIMIT="${FAILURE_LIMIT:-20}"
-FAILURE_CHANNEL="${FAILURE_CHANNEL:-email}"
-FAILURE_DRY_RUN="${FAILURE_DRY_RUN:-false}"
-FAILURE_FORCE="${FAILURE_FORCE:-false}"
-FAILURE_TO_EMAIL="${FAILURE_TO_EMAIL:-}"
-FAILURE_FALLBACK_ENABLED="${FAILURE_FALLBACK_ENABLED:-1}"
+failure_lookback_hours="24"
+failure_limit="20"
+failure_channel="email"
+failure_dry_run="false"
+failure_force="false"
+failure_to_email=""
+failure_fallback_enabled="1"
 
 HTTP_STATUS=""
 HTTP_BODY=""
@@ -53,21 +53,19 @@ json_bool() {
 
 build_failure_payload() {
   local dry_run force
-  dry_run="$(json_bool "$FAILURE_DRY_RUN")"
-  force="$(json_bool "$FAILURE_FORCE")"
+  dry_run="$(json_bool "$failure_dry_run")"
+  force="$(json_bool "$failure_force")"
 
-  FAILURE_CHANNEL="$FAILURE_CHANNEL" FAILURE_LOOKBACK_HOURS="$FAILURE_LOOKBACK_HOURS" \
-    FAILURE_LIMIT="$FAILURE_LIMIT" DRY_RUN="$dry_run" FORCE="$force" \
-    python3 - <<'PY'
+  python3 - "$failure_channel" "$failure_lookback_hours" "$failure_limit" "$dry_run" "$force" <<'PY'
 import json
-import os
+import sys
 
 payload = {
-    "channel": os.environ["FAILURE_CHANNEL"],
-    "lookback_hours": int(os.environ["FAILURE_LOOKBACK_HOURS"]),
-    "limit": int(os.environ["FAILURE_LIMIT"]),
-    "dry_run": os.environ["DRY_RUN"] == "true",
-    "force": os.environ["FORCE"] == "true",
+    "channel": sys.argv[1],
+    "lookback_hours": int(sys.argv[2]),
+    "limit": int(sys.argv[3]),
+    "dry_run": sys.argv[4] == "true",
+    "force": sys.argv[5] == "true",
 }
 print(json.dumps(payload, ensure_ascii=False))
 PY
@@ -104,10 +102,8 @@ try_primary_routes() {
 }
 
 build_fallback_payload() {
-  FAILURE_LOOKBACK_HOURS="$FAILURE_LOOKBACK_HOURS" FAILURE_TO_EMAIL="$FAILURE_TO_EMAIL" \
-    python3 - <<'PY'
+  python3 - "$failure_lookback_hours" "$failure_to_email" <<'PY'
 import json
-import os
 import sys
 from datetime import datetime, timedelta, timezone
 
@@ -120,7 +116,7 @@ except json.JSONDecodeError:
 if not isinstance(payload, list):
     payload = []
 
-lookback_hours = int(os.environ.get("FAILURE_LOOKBACK_HOURS", "24"))
+lookback_hours = int(sys.argv[1])
 cutoff = datetime.now(timezone.utc) - timedelta(hours=lookback_hours)
 
 def parse_iso(value: object) -> datetime | None:
@@ -175,7 +171,7 @@ result = {
     "subject": subject,
     "body": body,
 }
-to_email = os.environ.get("FAILURE_TO_EMAIL", "").strip()
+to_email = sys.argv[2].strip()
 if to_email:
     result["to_email"] = to_email
 
@@ -185,7 +181,7 @@ PY
 
 fallback_failure_alerts() {
   log "Fallback step 1/2: fetching failed videos."
-  api_get "/api/v1/videos?status=failed&limit=${FAILURE_LIMIT}"
+  api_get "/api/v1/videos?status=failed&limit=${failure_limit}"
   if [[ "$HTTP_STATUS" -lt 200 || "$HTTP_STATUS" -ge 300 ]]; then
     fail "Failed to list failed videos: status=${HTTP_STATUS}, body=$(safe_body_preview "$HTTP_BODY")"
   fi
@@ -212,6 +208,34 @@ main() {
   require_cmd curl
   require_cmd python3
 
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --api-base-url) VD_API_BASE_URL="${2:-}"; shift 2 ;;
+      --channel) failure_channel="${2:-}"; shift 2 ;;
+      --lookback-hours) failure_lookback_hours="${2:-}"; shift 2 ;;
+      --limit) failure_limit="${2:-}"; shift 2 ;;
+      --dry-run) failure_dry_run="${2:-}"; shift 2 ;;
+      --force) failure_force="${2:-}"; shift 2 ;;
+      --to-email) failure_to_email="${2:-}"; shift 2 ;;
+      --fallback-enabled) failure_fallback_enabled="${2:-}"; shift 2 ;;
+      -h|--help)
+        cat <<'USAGE'
+Usage: scripts/run_failure_alerts.sh [options]
+  --api-base-url <url>
+  --channel <name>
+  --lookback-hours <int>
+  --limit <int>
+  --dry-run <true|false>
+  --force <true|false>
+  --to-email <email>
+  --fallback-enabled <0|1|true|false>
+USAGE
+        exit 0
+        ;;
+      *) fail "unknown argument: $1" ;;
+    esac
+  done
+
   cd "$ROOT_DIR"
   check_api_health
 
@@ -219,8 +243,8 @@ main() {
     return 0
   fi
 
-  if ! is_truthy "$FAILURE_FALLBACK_ENABLED"; then
-    fail "Fallback disabled (FAILURE_FALLBACK_ENABLED=${FAILURE_FALLBACK_ENABLED})."
+  if ! is_truthy "$failure_fallback_enabled"; then
+    fail "Fallback disabled (--fallback-enabled=${failure_fallback_enabled})."
   fi
 
   fallback_failure_alerts

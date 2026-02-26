@@ -3,18 +3,15 @@
 本页收纳脚本层环境变量全集（从历史 `.env.example` 脚本区块迁移而来）。
 
 使用原则：
+
 - 新手启动优先使用 `.env.example` 最小模板。
 - 仅在需要覆盖脚本默认行为时，再设置本文变量。
 - 推荐临时按命令注入（`VAR=value ./scripts/xxx.sh`），避免长期污染 `.env`。
 
 ## Daily Digest Script (`scripts/run_daily_digest.sh`)
 
-- `DIGEST_CHANNEL` (default: `email`)
-- `DIGEST_DRY_RUN` (default: `false`)
-- `DIGEST_FORCE` (default: `false`)
-- `DIGEST_FALLBACK_ENABLED` (default: `1`)
-- `DIGEST_TO_EMAIL` (optional)
-- `DIGEST_DATE` (optional, `YYYY-MM-DD`)
+This script no longer consumes `DIGEST_*` env vars.
+Use CLI flags instead (`--date`, `--channel`, `--dry-run`, `--force`, `--to-email`, `--fallback-enabled`, `--api-base-url`).
 
 ## Live Smoke Script (`scripts/e2e_live_smoke.sh`)
 
@@ -43,24 +40,13 @@
 
 ## External Playwright Smoke (`scripts/external_playwright_smoke.sh`)
 
-- `EXTERNAL_SMOKE_URL` (default: `https://example.com`)
-- `EXTERNAL_SMOKE_BROWSER` (default: `chromium`)
-- `EXTERNAL_SMOKE_TIMEOUT_MS` (default: `45000`)
-- `EXTERNAL_SMOKE_EXPECT_TEXT` (default: `Example Domain`)
-- `EXTERNAL_SMOKE_OUTPUT_DIR` (default: `.runtime-cache/external-playwright-smoke`)
-- `EXTERNAL_SMOKE_RETRIES` (default: `2`)
-- `EXTERNAL_SMOKE_DIAGNOSTICS_JSON` (default: `.runtime-cache/external-playwright-smoke-result.json`)
-- `EXTERNAL_SMOKE_HEARTBEAT_SECONDS` (default: `30`)
+This script no longer consumes `EXTERNAL_SMOKE_*` env vars.
+Use CLI flags instead (`--url`, `--browser`, `--timeout-ms`, `--expect-text`, `--output-dir`, `--retries`, `--diagnostics-json`, `--heartbeat-seconds`).
 
 ## Failure Alerts Script (`scripts/run_failure_alerts.sh`)
 
-- `FAILURE_CHANNEL` (default: `email`)
-- `FAILURE_LOOKBACK_HOURS` (default: `24`)
-- `FAILURE_LIMIT` (default: `20`)
-- `FAILURE_DRY_RUN` (default: `false`)
-- `FAILURE_FORCE` (default: `false`)
-- `FAILURE_FALLBACK_ENABLED` (default: `1`)
-- `FAILURE_TO_EMAIL` (optional)
+This script no longer consumes `FAILURE_*` env vars.
+Use CLI flags instead (`--channel`, `--lookback-hours`, `--limit`, `--dry-run`, `--force`, `--to-email`, `--fallback-enabled`, `--api-base-url`).
 
 ## Script Entry Overrides (`scripts/dev_*.sh`, `scripts/init_env_example.sh`)
 
@@ -114,14 +100,5 @@
 
 ## Recreate GCE Instance (`scripts/recreate_gce_instance.sh`)
 
-- `GCP_PROJECT` (required when running recreate script)
-- `GCP_ZONE` (default: `us-west1-b`)
-- `INSTANCE_NAME` (default: `vd-prod`)
-- `MACHINE_TYPE` (default: `e2-standard-2`)
-- `DISK_SIZE` (default: `50GB`)
-- `IMAGE_FAMILY` (default: `debian-12`)
-- `IMAGE_PROJECT` (default: `debian-cloud`)
-- `GITHUB_REPO_URL` (optional)
-- `FORCE_DELETE_INSTANCE` (default: `0`)
-- `FORCE_REPLACE_APP_DIR` (default: `0`)
-- `INSTALL_DEPS` (default: `1`)
+This script no longer consumes env vars for GCE recreate options.
+Use CLI flags instead (`--project`, `--zone`, `--instance`, `--machine`, `--disk-size`, `--image-family`, `--image-project`, `--repo`, `--force-delete-instance`, `--force-replace-app-dir`).

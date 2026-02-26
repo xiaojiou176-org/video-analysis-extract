@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -20,9 +20,7 @@ def is_cleanup_candidate(path: Path) -> bool:
         return True
     if name.startswith("frame_") and suffix in IMAGE_EXTENSIONS:
         return True
-    if name.startswith("media.") and suffix in VIDEO_EXTENSIONS:
-        return True
-    return False
+    return name.startswith("media.") and suffix in VIDEO_EXTENSIONS
 
 
 def iter_files(root: Path) -> list[Path]:
@@ -67,7 +65,9 @@ def cleanup_workspace_media_files(
     effective_cache_older_than_hours = max(
         1, cache_older_than_hours if cache_older_than_hours is not None else older_than_hours
     )
-    effective_cache_max_size_mb = max(1, cache_max_size_mb if cache_max_size_mb is not None else 1024)
+    effective_cache_max_size_mb = max(
+        1, cache_max_size_mb if cache_max_size_mb is not None else 1024
+    )
     cache_max_size_bytes = effective_cache_max_size_mb * 1024 * 1024
 
     if not workspace.exists():
@@ -82,7 +82,7 @@ def cleanup_workspace_media_files(
             "reason": "workspace_not_found",
         }
 
-    reference = now_utc or datetime.now(timezone.utc)
+    reference = now_utc or datetime.now(UTC)
     cutoff = reference - timedelta(hours=max(1, older_than_hours))
     deleted_files = 0
     deleted_dirs = 0
@@ -97,7 +97,7 @@ def cleanup_workspace_media_files(
         if not is_cleanup_candidate(path):
             continue
         try:
-            modified_at = datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc)
+            modified_at = datetime.fromtimestamp(path.stat().st_mtime, tz=UTC)
         except OSError:
             continue
         if modified_at >= cutoff:
@@ -118,7 +118,7 @@ def cleanup_workspace_media_files(
                 stat = path.stat()
             except OSError:
                 continue
-            modified_at = datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc)
+            modified_at = datetime.fromtimestamp(stat.st_mtime, tz=UTC)
             size_bytes = int(stat.st_size)
             if modified_at < cache_cutoff:
                 try:

@@ -81,7 +81,9 @@ def test_subscriptions_allows_public_source_url() -> None:
     assert repo.kwargs["source_url"] == "https://example.com/feed.xml"
 
 
-def test_ui_audit_blocks_artifact_root_outside_base(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_ui_audit_blocks_artifact_root_outside_base(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     base_root = tmp_path / "base"
     outside_root = tmp_path / "outside"
     base_root.mkdir(parents=True, exist_ok=True)
@@ -96,7 +98,9 @@ def test_ui_audit_blocks_artifact_root_outside_base(monkeypatch: pytest.MonkeyPa
     assert payload["artifact_root"] is None
 
 
-def test_ui_audit_blocks_artifact_root_equal_to_base(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_ui_audit_blocks_artifact_root_equal_to_base(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     base_root = tmp_path / "base"
     base_root.mkdir(parents=True, exist_ok=True)
     (base_root / "playwright-log.json").write_text("{}", encoding="utf-8")
@@ -109,7 +113,9 @@ def test_ui_audit_blocks_artifact_root_equal_to_base(monkeypatch: pytest.MonkeyP
     assert payload["artifact_root"] is None
 
 
-def test_ui_audit_text_snippet_uses_stream_read(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_ui_audit_text_snippet_uses_stream_read(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     base_root = tmp_path / "ui-audit"
     base_root.mkdir(parents=True, exist_ok=True)
     log_path = base_root / "large.log"
@@ -201,7 +207,9 @@ def test_computer_use_timeout_retries_then_errors(monkeypatch: pytest.MonkeyPatc
     assert calls["count"] == 2
 
 
-def test_ui_audit_gemini_timeout_retries_then_fallback(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_ui_audit_gemini_timeout_retries_then_fallback(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     calls = {"count": 0}
     base_root = tmp_path / "ui-base"
     artifact_root = base_root / "run-1"
@@ -255,4 +263,6 @@ def test_ui_audit_gemini_timeout_retries_then_fallback(monkeypatch: pytest.Monke
 
     assert payload["status"] == "completed"
     assert calls["count"] == 2
-    assert any(item.get("rule") == "gemini-ui-review-provider-error" for item in payload["findings"])
+    assert any(
+        item.get("rule") == "gemini-ui-review-provider-error" for item in payload["findings"]
+    )

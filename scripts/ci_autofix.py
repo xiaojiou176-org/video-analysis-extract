@@ -128,7 +128,7 @@ def _expand_inputs(paths: list[str], globs: list[str]) -> list[Path]:
         if path.is_file():
             result.append(path)
     for pattern in globs:
-        result.extend(path for path in Path(".").glob(pattern) if path.is_file())
+        result.extend(path for path in Path().glob(pattern) if path.is_file())
     unique: dict[str, Path] = {str(path): path for path in result}
     return [unique[key] for key in sorted(unique)]
 
@@ -201,7 +201,9 @@ def main() -> int:
         description="Generate dry-run autofix report from CI junit/log artifacts."
     )
     parser.add_argument("--junit", action="append", default=[], help="Path to a junit xml file.")
-    parser.add_argument("--junit-glob", action="append", default=[], help="Glob for junit xml files.")
+    parser.add_argument(
+        "--junit-glob", action="append", default=[], help="Glob for junit xml files."
+    )
     parser.add_argument("--log", action="append", default=[], help="Path to a log file.")
     parser.add_argument("--log-glob", action="append", default=[], help="Glob for log files.")
     parser.add_argument(
@@ -218,7 +220,7 @@ def main() -> int:
     for path in junit_files:
         try:
             findings.extend(_parse_junit_file(path))
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             findings.append(
                 {
                     "source_type": "junit",

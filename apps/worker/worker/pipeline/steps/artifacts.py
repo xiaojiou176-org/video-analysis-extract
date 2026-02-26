@@ -72,7 +72,9 @@ def _apply_low_evidence_guard(
     digest["timestamp_references"] = []
     digest["code_blocks"] = []
 
-    fallback_notes = [str(item) for item in (digest.get("fallback_notes") or []) if str(item).strip()]
+    fallback_notes = [
+        str(item) for item in (digest.get("fallback_notes") or []) if str(item).strip()
+    ]
     if not _has_transcript_evidence(transcript):
         fallback_notes.append("transcript_missing_or_too_short")
     if not _has_comments_evidence(comments):
@@ -104,7 +106,9 @@ async def step_write_artifacts(ctx: PipelineContext, state: dict[str, Any]) -> S
 
         tldr = [str(item) for item in (digest.get("tldr") or []) if str(item).strip()]
         highlights = [str(item) for item in (digest.get("highlights") or []) if str(item).strip()]
-        action_items = [str(item) for item in (digest.get("action_items") or []) if str(item).strip()]
+        action_items = [
+            str(item) for item in (digest.get("action_items") or []) if str(item).strip()
+        ]
         if not highlights:
             highlights = ["未提取到高置信度要点。"]
         if not tldr:
@@ -123,7 +127,12 @@ async def step_write_artifacts(ctx: PipelineContext, state: dict[str, Any]) -> S
         rendered_digest = render_template(
             template,
             {
-                "title": str(digest.get("title") or metadata.get("title") or state.get("title") or "Untitled Video"),
+                "title": str(
+                    digest.get("title")
+                    or metadata.get("title")
+                    or state.get("title")
+                    or "Untitled Video"
+                ),
                 "source_url": source_url,
                 "platform": str(state.get("platform") or ""),
                 "video_uid": str(state.get("video_uid") or ""),
@@ -138,7 +147,9 @@ async def step_write_artifacts(ctx: PipelineContext, state: dict[str, Any]) -> S
                 "comments_markdown": build_comments_markdown(comments),
                 "frames_embedded_markdown": build_frames_embedded_markdown(frames, ctx.job_id),
                 "frames_index_markdown": build_frames_markdown(frames, source_url),
-                "timestamp_refs_markdown": build_timestamp_refs_markdown(outline, digest, source_url),
+                "timestamp_refs_markdown": build_timestamp_refs_markdown(
+                    outline, digest, source_url
+                ),
                 "fallback_notes_markdown": build_fallback_notes_markdown(digest, degradations),
                 "degradations_markdown": "\n".join(degradation_lines),
             },

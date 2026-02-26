@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import asyncio
 import time
+from collections.abc import Iterable
 from dataclasses import dataclass, field
-from typing import Any, Iterable
+from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
-from xml.etree import ElementTree
+from xml.etree import ElementTree as ET
 
 import httpx
 
@@ -16,7 +17,7 @@ def _local_name(tag: str) -> str:
     return tag
 
 
-def _find_text(node: ElementTree.Element, names: set[str]) -> str | None:
+def _find_text(node: ET.Element, names: set[str]) -> str | None:
     for child in node:
         if _local_name(child.tag) in names and child.text:
             text = child.text.strip()
@@ -25,7 +26,7 @@ def _find_text(node: ElementTree.Element, names: set[str]) -> str | None:
     return None
 
 
-def _extract_link(node: ElementTree.Element) -> str | None:
+def _extract_link(node: ET.Element) -> str | None:
     for child in node:
         if _local_name(child.tag) != "link":
             continue
@@ -40,7 +41,7 @@ def _extract_link(node: ElementTree.Element) -> str | None:
 
 
 def parse_feed(xml_content: str) -> list[dict[str, Any]]:
-    root = ElementTree.fromstring(xml_content)
+    root = ET.fromstring(xml_content)
     root_name = _local_name(root.tag)
 
     if root_name == "rss":
@@ -314,7 +315,7 @@ class RSSHubFetcher:
                     # Retry server errors; for known anti-bot errors, switch candidate route immediately.
                     if status_code < 500 or self._is_risk_control_response(exc.response):
                         break
-                except (httpx.RequestError, ElementTree.ParseError) as exc:
+                except (httpx.RequestError, ET.ParseError) as exc:
                     last_error = exc
 
                 if attempt >= self._retry_attempts:
@@ -338,7 +339,7 @@ class RSSHubFetcher:
             results = await asyncio.gather(*tasks, return_exceptions=True)
 
         by_feed: dict[str, list[dict[str, Any]]] = {}
-        for feed_url, result in zip(urls, results):
+        for feed_url, result in zip(urls, results, strict=False):
             if isinstance(result, asyncio.CancelledError):
                 raise result
             if isinstance(result, Exception):

@@ -7,7 +7,9 @@ from worker.pipeline.types import PipelineContext
 
 
 def _semantic_len(text: str) -> int:
-    content = "".join(ch for ch in str(text or "").strip() if ch.isalnum() or ("\u4e00" <= ch <= "\u9fff"))
+    content = "".join(
+        ch for ch in str(text or "").strip() if ch.isalnum() or ("\u4e00" <= ch <= "\u9fff")
+    )
     return len(content)
 
 
@@ -42,7 +44,11 @@ def _digest_quality_ok(payload: dict[str, Any]) -> bool:
 
 def _thinking_level_from_policy(llm_policy: dict[str, Any]) -> str:
     speed_priority = bool(llm_policy.get("speed_priority"))
-    raw = str(llm_policy.get("thinking_level") or ("low" if speed_priority else "high")).strip().lower()
+    raw = (
+        str(llm_policy.get("thinking_level") or ("low" if speed_priority else "high"))
+        .strip()
+        .lower()
+    )
     if raw not in {"minimal", "low", "medium", "high"}:
         return "high"
     if raw == "minimal":
@@ -64,7 +70,9 @@ def _coerce_bool(value: Any, default: bool) -> bool:
 
 
 def _max_function_call_rounds(llm_policy: dict[str, Any], section_policy: dict[str, Any]) -> int:
-    raw = section_policy.get("max_function_call_rounds", llm_policy.get("max_function_call_rounds", 2))
+    raw = section_policy.get(
+        "max_function_call_rounds", llm_policy.get("max_function_call_rounds", 2)
+    )
     parsed = coerce_int(raw, 2)
     return max(0, parsed)
 

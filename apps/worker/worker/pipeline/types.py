@@ -26,7 +26,7 @@ PIPELINE_STEPS: list[str] = [
     "write_artifacts",
 ]
 
-STEP_VERSIONS: dict[str, str] = {step: "v1" for step in PIPELINE_STEPS}
+STEP_VERSIONS: dict[str, str] = dict.fromkeys(PIPELINE_STEPS, "v1")
 STEP_VERSIONS["download_media"] = "v2"
 STEP_VERSIONS["collect_subtitles"] = "v2"
 STEP_VERSIONS["collect_comments"] = "v4"
@@ -52,7 +52,13 @@ PIPELINE_MODE_SKIP_STEPS: dict[PipelineMode, set[str]] = {
 PIPELINE_MODE_FORCE_STEPS: dict[PipelineMode, set[str]] = {
     "full": set(),
     "text_only": set(),
-    "refresh_comments": {"collect_comments", "llm_outline", "llm_digest", "build_embeddings", "write_artifacts"},
+    "refresh_comments": {
+        "collect_comments",
+        "llm_outline",
+        "llm_digest",
+        "build_embeddings",
+        "write_artifacts",
+    },
     "refresh_llm": {"llm_outline", "llm_digest", "build_embeddings", "write_artifacts"},
 }
 
@@ -165,9 +171,7 @@ STEP_SETTING_KEYS: dict[str, tuple[str, ...]] = {
         "pipeline_max_frames",
         "pipeline_llm_input_mode",
     ),
-    "build_embeddings": (
-        "gemini_embedding_model",
-    ),
+    "build_embeddings": ("gemini_embedding_model",),
     "write_artifacts": ("digest_template_path",),
 }
 
@@ -207,7 +211,7 @@ class StepExecution:
         }
 
     @classmethod
-    def from_record(cls, payload: dict[str, Any]) -> "StepExecution":
+    def from_record(cls, payload: dict[str, Any]) -> StepExecution:
         return cls(
             status=str(payload.get("status", "failed")),  # type: ignore[arg-type]
             output=dict(payload.get("output") or {}),

@@ -5,7 +5,6 @@ from pathlib import Path
 
 import pytest
 
-
 REQUIRED_API_ENV = {
     "DATABASE_URL": "sqlite+pysqlite:///:memory:",
     "TEMPORAL_TARGET_HOST": "127.0.0.1:7233",
@@ -30,7 +29,9 @@ def _load_api_config(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, **override
     return importlib.reload(module)
 
 
-def test_api_parse_helpers_cover_truthy_falsy_and_defaults(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_api_parse_helpers_cover_truthy_falsy_and_defaults(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     config_module = _load_api_config(monkeypatch, tmp_path)
 
     assert config_module._parse_bool("YES", default=False) is True
@@ -38,16 +39,27 @@ def test_api_parse_helpers_cover_truthy_falsy_and_defaults(monkeypatch: pytest.M
     assert config_module._parse_bool("invalid", default=True) is True
 
     monkeypatch.setenv("API_TEMPORAL_CONNECT_TIMEOUT_SECONDS", "2.5")
-    assert config_module._read_positive_float_env("API_TEMPORAL_CONNECT_TIMEOUT_SECONDS", default=5.0) == 2.5
+    assert (
+        config_module._read_positive_float_env("API_TEMPORAL_CONNECT_TIMEOUT_SECONDS", default=5.0)
+        == 2.5
+    )
 
     monkeypatch.setenv("API_TEMPORAL_CONNECT_TIMEOUT_SECONDS", "0")
-    assert config_module._read_positive_float_env("API_TEMPORAL_CONNECT_TIMEOUT_SECONDS", default=5.0) == 5.0
+    assert (
+        config_module._read_positive_float_env("API_TEMPORAL_CONNECT_TIMEOUT_SECONDS", default=5.0)
+        == 5.0
+    )
 
     monkeypatch.setenv("API_TEMPORAL_CONNECT_TIMEOUT_SECONDS", "not-a-number")
-    assert config_module._read_positive_float_env("API_TEMPORAL_CONNECT_TIMEOUT_SECONDS", default=5.0) == 5.0
+    assert (
+        config_module._read_positive_float_env("API_TEMPORAL_CONNECT_TIMEOUT_SECONDS", default=5.0)
+        == 5.0
+    )
 
 
-def test_api_settings_from_env_uses_expected_defaults(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_api_settings_from_env_uses_expected_defaults(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     config_module = _load_api_config(monkeypatch, tmp_path)
 
     settings = config_module.Settings.from_env()
@@ -75,7 +87,9 @@ def test_api_validate_rejects_missing_resend_config_when_notifications_enabled(
         )
 
 
-def test_api_read_required_env_rejects_blank(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_api_read_required_env_rejects_blank(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     config_module = _load_api_config(monkeypatch, tmp_path)
 
     monkeypatch.setenv("TEMPORAL_TARGET_HOST", "   ")
@@ -109,7 +123,9 @@ def test_source_name_mapping_and_fallback(monkeypatch: pytest.MonkeyPatch, tmp_p
     assert fallback_unknown == "Unknown"
 
 
-def test_source_name_loader_returns_empty_for_invalid_payload(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_source_name_loader_returns_empty_for_invalid_payload(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     module = importlib.import_module("apps.api.app.services.source_names")
     source_names = importlib.reload(module)
     mapping_file = tmp_path / "bad.json"

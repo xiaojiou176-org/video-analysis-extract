@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from html import escape
 import re
+from html import escape
 from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
@@ -45,9 +45,7 @@ def sanitize_url_for_payload(raw_url: str) -> str:
             continue
         redacted_items.append((key, value))
     sanitized_query = urlencode(redacted_items, doseq=True)
-    return urlunsplit(
-        (parsed.scheme, parsed.netloc, parsed.path, sanitized_query, parsed.fragment)
-    )
+    return urlunsplit((parsed.scheme, parsed.netloc, parsed.path, sanitized_query, parsed.fragment))
 
 
 def sanitize_text_preview(text_value: str, *, max_chars: int = 500) -> str:
@@ -82,7 +80,7 @@ def render_markdown_html(text_value: str) -> str:
 def to_html(text_value: str) -> str:
     body = render_markdown_html(text_value)
     return (
-        "<!doctype html><html><head><meta charset=\"utf-8\">"
+        '<!doctype html><html><head><meta charset="utf-8">'
         "<style>"
         "body{margin:0;padding:0;background:#f5f7fb;color:#0f172a;"
         "font-family:'PingFang SC','Microsoft YaHei',-apple-system,BlinkMacSystemFont,sans-serif;}"
@@ -100,7 +98,7 @@ def to_html(text_value: str) -> str:
         "th,td{border:1px solid #dbe3ee;padding:6px 8px;text-align:left;vertical-align:top;}"
         "img{max-width:100%;height:auto;border-radius:8px;border:1px solid #e2e8f0;}"
         "hr{border:none;border-top:1px solid #e2e8f0;margin:20px 0;}"
-        "</style></head><body><div class=\"container\"><article class=\"card\">"
+        '</style></head><body><div class="container"><article class="card">'
         f"{body}</article></div></body></html>"
     )
 

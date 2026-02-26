@@ -46,9 +46,10 @@ class SubscriptionsRepository:
     ) -> tuple[Subscription, bool]:
         dialect_name = (self.db.bind.dialect.name if self.db.bind is not None else "").lower()
         if dialect_name == "postgresql":
-            row = self.db.execute(
-                text(
-                    """
+            row = (
+                self.db.execute(
+                    text(
+                        """
                     INSERT INTO subscriptions (
                         id,
                         platform,
@@ -91,21 +92,24 @@ class SubscriptionsRepository:
                         updated_at = NOW()
                     RETURNING id, (xmax = 0) AS created
                     """
-                ),
-                {
-                    "platform": platform,
-                    "id": str(uuid.uuid4()),
-                    "source_type": source_type,
-                    "source_value": source_value,
-                    "adapter_type": adapter_type,
-                    "source_url": source_url,
-                    "rsshub_route": rsshub_route,
-                    "category": category,
-                    "tags": json.dumps(tags, ensure_ascii=False),
-                    "priority": priority,
-                    "enabled": enabled,
-                },
-            ).mappings().one()
+                    ),
+                    {
+                        "platform": platform,
+                        "id": str(uuid.uuid4()),
+                        "source_type": source_type,
+                        "source_value": source_value,
+                        "adapter_type": adapter_type,
+                        "source_url": source_url,
+                        "rsshub_route": rsshub_route,
+                        "category": category,
+                        "tags": json.dumps(tags, ensure_ascii=False),
+                        "priority": priority,
+                        "enabled": enabled,
+                    },
+                )
+                .mappings()
+                .one()
+            )
             subscription_id = row["id"]
             created = bool(row["created"])
             self.db.commit()

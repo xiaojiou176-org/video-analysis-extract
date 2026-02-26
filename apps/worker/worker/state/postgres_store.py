@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from datetime import datetime
-import json
 from typing import Any
 
 from sqlalchemy import create_engine, text
@@ -79,9 +79,10 @@ class PostgresBusinessStore:
 
         where_clause = " AND ".join(filters)
         with self._engine.begin() as conn:
-            rows = conn.execute(
-                text(
-                    f"""
+            rows = (
+                conn.execute(
+                    text(
+                        f"""
                     SELECT
                         id::text AS id,
                         platform,
@@ -95,9 +96,12 @@ class PostgresBusinessStore:
                     WHERE {where_clause}
                     ORDER BY created_at DESC
                     """
-                ),
-                params,
-            ).mappings().all()
+                    ),
+                    params,
+                )
+                .mappings()
+                .all()
+            )
         return [dict(row) for row in rows]
 
     def upsert_video(
@@ -110,9 +114,10 @@ class PostgresBusinessStore:
         published_at: datetime | None,
     ) -> dict[str, Any]:
         with self._engine.begin() as conn:
-            row = conn.execute(
-                text(
-                    """
+            row = (
+                conn.execute(
+                    text(
+                        """
                     INSERT INTO videos (
                         platform,
                         video_uid,
@@ -144,15 +149,18 @@ class PostgresBusinessStore:
                         title,
                         published_at
                     """
-                ),
-                {
-                    "platform": platform,
-                    "video_uid": video_uid,
-                    "source_url": source_url,
-                    "title": title,
-                    "published_at": published_at,
-                },
-            ).mappings().one()
+                    ),
+                    {
+                        "platform": platform,
+                        "video_uid": video_uid,
+                        "source_url": source_url,
+                        "title": title,
+                        "published_at": published_at,
+                    },
+                )
+                .mappings()
+                .one()
+            )
         return dict(row)
 
     def get_ingest_event(
@@ -162,21 +170,25 @@ class PostgresBusinessStore:
         entry_hash: str,
     ) -> dict[str, Any] | None:
         with self._engine.begin() as conn:
-            row = conn.execute(
-                text(
-                    """
+            row = (
+                conn.execute(
+                    text(
+                        """
                     SELECT id::text AS id, video_id::text AS video_id
                     FROM ingest_events
                     WHERE subscription_id = CAST(:subscription_id AS UUID)
                       AND entry_hash = :entry_hash
                     LIMIT 1
                     """
-                ),
-                {
-                    "subscription_id": subscription_id,
-                    "entry_hash": entry_hash,
-                },
-            ).mappings().first()
+                    ),
+                    {
+                        "subscription_id": subscription_id,
+                        "entry_hash": entry_hash,
+                    },
+                )
+                .mappings()
+                .first()
+            )
         return dict(row) if row else None
 
     def create_ingest_event(
@@ -189,9 +201,10 @@ class PostgresBusinessStore:
         video_id: str,
     ) -> tuple[dict[str, Any], bool]:
         with self._engine.begin() as conn:
-            row = conn.execute(
-                text(
-                    """
+            row = (
+                conn.execute(
+                    text(
+                        """
                     INSERT INTO ingest_events (
                         subscription_id,
                         feed_guid,
@@ -211,15 +224,18 @@ class PostgresBusinessStore:
                     ON CONFLICT (subscription_id, entry_hash) DO NOTHING
                     RETURNING id::text AS id, video_id::text AS video_id
                     """
-                ),
-                {
-                    "subscription_id": subscription_id,
-                    "feed_guid": feed_guid,
-                    "feed_link": feed_link,
-                    "entry_hash": entry_hash,
-                    "video_id": video_id,
-                },
-            ).mappings().first()
+                    ),
+                    {
+                        "subscription_id": subscription_id,
+                        "feed_guid": feed_guid,
+                        "feed_link": feed_link,
+                        "entry_hash": entry_hash,
+                        "video_id": video_id,
+                    },
+                )
+                .mappings()
+                .first()
+            )
 
         if row:
             return dict(row), True
@@ -231,9 +247,10 @@ class PostgresBusinessStore:
 
     def find_active_job(self, *, idempotency_key: str) -> dict[str, Any] | None:
         with self._engine.begin() as conn:
-            row = conn.execute(
-                text(
-                    """
+            row = (
+                conn.execute(
+                    text(
+                        """
                     SELECT id::text AS id, status
                     FROM jobs
                     WHERE idempotency_key = :idempotency_key
@@ -241,25 +258,32 @@ class PostgresBusinessStore:
                     ORDER BY created_at DESC
                     LIMIT 1
                     """
-                ),
-                {"idempotency_key": idempotency_key},
-            ).mappings().first()
+                    ),
+                    {"idempotency_key": idempotency_key},
+                )
+                .mappings()
+                .first()
+            )
         return dict(row) if row else None
 
     def find_job_by_idempotency_key(self, *, idempotency_key: str) -> dict[str, Any] | None:
         with self._engine.begin() as conn:
-            row = conn.execute(
-                text(
-                    """
+            row = (
+                conn.execute(
+                    text(
+                        """
                     SELECT id::text AS id, status
                     FROM jobs
                     WHERE idempotency_key = :idempotency_key
                     ORDER BY created_at DESC
                     LIMIT 1
                     """
-                ),
-                {"idempotency_key": idempotency_key},
-            ).mappings().first()
+                    ),
+                    {"idempotency_key": idempotency_key},
+                )
+                .mappings()
+                .first()
+            )
         return dict(row) if row else None
 
     def create_queued_job(
@@ -271,9 +295,10 @@ class PostgresBusinessStore:
     ) -> tuple[dict[str, Any], bool]:
         try:
             with self._engine.begin() as conn:
-                row = conn.execute(
-                    text(
-                        """
+                row = (
+                    conn.execute(
+                        text(
+                            """
                         INSERT INTO jobs (
                             video_id,
                             kind,
@@ -294,13 +319,16 @@ class PostgresBusinessStore:
                         )
                         RETURNING id::text AS id, status, mode
                         """
-                    ),
-                    {
-                        "video_id": video_id,
-                        "idempotency_key": idempotency_key,
-                        "mode": mode,
-                    },
-                ).mappings().one()
+                        ),
+                        {
+                            "video_id": video_id,
+                            "idempotency_key": idempotency_key,
+                            "mode": mode,
+                        },
+                    )
+                    .mappings()
+                    .one()
+                )
                 return dict(row), True
         except IntegrityError:
             existing = self.find_job_by_idempotency_key(idempotency_key=idempotency_key)
@@ -310,9 +338,10 @@ class PostgresBusinessStore:
 
     def mark_job_running(self, *, job_id: str) -> dict[str, Any]:
         with self._engine.begin() as conn:
-            row = conn.execute(
-                text(
-                    """
+            row = (
+                conn.execute(
+                    text(
+                        """
                     UPDATE jobs
                     SET status = 'running',
                         error_message = NULL,
@@ -322,25 +351,32 @@ class PostgresBusinessStore:
                       AND status = 'queued'
                     RETURNING id::text AS id, status
                     """
-                ),
-                {"job_id": job_id},
-            ).mappings().first()
+                    ),
+                    {"job_id": job_id},
+                )
+                .mappings()
+                .first()
+            )
 
             if row is not None:
                 payload = dict(row)
                 payload["transitioned"] = True
                 return payload
 
-            existing = conn.execute(
-                text(
-                    """
+            existing = (
+                conn.execute(
+                    text(
+                        """
                     SELECT id::text AS id, status
                     FROM jobs
                     WHERE id = CAST(:job_id AS UUID)
                     """
-                ),
-                {"job_id": job_id},
-            ).mappings().first()
+                    ),
+                    {"job_id": job_id},
+                )
+                .mappings()
+                .first()
+            )
             if existing is None:
                 raise ValueError(f"job not found: {job_id}")
             payload = dict(existing)
@@ -357,9 +393,10 @@ class PostgresBusinessStore:
         safe_timeout_seconds = max(60, int(timeout_seconds))
         safe_limit = max(1, int(limit))
         with self._engine.begin() as conn:
-            rows = conn.execute(
-                text(
-                    """
+            rows = (
+                conn.execute(
+                    text(
+                        """
                     WITH stale_jobs AS (
                         SELECT id
                         FROM jobs
@@ -387,20 +424,24 @@ class PostgresBusinessStore:
                         j.hard_fail_reason,
                         j.error_message
                     """
-                ),
-                {
-                    "timeout_seconds": safe_timeout_seconds,
-                    "limit": safe_limit,
-                    "error_message": "workflow_dispatch_timeout",
-                },
-            ).mappings().all()
+                    ),
+                    {
+                        "timeout_seconds": safe_timeout_seconds,
+                        "limit": safe_limit,
+                        "error_message": "workflow_dispatch_timeout",
+                    },
+                )
+                .mappings()
+                .all()
+            )
         return [dict(row) for row in rows]
 
     def get_job_with_video(self, *, job_id: str) -> dict[str, Any]:
         with self._engine.begin() as conn:
-            row = conn.execute(
-                text(
-                    """
+            row = (
+                conn.execute(
+                    text(
+                        """
                     SELECT
                         j.id::text AS job_id,
                         j.status AS job_status,
@@ -419,9 +460,12 @@ class PostgresBusinessStore:
                     WHERE j.id = CAST(:job_id AS UUID)
                     LIMIT 1
                     """
-                ),
-                {"job_id": job_id},
-            ).mappings().first()
+                    ),
+                    {"job_id": job_id},
+                )
+                .mappings()
+                .first()
+            )
             if row is None:
                 raise ValueError(f"job not found: {job_id}")
         return dict(row)
@@ -528,9 +572,10 @@ class PostgresBusinessStore:
         with self._engine.begin() as conn:
             if not self._video_embeddings_table_exists(conn):
                 return []
-            rows = conn.execute(
-                text(
-                    """
+            rows = (
+                conn.execute(
+                    text(
+                        """
                     SELECT
                         id::text AS id,
                         video_id::text AS video_id,
@@ -547,14 +592,19 @@ class PostgresBusinessStore:
                     ORDER BY embedding <=> CAST(:query_embedding AS vector(768)) ASC
                     LIMIT :limit
                     """
-                ),
-                {
-                    "query_embedding": self._to_vector_literal([float(v) for v in query_embedding]),
-                    "video_id": video_id,
-                    "content_type": normalized_content_type,
-                    "limit": normalized_limit,
-                },
-            ).mappings().all()
+                    ),
+                    {
+                        "query_embedding": self._to_vector_literal(
+                            [float(v) for v in query_embedding]
+                        ),
+                        "video_id": video_id,
+                        "content_type": normalized_content_type,
+                        "limit": normalized_limit,
+                    },
+                )
+                .mappings()
+                .all()
+            )
         return [dict(row) for row in rows]
 
     def mark_job_succeeded(
@@ -639,9 +689,10 @@ class PostgresBusinessStore:
         hard_fail_reason: str | None,
     ) -> dict[str, Any]:
         with self._engine.begin() as conn:
-            row = conn.execute(
-                text(
-                    """
+            row = (
+                conn.execute(
+                    text(
+                        """
                     UPDATE jobs
                     SET status = :status,
                         error_message = :error_message,
@@ -666,29 +717,33 @@ class PostgresBusinessStore:
                         llm_gate_passed,
                         hard_fail_reason
                     """
-                ),
-                {
-                    "job_id": job_id,
-                    "status": status,
-                    "error_message": error_message,
-                    "artifact_digest_md": artifact_digest_md,
-                    "artifact_root": artifact_root,
-                    "pipeline_final_status": pipeline_final_status,
-                    "degradation_count": degradation_count,
-                    "last_error_code": last_error_code,
-                    "llm_required": llm_required,
-                    "llm_gate_passed": llm_gate_passed,
-                    "hard_fail_reason": hard_fail_reason,
-                },
-            ).mappings().first()
+                    ),
+                    {
+                        "job_id": job_id,
+                        "status": status,
+                        "error_message": error_message,
+                        "artifact_digest_md": artifact_digest_md,
+                        "artifact_root": artifact_root,
+                        "pipeline_final_status": pipeline_final_status,
+                        "degradation_count": degradation_count,
+                        "last_error_code": last_error_code,
+                        "llm_required": llm_required,
+                        "llm_gate_passed": llm_gate_passed,
+                        "hard_fail_reason": hard_fail_reason,
+                    },
+                )
+                .mappings()
+                .first()
+            )
             if row is not None:
                 payload = dict(row)
                 payload["transitioned"] = True
                 return payload
 
-            existing = conn.execute(
-                text(
-                    """
+            existing = (
+                conn.execute(
+                    text(
+                        """
                     SELECT
                         id::text AS id,
                         status,
@@ -701,12 +756,17 @@ class PostgresBusinessStore:
                     FROM jobs
                     WHERE id = CAST(:job_id AS UUID)
                     """
-                ),
-                {"job_id": job_id},
-            ).mappings().first()
+                    ),
+                    {"job_id": job_id},
+                )
+                .mappings()
+                .first()
+            )
             if existing is None:
                 raise ValueError(f"job not found: {job_id}")
             payload = dict(existing)
             payload["transitioned"] = False
-            payload["conflict"] = "terminal_status" if payload.get("status") in {"succeeded", "failed"} else None
+            payload["conflict"] = (
+                "terminal_status" if payload.get("status") in {"succeeded", "failed"} else None
+            )
             return payload

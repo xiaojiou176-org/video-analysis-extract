@@ -16,7 +16,7 @@ def test_main_app_loads_real_notifications_routes_without_stub() -> None:
     _purge_api_modules()
 
     main_module = importlib.import_module("apps.api.app.main")
-    app = getattr(main_module, "app")
+    app = main_module.app
     route_paths = {getattr(route, "path", "") for route in app.routes}
 
     assert "/healthz" in route_paths

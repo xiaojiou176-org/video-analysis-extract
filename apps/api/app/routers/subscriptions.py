@@ -53,7 +53,9 @@ def _to_subscription_response(row) -> SubscriptionResponse:
         platform=row.platform,
         source_type=source_type,
         source_value=source_value,
-        source_name=resolve_source_name(source_type=source_type, source_value=source_value, fallback=source_value),
+        source_name=resolve_source_name(
+            source_type=source_type, source_value=source_value, fallback=source_value
+        ),
         adapter_type=getattr(row, "adapter_type", "rsshub_route"),
         source_url=getattr(row, "source_url", None),
         rsshub_route=row.rsshub_route,
@@ -88,7 +90,9 @@ def list_subscriptions(
     db: Session = Depends(get_db),
 ):
     service = SubscriptionsService(db)
-    rows = service.list_subscriptions(platform=platform, category=category, enabled_only=enabled_only)
+    rows = service.list_subscriptions(
+        platform=platform, category=category, enabled_only=enabled_only
+    )
     return [_to_subscription_response(row) for row in rows]
 
 
@@ -136,7 +140,9 @@ def batch_update_category(payload: BatchUpdateCategoryRequest, db: Session = Dep
     return BatchUpdateCategoryResponse(updated=updated)
 
 
-@router.delete("/{id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_write_access)])
+@router.delete(
+    "/{id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_write_access)]
+)
 def delete_subscription(id: uuid.UUID, db: Session = Depends(get_db)):
     service = SubscriptionsService(db)
     deleted = service.delete_subscription(id)

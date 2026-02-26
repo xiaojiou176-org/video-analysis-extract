@@ -2,32 +2,33 @@ from __future__ import annotations
 
 import hashlib
 import time
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from worker.config import Settings
 from worker.pipeline.policies import normalize_llm_input_mode
-from worker.pipeline.types import LLMInputMode
 from worker.pipeline.steps.llm_client_helpers import (
     _build_computer_use_tool,
     _build_frame_parts,
     _build_function_response_content,
     _cache_meta_default,
     _collect_thought_metadata,
-    _extract_finish_reason,
     _execute_function_call,
+    _extract_finish_reason,
     _extract_function_calls,
     _extract_primary_candidate_content,
     _extract_response_text,
     _is_cache_error,
-    _response_is_safety_blocked,
     _normalize_media_resolution_policy,
+    _response_is_safety_blocked,
     _thinking_config,
     classify_gemini_exception,
 )
 from worker.pipeline.steps.llm_prompts import build_evidence_citations, select_supporting_frames
+from worker.pipeline.types import LLMInputMode
 
 _CACHE_NAME_BY_KEY: dict[str, dict[str, Any]] = {}
-_LAST_CACHE_SWEEP_AT = 0.0
+_CACHE_SWEEP_STATE = {"last_sweep_at": 0.0}
 ComputerUseHandler = Callable[..., dict[str, Any]]
 
 
@@ -62,7 +63,11 @@ def _create_cached_content(
     if isinstance(cached_entry, dict):
         cached_name = cached_entry.get("name")
         created_at = float(cached_entry.get("created_at") or 0.0)
-        if isinstance(cached_name, str) and cached_name and (now - created_at) <= max(60, local_ttl_seconds):
+        if (
+            isinstance(cached_name, str)
+            and cached_name
+            and (now - created_at) <= max(60, local_ttl_seconds)
+        ):
             cached_entry["last_used_at"] = now
             return cached_name
 
@@ -109,11 +114,11 @@ def _trim_local_cache(*, max_keys: int) -> None:
 
 
 def _sweep_local_cache(*, local_ttl_seconds: int, sweep_interval_seconds: int) -> None:
-    global _LAST_CACHE_SWEEP_AT
     now = time.time()
-    if (now - _LAST_CACHE_SWEEP_AT) < max(10, int(sweep_interval_seconds)):
+    last_sweep_at = float(_CACHE_SWEEP_STATE.get("last_sweep_at") or 0.0)
+    if (now - last_sweep_at) < max(10, int(sweep_interval_seconds)):
         return
-    _LAST_CACHE_SWEEP_AT = now
+    _CACHE_SWEEP_STATE["last_sweep_at"] = now
     ttl = max(60, int(local_ttl_seconds))
     expired_keys: list[str] = []
     for key, entry in _CACHE_NAME_BY_KEY.items():
@@ -183,37 +188,49 @@ def gemini_generate(
     normalized_frame_paths = list(frame_paths or [])
 
     if not settings.gemini_api_key:
-        return None, "none", _failure_meta(
-            model=model_name,
-            media_input="none",
-            reason="gemini_api_key_missing",
-            detail="gemini api key is missing",
-            error_kind="auth",
+        return (
+            None,
+            "none",
+            _failure_meta(
+                model=model_name,
+                media_input="none",
+                reason="gemini_api_key_missing",
+                detail="gemini api key is missing",
+                error_kind="auth",
+            ),
         )
 
     try:
         from google import genai  # type: ignore
         from google.genai import types as genai_types  # type: ignore
     except Exception as exc:
-        return None, "none", _failure_meta(
-            model=model_name,
-            media_input="none",
-            reason="llm_runtime_import_failed",
-            detail=str(exc),
-            error_kind="runtime",
+        return (
+            None,
+            "none",
+            _failure_meta(
+                model=model_name,
+                media_input="none",
+                reason="llm_runtime_import_failed",
+                detail=str(exc),
+                error_kind="runtime",
+            ),
         )
 
     try:
         client = genai.Client(api_key=settings.gemini_api_key)
     except Exception as exc:
         reason, error_kind, http_status = classify_gemini_exception(exc)
-        return None, "none", _failure_meta(
-            model=model_name,
-            media_input="none",
-            reason=reason,
-            detail=str(exc),
-            error_kind=error_kind,
-            http_status=http_status,
+        return (
+            None,
+            "none",
+            _failure_meta(
+                model=model_name,
+                media_input="none",
+                reason=reason,
+                detail=str(exc),
+                error_kind=error_kind,
+                http_status=http_status,
+            ),
         )
 
     _sweep_local_cache(
@@ -329,15 +346,22 @@ def gemini_generate(
                     http_status=http_status,
                     termination_reason="generate_exception",
                 )
-            request_id = str(
-                getattr(response, "response_id", None)
-                or getattr(response, "id", None)
+            request_id = (
+                str(
+                    getattr(response, "response_id", None)
+                    or getattr(response, "id", None)
+                    or request_id
+                    or ""
+                ).strip()
                 or request_id
-                or ""
-            ).strip() or request_id
+            )
             thought_meta = _collect_thought_metadata(response)
             thought_count += int(thought_meta.get("thought_count") or 0)
-            current_signatures = [str(item).strip() for item in list(thought_meta.get("thought_signatures") or []) if str(item).strip()]
+            current_signatures = [
+                str(item).strip()
+                for item in list(thought_meta.get("thought_signatures") or [])
+                if str(item).strip()
+            ]
             thought_signatures.extend(current_signatures)
             if current_signatures:
                 carried_signatures = list(dict.fromkeys(current_signatures))
@@ -464,16 +488,21 @@ def gemini_generate(
                 deferred_failure = ("video_text", metadata)
         except Exception as exc:
             reason, error_kind, http_status = classify_gemini_exception(exc)
-            deferred_failure = ("video_text", _failure_meta(
-                model=model_name,
-                media_input="video_text",
-                reason=reason,
-                detail=str(exc),
-                error_kind=error_kind,
-                http_status=http_status,
-            ))
+            deferred_failure = (
+                "video_text",
+                _failure_meta(
+                    model=model_name,
+                    media_input="video_text",
+                    reason=reason,
+                    detail=str(exc),
+                    error_kind=error_kind,
+                    http_status=http_status,
+                ),
+            )
 
-    should_try_frames = normalized_mode in {"auto", "video_text", "frames_text"} and bool(normalized_frame_paths)
+    should_try_frames = normalized_mode in {"auto", "video_text", "frames_text"} and bool(
+        normalized_frame_paths
+    )
     if should_try_frames:
         try:
             frame_parts = _build_frame_parts(
@@ -492,14 +521,17 @@ def gemini_generate(
                     deferred_failure = ("frames_text", metadata)
         except Exception as exc:
             reason, error_kind, http_status = classify_gemini_exception(exc)
-            deferred_failure = ("frames_text", _failure_meta(
-                model=model_name,
-                media_input="frames_text",
-                reason=reason,
-                detail=str(exc),
-                error_kind=error_kind,
-                http_status=http_status,
-            ))
+            deferred_failure = (
+                "frames_text",
+                _failure_meta(
+                    model=model_name,
+                    media_input="frames_text",
+                    reason=reason,
+                    detail=str(exc),
+                    error_kind=error_kind,
+                    http_status=http_status,
+                ),
+            )
 
     if normalized_mode in {"auto", "text"}:
         cache_key = _cache_key(model_name, prompt, normalized_mode)
@@ -550,7 +582,9 @@ def gemini_generate(
                             }
                         )
                     elif _is_cache_error(
-                        RuntimeError(str(metadata.get("error_detail") or metadata.get("error_code") or ""))
+                        RuntimeError(
+                            str(metadata.get("error_detail") or metadata.get("error_code") or "")
+                        )
                     ):
                         _drop_cached_content(cache_key)
                         try:
@@ -644,24 +678,31 @@ def gemini_generate(
                 return None, "text", metadata
         except Exception as exc:
             reason, error_kind, http_status = classify_gemini_exception(exc)
-            deferred_failure = ("text", _failure_meta(
-                model=model_name,
-                media_input="text",
-                reason=reason,
-                detail=str(exc),
-                error_kind=error_kind,
-                http_status=http_status,
-            ))
+            deferred_failure = (
+                "text",
+                _failure_meta(
+                    model=model_name,
+                    media_input="text",
+                    reason=reason,
+                    detail=str(exc),
+                    error_kind=error_kind,
+                    http_status=http_status,
+                ),
+            )
 
     if deferred_failure is not None:
         media_input, meta = deferred_failure
         return None, media_input, meta
 
-    return None, "none", _failure_meta(
-        model=model_name,
-        media_input="none",
-        reason="llm_no_response",
-        detail="no text response from model",
-        error_kind="runtime",
-        termination_reason="no_response",
+    return (
+        None,
+        "none",
+        _failure_meta(
+            model=model_name,
+            media_input="none",
+            reason="llm_no_response",
+            detail="no text response from model",
+            error_kind="runtime",
+            termination_reason="no_response",
+        ),
     )

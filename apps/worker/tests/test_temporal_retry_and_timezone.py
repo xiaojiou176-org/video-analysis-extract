@@ -2,11 +2,10 @@ from __future__ import annotations
 
 import asyncio
 import types
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pytest
-
 from worker.temporal import activities, workflows
 
 
@@ -30,7 +29,7 @@ class _DummyPostgresStore:
 
 def test_retry_failed_deliveries_activity_schedules_retry_for_transient(monkeypatch: Any) -> None:
     captured: list[dict[str, Any]] = []
-    now_utc = datetime(2026, 2, 22, 12, 0, tzinfo=timezone.utc)
+    now_utc = datetime(2026, 2, 22, 12, 0, tzinfo=UTC)
 
     monkeypatch.setattr(activities, "PostgresBusinessStore", _DummyPostgresStore)
     monkeypatch.setattr(
@@ -78,6 +77,7 @@ def test_retry_failed_deliveries_activity_schedules_retry_for_transient(monkeypa
         "_send_with_resend",
         lambda **_: (_ for _ in ()).throw(RuntimeError("Resend request failed: timeout")),
     )
+
     def _fake_mark_delivery_state(
         _pg_store,
         *,
@@ -235,9 +235,11 @@ def test_daily_digest_workflow_uses_timezone_name_across_dst(monkeypatch: Any) -
     async def _fake_sleep(duration: timedelta) -> None:
         sleeps.append(duration)
         if len(sleeps) >= 2:
-            raise StopAsyncIteration()
+            raise StopAsyncIteration
 
-    async def _fake_execute_activity(activity_fn: Any, payload: dict[str, Any], **_: Any) -> dict[str, Any]:
+    async def _fake_execute_activity(
+        activity_fn: Any, payload: dict[str, Any], **_: Any
+    ) -> dict[str, Any]:
         if activity_fn is workflows.resolve_daily_digest_timing_activity:
             return {
                 "ok": True,

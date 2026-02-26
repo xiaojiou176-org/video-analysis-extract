@@ -4,7 +4,9 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
-WorkflowName = Literal["poll_feeds", "daily_digest", "notification_retry", "cleanup", "provider_canary"]
+WorkflowName = Literal[
+    "poll_feeds", "daily_digest", "notification_retry", "cleanup", "provider_canary"
+]
 
 
 class CleanupWorkflowPayload(BaseModel):
@@ -17,7 +19,7 @@ class CleanupWorkflowPayload(BaseModel):
     cache_max_size_mb: int | None = Field(default=None, ge=1, le=10240)
 
     @model_validator(mode="after")
-    def validate_paths(self) -> "CleanupWorkflowPayload":
+    def validate_paths(self) -> CleanupWorkflowPayload:
         for path in (self.workspace_dir, self.cache_dir):
             if path is None:
                 continue
@@ -41,7 +43,7 @@ class WorkflowRunRequest(BaseModel):
     payload: dict[str, Any] = Field(default_factory=dict)
 
     @model_validator(mode="after")
-    def validate_payload(self) -> "WorkflowRunRequest":
+    def validate_payload(self) -> WorkflowRunRequest:
         payload = dict(self.payload or {})
         if len(payload) > 32:
             raise ValueError("payload has too many keys")

@@ -9,6 +9,7 @@ from worker.temporal.activities_entry import *  # noqa: F403
 try:
     from temporalio import activity
 except ModuleNotFoundError:  # pragma: no cover
+
     class _ActivityFallback:
         @staticmethod
         def defn(name: str | None = None):

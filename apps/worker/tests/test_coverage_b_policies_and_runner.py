@@ -20,7 +20,10 @@ def test_policies_override_and_classification_branches(tmp_path: Path) -> None:
     settings = _make_settings(tmp_path)
 
     assert policies.pipeline_llm_hard_required(settings, {"hard_required": "0"}) is False
-    assert policies.pipeline_llm_fail_on_provider_error(settings, {"fail_on_provider_error": "false"}) is False
+    assert (
+        policies.pipeline_llm_fail_on_provider_error(settings, {"fail_on_provider_error": "false"})
+        is False
+    )
     assert policies.retry_delay_seconds({"backoff": 0, "max_backoff": 8}, retries_used=4) == 0.0
     assert policies.classify_error("429", "too many request") == "rate_limit"
     assert policies.classify_error(None, "invalid api key") == "auth"
@@ -54,7 +57,9 @@ def test_runner_step_wrappers_delegate_to_impls(monkeypatch: Any, tmp_path: Path
         fetch_capture["run_command"] = run_command
         return runner.StepExecution(status="succeeded", output={"wrapped": "fetch"})
 
-    async def _fake_embedding_impl(current_ctx: Any, current_state: dict[str, Any]) -> runner.StepExecution:
+    async def _fake_embedding_impl(
+        current_ctx: Any, current_state: dict[str, Any]
+    ) -> runner.StepExecution:
         embedding_capture["ctx"] = current_ctx
         embedding_capture["state"] = current_state
         return runner.StepExecution(status="succeeded", output={"wrapped": "embedding"})

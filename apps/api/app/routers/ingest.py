@@ -10,8 +10,7 @@ from sqlalchemy.orm import Session
 
 from ..db import get_db
 from ..errors import ApiServiceError
-from ..security import require_write_access
-from ..security import sanitize_exception_detail
+from ..security import require_write_access, sanitize_exception_detail
 from ..services import IngestService
 
 router = APIRouter(prefix="/api/v1/ingest", tags=["ingest"])

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from apps.mcp.tools._common import (
     parse_artifact_relative_path,
@@ -18,7 +19,11 @@ from apps.mcp.tools.notifications import (
     register_notification_tools,
 )
 from apps.mcp.tools.subscriptions import register_subscription_tools
-from apps.mcp.tools.ui_audit import _normalize_autofix_payload, _normalize_run_payload, register_ui_audit_tools
+from apps.mcp.tools.ui_audit import (
+    _normalize_autofix_payload,
+    _normalize_run_payload,
+    register_ui_audit_tools,
+)
 
 UUID_1 = "11111111-1111-1111-1111-111111111111"
 UUID_2 = "22222222-2222-2222-2222-222222222222"
@@ -68,7 +73,9 @@ def test_common_tail_branches() -> None:
 
 
 def test_artifacts_tail_branches() -> None:
-    assert _normalize_markdown_payload({"code": "X", "message": "bad", "details": {}})["code"] == "X"
+    assert (
+        _normalize_markdown_payload({"code": "X", "message": "bad", "details": {}})["code"] == "X"
+    )
     assert _normalize_markdown_payload({"text": "fallback text"}) == {
         "markdown": "fallback text",
         "job_id": None,
@@ -130,7 +137,10 @@ def test_health_tail_branches() -> None:
 
 
 def test_jobs_tail_branches() -> None:
-    assert _normalize_job_payload({"code": "UPSTREAM", "message": "bad", "details": {}})["code"] == "UPSTREAM"
+    assert (
+        _normalize_job_payload({"code": "UPSTREAM", "message": "bad", "details": {}})["code"]
+        == "UPSTREAM"
+    )
 
     normalized = _normalize_job_payload(
         {
@@ -185,8 +195,12 @@ def test_jobs_tail_branches() -> None:
 
 
 def test_notifications_tail_branches() -> None:
-    assert _normalize_send_test_payload({"code": "X", "message": "bad", "details": {}})["code"] == "X"
-    assert _normalize_set_config_payload({"code": "X", "message": "bad", "details": {}})["code"] == "X"
+    assert (
+        _normalize_send_test_payload({"code": "X", "message": "bad", "details": {}})["code"] == "X"
+    )
+    assert (
+        _normalize_set_config_payload({"code": "X", "message": "bad", "details": {}})["code"] == "X"
+    )
 
     mcp = _FakeMCP()
 
@@ -205,7 +219,7 @@ def test_subscriptions_tail_branches() -> None:
     mcp = _FakeMCP()
     register_subscription_tools(mcp, lambda *_args, **_kwargs: {"ok": True})
 
-    bad_batch = mcp.tools["vd.subscriptions.manage"](action="batch_update_category", ids=["bad"]) 
+    bad_batch = mcp.tools["vd.subscriptions.manage"](action="batch_update_category", ids=["bad"])
     assert bad_batch["code"] == "INVALID_ARGUMENT"
 
     missing_remove_id = mcp.tools["vd.subscriptions.manage"](action="remove")

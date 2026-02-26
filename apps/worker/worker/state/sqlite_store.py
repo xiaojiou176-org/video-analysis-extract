@@ -1,21 +1,21 @@
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta, timezone
 import json
-from pathlib import Path
 import sqlite3
+from datetime import UTC, date, datetime, timedelta
+from pathlib import Path
 from typing import Any
 
 
 def _utc_now_iso() -> str:
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+    return datetime.now(UTC).replace(microsecond=0).isoformat()
 
 
 def _is_expired(ts: str | None) -> bool:
     if not ts:
         return True
     try:
-        return datetime.fromisoformat(ts) <= datetime.now(timezone.utc)
+        return datetime.fromisoformat(ts) <= datetime.now(UTC)
     except ValueError:
         return True
 
@@ -162,9 +162,9 @@ class SQLiteStateStore:
         return int(row["next_attempt"])
 
     def acquire_lock(self, lock_key: str, owner: str, ttl_seconds: int) -> bool:
-        expires_at = (datetime.now(timezone.utc) + timedelta(seconds=ttl_seconds)).replace(
-            microsecond=0
-        ).isoformat()
+        expires_at = (
+            (datetime.now(UTC) + timedelta(seconds=ttl_seconds)).replace(microsecond=0).isoformat()
+        )
         with self._connect() as conn:
             row = conn.execute(
                 "SELECT owner, expires_at FROM locks WHERE lock_key = ?",
@@ -350,7 +350,7 @@ class SQLiteStateStore:
                 result_json,
                 cache_key
             FROM step_runs
-            WHERE {' AND '.join(clauses)}
+            WHERE {" AND ".join(clauses)}
             ORDER BY attempt DESC
             LIMIT 1
         """

@@ -34,6 +34,7 @@ TS_PROCESS_ENV_RE = re.compile(r"process\.env\.([A-Z][A-Z0-9_]*)")
 SH_DEFAULT_ENV_RE = re.compile(r"\$\{([A-Z][A-Z0-9_]*)[:-][^}]*\}")
 ENV_EXAMPLE_EXPORT_RE = re.compile(r"^\s*(?:#\s*)?export\s+([A-Z][A-Z0-9_]*)\s*=", re.MULTILINE)
 ENV_FILE_KEY_RE = re.compile(r"^\s*(?:export\s+)?([A-Z][A-Z0-9_]*)\s*=", re.MULTILINE)
+ENV_FILE_LINE_RE = re.compile(r"^\s*(?:export\s+)?([A-Z][A-Z0-9_]*)\s*=\s*(.*)\s*$")
 
 
 def _repo_root() -> Path:
@@ -50,7 +51,9 @@ def _normalize_contract_paths(raw_contracts: list[str], root: Path) -> list[Path
             token = token.strip()
             if not token:
                 continue
-            path = (root / token).resolve() if not Path(token).is_absolute() else Path(token).resolve()
+            path = (
+                (root / token).resolve() if not Path(token).is_absolute() else Path(token).resolve()
+            )
             if path in seen:
                 continue
             seen.add(path)
@@ -198,6 +201,31 @@ def _load_env_file_vars(path: Path) -> set[str]:
     return set(ENV_FILE_KEY_RE.findall(content))
 
 
+def _parse_env_value(raw_value: str) -> str:
+    value = raw_value.strip()
+    if not value:
+        return ""
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
+        return value[1:-1]
+    return value.split(" #", 1)[0].strip()
+
+
+def _load_env_file_items(path: Path) -> dict[str, str]:
+    if not path.is_file():
+        return {}
+    items: dict[str, str] = {}
+    for line in path.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        matched = ENV_FILE_LINE_RE.match(line)
+        if not matched:
+            continue
+        key, raw_value = matched.group(1), matched.group(2)
+        items[key] = _parse_env_value(raw_value)
+    return items
+
+
 def _load_profile_matrix(path: Path) -> dict:
     payload = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(payload, dict) or not isinstance(payload.get("profiles"), dict):
@@ -217,7 +245,9 @@ def _resolve_profile(
         raise ValueError(f"profile not found: {profile}")
 
     contract_entries = profile_item.get("contracts", [])
-    if not isinstance(contract_entries, list) or any(not isinstance(x, str) for x in contract_entries):
+    if not isinstance(contract_entries, list) or any(
+        not isinstance(x, str) for x in contract_entries
+    ):
         raise ValueError(f"profile '{profile}' contracts must be list[str]")
 
     allowed_vars = profile_item.get("allowed_vars", [])
@@ -288,19 +318,15 @@ def main() -> int:
 
         universe_paths = _discover_universe_contract_paths(root, selected_contract_paths)
         universe_contracts = _load_contract_map(universe_paths)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         print(f"[env-contract] invalid configuration: {exc}", file=sys.stderr)
         return 2
 
     registered = {
-        item["name"]
-        for payload in selected_contracts.values()
-        for item in payload["variables"]
+        item["name"] for payload in selected_contracts.values() for item in payload["variables"]
     }
     universe = {
-        item["name"]
-        for payload in universe_contracts.values()
-        for item in payload["variables"]
+        item["name"] for payload in universe_contracts.values() for item in payload["variables"]
     }
     allowed_vars = set(registered)
     if args.profile.strip():
@@ -330,7 +356,7 @@ def main() -> int:
 
     try:
         env_example_vars = _load_env_example_vars(root / ".env.example")
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         print(f"[env-contract] invalid .env.example: {exc}", file=sys.stderr)
         return 2
 
@@ -361,7 +387,9 @@ def main() -> int:
             print("[env-contract] profile allow-list check passed")
 
     print(f"[env-contract] required vars in selected contracts: {len(required_vars)}")
-    print(f"[env-contract] web e2e critical vars in selected contracts: {len(web_e2e_critical_vars)}")
+    print(
+        f"[env-contract] web e2e critical vars in selected contracts: {len(web_e2e_critical_vars)}"
+    )
     if missing_in_example:
         print(f"[env-contract] missing in .env.example: {len(missing_in_example)}")
         print(f"  - vars: {', '.join(missing_in_example)}")
@@ -369,10 +397,13 @@ def main() -> int:
         print("[env-contract] .env.example covers required + web e2e critical vars")
 
     unregistered_env_keys: list[str] = []
+    missing_required_in_env: list[str] = []
+    empty_required_in_env: list[str] = []
     if args.env_file.strip():
         env_file_path = root / args.env_file
         if env_file_path.is_file():
-            env_file_vars = _load_env_file_vars(env_file_path)
+            env_file_items = _load_env_file_items(env_file_path)
+            env_file_vars = set(env_file_items.keys())
             unregistered_env_keys = sorted(var for var in env_file_vars if var not in universe)
             print(f"[env-contract] vars in {args.env_file}: {len(env_file_vars)}")
             if unregistered_env_keys:
@@ -383,10 +414,33 @@ def main() -> int:
                 print(f"  - vars: {', '.join(unregistered_env_keys)}")
             else:
                 print(f"[env-contract] {args.env_file} has no unregistered vars")
+
+            missing_required_in_env = sorted(var for var in required_vars if var not in env_file_items)
+            empty_required_in_env = sorted(
+                var for var in required_vars if var in env_file_items and env_file_items[var] == ""
+            )
+            if missing_required_in_env or empty_required_in_env:
+                print(
+                    f"[env-contract] required vars missing/empty in {args.env_file}: "
+                    f"{len(missing_required_in_env) + len(empty_required_in_env)}"
+                )
+                if missing_required_in_env:
+                    print(f"  - missing: {', '.join(missing_required_in_env)}")
+                if empty_required_in_env:
+                    print(f"  - empty: {', '.join(empty_required_in_env)}")
+            else:
+                print(f"[env-contract] required vars in {args.env_file} are present and non-empty")
         else:
             print(f"[env-contract] {args.env_file} not found; skip env-file key check")
 
-    if args.strict and (missing_refs or missing_in_example or unregistered_env_keys or disallowed_refs):
+    if args.strict and (
+        missing_refs
+        or missing_in_example
+        or unregistered_env_keys
+        or disallowed_refs
+        or missing_required_in_env
+        or empty_required_in_env
+    ):
         return 1
     return 0
 

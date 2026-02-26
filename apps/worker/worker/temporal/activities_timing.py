@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-from datetime import date, datetime, time, timedelta, timezone, tzinfo
+from datetime import UTC, date, datetime, time, timedelta, timezone, tzinfo
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 try:
     from temporalio import activity
 except ModuleNotFoundError:  # pragma: no cover
+
     class _ActivityFallback:
         @staticmethod
         def defn(name: str | None = None):
@@ -19,7 +20,7 @@ except ModuleNotFoundError:  # pragma: no cover
 
 
 def _utc_now_iso() -> str:
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+    return datetime.now(UTC).replace(microsecond=0).isoformat()
 
 
 def _coerce_int(value: Any, *, fallback: int) -> int:
@@ -69,7 +70,7 @@ def _resolve_local_digest_date(
         timezone_name=timezone_name,
         offset_minutes=offset_minutes,
     )
-    local_now = datetime.now(timezone.utc).astimezone(local_tz)
+    local_now = datetime.now(UTC).astimezone(local_tz)
     return local_now.date()
 
 
@@ -85,7 +86,7 @@ def _build_local_day_window_utc(
     )
     start_local = datetime.combine(local_day, time.min, tzinfo=local_tz)
     end_local = start_local + timedelta(days=1)
-    return start_local.astimezone(timezone.utc), end_local.astimezone(timezone.utc)
+    return start_local.astimezone(UTC), end_local.astimezone(UTC)
 
 
 @activity.defn(name="resolve_daily_digest_timing_activity")
@@ -102,7 +103,7 @@ async def resolve_daily_digest_timing_activity(
         timezone_name=timezone_name,
         offset_minutes=offset_minutes,
     )
-    now_utc = datetime.now(timezone.utc)
+    now_utc = datetime.now(UTC)
     now_local = now_utc.astimezone(local_tz)
     scheduled_today = now_local.replace(hour=target_hour, minute=0, second=0, microsecond=0)
 
@@ -113,13 +114,13 @@ async def resolve_daily_digest_timing_activity(
         run_local = scheduled_today
 
     digest_date = run_local.date().isoformat()
-    run_utc = run_local.astimezone(timezone.utc)
+    run_utc = run_local.astimezone(UTC)
     next_run_local = datetime.combine(
         run_local.date() + timedelta(days=1),
         time(hour=target_hour),
         tzinfo=local_tz,
     )
-    wait_after_seconds = int((next_run_local.astimezone(timezone.utc) - run_utc).total_seconds())
+    wait_after_seconds = int((next_run_local.astimezone(UTC) - run_utc).total_seconds())
     if wait_after_seconds < 1:
         wait_after_seconds = 60
 

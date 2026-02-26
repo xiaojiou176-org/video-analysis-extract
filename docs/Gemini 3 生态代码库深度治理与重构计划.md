@@ -27,17 +27,20 @@
 ## 1. 审计方法与证据来源
 
 ### 1.1 并发审计拓扑
+
 - 第一轮: 12 SubAgents（知识摄取、环境审计、文档树、代码治理、测试深审）。
 - 第二轮: 4 SubAgents（OpenAI 残留深挖、Gemini 能力矩阵深挖、CI 门禁深挖、契约/文档闭环深挖）。
 
 ### 1.2 证据可信度分级
+
 - A 级: 代码/脚本/CI 文件行号证据（可重复验证）。
 - B 级: 官方文档规则映射（ai.google.dev 公开规范）。
 - C 级: 架构推断与治理建议（需改造后验证）。
 
 ### 1.3 官方规范锚点（2026-02-23 验证）
-- Gemini API docs: https://ai.google.dev/gemini-api/docs
-- Gemini API reference: https://ai.google.dev/api
+
+- Gemini API docs: <https://ai.google.dev/gemini-api/docs>
+- Gemini API reference: <https://ai.google.dev/api>
 - 关键能力: Thinking、Function Calling、Structured Outputs、Context Caching、Embeddings、Computer Use
 
 ---
@@ -45,17 +48,21 @@
 ## 2. Plan模式总纲（DoR/DoD/协作协议/节拍）
 
 ### 2.1 Plan模式定义
+
 Plan 模式不是“任务清单”，而是“可执行治理协议”。
 其目标是在高并发、多模块、长周期改造中，确保执行可追踪、质量可证明、风险可收敛。
 
 Plan 模式四层结构：
+
 - `目标层`: 定义业务与工程目标，不接受模糊描述。
 - `约束层`: 定义时间、依赖、风险、资源边界，不允许隐性前提。
 - `执行层`: 定义主控与 SubAgent 职责、节拍、检查点、熔断条件。
 - `证据层`: 定义验收证据与归档规则，未留痕即未完成。
 
 ### 2.2 DoR（Definition of Ready）硬门槛
+
 任一执行前，以下项必须全部满足：
+
 - `问题定义明确`: 目标、范围、非目标可单句复述。
 - `输入资源就绪`: 代码基线、依赖、权限、环境可访问。
 - `验收指标明确`: 每个目标有可计算指标与验证命令。
@@ -65,7 +72,9 @@ Plan 模式四层结构：
 未达 DoR 的任务不得进入执行队列。
 
 ### 2.3 DoD（Definition of Done）硬门槛
+
 阶段完成需同时满足：
+
 - `功能完成`: 需求范围能力已实现，无临时绕行。
 - `质量达标`: 测试、静态检查、关键 Gate 全通过。
 - `文档同步`: 决策、变更、运行、排障文档同步更新。
@@ -75,16 +84,20 @@ Plan 模式四层结构：
 仅“代码可运行”不构成完成。
 
 ### 2.4 主控-SubAgent 协作协议
+
 - `主控（Control Plane）`: 负责分解、排程、验收、熔断，不替代 SubAgent 执行具体改动。
 - `SubAgent（Execution Plane）`: 按边界完成代码/测试/文档改造并提交证据，不得越权扩范围。
 
 协作契约：
+
 - 每个 SubAgent 任务必须包含 `输入/输出/约束/验收命令`。
 - 每次提交必须包含 `变更摘要/失败重试记录/证据索引`。
 - 并发冲突以主控“锁定文件/模块清单”为唯一仲裁依据。
 
 ### 2.5 双周节拍与每日检查点
+
 双周节拍（14 天）：
+
 - `Day 1-2`: 基线冻结与风险建档。
 - `Day 3-5`: P0 阻塞项清除。
 - `Day 6-9`: 核心链路重构与并发稳定修复。
@@ -93,6 +106,7 @@ Plan 模式四层结构：
 - `Day 14`: 主控终验与发布决策。
 
 每日检查点：
+
 - `09:30` 计划对齐
 - `13:30` 中段校准（必要时 Re-Plan）
 - `18:30` 日终验收（DoD 子集 + 证据归档）
@@ -102,6 +116,7 @@ Plan 模式四层结构：
 ## 3. 目标态与全局差距诊断
 
 ### 3.1 目标态定义（Gemini 3 极致工程）
+
 1. 唯一 Provider: Gemini（`google-genai`），无 OpenAI 运行时代码与配置。
 2. 唯一密钥入口: `GEMINI_API_KEY`，统一配置模块读取，契约可验证。
 3. Thinking 可追踪: `thinkingLevel` 与 thought signatures 全链路透传。
@@ -112,6 +127,7 @@ Plan 模式四层结构：
 8. 文档单一真相源: 文档不与代码冲突，1 分钟 onboarding 可执行。
 
 ### 3.2 差距总表
+
 | 领域 | 目标态 | 现状 | 差距等级 |
 |---|---|---|---|
 | Provider 统一 | Gemini-only | 运行时基本 Gemini-only，文档语义仍有残留词汇 | 中 |
@@ -130,6 +146,7 @@ Plan 模式四层结构：
 ## 4. 关键能力深挖（Gemini 能力矩阵）
 
 ### 4.1 Thinking / Thought Signatures
+
 - 已实现（Worker）:
   - `apps/worker/worker/pipeline/steps/llm_client_helpers.py:350`
   - `apps/worker/worker/pipeline/steps/llm_client.py:394`
@@ -141,6 +158,7 @@ Plan 模式四层结构：
   - `apps/mcp/tools/*` 同步规范返回字段。
 
 ### 4.2 Structured Outputs
+
 - 已实现:
   - `apps/worker/worker/pipeline/steps/llm_steps.py:338`
   - `apps/worker/worker/pipeline/steps/llm_schema.py:62`
@@ -152,6 +170,7 @@ Plan 模式四层结构：
   - 降级行为必须记录审计事件。
 
 ### 4.3 Tool Calling
+
 - 已实现:
   - `apps/worker/worker/pipeline/steps/llm_client.py:340`
   - `apps/worker/worker/pipeline/steps/llm_client_helpers.py:266`
@@ -162,6 +181,7 @@ Plan 模式四层结构：
   - 每次工具调用统一记录 `tool_name/args_hash/duration/outcome`。
 
 ### 4.4 Context Caching
+
 - 已实现:
   - `apps/worker/worker/pipeline/steps/llm_client.py:42`
   - `apps/worker/worker/pipeline/steps/llm_client.py:472`
@@ -172,6 +192,7 @@ Plan 模式四层结构：
   - 工具场景采用分层缓存（context 可缓存，tool result 不缓存）。
 
 ### 4.5 Embeddings
+
 - 已实现:
   - `apps/worker/worker/pipeline/steps/embedding.py:190`
   - `apps/worker/worker/state/postgres_store.py:333`
@@ -182,6 +203,7 @@ Plan 模式四层结构：
   - Router 与 MCP 同步暴露 `mode`。
 
 ### 4.6 Computer Use
+
 - 已实现:
   - `apps/api/app/routers/computer_use.py:42`
   - Worker tool 链路已有 computer_use。
@@ -197,25 +219,30 @@ Plan 模式四层结构：
 ## 5. 配置与密钥治理（P0 硬约束）
 
 ### 5.1 单一密钥原则
+
 - 唯一运行时密钥变量: `GEMINI_API_KEY`
 - 唯一读取入口: 配置模块（禁止散落 `os.getenv`）
 - 唯一注入方式: `.env` + CI/Prod Secret
 - 开发默认仅使用 `.env`；`.env.local` 仅保留兼容兜底，不作为主规范。
 
 ### 5.2 当前阻塞证据
+
 - `python3 scripts/check_env_contract.py --strict` 返回失败。
 - 未登记变量包含 `UI_AUDIT_GEMINI_ENABLED` 与多项 `OPS_*`。
 
 ### 5.3 P0 修复包
+
 1. 更新 `infra/config/env.contract.json` 补齐变量。
 2. 更新 `.env.example` 与 `ENVIRONMENT.md` 统一口径。
 3. 统一 API/Worker 配置读取路径。
 4. 修复后强制执行：
+
 ```bash
 python3 scripts/check_env_contract.py --strict
 ```
 
 ### 5.4 安全细则
+
 - `.env` 权限固定 `600`
 - 禁止 URL query 传 key（改用 header 或服务端注入）
 - 脱敏规则保留但中性化文案，避免厂商耦合表达
@@ -225,6 +252,7 @@ python3 scripts/check_env_contract.py --strict
 ## 6. 代码治理深挖（重复逻辑 + 大文件）
 
 ### 6.1 >800 行文件治理
+
 - 目标文件: `apps/web/tests/e2e/test_smoke_playwright.py`（824 行）
 - 拆分目标:
   - `apps/web/tests/e2e/conftest.py`
@@ -238,12 +266,14 @@ python3 scripts/check_env_contract.py --strict
   - 每步拆分后立刻跑 E2E 回归
 
 ### 6.2 重复逻辑治理（高 ROI）
+
 1. API/Worker 配置解析抽象至 `apps/common/env_utils.py`
 2. LLM outline/digest 镜像流程收敛至 `llm_task_runner.py`
 3. MCP 工具模板抽象 `_dsl.py`
 4. Shell 通用函数下沉 `scripts/lib/common.sh`
 
 ### 6.3 目标收益
+
 - 重复代码减少 200+ 行
 - 缺陷修复路径由多点收敛为单点
 - Code Review 负担下降
@@ -253,21 +283,26 @@ python3 scripts/check_env_contract.py --strict
 ## 7. WBS + Wave并行编排
 
 ### 7.1 编排总则
+
 - 串行主链: `Wave 0 -> Wave 1 -> Wave 2 -> Wave 3 -> Wave 4`（上游 DoD 未达成不得进入下游）
 - 波次内并行: 同一 Wave 内子任务可并行
 - 冲突规则: 同时段禁止两个 SubAgent 修改同一文件；共享目录需文件级锁
 
 ### 7.2 Wave 0（P0）阻塞清除：契约与文档口径统一
+
 输入：失败基线与契约文档集合
 输出：环境契约 strict 通过；8-step/9-step 口径统一；开发环境默认仅 `.env`（`.env.local` 仅兼容兜底）；命令统一为 `python3`
 并行任务：
+
 - T0-1 契约补齐与变量登记
 - T0-2 文档口径统一
 串行任务：
 - T0-3 契约校验与回归命令执行
 
 ### 7.3 Wave 1（P1）核心能力收敛：LLM/Thinking/Tool/Computer Use
+
 并行任务：
+
 - T1-1 Thinking 字段标准化透传
 - T1-2 Tool Registry 与调用审计落地
 - T1-3 Computer Use adapter 统一
@@ -275,7 +310,9 @@ python3 scripts/check_env_contract.py --strict
 - T1-4 跨模块联调与契约回归
 
 ### 7.4 Wave 2（P1/P2）检索语义闭环与严格结构化输出
+
 并行任务：
+
 - T2-1 API retrieval 扩展 `keyword|semantic|hybrid`
 - T2-2 MCP retrieval 暴露同等模式
 - T2-3 Schema strict 开关化与审计
@@ -283,7 +320,9 @@ python3 scripts/check_env_contract.py --strict
 - T2-4 三模式回归与精度对比
 
 ### 7.5 Wave 3（P2）测试与 CI 门禁升级
+
 并行任务：
+
 - T3-1 CI workflow 扩展（coverage/concurrency/perf/flaky）
 - T3-2 准确度回归集与评估脚本接入
 - T3-3 Web E2E 大文件拆分与稳定性增强
@@ -291,7 +330,9 @@ python3 scripts/check_env_contract.py --strict
 - T3-4 aggregate-gate 串联验证
 
 ### 7.6 Wave 4（P2/P3）运维闭环与文档封板
+
 并行任务：
+
 - T4-1 运维脚本与调度策略固化
 - T4-2 日志/缓存/runbook 文档更新
 - T4-3 README/AGENTS/docs index/start-here 重构
@@ -299,6 +340,7 @@ python3 scripts/check_env_contract.py --strict
 - T4-4 发布前全量回归与治理报告
 
 ### 7.7 并行/串行判定矩阵
+
 | 任务对 | 判定 | 原因 |
 |---|---|---|
 | Wave 0 内 T0-1 vs T0-2 | 可并行 | 文件集合不重叠 |
@@ -310,6 +352,7 @@ python3 scripts/check_env_contract.py --strict
 | 跨 Wave 执行 | 必须串行 | 下游依赖上游输出 |
 
 ### 7.8 里程碑 DoD（按 Wave）
+
 - Wave 0 DoD: 契约 strict 绿灯 + 文档关键冲突清零
 - Wave 1 DoD: Thinking/Tool/Computer Use 三能力统一并通过回归
 - Wave 2 DoD: 三模式检索可用 + strict schema 默认生效且可审计
@@ -321,6 +364,7 @@ python3 scripts/check_env_contract.py --strict
 ## 8. 测试与CI Gate矩阵（Shadow -> Hard）
 
 ### 8.1 Gate 矩阵（名称/触发/失败条件/负责人）
+
 | Gate 名称 | 触发 | 失败条件 | 负责人 |
 |---|---|---|---|
 | `python-coverage-gate` | 每次 PR + `main` push | 全仓覆盖率 `< 85%` 或关键目录 `< 90%` | QA Owner + 模块 Maintainer |
@@ -332,6 +376,7 @@ python3 scripts/check_env_contract.py --strict
 | `workflow-concurrency-guard` | 所有 CI workflow | 同分支并发冲突或状态回写竞争 | DevOps Owner |
 
 ### 8.2 分阶段上线策略（Shadow/Soft/Hard）
+
 | 维度 | Shadow（观测期） | Soft（软门禁） | Hard（硬门禁） |
 |---|---|---|---|
 | 并发稳定（Concurrency） | 仅采集差异不阻断，持续 7 天 | 非 `main` 警告，`main` 失败需人工豁免，持续 7 天 | 全分支阻断 |
@@ -342,6 +387,7 @@ python3 scripts/check_env_contract.py --strict
 默认推进节奏：`Shadow(7~14天) -> Soft(7天) -> Hard(长期)`，满足连续稳定窗口后再升档。
 
 ### 8.3 回归套件最小集合（命令）
+
 ```bash
 # A. 环境与契约回归
 python3 scripts/check_env_contract.py --strict
@@ -361,6 +407,7 @@ npm --prefix apps/web run lint
 ```
 
 ### 8.4 CI Required Checks
+
 1. `python-coverage-gate`
 2. `concurrency-race-gate`
 3. `accuracy-regression-gate`
@@ -373,6 +420,7 @@ npm --prefix apps/web run lint
 ## 9. 文件级行动清单（按 PR 批次）
 
 ### 9.1 PR-01 契约与密钥治理（P0）
+
 - `infra/config/env.contract.json`
 - `.env.example`
 - `ENVIRONMENT.md`
@@ -381,39 +429,46 @@ npm --prefix apps/web run lint
 - 验证: `python3 scripts/check_env_contract.py --strict`
 
 ### 9.2 PR-02 Gemini Provider 收敛（P0/P1）
+
 - `apps/worker/worker/pipeline/steps/llm_client.py`
 - `apps/worker/worker/pipeline/steps/llm_client_helpers.py`
 - `apps/worker/worker/pipeline/steps/llm_steps.py`
 - `apps/worker/worker/pipeline/steps/llm_schema.py`
 
 ### 9.3 PR-03 Retrieval 语义闭环（P1）
+
 - `apps/api/app/services/retrieval.py`
 - `apps/api/app/routers/retrieval.py`
 - `apps/mcp/tools/retrieval.py`
 - `apps/worker/worker/pipeline/steps/embedding.py`（联动）
 
 ### 9.4 PR-04 Computer Use 统一（P1）
+
 - `apps/api/app/routers/computer_use.py`
 - `apps/api/app/services/computer_use.py`
 - `apps/worker/worker/pipeline/steps/llm_computer_use.py`
 
 ### 9.5 PR-05 E2E 拆分与稳定性（P1/P2）
+
 - `apps/web/tests/e2e/test_smoke_playwright.py`
 - `apps/web/tests/e2e/conftest.py`
 - `apps/web/tests/e2e/support/*`
 
 ### 9.6 PR-06 CI 门禁扩展（P2）
+
 - `.github/workflows/ci.yml`
 - `.github/workflows/*.yml`
 - `scripts/e2e_live_smoke.sh`
 
 ### 9.7 PR-07 运维闭环（P2）
+
 - `scripts/start_ops_workflows.sh`
 - `docs/reference/logging.md`
 - `docs/reference/cache.md`
 - `docs/runbook-local.md`
 
 ### 9.8 PR-08 文档真相源重构（P2）
+
 - `AGENTS.md`
 - `README.md`
 - `docs/index.md`
@@ -435,6 +490,7 @@ npm --prefix apps/web run lint
 | R-08 | 并发修改导致冲突与半完成状态 | 中 | 中 | 批次锁模块边界；feature flag；避免跨批次共享改动 | 同模块 2 个 PR 同时改关键入口 | Batch Lead |
 
 评分口径：
+
 - 概率: 低/中/高
 - 影响: 低/中/高
 - 优先级: 高影响 + 中/高概率视为 P0 风险，必须具备可演练回滚路径
@@ -444,6 +500,7 @@ npm --prefix apps/web run lint
 ## 11. 回滚剧本（按 Batch）
 
 ### 11.1 Batch-1（结构清理与无行为变更重命名）
+
 - 回滚条件: CI 绿但线上关键路径异常增长
 - 回滚动作:
   1. 单 PR 单 `revert`（禁止手改混入）
@@ -452,6 +509,7 @@ npm --prefix apps/web run lint
 - 验收信号: 错误率恢复到基线 ±5%
 
 ### 11.2 Batch-2（状态机与 Pipeline 逻辑调整）
+
 - 回滚条件: 状态迁移失败率超阈值或出现任务卡死
 - 回滚动作:
   1. 关闭新状态机 feature flag
@@ -460,6 +518,7 @@ npm --prefix apps/web run lint
 - 验收信号: 卡死任务 30 分钟内归零
 
 ### 11.3 Batch-3（存储/迁移与索引优化）
+
 - 回滚条件: 迁移失败、查询性能恶化、一致性校验失败
 - 回滚动作:
   1. 停写入并切只读保护
@@ -469,6 +528,7 @@ npm --prefix apps/web run lint
 - 验收信号: 一致性校验 100% 通过且时延回基线
 
 ### 11.4 Batch-4（观测性与治理规则落地）
+
 - 回滚条件: 告警风暴、日志成本异常、规则误杀
 - 回滚动作:
   1. 告警策略降级至上一阈值
@@ -477,6 +537,7 @@ npm --prefix apps/web run lint
 - 验收信号: 告警回归正常区间且无 P0 漏报
 
 ### 11.5 回滚通用红线
+
 - 禁止回滚期间“顺手修复”
 - 回滚优先级: 先恢复可用性，再定位根因
 - 任一批次回滚后 24 小时内补齐 RCA 与防复发行动
@@ -486,6 +547,7 @@ npm --prefix apps/web run lint
 ## 12. 交付检查单（Delivery Checklist）
 
 ### 12.1 提交前（Pre-Commit）
+
 - [ ] 本次改动绑定任务编号与范围说明
 - [ ] 单测/集成测试已更新并覆盖新增分支
 - [ ] 不含临时代码、注释大段逻辑、`TODO` 泄漏
@@ -493,6 +555,7 @@ npm --prefix apps/web run lint
 - [ ] 变更文件通过 lint/typecheck（如适用）
 
 ### 12.2 合并前（Pre-Merge）
+
 - [ ] PR 描述包含变更摘要、风险点、回滚方式、验证证据
 - [ ] CI 全通过且无新增 blocker
 - [ ] Reviewer 已核对风险登记簿并确认缓解动作
@@ -500,6 +563,7 @@ npm --prefix apps/web run lint
 - [ ] Feature flag 默认策略明确（开关、灰度范围、回收计划）
 
 ### 12.3 发布前（Pre-Release）
+
 - [ ] 已完成灰度发布与关键路径 smoke
 - [ ] 监控面板已对齐本批次核心指标（错误率/延迟/吞吐/积压）
 - [ ] 回滚命令与值班负责人确认
@@ -511,17 +575,20 @@ npm --prefix apps/web run lint
 ## 13. 文档真相源与信息架构重建
 
 ### 13.1 已识别冲突
+
 1. `AGENTS.md` 写 8-step，但代码/状态机为 9-step。
 2. `.env.local.example` 指引与实际 `.env` 规范冲突。
 3. README 与 runbook 的 `max_new_videos` 值冲突。
 4. `python` vs `python3` 命令口径不一致。
 
 ### 13.2 重建原则
+
 1. 代码事实优先
 2. 一个事实仅一个真相源
 3. 其余文档只链接不复制
 
 ### 13.3 新目录建议
+
 ```text
 docs/
 ├─ getting-started/
@@ -530,6 +597,7 @@ docs/
 ├─ reference/
 └─ architecture/
 ```
+
 并将 `docs/start-here.md` 作为 1 分钟入口。
 
 ---
@@ -537,17 +605,20 @@ docs/
 ## 14. 运维闭环（日志/缓存/调度）
 
 ### 14.1 主要缺口
+
 1. 日志轮转与保留策略缺失
 2. cleanup 未纳入常驻 ops workflow
 3. cron 与 Temporal 双轨并存，互斥策略未定义
 
 ### 14.2 目标基线
+
 1. cleanup 每 6 小时
 2. logrotate 每日
 3. SQLite 过期清理 + VACUUM 每日低峰
 4. 明确 cron 与 Temporal 二选一策略
 
 ### 14.3 同步文档
+
 - `docs/reference/logging.md`
 - `docs/reference/cache.md`
 - `docs/runbook-local.md`
@@ -557,6 +628,7 @@ docs/
 ## 15. 验收标准与立即执行清单
 
 ### 15.1 全局 DoD 验收标准
+
 1. `python3 scripts/check_env_contract.py --strict` 返回 0
 2. `google-genai` 成为唯一 SDK；旧 SDK import = 0
 3. OpenAI 运行时残留 = 0 且 CI 有扫描守卫
@@ -568,6 +640,7 @@ docs/
 9. 文档口径统一且 `docs/start-here.md` 1 分钟可上手
 
 ### 15.2 立即执行命令
+
 ```bash
 # 1) 环境契约
 python3 scripts/check_env_contract.py --strict
@@ -602,6 +675,7 @@ rg -n "8-step|9-step|\.env\.local\.example|python3 scripts/check_env_contract.py
 ## 17. 主控验收总结
 
 本手册已从“方向性建议”升级为“Plan 版执行手册”：
+
 1. 有证据矩阵（行号级）
 2. 有 DoR/DoD 与协作契约
 3. 有 WBS + Wave 并行编排与冲突矩阵
@@ -628,6 +702,7 @@ rg -n "8-step|9-step|\.env\.local\.example|python3 scripts/check_env_contract.py
 ## 19. 已落地改动清单（按文件分类）
 
 ### 19.1 配置与契约
+
 - `infra/config/env.contract.json`：补齐变量契约并与 strict 校验脚本对齐。
 - `.env.example`：统一变量命名与默认口径，移除歧义项。
 - `ENVIRONMENT.md`：同步运行时变量定义与初始化指引。
@@ -635,6 +710,7 @@ rg -n "8-step|9-step|\.env\.local\.example|python3 scripts/check_env_contract.py
 - `apps/worker/worker/config.py`：配置读取入口收敛。
 
 ### 19.2 核心能力链路（LLM / Thinking / Tool / Computer Use）
+
 - `apps/worker/worker/pipeline/steps/llm_client.py`：thinking/schema/tool 行为统一与约束补强。
 - `apps/worker/worker/pipeline/steps/llm_client_helpers.py`：辅助逻辑收敛，减少重复分支。
 - `apps/worker/worker/pipeline/steps/llm_steps.py`：结构化输出流程与审计透传对齐。
@@ -644,12 +720,14 @@ rg -n "8-step|9-step|\.env\.local\.example|python3 scripts/check_env_contract.py
 - `apps/worker/worker/pipeline/steps/llm_computer_use.py`：与 API 语义对齐。
 
 ### 19.3 检索与语义闭环
+
 - `apps/api/app/services/retrieval.py`：检索模式扩展（`keyword|semantic|hybrid`）。
 - `apps/api/app/routers/retrieval.py`：模式参数与响应契约对齐。
 - `apps/mcp/tools/retrieval.py`：MCP 侧模式一致化。
 - `apps/worker/worker/pipeline/steps/embedding.py`：检索链路联动补齐。
 
 ### 19.4 测试与 CI 门禁
+
 - `.github/workflows/ci.yml`：主 CI 门禁增强与 required checks 对齐。
 - `.github/workflows/*.yml`：并发、性能、稳定性相关 workflow 接入。
 - `scripts/e2e_live_smoke.sh`：release 路径 smoke 脚本固化。
@@ -658,6 +736,7 @@ rg -n "8-step|9-step|\.env\.local\.example|python3 scripts/check_env_contract.py
 - `apps/web/tests/e2e/support/*`：通用能力下沉，降低重复实现。
 
 ### 19.5 运维与文档封板
+
 - `scripts/start_ops_workflows.sh`：cleanup/logrotate/调度策略脚本化。
 - `docs/reference/logging.md`：日志策略与轮转规范落地。
 - `docs/reference/cache.md`：缓存策略与清理规则落地。
@@ -692,6 +771,7 @@ rg -n "8-step|9-step|\.env\.local\.example|python3 scripts/check_env_contract.py
 ```
 
 ### 20.2 主控判定规则
+
 - 所有 M-CHECK exit code = 0，且无 blocker 级残留，即判定 Wave3 终验通过。
 - 若出现非 0 退出码，文档状态自动回退为 `🟡 In Progress`，并在本节追加修复记录。
 
@@ -700,15 +780,18 @@ rg -n "8-step|9-step|\.env\.local\.example|python3 scripts/check_env_contract.py
 ## 21. 剩余后续项（若有）
 
 ### 21.1 must-have（发布前必须完成）
+
 1. 回填并冻结 Wave3-SubAgent-M 的原始验收输出（见 20.1）。
 2. 在本文件补充最终证据索引（commit SHA / workflow run id / artifact 路径）。
 3. 完成一次发布前全量回归并归档结果（与 15.1 DoD 一致）。
 
 ### 21.2 nice-to-have（可延后，不阻断发布）
+
 1. 增加趋势型质量看板（coverage、flake rate、P95）周报自动汇总。
 2. 将验收快照模板脚本化，减少人工回填误差。
 3. 对文档术语建立 lint 词表，降低后续口径漂移概率。
 
 #### 🔴 PROTOCOLS_LOADED
+
 - `~/.codex/skills/09-任务拆解-规划/SKILL.md`
 - `~/.codex/skills/07-写文档-Documentation/SKILL.md`

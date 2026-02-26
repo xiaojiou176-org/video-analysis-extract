@@ -1,0 +1,40 @@
+version: "2"
+
+run:
+  timeout: 5m
+  tests: true
+
+linters:
+  default: none
+  enable:
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - gosimple
+    - gocritic
+    - misspell
+    - revive
+    - unconvert
+    - unparam
+    - nakedret
+    - prealloc
+    - bodyclose
+    - noctx
+    - sqlclosecheck
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+
+linters-settings:
+  revive:
+    severity: warning
+    rules:
+      - name: var-naming
+      - name: exported
+      - name: package-comments
+      - name: if-return
+      - name: early-return
+      - name: superfluous-else

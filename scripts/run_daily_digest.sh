@@ -10,12 +10,12 @@ source "$ROOT_DIR/scripts/lib/http_api.sh"
 load_repo_env "$ROOT_DIR" "$SCRIPT_NAME"
 
 VD_API_BASE_URL="${VD_API_BASE_URL:-http://127.0.0.1:8000}"
-DIGEST_DATE="${DIGEST_DATE:-$(date -u +%F)}"
-DIGEST_CHANNEL="${DIGEST_CHANNEL:-email}"
-DIGEST_DRY_RUN="${DIGEST_DRY_RUN:-false}"
-DIGEST_FORCE="${DIGEST_FORCE:-false}"
-DIGEST_TO_EMAIL="${DIGEST_TO_EMAIL:-}"
-DIGEST_FALLBACK_ENABLED="${DIGEST_FALLBACK_ENABLED:-1}"
+digest_date="$(date -u +%F)"
+digest_channel="email"
+digest_dry_run="false"
+digest_force="false"
+digest_to_email=""
+digest_fallback_enabled="1"
 
 HTTP_STATUS=""
 HTTP_BODY=""
@@ -52,21 +52,20 @@ json_bool() {
 
 build_daily_payload() {
   local dry_run force
-  dry_run="$(json_bool "$DIGEST_DRY_RUN")"
-  force="$(json_bool "$DIGEST_FORCE")"
+  dry_run="$(json_bool "$digest_dry_run")"
+  force="$(json_bool "$digest_force")"
 
-  DIGEST_DATE="$DIGEST_DATE" DIGEST_CHANNEL="$DIGEST_CHANNEL" DRY_RUN="$dry_run" FORCE="$force" \
-    python3 - <<'PY'
+  python3 - "$digest_date" "$digest_channel" "$dry_run" "$force" <<'PY'
 import json
-import os
+import sys
 
 print(
     json.dumps(
         {
-            "date": os.environ["DIGEST_DATE"],
-            "channel": os.environ["DIGEST_CHANNEL"],
-            "dry_run": os.environ["DRY_RUN"] == "true",
-            "force": os.environ["FORCE"] == "true",
+            "date": sys.argv[1],
+            "channel": sys.argv[2],
+            "dry_run": sys.argv[3] == "true",
+            "force": sys.argv[4] == "true",
         },
         ensure_ascii=False,
     )
@@ -141,16 +140,15 @@ PY
 
   local payload
   payload="$(
-    DIGEST_DATE="$DIGEST_DATE" DIGEST_TO_EMAIL="$DIGEST_TO_EMAIL" JOB_ID="$latest_job_id" \
-      DIGEST_MARKDOWN_FILE="$markdown_file" python3 - <<'PY'
+    python3 - "$digest_date" "$digest_to_email" "$latest_job_id" "$markdown_file" <<'PY'
 import json
-import os
+import sys
 from pathlib import Path
 
-digest = Path(os.environ["DIGEST_MARKDOWN_FILE"]).read_text(encoding="utf-8")
-digest_date = os.environ["DIGEST_DATE"]
-job_id = os.environ["JOB_ID"]
-to_email = os.environ.get("DIGEST_TO_EMAIL", "").strip() or None
+digest_date = sys.argv[1]
+to_email = sys.argv[2].strip() or None
+job_id = sys.argv[3]
+digest = Path(sys.argv[4]).read_text(encoding="utf-8")
 
 subject = f"[Video Digestor] Daily digest {digest_date}"
 body = f"job_id: {job_id}\n\ndate: {digest_date}\n\n{digest}"
@@ -181,6 +179,32 @@ main() {
   require_cmd curl
   require_cmd python3
 
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --api-base-url) VD_API_BASE_URL="${2:-}"; shift 2 ;;
+      --date) digest_date="${2:-}"; shift 2 ;;
+      --channel) digest_channel="${2:-}"; shift 2 ;;
+      --dry-run) digest_dry_run="${2:-}"; shift 2 ;;
+      --force) digest_force="${2:-}"; shift 2 ;;
+      --to-email) digest_to_email="${2:-}"; shift 2 ;;
+      --fallback-enabled) digest_fallback_enabled="${2:-}"; shift 2 ;;
+      -h|--help)
+        cat <<'USAGE'
+Usage: scripts/run_daily_digest.sh [options]
+  --api-base-url <url>
+  --date <YYYY-MM-DD>
+  --channel <name>
+  --dry-run <true|false>
+  --force <true|false>
+  --to-email <email>
+  --fallback-enabled <0|1|true|false>
+USAGE
+        exit 0
+        ;;
+      *) fail "unknown argument: $1" ;;
+    esac
+  done
+
   cd "$ROOT_DIR"
   check_api_health
 
@@ -188,8 +212,8 @@ main() {
     return 0
   fi
 
-  if ! is_truthy "$DIGEST_FALLBACK_ENABLED"; then
-    fail "Fallback disabled (DIGEST_FALLBACK_ENABLED=${DIGEST_FALLBACK_ENABLED})."
+  if ! is_truthy "$digest_fallback_enabled"; then
+    fail "Fallback disabled (--fallback-enabled=${digest_fallback_enabled})."
   fi
 
   fallback_daily_send

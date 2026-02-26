@@ -39,7 +39,9 @@ def register_health_tools(mcp: FastMCP, api_call: ApiCall) -> None:
             system_response = api_call("GET", "/healthz")
             if is_error_payload(system_response):
                 return system_response
-            payload["system"] = {"status": to_optional_str(system_response.get("status")) or "unknown"}
+            payload["system"] = {
+                "status": to_optional_str(system_response.get("status")) or "unknown"
+            }
 
         if normalized_scope in {"providers", "all"}:
             providers_response = api_call(

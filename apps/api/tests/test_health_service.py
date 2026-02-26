@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy.exc import DBAPIError
@@ -12,7 +12,7 @@ class _RowsResult:
     def __init__(self, rows: list[dict[str, Any]]) -> None:
         self._rows = rows
 
-    def mappings(self) -> "_RowsResult":
+    def mappings(self) -> _RowsResult:
         return self
 
     def all(self) -> list[dict[str, Any]]:
@@ -38,14 +38,14 @@ class _FakeDB:
                 {
                     "check_kind": "rsshub",
                     "status": "ok",
-                    "checked_at": datetime(2026, 2, 22, 10, 0, tzinfo=timezone.utc),
+                    "checked_at": datetime(2026, 2, 22, 10, 0, tzinfo=UTC),
                     "error_kind": None,
                     "message": "ok",
                 },
                 {
                     "check_kind": "gemini",
                     "status": "fail",
-                    "checked_at": datetime(2026, 2, 22, 10, 5, tzinfo=timezone.utc),
+                    "checked_at": datetime(2026, 2, 22, 10, 5, tzinfo=UTC),
                     "error_kind": "transient",
                     "message": "timeout",
                 },

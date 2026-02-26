@@ -46,11 +46,13 @@
 | `live-smoke` | 真实 `/api/v1/videos/process` + 真实 provider 链路 | 是（YouTube/Bilibili + Gemini/Resend） | 是（CI 主干必需） |
 
 `pr-llm-real-smoke` 触发条件（PR 可选真实 LLM）：
+
 - 仅 `pull_request` 事件。
 - 仅同仓 PR（`head.repo.full_name == github.repository`），fork PR 不触发。
 - 且仓库配置了 `GEMINI_API_KEY` secret；否则该 job 为 `skipped`，不阻塞 aggregate gate。
 
 CI `live-smoke` 必需 secrets（`main` push / nightly schedule）：
+
 - `GEMINI_API_KEY`
 - `RESEND_API_KEY`
 - `RESEND_FROM_EMAIL`
@@ -71,13 +73,15 @@ CI `live-smoke` 必需 secrets（`main` push / nightly schedule）：
   - `--retries` 未显式传入时使用脚本默认值 `2`，且 live 策略强制最大值 `2`
 
 Live 诊断与执行策略（本地/CI 一致）：
+
 - 环境变量优先级：先读仓库 `.env`，缺失项仅使用当前 shell 环境变量。
 - `YOUTUBE_API_KEY` 失效修复：`e2e_live_smoke.sh` 会按 `.env` → 当前 shell 环境变量自动探测可用 key，并在修复成功后回写 `.env`（日志仅展示脱敏 key 片段）。
 - 若所有来源都无效：脚本直接失败，并输出“需要用户提供有效key”。
 - 失败分类：诊断 JSON 必须携带 `failure_kind`，取值为 `code_logic_error` 或 `network_or_environment_timeout`。
 - `OFFLINE_FALLBACK` 口径（去除假通过）：
-  - `local` / `ci` profile 默认 `OFFLINE_FALLBACK=0`，核心服务或 reader 栈异常时立即失败（fail-fast，不自动降级为绿灯）。
-  - 仅在显式设置 `OFFLINE_FALLBACK=1` 时允许降级路径；此时若命中 `.runtime-cache/full-stack/offline-fallback.flag`，`smoke_full_stack.sh` 会跳过 reader checks 并输出 degraded 信息。
+  - `scripts/smoke_full_stack.sh` 的脚本内默认值为 `OFFLINE_FALLBACK=1`（仅当环境未提供该变量时生效）。
+  - 仓库提供的 `local` / `ci` / `live-smoke` profile 会覆盖为 `OFFLINE_FALLBACK=0`，因此按标准 profile 执行时是 fail-fast（核心服务或 reader 栈异常立即失败）。
+  - 当最终生效值为 `OFFLINE_FALLBACK=1` 且命中 `.runtime-cache/full-stack/offline-fallback.flag` 时，`smoke_full_stack.sh` 会跳过 reader checks 并输出 degraded 信息。
   - 降级路径不改变 `e2e_live_smoke` 的失败分类枚举；`failure_kind` 仍仅使用上述两类值。
 - 长任务可观测：live 脚本输出 heartbeat 与 phase 进度日志（`phase=short_tests` / `phase=long_tests`）。
 - 顺序规则：先 short tests 再 long tests，再执行 `phase=teardown`（仅做安全清理，不做破坏性操作）。
@@ -132,6 +136,7 @@ scripts/smoke_llm_real_local.sh --api-base-url "http://127.0.0.1:18081"
 ```
 
 说明：
+
 - `up` 会等待 API health 与 Web 端口就绪，失败时输出 `logs/full-stack/*.log` 关键片段，便于快速定位。
 - 后台 `up` 场景默认关闭 API reload（`DEV_API_RELOAD=0`），避免 `status` 因 reload 父子进程变化误判 `stopped`。
 
@@ -152,6 +157,7 @@ python3 scripts/check_test_assertions.py
 ```
 
 说明：
+
 - 默认禁止 `expect(true).toBe(true)`、`expect("x").toEqual("x")`、`expect(1).toBe(1)` 等左右同字面量断言。
 - 默认禁止 `toBeDefined()`；如确有必要，可在同一行或上一行添加注释标记：
   `// allow-low-value-assertion: toBeDefined`
@@ -175,6 +181,7 @@ bash scripts/env/final_governance_check.sh --skip-prepush
 ```
 
 默认策略（阻断）：
+
 - 全仓 Lint 错误必须为 0（`npm --prefix apps/web run lint` + `uv run --with ruff ruff check apps scripts`）。
 - 禁止安慰剂断言（`python3 scripts/check_test_assertions.py --path .`）。
 - Secrets 泄漏扫描必须通过（`sk-*` / `ghp_*` / `AKIA*` / 私钥头模式）。
@@ -189,6 +196,39 @@ bash scripts/env/final_governance_check.sh --skip-prepush
 
 ```bash
 ./scripts/install_git_hooks.sh
+```
+
+可选：直接安装 pre-commit framework hooks（会写入当前 `core.hooksPath`）：
+
+```bash
+pre-commit install --hook-type pre-commit --hook-type commit-msg --hook-type pre-push
+```
+
+协同口径（与仓库现状一致）：
+
+- 默认强制链路：`.githooks/* -> quality_gate/commitlint`。
+- `.pre-commit-config.yaml`：统一可复用 checks（手动执行、全量清洗、版本保养）。
+- 当前 `.githooks` 不直接调用 `pre-commit run`，因此 `pre-commit` 在本仓库是“补充工具链”，不是唯一强制入口。
+
+Big Bang 全量清洗（建议在大改前执行）：
+
+```bash
+pre-commit run --all-files
+```
+
+detect-secrets baseline（可选补充流程，默认强制 secrets 门禁仍为 gitleaks）：
+
+```bash
+uv run --with detect-secrets detect-secrets scan > .secrets.baseline
+uv run --with detect-secrets detect-secrets audit .secrets.baseline
+uv run --with detect-secrets detect-secrets scan --baseline .secrets.baseline > .secrets.baseline
+```
+
+月度保养（建议每月一次）：
+
+```bash
+pre-commit autoupdate
+pre-commit run --all-files
 ```
 
 提交信息本地校验（Conventional Commits）：
@@ -229,6 +269,7 @@ echo "feat(api): add ingest health guard" > /tmp/commit-msg-ok.txt
   - `python3 -c '...读取 mutants/mutmut-cicd-stats.json 并校验 score>=阈值...'`（默认阈值 `0.60`）
 
 变异测试工具不可用策略（阻断）：
+
 - 若 `uv` 不可用：直接失败并提示安装 `uv`，禁止静默跳过。
 - 若 `mutmut` 安装/执行失败：直接失败并提示执行 `uv sync --frozen --extra dev --extra e2e`。
 - 若无有效突变体（`killed + survived == 0`）：直接失败，视为门禁无效配置。
@@ -277,6 +318,7 @@ uv run \
 ```
 
 该用例应覆盖 `vd.jobs.get` 归一化后的关键字段保留：
+
 - `steps`
 - `degradations`
 - `pipeline_final_status`
@@ -295,6 +337,7 @@ uv run --with pytest --with playwright pytest apps/web/tests/e2e -q
 ```
 
 说明：
+
 - E2E 用例会自动启动本地 Next.js Web（`apps/web`）并注入本地 mock API，不依赖真实后端或外部 API。
 - 运行前需确保 `apps/web/node_modules` 已安装（例如先执行 `cd apps/web && npm ci`）。
 
@@ -306,6 +349,7 @@ uv run --with pytest --with playwright pytest apps/web/tests/e2e -q
 ```
 
 说明：
+
 - `WEB_BASE_URL` 必须是绝对 `http(s)` URL。
 - 使用外部模式时，请确保目标 Web 已启动且其 API 指向与测试预期一致。
 

@@ -19,7 +19,7 @@ class _RowsResult:
     def __init__(self, rows: list[dict[str, Any]]) -> None:
         self._rows = rows
 
-    def mappings(self) -> "_RowsResult":
+    def mappings(self) -> _RowsResult:
         return self
 
     def all(self) -> list[dict[str, Any]]:
@@ -48,7 +48,9 @@ class _ErrorDB(_FakeDB):
 def test_retrieval_service_search_matches_digest_and_applies_top_k(tmp_path: Path) -> None:
     artifact_root = tmp_path / "artifacts"
     artifact_root.mkdir(parents=True, exist_ok=True)
-    (artifact_root / "digest.md").write_text("Provider timeout detected and retried.", encoding="utf-8")
+    (artifact_root / "digest.md").write_text(
+        "Provider timeout detected and retried.", encoding="utf-8"
+    )
     (artifact_root / "transcript.txt").write_text("Everything is normal here.", encoding="utf-8")
 
     db = _FakeDB(
@@ -68,7 +70,9 @@ def test_retrieval_service_search_matches_digest_and_applies_top_k(tmp_path: Pat
     )
     service = RetrievalService(db)  # type: ignore[arg-type]
 
-    payload = service.search(query="timeout", top_k=1, mode="keyword", filters={"platform": "youtube"})
+    payload = service.search(
+        query="timeout", top_k=1, mode="keyword", filters={"platform": "youtube"}
+    )
 
     assert payload["query"] == "timeout"
     assert payload["top_k"] == 1
@@ -100,7 +104,9 @@ def test_retrieval_service_ignores_unsupported_filters(tmp_path: Path) -> None:
     )
     service = RetrievalService(db)  # type: ignore[arg-type]
 
-    payload = service.search(query="quick", top_k=5, mode="keyword", filters={"unknown": "x", "platform": "youtube"})
+    payload = service.search(
+        query="quick", top_k=5, mode="keyword", filters={"unknown": "x", "platform": "youtube"}
+    )
 
     assert payload["filters"] == {"platform": "youtube"}
 
@@ -130,7 +136,9 @@ def test_retrieval_service_semantic_mode_uses_embedding_path(monkeypatch) -> Non
         ],
     )
 
-    payload = service.search(query="timeout issue", top_k=3, mode="semantic", filters={"platform": "youtube"})
+    payload = service.search(
+        query="timeout issue", top_k=3, mode="semantic", filters={"platform": "youtube"}
+    )
 
     assert payload["query"] == "timeout issue"
     assert payload["top_k"] == 3
@@ -194,7 +202,9 @@ def test_retrieval_service_hybrid_mode_merges_and_deduplicates(monkeypatch) -> N
         ],
     )
 
-    payload = service.search(query="timeout", top_k=5, mode="hybrid", filters={"platform": "youtube"})
+    payload = service.search(
+        query="timeout", top_k=5, mode="hybrid", filters={"platform": "youtube"}
+    )
 
     assert len(payload["items"]) == 2
     assert payload["items"][0]["job_id"] == "job-1"
@@ -207,7 +217,9 @@ def test_retrieval_service_search_hits_three_sources(tmp_path: Path) -> None:
     artifact_root.mkdir(parents=True, exist_ok=True)
     (artifact_root / "digest.md").write_text("alpha found in digest", encoding="utf-8")
     (artifact_root / "transcript.txt").write_text("alpha found in transcript", encoding="utf-8")
-    (artifact_root / "outline.json").write_text('{"summary":"alpha found in outline"}', encoding="utf-8")
+    (artifact_root / "outline.json").write_text(
+        '{"summary":"alpha found in outline"}', encoding="utf-8"
+    )
 
     db = _FakeDB(
         [
@@ -325,7 +337,11 @@ def test_build_query_embedding_handles_import_error(monkeypatch) -> None:
     service = RetrievalService(_FakeDB([]))  # type: ignore[arg-type]
     monkeypatch.setattr(
         "apps.api.app.services.retrieval.Settings.from_env",
-        lambda: SimpleNamespace(gemini_api_key="key", gemini_embedding_model="x", api_retrieval_embedding_timeout_seconds=1.0),
+        lambda: SimpleNamespace(
+            gemini_api_key="key",
+            gemini_embedding_model="x",
+            api_retrieval_embedding_timeout_seconds=1.0,
+        ),
     )
 
     monkeypatch.setitem(sys.modules, "google", None)
@@ -354,7 +370,9 @@ def test_build_query_embedding_timeout_raises_api_timeout(monkeypatch) -> None:
     class _FakeClient:
         def __init__(self, api_key: str):
             self.api_key = api_key
-            self.models = types.SimpleNamespace(embed_content=lambda **kwargs: {"values": [0.1, 0.2]})
+            self.models = types.SimpleNamespace(
+                embed_content=lambda **kwargs: {"values": [0.1, 0.2]}
+            )
 
     fake_types_module = types.ModuleType("google.genai.types")
 
@@ -367,6 +385,7 @@ def test_build_query_embedding_timeout_raises_api_timeout(monkeypatch) -> None:
     fake_genai_module.Client = _FakeClient
     fake_genai_module.types = fake_types_module
     fake_genai_module.__path__ = []
+
     def _fake_import(name: str):
         if name == "google.genai":
             return fake_genai_module
@@ -379,7 +398,7 @@ def test_build_query_embedding_timeout_raises_api_timeout(monkeypatch) -> None:
     class _Future:
         def result(self, timeout: float):
             del timeout
-            raise concurrent.futures.TimeoutError()
+            raise concurrent.futures.TimeoutError
 
     class _Executor:
         def __init__(self, max_workers: int):
@@ -415,7 +434,9 @@ def test_build_query_embedding_returns_none_on_runtime_exception(monkeypatch) ->
     class _FakeClient:
         def __init__(self, api_key: str):
             self.api_key = api_key
-            self.models = types.SimpleNamespace(embed_content=lambda **kwargs: {"values": [0.1, 0.2]})
+            self.models = types.SimpleNamespace(
+                embed_content=lambda **kwargs: {"values": [0.1, 0.2]}
+            )
 
     fake_types_module = types.ModuleType("google.genai.types")
 
@@ -428,6 +449,7 @@ def test_build_query_embedding_returns_none_on_runtime_exception(monkeypatch) ->
     fake_genai_module.Client = _FakeClient
     fake_genai_module.types = fake_types_module
     fake_genai_module.__path__ = []
+
     def _fake_import(name: str):
         if name == "google.genai":
             return fake_genai_module

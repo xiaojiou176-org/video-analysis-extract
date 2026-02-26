@@ -49,6 +49,6 @@ def api_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     monkeypatch.setitem(sys.modules, "apps.api.app.routers.notifications", notifications_stub)
 
     module = importlib.import_module("apps.api.app.main")
-    app = getattr(module, "app")
+    app = module.app
     with TestClient(app) as client:
         yield client

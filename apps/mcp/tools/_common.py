@@ -3,8 +3,9 @@ from __future__ import annotations
 import base64
 import os
 import re
+from collections.abc import Callable
 from pathlib import PurePosixPath
-from typing import Any, Callable
+from typing import Any
 from urllib.parse import quote
 from uuid import UUID
 
@@ -112,22 +113,26 @@ def parse_artifact_relative_path(value: Any) -> str | None:
     if any(part == ".." for part in parts):
         return None
     normalized = PurePosixPath(*parts).as_posix()
-    return normalized if normalized else None
+    return normalized or None
 
 
-def validate_object_keys(value: Any, *, allowed_keys: set[str]) -> tuple[dict[str, Any] | None, str | None]:
+def validate_object_keys(
+    value: Any, *, allowed_keys: set[str]
+) -> tuple[dict[str, Any] | None, str | None]:
     if not isinstance(value, dict):
         return None, "must be an object"
-    unknown_keys = sorted(key for key in value.keys() if isinstance(key, str) and key not in allowed_keys)
+    unknown_keys = sorted(key for key in value if isinstance(key, str) and key not in allowed_keys)
     if unknown_keys:
         return None, f"contains unsupported keys: {', '.join(unknown_keys)}"
-    non_string_keys = [str(key) for key in value.keys() if not isinstance(key, str)]
+    non_string_keys = [str(key) for key in value if not isinstance(key, str)]
     if non_string_keys:
         return None, "contains non-string keys"
     return dict(value), None
 
 
-def validate_base64_size(value: Any, *, max_bytes: int = DEFAULT_MAX_BASE64_BYTES) -> tuple[bool, str | None]:
+def validate_base64_size(
+    value: Any, *, max_bytes: int = DEFAULT_MAX_BASE64_BYTES
+) -> tuple[bool, str | None]:
     if not isinstance(value, str):
         return False, "must be a base64 string"
     try:

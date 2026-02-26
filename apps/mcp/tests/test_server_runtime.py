@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Self
 
 import httpx
 import pytest
@@ -10,11 +10,13 @@ from apps.mcp.server import ApiClient, ApiConfig, ApiError
 
 
 class _DummyClient:
-    def __init__(self, response: httpx.Response | None = None, exc: Exception | None = None) -> None:
+    def __init__(
+        self, response: httpx.Response | None = None, exc: Exception | None = None
+    ) -> None:
         self._response = response
         self._exc = exc
 
-    def __enter__(self) -> "_DummyClient":
+    def __enter__(self) -> Self:
         return self
 
     def __exit__(self, exc_type, exc, tb) -> bool:
@@ -83,7 +85,9 @@ def test_api_client_handles_empty_and_binary_and_list_json(monkeypatch: pytest.M
         "apps.mcp.server.httpx.Client",
         lambda timeout: _DummyClient(response=responses.pop(0)),
     )
-    client = ApiClient(ApiConfig(base_url="http://api", timeout_sec=2, api_key=None, max_base64_bytes=8))
+    client = ApiClient(
+        ApiConfig(base_url="http://api", timeout_sec=2, api_key=None, max_base64_bytes=8)
+    )
 
     assert client.request("GET", "/empty") == {"ok": True}
 
@@ -95,7 +99,9 @@ def test_api_client_handles_empty_and_binary_and_list_json(monkeypatch: pytest.M
     assert list_payload == {"items": [{"id": "item-1"}]}
 
 
-def test_api_client_handles_invalid_json_and_path_control_characters(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_api_client_handles_invalid_json_and_path_control_characters(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     invalid_json_response = httpx.Response(
         status_code=200,
         content=b"{",
@@ -115,7 +121,9 @@ def test_api_client_handles_invalid_json_and_path_control_characters(monkeypatch
     assert exc_info.value.code == "INVALID_UPSTREAM_PATH"
 
 
-def test_api_client_http_error_with_invalid_json_body_uses_text_preview(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_api_client_http_error_with_invalid_json_body_uses_text_preview(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     response = httpx.Response(
         status_code=500,
         content=b"{",
@@ -136,18 +144,22 @@ def test_api_client_http_error_with_invalid_json_body_uses_text_preview(monkeypa
 
 
 def test_extract_error_message_supports_detail_list() -> None:
-    message = server._extract_error_message({"detail": [{"msg": "bad request"}]}, fallback="fallback")
+    message = server._extract_error_message(
+        {"detail": [{"msg": "bad request"}]}, fallback="fallback"
+    )
     assert '"msg": "bad request"' in message
 
 
 def test_extract_error_message_uses_string_and_fallback_paths() -> None:
-    assert server._extract_error_message(" upstream failed ", fallback="fallback") == "upstream failed"
+    assert (
+        server._extract_error_message(" upstream failed ", fallback="fallback") == "upstream failed"
+    )
     assert server._extract_error_message(None, fallback="fallback") == "fallback"
 
 
 def test_stringify_value_handles_none_and_non_serializable_data() -> None:
     assert server._stringify_value(None) == ""
-    assert server._stringify_value(set([1])) == "{1}"
+    assert server._stringify_value({1}) == "{1}"
 
 
 def test_api_config_from_env_reads_values(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -164,7 +176,9 @@ def test_api_config_from_env_reads_values(monkeypatch: pytest.MonkeyPatch) -> No
     assert config.max_base64_bytes == 1
 
 
-def test_create_server_registers_tools_and_normalizes_error_payloads(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_create_server_registers_tools_and_normalizes_error_payloads(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     recorder: dict[str, Any] = {"api_call": None, "request_calls": []}
 
     class FakeFastMCP:
@@ -195,7 +209,11 @@ def test_create_server_registers_tools_and_normalizes_error_payloads(monkeypatch
         recorder["api_call"] = api_call
 
     monkeypatch.setattr(server, "FastMCP", FakeFastMCP)
-    monkeypatch.setattr(server, "ApiConfig", type("_C", (), {"from_env": staticmethod(lambda: ApiConfig("http://api", 1, None))}))
+    monkeypatch.setattr(
+        server,
+        "ApiConfig",
+        type("_C", (), {"from_env": staticmethod(lambda: ApiConfig("http://api", 1, None))}),
+    )
     monkeypatch.setattr(server, "ApiClient", FakeApiClient)
     monkeypatch.setattr(server, "register_subscription_tools", _register_tool)
     monkeypatch.setattr(server, "register_ingest_tools", _register_tool)

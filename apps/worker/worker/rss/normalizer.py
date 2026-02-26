@@ -1,19 +1,19 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from email.utils import parsedate_to_datetime
 import hashlib
 import re
-from typing import Any, Mapping
+from collections.abc import Mapping
+from datetime import UTC, datetime
+from email.utils import parsedate_to_datetime
+from typing import Any
 from urllib.parse import parse_qs, urlparse
-
 
 YOUTUBE_HOSTS = {"youtube.com", "www.youtube.com", "m.youtube.com", "youtu.be"}
 BILIBILI_HOSTS = {"bilibili.com", "www.bilibili.com", "m.bilibili.com", "b23.tv"}
 
 
 def _utc_now_iso() -> str:
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+    return datetime.now(UTC).replace(microsecond=0).isoformat()
 
 
 def _clean_text(value: Any) -> str:
@@ -60,7 +60,7 @@ def extract_video_identity(url: str) -> tuple[str | None, str]:
     query = parse_qs(parsed.query)
 
     if host in YOUTUBE_HOSTS:
-        if "v" in query and query["v"]:
+        if query.get("v"):
             return "youtube", _clean_text(query["v"][0])
 
         if host == "youtu.be":

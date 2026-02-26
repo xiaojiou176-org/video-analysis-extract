@@ -8,8 +8,8 @@ from worker.pipeline.steps.llm_steps import (
 
 __all__ = [
     "gemini_generate",
-    "normalize_outline_payload",
     "normalize_digest_payload",
-    "step_llm_outline",
+    "normalize_outline_payload",
     "step_llm_digest",
+    "step_llm_outline",
 ]

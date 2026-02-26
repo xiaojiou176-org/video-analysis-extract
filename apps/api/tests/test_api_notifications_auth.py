@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from types import SimpleNamespace
 
 from fastapi import FastAPI
@@ -25,7 +25,7 @@ def _build_notifications_client() -> TestClient:
 
 
 def test_notifications_write_endpoints_require_write_access(monkeypatch) -> None:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     monkeypatch.setenv("VD_API_KEY", "unit-test-token")
     monkeypatch.setattr(
         notifications_router,

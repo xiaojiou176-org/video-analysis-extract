@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from pathlib import Path
 import sys
 import time
 import types
+from pathlib import Path
 from typing import Any
 
 from worker.config import Settings
@@ -12,7 +12,9 @@ from worker.pipeline.steps import llm_client
 from worker.pipeline.steps.llm_computer_use import build_default_computer_use_handler
 
 
-def test_gemini_multimodal_falls_back_from_video_to_frames(monkeypatch: Any, tmp_path: Path) -> None:
+def test_gemini_multimodal_falls_back_from_video_to_frames(
+    monkeypatch: Any, tmp_path: Path
+) -> None:
     video_path = tmp_path / "video.mp4"
     frame_path = tmp_path / "frame_001.jpg"
     video_path.write_bytes(b"not-a-real-video")
@@ -24,8 +26,7 @@ def test_gemini_multimodal_falls_back_from_video_to_frames(monkeypatch: Any, tmp
         def generate_content(self, *, model: str, contents: Any, config: Any) -> Any:
             calls.append({"model": model, "contents": contents, "config": config})
             if isinstance(contents, list) and any(
-                isinstance(item, dict) and item.get("kind") == "video"
-                for item in contents
+                isinstance(item, dict) and item.get("kind") == "video" for item in contents
             ):
                 raise RuntimeError("video-input-failed")
             if isinstance(contents, list) and any(
@@ -88,7 +89,9 @@ def test_gemini_multimodal_falls_back_from_video_to_frames(monkeypatch: Any, tmp
     assert isinstance(meta, dict)
 
 
-def test_gemini_function_calling_loop_and_thought_metadata(monkeypatch: Any, tmp_path: Path) -> None:
+def test_gemini_function_calling_loop_and_thought_metadata(
+    monkeypatch: Any, tmp_path: Path
+) -> None:
     frame_path = tmp_path / "frame_001.jpg"
     frame_path.write_bytes(b"\xff\xd8\xff")
 
@@ -129,7 +132,10 @@ def test_gemini_function_calling_loop_and_thought_metadata(monkeypatch: Any, tmp
                 first_round["value"] = False
                 function_call = _FunctionCall(
                     name="select_supporting_frames",
-                    args={"frame_summaries": [{"timestamp_s": 12, "path": "/tmp/f.jpg"}], "max_items": 1},
+                    args={
+                        "frame_summaries": [{"timestamp_s": 12, "path": "/tmp/f.jpg"}],
+                        "max_items": 1,
+                    },
                 )
                 part_call = _Part(function_call=function_call)
                 part_thought = _Part(text="internal", thought=True, signature="sig-A")
@@ -202,7 +208,9 @@ def test_gemini_function_calling_loop_and_thought_metadata(monkeypatch: Any, tmp
     first_contents = calls[0]["contents"]
     assert isinstance(first_contents, list)
     assert any(
-        isinstance(item, dict) and item.get("mime_type", "").startswith("image/") and item.get("media_resolution") == "high"
+        isinstance(item, dict)
+        and item.get("mime_type", "").startswith("image/")
+        and item.get("media_resolution") == "high"
         for item in first_contents
     )
     function_meta = meta["function_calling"]
@@ -411,9 +419,13 @@ def test_gemini_computer_use_requires_confirmation(monkeypatch: Any) -> None:
                 content = types.SimpleNamespace(
                     parts=[_Part(function_call=_FunctionCall("computer_use", {"action": "click"}))]
                 )
-                return types.SimpleNamespace(text=None, candidates=[types.SimpleNamespace(content=content)])
+                return types.SimpleNamespace(
+                    text=None, candidates=[types.SimpleNamespace(content=content)]
+                )
             content = types.SimpleNamespace(parts=[_Part(text='{"ok":true}')])
-            return types.SimpleNamespace(text='{"ok":true}', candidates=[types.SimpleNamespace(content=content)])
+            return types.SimpleNamespace(
+                text='{"ok":true}', candidates=[types.SimpleNamespace(content=content)]
+            )
 
     class _FakeClient:
         def __init__(self, *, api_key: str):
@@ -489,9 +501,13 @@ def test_gemini_computer_use_default_handler_avoids_handler_missing(monkeypatch:
                 content = types.SimpleNamespace(
                     parts=[_Part(function_call=_FunctionCall("computer_use", {"action": "click"}))]
                 )
-                return types.SimpleNamespace(text=None, candidates=[types.SimpleNamespace(content=content)])
+                return types.SimpleNamespace(
+                    text=None, candidates=[types.SimpleNamespace(content=content)]
+                )
             content = types.SimpleNamespace(parts=[_Part(text='{"ok":true}')])
-            return types.SimpleNamespace(text='{"ok":true}', candidates=[types.SimpleNamespace(content=content)])
+            return types.SimpleNamespace(
+                text='{"ok":true}', candidates=[types.SimpleNamespace(content=content)]
+            )
 
     class _FakeClient:
         def __init__(self, *, api_key: str):
@@ -523,7 +539,10 @@ def test_gemini_computer_use_default_handler_avoids_handler_missing(monkeypatch:
     monkeypatch.setitem(sys.modules, "google.genai", fake_genai)
 
     handler = build_default_computer_use_handler(
-        state={"source_url": "https://www.youtube.com/watch?v=demo"},
+        state={
+            "source_url": "https://www.youtube.com/watch?v=demo",
+            "computer_use": {"executor": "browser_stub"},
+        },
         llm_policy={},
         section_policy={},
     )
@@ -568,9 +587,13 @@ def test_gemini_computer_use_honors_max_steps(monkeypatch: Any) -> None:
                 content = types.SimpleNamespace(
                     parts=[_Part(function_call=_FunctionCall("computer_use", {"action": "click"}))]
                 )
-                return types.SimpleNamespace(text=None, candidates=[types.SimpleNamespace(content=content)])
+                return types.SimpleNamespace(
+                    text=None, candidates=[types.SimpleNamespace(content=content)]
+                )
             content = types.SimpleNamespace(parts=[_Part(text='{"ok":true}')])
-            return types.SimpleNamespace(text='{"ok":true}', candidates=[types.SimpleNamespace(content=content)])
+            return types.SimpleNamespace(
+                text='{"ok":true}', candidates=[types.SimpleNamespace(content=content)]
+            )
 
     class _FakeClient:
         def __init__(self, *, api_key: str):
@@ -648,9 +671,13 @@ def test_gemini_computer_use_honors_timeout(monkeypatch: Any) -> None:
                 content = types.SimpleNamespace(
                     parts=[_Part(function_call=_FunctionCall("computer_use", {"action": "click"}))]
                 )
-                return types.SimpleNamespace(text=None, candidates=[types.SimpleNamespace(content=content)])
+                return types.SimpleNamespace(
+                    text=None, candidates=[types.SimpleNamespace(content=content)]
+                )
             content = types.SimpleNamespace(parts=[_Part(text='{"ok":true}')])
-            return types.SimpleNamespace(text='{"ok":true}', candidates=[types.SimpleNamespace(content=content)])
+            return types.SimpleNamespace(
+                text='{"ok":true}', candidates=[types.SimpleNamespace(content=content)]
+            )
 
     class _FakeClient:
         def __init__(self, *, api_key: str):

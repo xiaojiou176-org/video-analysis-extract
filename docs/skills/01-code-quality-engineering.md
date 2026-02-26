@@ -95,8 +95,9 @@ bash "$(dirname "$0")/scripts/preflight.sh" --output .runtime-cache/review/prefl
 ```
 
 **预检项** (任一失败 → BLOCKER，不进入人工审查):
+
 - [ ] Lint 通过
-- [ ] TypeCheck 通过  
+- [ ] TypeCheck 通过
 - [ ] 单元测试通过
 - [ ] 依赖安全审计通过
 
@@ -156,6 +157,7 @@ scope:
 | **7.5** | **🔥 日志审计** | ✅ | ✅ | **必须运行代码看日志！** |
 
 **日志审计执行**:
+
 ```bash
 bash scripts/log_audit.sh --dir .runtime-cache/logs --output .runtime-cache/review/log_audit.json
 ```
@@ -192,6 +194,7 @@ bash scripts/log_audit.sh --dir .runtime-cache/logs --output .runtime-cache/revi
 | 18 | **性能与资源** | ✅ | ✅ | N+1、内存泄漏、索引、竞态条件 |
 
 **敏感信息扫描**:
+
 ```bash
 bash scripts/secrets_scan.sh --dir . --output .runtime-cache/review/secrets_scan.json
 ```
@@ -231,6 +234,7 @@ bash scripts/secrets_scan.sh --dir . --output .runtime-cache/review/secrets_scan
 4. **Verification（验证方式）**: 如何确认修复成功
 
 **不可证实即降级规则**:
+
 - 无法定位到具体位置 → 降级为 `QUESTION`（提问）
 - 无法验证 → 标记 `UNVERIFIED` + 升级严重级别
 
@@ -368,7 +372,6 @@ skip_dimensions: []  # 跳过的维度编号
 □ API 兼容性 (维度 23)
 □ 可访问性 (维度 24)
 ```
-
 
 ---
 
@@ -880,7 +883,6 @@ function processOrder(order) {
 #refactor: UserService 接口隔离 拆分为3个服务
 ```
 
-
 ---
 
 ## Part 3: 测试缺口分析
@@ -1176,6 +1178,7 @@ it("should handle gateway timeout gracefully", async () => {
 > 覆盖率 ≠ 测试质量。突变测试验证测试是否真正检测到代码变更。
 
 **工具链**:
+
 - Python: `mutmut` → `mutmut run --paths-to-mutate=src/`
 - JavaScript/TypeScript: `stryker` → `npx stryker run`
 
@@ -1188,6 +1191,7 @@ it("should handle gateway timeout gracefully", async () => {
 | 存活突变体数 | 持续下降趋势 | 持续上升 |
 
 **检测安慰剂测试**:
+
 1. 运行 `mutmut` / `stryker` 生成突变体
 2. 存活突变体 = 测试未检测到的逻辑变更
 3. 每个存活突变体必须：增加测试覆盖 或 标记为等价突变体
@@ -1358,15 +1362,16 @@ it('should be idempotent', () => { ... });
 
 ```
 
-#test-gap: [模块] [P0:X P1:Y P2:Z] [安慰剂:W]
+# test-gap: [模块] [P0:X P1:Y P2:Z] [安慰剂:W]
 
 ```
 
 示例:
 ```
 
-#test-gap: payment P0:2 P1:3 P2:3 安慰剂:1
-#test-gap: auth P0:0 P1:1 P2:2 已全部补充
+# test-gap: payment P0:2 P1:3 P2:3 安慰剂:1
+
+# test-gap: auth P0:0 P1:1 P2:2 已全部补充
 
 ```
 
@@ -1422,4 +1427,3 @@ it('should be idempotent', () => { ... });
 - `NIT:` — 可选美化
 - `FYI:` — 信息分享，无需行动
 - `Q:` — 提问，需要作者回答
-

@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from pathlib import Path
-from typing import Any, Awaitable, Callable
+from typing import Any
 
 from worker.config import Settings
 from worker.pipeline.types import CommandResult, PipelineContext, StepExecution, StepStatus
@@ -96,7 +97,9 @@ async def step_download_media(
     for provider in providers:
         provider_result: CommandResult | None = None
         if provider == "yt-dlp":
-            provider_result = await run_command(ctx, yt_dlp_download_command(source_url, output_tmpl))
+            provider_result = await run_command(
+                ctx, yt_dlp_download_command(source_url, output_tmpl)
+            )
         elif provider == "bbdown":
             for cmd in bbdown_commands(source_url, ctx.download_dir):
                 provider_result = await run_command(ctx, cmd)
@@ -129,7 +132,9 @@ async def step_download_media(
             }
         )
 
-    only_binary_missing = bool(attempts) and all(str(item.get("reason")) == "binary_not_found" for item in attempts)
+    only_binary_missing = bool(attempts) and all(
+        str(item.get("reason")) == "binary_not_found" for item in attempts
+    )
     status: StepStatus = "skipped" if only_binary_missing else "failed"
     last_attempt = attempts[-1] if attempts else {}
     return StepExecution(

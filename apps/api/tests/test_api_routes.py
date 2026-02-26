@@ -5,7 +5,7 @@ import sys
 import tempfile
 import types
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
@@ -39,7 +39,7 @@ def test_ingest_poll_returns_candidates(
                     "video_uid": "abc123",
                     "source_url": "https://www.youtube.com/watch?v=abc123",
                     "title": "Demo",
-                    "published_at": datetime.now(timezone.utc),
+                    "published_at": datetime.now(UTC),
                     "job_id": job_id,
                 }
             ],
@@ -216,7 +216,7 @@ def test_job_get_returns_mode_and_pipeline_fields(
     monkeypatch,
 ) -> None:
     job_id = uuid.uuid4()
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     def fake_get_job(self, query_job_id):
         assert query_job_id == job_id
@@ -351,7 +351,12 @@ def test_retrieval_search_passes_semantic_mode(api_client: TestClient, monkeypat
 
     response = api_client.post(
         "/api/v1/retrieval/search",
-        json={"query": "retry policy", "top_k": 3, "mode": "semantic", "filters": {"platform": "youtube"}},
+        json={
+            "query": "retry policy",
+            "top_k": 3,
+            "mode": "semantic",
+            "filters": {"platform": "youtube"},
+        },
     )
     payload = response.json()
 
@@ -388,9 +393,13 @@ def test_feed_digests_returns_items(api_client: TestClient, monkeypatch) -> None
             "next_cursor": "2026-02-23T09:58:12Z__job-1",
         }
 
-    monkeypatch.setattr("apps.api.app.services.feed.FeedService.list_digest_feed", fake_list_digest_feed)
+    monkeypatch.setattr(
+        "apps.api.app.services.feed.FeedService.list_digest_feed", fake_list_digest_feed
+    )
 
-    response = api_client.get("/api/v1/feed/digests", params={"source": "youtube", "category": "tech", "limit": 5})
+    response = api_client.get(
+        "/api/v1/feed/digests", params={"source": "youtube", "category": "tech", "limit": 5}
+    )
     payload = response.json()
 
     assert response.status_code == 200
@@ -401,8 +410,10 @@ def test_feed_digests_returns_items(api_client: TestClient, monkeypatch) -> None
     assert payload["items"][0]["artifact_type"] == "digest"
 
 
-def test_subscriptions_list_includes_adapter_and_category_fields(api_client: TestClient, monkeypatch) -> None:
-    now = datetime.now(timezone.utc)
+def test_subscriptions_list_includes_adapter_and_category_fields(
+    api_client: TestClient, monkeypatch
+) -> None:
+    now = datetime.now(UTC)
 
     monkeypatch.setattr(
         "apps.api.app.services.subscriptions.SubscriptionsService.list_subscriptions",
@@ -439,7 +450,7 @@ def test_subscriptions_list_includes_adapter_and_category_fields(api_client: Tes
 
 
 def test_subscriptions_upsert_passes_adapter_fields(api_client: TestClient, monkeypatch) -> None:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     def fake_upsert_subscription(self, **kwargs):
         assert kwargs["adapter_type"] == "rss_generic"
@@ -572,7 +583,9 @@ def test_computer_use_run_rejects_invalid_screenshot_base64(api_client: TestClie
     assert response.json()["detail"] == "screenshot must be valid base64"
 
 
-def test_computer_use_run_redacts_sensitive_error_detail(api_client: TestClient, monkeypatch) -> None:
+def test_computer_use_run_redacts_sensitive_error_detail(
+    api_client: TestClient, monkeypatch
+) -> None:
     screenshot_b64 = base64.b64encode(b"fake-image-bytes").decode("ascii")
 
     def fake_run(self, **kwargs):
@@ -602,7 +615,7 @@ def test_job_get_infers_llm_gate_fields_from_steps_when_legacy_fields_are_null(
     monkeypatch,
 ) -> None:
     job_id = uuid.uuid4()
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     monkeypatch.setattr(
         "apps.api.app.services.jobs.JobsService.get_job",
@@ -652,13 +665,19 @@ def test_job_get_infers_llm_gate_fields_from_steps_when_legacy_fields_are_null(
             },
         ],
     )
-    monkeypatch.setattr("apps.api.app.services.jobs.JobsService.get_degradations", lambda self, **kwargs: [])
-    monkeypatch.setattr("apps.api.app.services.jobs.JobsService.get_artifacts_index", lambda self, **kwargs: {})
+    monkeypatch.setattr(
+        "apps.api.app.services.jobs.JobsService.get_degradations", lambda self, **kwargs: []
+    )
+    monkeypatch.setattr(
+        "apps.api.app.services.jobs.JobsService.get_artifacts_index", lambda self, **kwargs: {}
+    )
     monkeypatch.setattr(
         "apps.api.app.services.jobs.JobsService.get_pipeline_final_status",
         lambda self, _job_id, fallback_status: "failed",
     )
-    monkeypatch.setattr("apps.api.app.services.jobs.JobsService.get_notification_retry", lambda self, _job_id: None)
+    monkeypatch.setattr(
+        "apps.api.app.services.jobs.JobsService.get_notification_retry", lambda self, _job_id: None
+    )
 
     response = api_client.get(f"/api/v1/jobs/{job_id}")
     payload = response.json()
@@ -675,7 +694,7 @@ def test_job_get_infers_llm_gate_passed_true_when_llm_steps_succeed(
     monkeypatch,
 ) -> None:
     job_id = uuid.uuid4()
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     monkeypatch.setattr(
         "apps.api.app.services.jobs.JobsService.get_job",
@@ -725,13 +744,19 @@ def test_job_get_infers_llm_gate_passed_true_when_llm_steps_succeed(
             },
         ],
     )
-    monkeypatch.setattr("apps.api.app.services.jobs.JobsService.get_degradations", lambda self, **kwargs: [])
-    monkeypatch.setattr("apps.api.app.services.jobs.JobsService.get_artifacts_index", lambda self, **kwargs: {})
+    monkeypatch.setattr(
+        "apps.api.app.services.jobs.JobsService.get_degradations", lambda self, **kwargs: []
+    )
+    monkeypatch.setattr(
+        "apps.api.app.services.jobs.JobsService.get_artifacts_index", lambda self, **kwargs: {}
+    )
     monkeypatch.setattr(
         "apps.api.app.services.jobs.JobsService.get_pipeline_final_status",
         lambda self, _job_id, fallback_status: "succeeded",
     )
-    monkeypatch.setattr("apps.api.app.services.jobs.JobsService.get_notification_retry", lambda self, _job_id: None)
+    monkeypatch.setattr(
+        "apps.api.app.services.jobs.JobsService.get_notification_retry", lambda self, _job_id: None
+    )
 
     response = api_client.get(f"/api/v1/jobs/{job_id}")
     payload = response.json()
@@ -744,7 +769,7 @@ def test_job_get_infers_llm_gate_passed_true_when_llm_steps_succeed(
 
 
 def test_health_providers_returns_rollup(api_client: TestClient, monkeypatch) -> None:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     monkeypatch.setattr(
         "apps.api.app.services.health.HealthService.get_provider_health",
         lambda self, window_hours=24: {
@@ -789,7 +814,9 @@ def _mock_artifact_job(
     )
 
 
-def test_artifact_assets_allows_whitelisted_meta(api_client: TestClient, monkeypatch, tmp_path) -> None:
+def test_artifact_assets_allows_whitelisted_meta(
+    api_client: TestClient, monkeypatch, tmp_path
+) -> None:
     job_id = uuid.uuid4()
     artifact_root = tmp_path / "artifacts"
     artifact_root.mkdir(parents=True, exist_ok=True)
@@ -805,7 +832,9 @@ def test_artifact_assets_allows_whitelisted_meta(api_client: TestClient, monkeyp
     assert response.json() == {"ok": True}
 
 
-def test_artifact_assets_blocks_path_traversal(api_client: TestClient, monkeypatch, tmp_path) -> None:
+def test_artifact_assets_blocks_path_traversal(
+    api_client: TestClient, monkeypatch, tmp_path
+) -> None:
     job_id = uuid.uuid4()
     artifact_root = tmp_path / "artifacts"
     artifact_root.mkdir(parents=True, exist_ok=True)
@@ -821,7 +850,9 @@ def test_artifact_assets_blocks_path_traversal(api_client: TestClient, monkeypat
     assert response.json()["detail"] == "artifact asset not found"
 
 
-def test_artifact_assets_blocks_non_whitelisted_file(api_client: TestClient, monkeypatch, tmp_path) -> None:
+def test_artifact_assets_blocks_non_whitelisted_file(
+    api_client: TestClient, monkeypatch, tmp_path
+) -> None:
     job_id = uuid.uuid4()
     artifact_root = tmp_path / "artifacts"
     artifact_root.mkdir(parents=True, exist_ok=True)
@@ -856,7 +887,9 @@ def test_artifact_assets_allows_frame_image(api_client: TestClient, monkeypatch,
     assert response.headers["content-type"].startswith("image/jpeg")
 
 
-def test_workflows_run_returns_503_when_temporal_unavailable(api_client: TestClient, monkeypatch) -> None:
+def test_workflows_run_returns_503_when_temporal_unavailable(
+    api_client: TestClient, monkeypatch
+) -> None:
     import sys
     import types
 
@@ -896,7 +929,9 @@ def test_workflows_run_returns_503_when_temporal_unavailable(api_client: TestCli
     assert "failed to connect temporal" in response.json()["detail"]
 
 
-def test_workflows_run_requires_write_access_when_api_key_configured(api_client: TestClient, monkeypatch) -> None:
+def test_workflows_run_requires_write_access_when_api_key_configured(
+    api_client: TestClient, monkeypatch
+) -> None:
     monkeypatch.setenv("VD_API_KEY", "unit-test-token")
 
     response = api_client.post(
@@ -949,8 +984,10 @@ def test_workflows_run_cleanup_rejects_parent_traversal_path(api_client: TestCli
     assert "parent traversal" in response.text
 
 
-def test_subscriptions_write_endpoints_enforce_write_access(api_client: TestClient, monkeypatch) -> None:
-    now = datetime.now(timezone.utc)
+def test_subscriptions_write_endpoints_enforce_write_access(
+    api_client: TestClient, monkeypatch
+) -> None:
+    now = datetime.now(UTC)
     monkeypatch.setenv("VD_API_KEY", "unit-test-token")
     monkeypatch.setattr(
         "apps.api.app.services.subscriptions.SubscriptionsService.upsert_subscription",
@@ -982,7 +1019,9 @@ def test_subscriptions_write_endpoints_enforce_write_access(api_client: TestClie
         "enabled": True,
     }
     unauth = api_client.post("/api/v1/subscriptions", json=payload)
-    forbidden = api_client.post("/api/v1/subscriptions", json=payload, headers={"X-API-Key": "wrong-token"})
+    forbidden = api_client.post(
+        "/api/v1/subscriptions", json=payload, headers={"X-API-Key": "wrong-token"}
+    )
     authorized = api_client.post(
         "/api/v1/subscriptions",
         json=payload,
@@ -995,7 +1034,7 @@ def test_subscriptions_write_endpoints_enforce_write_access(api_client: TestClie
 
 
 def test_execution_endpoints_enforce_write_access(api_client: TestClient, monkeypatch) -> None:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     monkeypatch.setenv("VD_API_KEY", "unit-test-token")
 
     async def fake_ingest_poll(self, *, subscription_id, platform, max_new_videos):
@@ -1018,11 +1057,21 @@ def test_execution_endpoints_enforce_write_access(api_client: TestClient, monkey
         }
 
     monkeypatch.setattr("apps.api.app.services.ingest.IngestService.poll", fake_ingest_poll)
-    monkeypatch.setattr("apps.api.app.services.videos.VideosService.process_video", fake_process_video)
+    monkeypatch.setattr(
+        "apps.api.app.services.videos.VideosService.process_video", fake_process_video
+    )
     monkeypatch.setattr(
         "apps.api.app.services.computer_use.ComputerUseService.run",
         lambda self, **kwargs: {
-            "actions": [{"step": 1, "action": "click", "target": "#submit", "input_text": None, "reasoning": None}],
+            "actions": [
+                {
+                    "step": 1,
+                    "action": "click",
+                    "target": "#submit",
+                    "input_text": None,
+                    "reasoning": None,
+                }
+            ],
             "require_confirmation": True,
             "blocked_actions": [],
             "final_text": "ok",
@@ -1054,16 +1103,27 @@ def test_execution_endpoints_enforce_write_access(api_client: TestClient, monkey
 
     endpoints = [
         ("/api/v1/ingest/poll", {"platform": "youtube", "max_new_videos": 1}),
-        ("/api/v1/videos/process", {"video": {"platform": "youtube", "url": "https://www.youtube.com/watch?v=abc123"}}),
-        ("/api/v1/computer-use/run", {"instruction": "open submit button", "screenshot_base64": "ZmFrZQ=="}),
+        (
+            "/api/v1/videos/process",
+            {"video": {"platform": "youtube", "url": "https://www.youtube.com/watch?v=abc123"}},
+        ),
+        (
+            "/api/v1/computer-use/run",
+            {"instruction": "open submit button", "screenshot_base64": "ZmFrZQ=="},
+        ),
         ("/api/v1/ui-audit/run", {"artifact_root": tempfile.gettempdir()}),
-        ("/api/v1/ui-audit/run-1/autofix", {"mode": "dry-run", "max_files": 1, "max_changed_lines": 10}),
+        (
+            "/api/v1/ui-audit/run-1/autofix",
+            {"mode": "dry-run", "max_files": 1, "max_changed_lines": 10},
+        ),
     ]
 
     for path, payload in endpoints:
         unauth = api_client.post(path, json=payload)
         forbidden = api_client.post(path, json=payload, headers={"X-API-Key": "wrong-token"})
-        authorized = api_client.post(path, json=payload, headers={"Authorization": "Bearer unit-test-token"})
+        authorized = api_client.post(
+            path, json=payload, headers={"Authorization": "Bearer unit-test-token"}
+        )
 
         assert unauth.status_code == status.HTTP_401_UNAUTHORIZED
         assert forbidden.status_code == status.HTTP_403_FORBIDDEN
@@ -1073,7 +1133,9 @@ def test_execution_endpoints_enforce_write_access(api_client: TestClient, monkey
         }
 
 
-def test_artifact_markdown_contract_switches_by_include_meta(api_client: TestClient, monkeypatch) -> None:
+def test_artifact_markdown_contract_switches_by_include_meta(
+    api_client: TestClient, monkeypatch
+) -> None:
     monkeypatch.setattr(
         "apps.api.app.services.jobs.JobsService.get_artifact_payload",
         lambda self, **kwargs: {"markdown": "# Digest", "meta": {"source": "test"}},
@@ -1105,25 +1167,33 @@ def test_artifact_markdown_openapi_declares_dual_response_content(api_client: Te
     assert "text/markdown" in content
 
 
-def test_ingest_poll_maps_value_error_to_404_for_missing_resource(api_client: TestClient, monkeypatch) -> None:
+def test_ingest_poll_maps_value_error_to_404_for_missing_resource(
+    api_client: TestClient, monkeypatch
+) -> None:
     async def fake_poll(self, *, subscription_id, platform, max_new_videos):
         del subscription_id, platform, max_new_videos
         raise ValueError("subscription does not exist")
 
     monkeypatch.setattr("apps.api.app.services.ingest.IngestService.poll", fake_poll)
-    response = api_client.post("/api/v1/ingest/poll", json={"platform": "youtube", "max_new_videos": 10})
+    response = api_client.post(
+        "/api/v1/ingest/poll", json={"platform": "youtube", "max_new_videos": 10}
+    )
 
     assert response.status_code == status.HTTP_404_NOT_FOUND
     assert response.json()["detail"] == "subscription does not exist"
 
 
-def test_ingest_poll_maps_value_error_to_400_for_invalid_argument(api_client: TestClient, monkeypatch) -> None:
+def test_ingest_poll_maps_value_error_to_400_for_invalid_argument(
+    api_client: TestClient, monkeypatch
+) -> None:
     async def fake_poll(self, *, subscription_id, platform, max_new_videos):
         del subscription_id, platform, max_new_videos
         raise ValueError("invalid poll filters")
 
     monkeypatch.setattr("apps.api.app.services.ingest.IngestService.poll", fake_poll)
-    response = api_client.post("/api/v1/ingest/poll", json={"platform": "youtube", "max_new_videos": 10})
+    response = api_client.post(
+        "/api/v1/ingest/poll", json={"platform": "youtube", "max_new_videos": 10}
+    )
 
     assert response.status_code == status.HTTP_400_BAD_REQUEST
     assert response.json()["detail"] == "invalid poll filters"
@@ -1146,7 +1216,9 @@ def test_sanitize_exception_detail_redacts_basic_userinfo_and_common_tokens() ->
     assert "alice:secret" not in sanitized
 
 
-def test_workflows_run_returns_already_running_when_conflict(api_client: TestClient, monkeypatch) -> None:
+def test_workflows_run_returns_already_running_when_conflict(
+    api_client: TestClient, monkeypatch
+) -> None:
     import sys
     import types
 
@@ -1161,7 +1233,7 @@ def test_workflows_run_returns_already_running_when_conflict(api_client: TestCli
             class _Connected:
                 async def start_workflow(self, *a, **kw):
                     del a, kw
-                    raise FakeWorkflowAlreadyStartedError()
+                    raise FakeWorkflowAlreadyStartedError
 
             return _Connected()
 
@@ -1355,7 +1427,7 @@ def test_notification_html_renderer_supports_markdown() -> None:
     html = _to_html("# 标题\n\n- 一\n- 二\n\n[链接](https://example.com)")
     assert "<h1>标题</h1>" in html
     assert "<li>一</li>" in html
-    assert "<a href=\"https://example.com\">链接</a>" in html
+    assert '<a href="https://example.com">链接</a>' in html
 
 
 def test_ui_audit_run_and_get_endpoints(api_client: TestClient, tmp_path) -> None:
@@ -1367,7 +1439,9 @@ def test_ui_audit_run_and_get_endpoints(api_client: TestClient, tmp_path) -> Non
         encoding="utf-8",
     )
 
-    run_response = api_client.post("/api/v1/ui-audit/run", json={"artifact_root": str(artifact_root)})
+    run_response = api_client.post(
+        "/api/v1/ui-audit/run", json={"artifact_root": str(artifact_root)}
+    )
     assert run_response.status_code == 200
     run_payload = run_response.json()
     assert run_payload["status"] == "completed"
@@ -1396,9 +1470,14 @@ def test_ui_audit_get_artifact_returns_base64(api_client: TestClient, tmp_path) 
     artifact_root = tmp_path / "ui-audit-artifacts"
     artifact_root.mkdir(parents=True, exist_ok=True)
     report_path = artifact_root / "playwright-log.json"
-    report_path.write_text('{"findings":[{"id":"f-1","severity":"low","title":"Sample","message":"ok"}]}', encoding="utf-8")
+    report_path.write_text(
+        '{"findings":[{"id":"f-1","severity":"low","title":"Sample","message":"ok"}]}',
+        encoding="utf-8",
+    )
 
-    run_response = api_client.post("/api/v1/ui-audit/run", json={"artifact_root": str(artifact_root)})
+    run_response = api_client.post(
+        "/api/v1/ui-audit/run", json={"artifact_root": str(artifact_root)}
+    )
     run_id = run_response.json()["run_id"]
 
     response = api_client.get(
@@ -1412,7 +1491,9 @@ def test_ui_audit_get_artifact_returns_base64(api_client: TestClient, tmp_path) 
     assert isinstance(payload["base64"], str)
 
 
-def test_ui_audit_run_includes_gemini_review_findings(api_client: TestClient, monkeypatch, tmp_path) -> None:
+def test_ui_audit_run_includes_gemini_review_findings(
+    api_client: TestClient, monkeypatch, tmp_path
+) -> None:
     artifact_root = tmp_path / "ui-audit-artifacts"
     artifact_root.mkdir(parents=True, exist_ok=True)
     (artifact_root / "playwright-axe-report.json").write_text(
@@ -1464,7 +1545,9 @@ def test_ui_audit_run_includes_gemini_review_findings(api_client: TestClient, mo
     monkeypatch.setitem(sys.modules, "google", fake_google_module)
     monkeypatch.setitem(sys.modules, "google.genai", fake_genai_module)
 
-    run_response = api_client.post("/api/v1/ui-audit/run", json={"artifact_root": str(artifact_root)})
+    run_response = api_client.post(
+        "/api/v1/ui-audit/run", json={"artifact_root": str(artifact_root)}
+    )
     assert run_response.status_code == 200
     run_payload = run_response.json()
     assert run_payload["status"] == "completed"
@@ -1482,7 +1565,9 @@ def test_ui_audit_run_includes_gemini_review_findings(api_client: TestClient, mo
         json={"mode": "dry-run", "max_files": 2, "max_changed_lines": 80},
     )
     assert autofix_response.status_code == 200
-    assert "Align spacing tokens for CTA containers." in autofix_response.json()["suggested_actions"]
+    assert (
+        "Align spacing tokens for CTA containers." in autofix_response.json()["suggested_actions"]
+    )
 
 
 def test_ui_audit_autofix_endpoint_returns_summary(api_client: TestClient, tmp_path) -> None:
@@ -1494,7 +1579,9 @@ def test_ui_audit_autofix_endpoint_returns_summary(api_client: TestClient, tmp_p
         encoding="utf-8",
     )
 
-    run_response = api_client.post("/api/v1/ui-audit/run", json={"artifact_root": str(artifact_root)})
+    run_response = api_client.post(
+        "/api/v1/ui-audit/run", json={"artifact_root": str(artifact_root)}
+    )
     run_id = run_response.json()["run_id"]
 
     response = api_client.post(

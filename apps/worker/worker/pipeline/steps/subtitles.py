@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import asyncio
-from pathlib import Path
 import re
-from typing import Any, Awaitable, Callable
+from collections.abc import Awaitable, Callable
+from pathlib import Path
+from typing import Any
 from urllib.parse import parse_qsl, urlparse
 
 from worker.pipeline.policies import coerce_bool
@@ -198,7 +199,9 @@ async def step_collect_subtitles(
     if coerce_bool(getattr(ctx.settings, "asr_fallback_enabled", False), default=False):
         media_path = str(state.get("media_path") or "").strip()
         if media_path:
-            asr_model_size = str(getattr(ctx.settings, "asr_model_size", "small") or "small").strip()
+            asr_model_size = str(
+                getattr(ctx.settings, "asr_model_size", "small") or "small"
+            ).strip()
             asr_failure_reasons: list[str] = []
             asr_commands = [
                 [

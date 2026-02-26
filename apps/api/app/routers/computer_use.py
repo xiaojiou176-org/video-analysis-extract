@@ -5,8 +5,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from ..security import require_write_access
-from ..security import sanitize_exception_detail
+from ..security import require_write_access, sanitize_exception_detail
 from ..services.computer_use import ComputerUseSafetyConfig, ComputerUseService
 
 router = APIRouter(prefix="/api/v1/computer-use", tags=["computer_use"])

@@ -21,9 +21,13 @@ class StructuredLogChecker(ast.NodeVisitor):
     def __init__(self) -> None:
         self.calls: list[tuple[str, int, set[str]]] = []
 
-    def visit_Call(self, node: ast.Call) -> None:  # noqa: N802
+    def visit_Call(self, node: ast.Call) -> None:
         func = node.func
-        if isinstance(func, ast.Attribute) and isinstance(func.value, ast.Name) and func.value.id == "logger":
+        if (
+            isinstance(func, ast.Attribute)
+            and isinstance(func.value, ast.Name)
+            and func.value.id == "logger"
+        ):
             level = func.attr
             if level in LOG_LEVELS:
                 keys = self._extract_extra_keys(node)

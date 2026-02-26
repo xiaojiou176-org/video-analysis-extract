@@ -16,11 +16,11 @@ required_patterns=(
   "PR_LLM_REAL_SMOKE_DIAGNOSTICS_JSON"
   "ci-failure-diagnostics-pr-llm-real-smoke"
   "external-playwright-smoke:"
-  "EXTERNAL_SMOKE_URL"
-  "EXTERNAL_SMOKE_EXPECT_TEXT"
-  "EXTERNAL_SMOKE_TIMEOUT_MS"
-  "EXTERNAL_SMOKE_RETRIES"
   "scripts/external_playwright_smoke.sh"
+  "--url \"\${{ vars.EXTERNAL_SMOKE_URL || 'https://example.com' }}\""
+  "--expect-text \"\${{ vars.EXTERNAL_SMOKE_EXPECT_TEXT || 'Example Domain' }}\""
+  "--timeout-ms \"\${{ vars.EXTERNAL_SMOKE_TIMEOUT_MS || '45000' }}\""
+  "--retries \"\${{ vars.EXTERNAL_SMOKE_RETRIES || '2' }}\""
 )
 
 missing=()

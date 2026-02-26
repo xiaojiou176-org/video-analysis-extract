@@ -5,7 +5,6 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-
 from worker.config import Settings
 from worker.pipeline import step_executor
 from worker.pipeline.types import PipelineContext, StepExecution

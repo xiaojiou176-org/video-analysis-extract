@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from worker.comments import (
     BilibiliCommentCollector,
@@ -46,7 +47,6 @@ from worker.pipeline.types import (
 )
 from worker.state.postgres_store import PostgresBusinessStore
 from worker.state.sqlite_store import SQLiteStateStore
-
 
 StepHandler = Callable[[PipelineContext, dict[str, Any]], Any]
 
@@ -157,7 +157,9 @@ async def run_pipeline(
     checkpoint = sqlite_store.get_checkpoint(job_id)
     checkpoint_step = str((checkpoint or {}).get("last_completed_step") or "")
     checkpoint_payload = dict((checkpoint or {}).get("payload") or {})
-    resume_upto_idx = PIPELINE_STEPS.index(checkpoint_step) if checkpoint_step in PIPELINE_STEPS else -1
+    resume_upto_idx = (
+        PIPELINE_STEPS.index(checkpoint_step) if checkpoint_step in PIPELINE_STEPS else -1
+    )
 
     state: dict[str, Any] = {
         "job_id": job_id,
@@ -254,7 +256,9 @@ async def run_pipeline(
             ctx,
             state,
             step_name=step_name,
-            step_func=build_mode_skip_step(step_name, pipeline_mode) if is_mode_skipped else handler,
+            step_func=build_mode_skip_step(step_name, pipeline_mode)
+            if is_mode_skipped
+            else handler,
             critical=critical,
             resume_hint=(step_idx <= resume_upto_idx) and not force_run,
             force_run=force_run,

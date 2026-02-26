@@ -53,7 +53,10 @@ def _patch_stub_steps(monkeypatch: Any, tmp_path: Path) -> None:
         return runner.StepExecution(
             status="succeeded",
             output={"mode": "media"},
-            state_updates={"media_path": str((tmp_path / "video.mp4").resolve()), "download_mode": "media"},
+            state_updates={
+                "media_path": str((tmp_path / "video.mp4").resolve()),
+                "download_mode": "media",
+            },
         )
 
     async def _subtitles(_: runner.PipelineContext, __: dict[str, Any]) -> runner.StepExecution:
@@ -90,7 +93,9 @@ def _patch_stub_steps(monkeypatch: Any, tmp_path: Path) -> None:
         return runner.StepExecution(
             status="succeeded",
             output={"frames": 1},
-            state_updates={"frames": [{"path": str((tmp_path / "f1.jpg").resolve()), "timestamp_s": 10}]},
+            state_updates={
+                "frames": [{"path": str((tmp_path / "f1.jpg").resolve()), "timestamp_s": 10}]
+            },
         )
 
     async def _outline(_: runner.PipelineContext, __: dict[str, Any]) -> runner.StepExecution:
@@ -199,7 +204,9 @@ def test_run_pipeline_text_only_mode_skips_media_steps(monkeypatch: Any, tmp_pat
     assert result["llm_media_input"] == {"video_available": False, "frame_count": 0}
 
 
-def test_run_pipeline_refresh_comments_forces_target_steps(monkeypatch: Any, tmp_path: Path) -> None:
+def test_run_pipeline_refresh_comments_forces_target_steps(
+    monkeypatch: Any, tmp_path: Path
+) -> None:
     _patch_stub_steps(monkeypatch, tmp_path)
     settings = _make_settings(tmp_path)
     sqlite_store = _FakeSQLiteStore()

@@ -42,8 +42,8 @@ def test_make_job_idempotency_key_is_deterministic() -> None:
     key_1 = make_job_idempotency_key("youtube", "abc123")
     key_2 = make_job_idempotency_key("youtube", "abc123")
     key_3 = make_job_idempotency_key("youtube", "another")
-    new_formula = hashlib.sha256("youtube:abc123:video_digest_v1".encode("utf-8")).hexdigest()
-    old_formula = hashlib.sha256("youtube:abc123:phase2_ingest_stub".encode("utf-8")).hexdigest()
+    new_formula = hashlib.sha256(b"youtube:abc123:video_digest_v1").hexdigest()
+    old_formula = hashlib.sha256(b"youtube:abc123:phase2_ingest_stub").hexdigest()
 
     assert key_1 == key_2
     assert key_1 != key_3

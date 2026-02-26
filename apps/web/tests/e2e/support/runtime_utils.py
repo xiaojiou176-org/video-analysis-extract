@@ -1,13 +1,14 @@
 from __future__ import annotations
 
-import os
 import errno
+import os
 import re
 import socket
 import time
+from collections.abc import Callable
 from datetime import UTC, datetime
 from http import HTTPStatus
-from typing import Callable, TypeVar
+from typing import TypeVar
 from urllib.parse import urlparse
 from urllib.request import urlopen
 

@@ -99,7 +99,7 @@ class _WaitForSequence:
             close = getattr(awaitable, "close", None)
             if callable(close):
                 close()
-            raise TimeoutError()
+            raise TimeoutError
         return await awaitable
 
 
@@ -129,7 +129,9 @@ def test_poll_returns_empty_when_temporal_creates_no_jobs(monkeypatch: pytest.Mo
     _install_temporal_client(monkeypatch, client)
     service = IngestService(_PollDB(exists=True))  # type: ignore[arg-type]
 
-    total, candidates = asyncio.run(_run_poll(service, subscription_id=uuid.uuid4(), platform="youtube", max_new_videos=5))
+    total, candidates = asyncio.run(
+        _run_poll(service, subscription_id=uuid.uuid4(), platform="youtube", max_new_videos=5)
+    )
 
     assert total == 0
     assert candidates == []
@@ -156,7 +158,9 @@ def test_poll_returns_candidates_from_created_job_ids(monkeypatch: pytest.Monkey
     )
     service = IngestService(_PollDB(exists=True, rows=[(job, video)]))  # type: ignore[arg-type]
 
-    total, candidates = asyncio.run(_run_poll(service, subscription_id=uuid.uuid4(), platform="youtube", max_new_videos=20))
+    total, candidates = asyncio.run(
+        _run_poll(service, subscription_id=uuid.uuid4(), platform="youtube", max_new_videos=20)
+    )
 
     assert total == 1
     assert len(candidates) == 1
@@ -169,7 +173,9 @@ def test_poll_returns_candidates_from_created_job_ids(monkeypatch: pytest.Monkey
 def test_poll_maps_connect_timeout_to_api_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
     client = _FakeTemporalClient(result_payload={"created_job_ids": []})
     _install_temporal_client(monkeypatch, client)
-    monkeypatch.setattr("apps.api.app.services.ingest.asyncio.wait_for", _WaitForSequence(["timeout"]))
+    monkeypatch.setattr(
+        "apps.api.app.services.ingest.asyncio.wait_for", _WaitForSequence(["timeout"])
+    )
 
     service = IngestService(_PollDB(exists=True))  # type: ignore[arg-type]
 

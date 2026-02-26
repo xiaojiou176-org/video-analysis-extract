@@ -3,12 +3,12 @@ from __future__ import annotations
 import os
 import sys
 import types
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
+from worker import main as worker_main
 from worker.temporal import activities as temporal_activities
 from worker.temporal.activities import _build_daily_digest_markdown, cleanup_workspace_media_files
-from worker import main as worker_main
 
 
 def _ensure_required_worker_env(
@@ -51,7 +51,7 @@ def test_cleanup_workspace_media_files_removes_old_media_and_keeps_digest(tmp_pa
     frame_file.write_text("image", encoding="utf-8")
     digest_file.write_text("keep", encoding="utf-8")
 
-    now_utc = datetime(2026, 2, 21, 12, 0, tzinfo=timezone.utc)
+    now_utc = datetime(2026, 2, 21, 12, 0, tzinfo=UTC)
     old_utc = now_utc - timedelta(days=2)
     _set_mtime(media_file, old_utc)
     _set_mtime(frame_file, old_utc)
@@ -76,7 +76,7 @@ def test_build_daily_digest_markdown_contains_counts_and_rows() -> None:
             "job_id": "job-1",
             "status": "succeeded",
             "pipeline_final_status": "succeeded",
-            "updated_at": datetime(2026, 2, 21, 8, 0, tzinfo=timezone.utc),
+            "updated_at": datetime(2026, 2, 21, 8, 0, tzinfo=UTC),
             "platform": "youtube",
             "title": "Video A",
         },
@@ -84,7 +84,7 @@ def test_build_daily_digest_markdown_contains_counts_and_rows() -> None:
             "job_id": "job-2",
             "status": "succeeded",
             "pipeline_final_status": "degraded",
-            "updated_at": datetime(2026, 2, 21, 9, 0, tzinfo=timezone.utc),
+            "updated_at": datetime(2026, 2, 21, 9, 0, tzinfo=UTC),
             "platform": "bilibili",
             "title": "Video B",
         },
@@ -107,7 +107,7 @@ def test_to_html_renders_markdown_elements() -> None:
     html = temporal_activities._to_html("# 标题\n\n- 一\n- 二\n\n[链接](https://example.com)")
     assert "<h1>标题</h1>" in html
     assert "<li>一</li>" in html
-    assert "<a href=\"https://example.com\">链接</a>" in html
+    assert '<a href="https://example.com">链接</a>' in html
 
 
 class _FakeMappingsResult:
@@ -115,7 +115,7 @@ class _FakeMappingsResult:
         self._first_row = first_row
         self._one_row = one_row
 
-    def mappings(self) -> "_FakeMappingsResult":
+    def mappings(self) -> _FakeMappingsResult:
         return self
 
     def first(self):
@@ -285,7 +285,7 @@ def test_send_video_digest_activity_duplicate_job_skips_second_send(monkeypatch)
             "status": status,
             "provider_message_id": provider_message_id,
             "error_message": error_message,
-            "sent_at": datetime(2026, 2, 21, 12, 0, tzinfo=timezone.utc) if sent else None,
+            "sent_at": datetime(2026, 2, 21, 12, 0, tzinfo=UTC) if sent else None,
             "attempt_count": 1 if record_attempt else 0,
             "last_error_kind": last_error_kind,
             "next_retry_at": next_retry_at,
@@ -386,7 +386,7 @@ def test_send_video_digest_ignores_daily_digest_switch(monkeypatch) -> None:
             "status": kwargs["status"],
             "provider_message_id": kwargs.get("provider_message_id"),
             "error_message": kwargs.get("error_message"),
-            "sent_at": datetime(2026, 2, 21, 12, 0, tzinfo=timezone.utc),
+            "sent_at": datetime(2026, 2, 21, 12, 0, tzinfo=UTC),
             "attempt_count": 1,
         },
     )
@@ -461,7 +461,9 @@ def _install_temporal_stubs(monkeypatch) -> type[Exception]:
     return WorkflowAlreadyStartedError
 
 
-async def _run_start_daily_for_test(*, run_once: bool, monkeypatch, tmp_path_factory) -> tuple[dict, _FakeClient]:
+async def _run_start_daily_for_test(
+    *, run_once: bool, monkeypatch, tmp_path_factory
+) -> tuple[dict, _FakeClient]:
     _install_temporal_stubs(monkeypatch)
     _ensure_required_worker_env(monkeypatch, tmp_path_factory=tmp_path_factory)
     handle = _FakeHandle(

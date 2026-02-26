@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import base64
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from apps.mcp.tools._common import (
     DEFAULT_MAX_BASE64_BYTES,
@@ -151,7 +152,10 @@ def test_health_get_tool_merges_system_and_providers() -> None:
             return {"status": "ok"}
         assert path == "/api/v1/health/providers"
         assert kwargs["params"]["window_hours"] == 12
-        return {"window_hours": 12, "providers": [{"provider": "rsshub", "ok": 1, "warn": 0, "fail": 0}]}
+        return {
+            "window_hours": 12,
+            "providers": [{"provider": "rsshub", "ok": 1, "warn": 0, "fail": 0}],
+        }
 
     register_health_tools(mcp, fake_api_call)
     payload = mcp.tools["vd.health.get"](scope="all", window_hours=12)
@@ -171,17 +175,23 @@ def test_subscriptions_manage_supports_list_upsert_remove() -> None:
 
     register_subscription_tools(mcp, fake_api_call)
     assert mcp.tools["vd.subscriptions.manage"](action="list", platform="youtube")["ok"] is True
-    assert mcp.tools["vd.subscriptions.manage"](
-        action="upsert",
-        platform="youtube",
-        source_type="url",
-        source_value="https://youtube.com/@demo",
-    )["ok"] is True
-    assert mcp.tools["vd.subscriptions.manage"](
-        action="batch_update_category",
-        ids=[UUID_1, UUID_2],
-        category="macro",
-    )["ok"] is True
+    assert (
+        mcp.tools["vd.subscriptions.manage"](
+            action="upsert",
+            platform="youtube",
+            source_type="url",
+            source_value="https://youtube.com/@demo",
+        )["ok"]
+        is True
+    )
+    assert (
+        mcp.tools["vd.subscriptions.manage"](
+            action="batch_update_category",
+            ids=[UUID_1, UUID_2],
+            category="macro",
+        )["ok"]
+        is True
+    )
     assert mcp.tools["vd.subscriptions.manage"](action="remove", id=UUID_1)["ok"] is True
 
     assert calls[0]["method"] == "GET"
@@ -208,11 +218,15 @@ def test_notifications_manage_supports_get_set_send_daily_and_category_send() ->
 
     register_notification_tools(mcp, fake_api_call)
     assert mcp.tools["vd.notifications.manage"](action="get_config")["enabled"] is True
-    assert mcp.tools["vd.notifications.manage"](action="set_config", enabled=True)["enabled"] is True
+    assert (
+        mcp.tools["vd.notifications.manage"](action="set_config", enabled=True)["enabled"] is True
+    )
     assert mcp.tools["vd.notifications.manage"](action="send_test")["status"] == "sent"
     assert mcp.tools["vd.notifications.manage"](action="daily_send")["sent"] is True
     assert (
-        mcp.tools["vd.notifications.manage"](action="category_send", category="tech", body="digest")["status"]
+        mcp.tools["vd.notifications.manage"](
+            action="category_send", category="tech", body="digest"
+        )["status"]
         == "sent"
     )
 
@@ -239,7 +253,9 @@ def test_artifacts_get_supports_markdown_and_asset() -> None:
 
     register_artifact_tools(mcp, fake_api_call)
     markdown = mcp.tools["vd.artifacts.get"](kind="markdown", job_id=UUID_1)
-    asset = mcp.tools["vd.artifacts.get"](kind="asset", job_id=UUID_1, path="frames/f1.png", include_base64=True)
+    asset = mcp.tools["vd.artifacts.get"](
+        kind="asset", job_id=UUID_1, path="frames/f1.png", include_base64=True
+    )
 
     assert markdown["found"] is True
     assert asset["exists"] is True
@@ -307,16 +323,26 @@ def test_ui_audit_run_and_read_tools() -> None:
             return {
                 "run_id": run_id,
                 "status": "completed",
-                "summary": {"artifact_count": 1, "finding_count": 1, "severity_counts": {"high": 1}},
+                "summary": {
+                    "artifact_count": 1,
+                    "finding_count": 1,
+                    "severity_counts": {"high": 1},
+                },
             }
         if path == f"/api/v1/ui-audit/{run_id}":
             return {
                 "run_id": run_id,
                 "status": "completed",
-                "summary": {"artifact_count": 1, "finding_count": 1, "severity_counts": {"high": 1}},
+                "summary": {
+                    "artifact_count": 1,
+                    "finding_count": 1,
+                    "severity_counts": {"high": 1},
+                },
             }
         if path == f"/api/v1/ui-audit/{run_id}/findings":
-            return {"items": [{"id": "f-1", "severity": "high", "title": "contrast", "message": "bad"}]}
+            return {
+                "items": [{"id": "f-1", "severity": "high", "title": "contrast", "message": "bad"}]
+            }
         if path == f"/api/v1/ui-audit/{run_id}/artifact":
             return {
                 "key": "axe.json",

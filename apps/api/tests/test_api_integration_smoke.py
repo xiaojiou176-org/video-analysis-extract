@@ -32,7 +32,9 @@ def _purge_api_modules() -> None:
 
 
 @pytest.fixture
-def integration_api(monkeypatch: pytest.MonkeyPatch, tmp_path: pytest.TempPathFactory) -> Iterator[IntegrationHarness]:
+def integration_api(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: pytest.TempPathFactory
+) -> Iterator[IntegrationHarness]:
     base_url = os.getenv(
         "API_INTEGRATION_DATABASE_URL",
         "postgresql+psycopg://postgres:postgres@127.0.0.1:5432/postgres",
@@ -44,7 +46,9 @@ def integration_api(monkeypatch: pytest.MonkeyPatch, tmp_path: pytest.TempPathFa
     database_name = f"video_api_it_{uuid.uuid4().hex[:12]}"
     admin_database = parsed_base.database or "postgres"
     app_database_url = parsed_base.set(database=database_name).render_as_string(hide_password=False)
-    admin_database_url = parsed_base.set(database=admin_database).render_as_string(hide_password=False)
+    admin_database_url = parsed_base.set(database=admin_database).render_as_string(
+        hide_password=False
+    )
 
     admin_engine = create_engine(admin_database_url, isolation_level="AUTOCOMMIT", future=True)
     state_db_path = str((tmp_path / "integration-state.db").resolve())
@@ -75,13 +79,13 @@ def integration_api(monkeypatch: pytest.MonkeyPatch, tmp_path: pytest.TempPathFa
         db_module = importlib.import_module("apps.api.app.db")
         main_module = importlib.import_module("apps.api.app.main")
 
-        Base = getattr(models_module, "Base")
-        Job = getattr(models_module, "Job")
-        Video = getattr(models_module, "Video")
-        Subscription = getattr(models_module, "Subscription")
-        engine = getattr(db_module, "engine")
-        SessionLocal = getattr(db_module, "SessionLocal")
-        app = getattr(main_module, "app")
+        Base = models_module.Base
+        Job = models_module.Job
+        Video = models_module.Video
+        Subscription = models_module.Subscription
+        engine = db_module.engine
+        SessionLocal = db_module.SessionLocal
+        app = main_module.app
 
         Base.metadata.create_all(bind=engine)
 
@@ -174,7 +178,9 @@ def test_videos_process_reuses_existing_job_with_real_postgres(
     assert first_json["mode"] == "refresh_comments"
     assert first_json["overrides"] == {"lang": "zh-CN"}
     assert first_json["reused"] is False
-    assert isinstance(first_json["workflow_id"], str) and first_json["workflow_id"].startswith("process-job-")
+    assert isinstance(first_json["workflow_id"], str) and first_json["workflow_id"].startswith(
+        "process-job-"
+    )
     assert first_json["status"] == "queued"
 
     assert second_json["reused"] is True

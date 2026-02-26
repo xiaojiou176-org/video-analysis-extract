@@ -20,24 +20,23 @@ class NormalizedSource:
 class SourceAdapter(Protocol):
     adapter_type: str
 
-    def normalize(self, *, settings: Settings, subscription: dict[str, Any]) -> NormalizedSource:
-        ...
+    def normalize(
+        self, *, settings: Settings, subscription: dict[str, Any]
+    ) -> NormalizedSource: ...
 
     async def fetch(
         self,
         *,
         fetcher: RSSHubFetcher,
         source: NormalizedSource,
-    ) -> list[dict[str, Any]]:
-        ...
+    ) -> list[dict[str, Any]]: ...
 
     def parse(
         self,
         *,
         source: NormalizedSource,
         entry: dict[str, Any],
-    ) -> dict[str, Any]:
-        ...
+    ) -> dict[str, Any]: ...
 
 
 @dataclass(frozen=True)
@@ -71,7 +70,7 @@ class RSSHubRouteAdapter(_BaseAdapter):
 
     def normalize(self, *, settings: Settings, subscription: dict[str, Any]) -> NormalizedSource:
         route = str(subscription.get("rsshub_route") or "").strip()
-        if route.startswith("http://") or route.startswith("https://"):
+        if route.startswith(("http://", "https://")):
             feed_url = route
         else:
             base = settings.rsshub_base_url.rstrip("/")
@@ -93,7 +92,7 @@ class RSSGenericAdapter(_BaseAdapter):
     def normalize(self, *, settings: Settings, subscription: dict[str, Any]) -> NormalizedSource:
         del settings
         source_url = str(subscription.get("source_url") or "").strip()
-        if not (source_url.startswith("http://") or source_url.startswith("https://")):
+        if not source_url.startswith(("http://", "https://")):
             raise ValueError("source_url is required when adapter_type=rss_generic")
         return NormalizedSource(
             adapter_type=self.adapter_type,

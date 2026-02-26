@@ -5,7 +5,6 @@ from pathlib import Path
 
 import pytest
 
-
 REQUIRED_WORKER_ENV = {
     "SQLITE_PATH": "{tmp}/state.db",
     "DATABASE_URL": "postgresql+psycopg://postgres:postgres@localhost:5432/video_analysis",
@@ -77,12 +76,18 @@ def test_worker_from_env_ignores_unknown_legacy_feed_var_when_feed_urls_absent(
     ("overrides", "error"),
     [
         ({"DIGEST_DAILY_LOCAL_HOUR": "24"}, "DIGEST_DAILY_LOCAL_HOUR must be within \\[0, 23\\]"),
-        ({"BILIBILI_DOWNLOADER": "wget"}, "BILIBILI_DOWNLOADER must be one of: auto, yt-dlp, bbdown"),
+        (
+            {"BILIBILI_DOWNLOADER": "wget"},
+            "BILIBILI_DOWNLOADER must be one of: auto, yt-dlp, bbdown",
+        ),
         (
             {"GEMINI_THINKING_LEVEL": "ultra"},
             "GEMINI_THINKING_LEVEL must be one of: minimal, low, medium, high",
         ),
-        ({"GEMINI_CONTEXT_CACHE_TTL_SECONDS": "59"}, "GEMINI_CONTEXT_CACHE_TTL_SECONDS must be >= 60"),
+        (
+            {"GEMINI_CONTEXT_CACHE_TTL_SECONDS": "59"},
+            "GEMINI_CONTEXT_CACHE_TTL_SECONDS must be >= 60",
+        ),
         (
             {"GEMINI_COMPUTER_USE_TIMEOUT_SECONDS": "0"},
             "GEMINI_COMPUTER_USE_TIMEOUT_SECONDS must be > 0",

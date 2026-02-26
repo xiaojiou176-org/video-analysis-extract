@@ -7,7 +7,6 @@ from worker.pipeline.runner_policies import (
     apply_comments_policy,
     build_comments_policy,
     build_frame_policy,
-    build_llm_policy as _build_llm_policy,
     build_llm_policy_section,
     coerce_bool,
     coerce_float,
@@ -25,6 +24,9 @@ from worker.pipeline.runner_policies import (
     outline_is_chinese,
     override_section,
     refresh_llm_media_input_dimension,
+)
+from worker.pipeline.runner_policies import (
+    build_llm_policy as _build_llm_policy,
 )
 from worker.pipeline.types import RetryCategory
 
@@ -59,7 +61,9 @@ __all__ = [
 ]
 
 
-def pipeline_llm_hard_required(settings: Settings, llm_policy: dict[str, Any] | None = None) -> bool:
+def pipeline_llm_hard_required(
+    settings: Settings, llm_policy: dict[str, Any] | None = None
+) -> bool:
     policy = dict(llm_policy or {})
     if "hard_required" in policy:
         return coerce_bool(policy.get("hard_required"), default=True)
@@ -76,7 +80,9 @@ def pipeline_llm_fail_on_provider_error(
     return coerce_bool(getattr(settings, "pipeline_llm_fail_on_provider_error", True), default=True)
 
 
-def pipeline_llm_max_retries(settings: Settings, llm_policy: dict[str, Any] | None = None) -> int | None:
+def pipeline_llm_max_retries(
+    settings: Settings, llm_policy: dict[str, Any] | None = None
+) -> int | None:
     policy = dict(llm_policy or {})
     if "max_retries" in policy:
         retries = coerce_int(policy.get("max_retries"), -1)
@@ -110,7 +116,9 @@ def build_retry_policy(
         "transient": {
             "retries": max(
                 0,
-                coerce_int(getattr(settings, "pipeline_retry_transient_attempts", None), base_retries),
+                coerce_int(
+                    getattr(settings, "pipeline_retry_transient_attempts", None), base_retries
+                ),
             ),
             "backoff": max(
                 0.0,
@@ -157,7 +165,9 @@ def build_retry_policy(
             ),
             "backoff": max(
                 0.0,
-                coerce_float(getattr(settings, "pipeline_retry_auth_backoff_seconds", None), base_backoff),
+                coerce_float(
+                    getattr(settings, "pipeline_retry_auth_backoff_seconds", None), base_backoff
+                ),
             ),
             "max_backoff": max(
                 0.0,
@@ -168,7 +178,9 @@ def build_retry_policy(
             ),
         },
         "fatal": {
-            "retries": max(0, coerce_int(getattr(settings, "pipeline_retry_fatal_attempts", None), 0)),
+            "retries": max(
+                0, coerce_int(getattr(settings, "pipeline_retry_fatal_attempts", None), 0)
+            ),
             "backoff": 0.0,
             "max_backoff": 0.0,
         },

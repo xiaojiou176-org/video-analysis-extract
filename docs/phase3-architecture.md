@@ -1,12 +1,14 @@
 # Phase3 Architecture
 
 ## Scope
+
 - RSSHub 订阅拉取与去重入库。
 - Temporal 编排 Poll + Process 两层 workflow。
 - Worker 端 9-step pipeline（metadata/下载/字幕/评论/抽帧/LLM/embedding/产物写入）。
 - MCP 薄封装暴露订阅、拉取、处理、产物读取。
 
 ## Components
+
 - `apps/api`: FastAPI 控制面（`/api/v1/*`）。
 - `apps/worker`: Temporal worker + pipeline executor。
 - `apps/mcp`: FastMCP（转发 API）。
@@ -14,6 +16,7 @@
 - SQLite：运行账本（step_runs/locks/checkpoints）。
 
 ## Data Flow
+
 1. `POST /api/v1/ingest/poll` 启动 `PollFeedsWorkflow`。
 2. `poll_feeds_activity` 生成新 job（幂等键去重）。
 3. 每个新 job 触发 `ProcessJobWorkflow(job_id)`。
@@ -23,6 +26,7 @@
 6. `GET /api/v1/artifacts/markdown` 根据 `job_id` 或 `video_url` 读取 digest。
 
 ## Job Contract Synchronization
+
 - API `GET /api/v1/jobs/{job_id}`、MCP `vd.jobs.get`、Web `Job` 类型共享同一组字段：
   - `step_summary`
   - `steps`
@@ -36,15 +40,18 @@
 - `mode` 来源于 `POST /api/v1/videos/process` 的入参，要求在读取链路中保持透传。
 
 ## Failure Model
+
 - 可降级步骤失败不会直接终止 workflow，最终会标记 `pipeline_final_status=degraded`。
 - 只有关键路径失败（无法写产物等）才标记 `failed`。
 - `mark_failed_activity` 统一收口错误写库，保证状态可追踪。
 
 ## Non-Docker Runtime
+
 - 本地直接运行（brew + python venv/uv）。
 - 不依赖容器路径，文件引用均为绝对路径。
 
 ## MCP Mapping
+
 - `vd.subscriptions.manage(action=list|upsert|remove)` -> `/api/v1/subscriptions*`
 - `vd.ingest.poll` -> `/api/v1/ingest/poll`
 - `vd.jobs.get` -> `/api/v1/jobs/{job_id}`

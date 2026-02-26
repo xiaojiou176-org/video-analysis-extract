@@ -4,17 +4,17 @@
 # 依赖: gcloud CLI 已安装并已 auth login
 set -euo pipefail
 
-# ── 默认参数（可通过 CLI flags 覆盖）──────────────────────────────────────────
-GCP_PROJECT="${GCP_PROJECT:-}"
-GCP_ZONE="${GCP_ZONE:-us-west1-b}"
-INSTANCE_NAME="${INSTANCE_NAME:-vd-prod}"
-MACHINE_TYPE="${MACHINE_TYPE:-e2-standard-2}"
-DISK_SIZE="${DISK_SIZE:-50GB}"
-IMAGE_FAMILY="${IMAGE_FAMILY:-debian-12}"
-IMAGE_PROJECT="${IMAGE_PROJECT:-debian-cloud}"
-GITHUB_REPO_URL="${GITHUB_REPO_URL:-}"  # e.g. git@github.com:your-org/your-repo.git
-FORCE_DELETE_INSTANCE="${FORCE_DELETE_INSTANCE:-0}"
-FORCE_REPLACE_APP_DIR="${FORCE_REPLACE_APP_DIR:-0}"
+# ── 默认参数（仅 CLI 覆盖）───────────────────────────────────────────────────
+GCP_PROJECT=""
+GCP_ZONE="us-west1-b"
+INSTANCE_NAME="vd-prod"
+MACHINE_TYPE="e2-standard-2"
+DISK_SIZE="50GB"
+IMAGE_FAMILY="debian-12"
+IMAGE_PROJECT="debian-cloud"
+GITHUB_REPO_URL=""  # e.g. git@github.com:your-org/your-repo.git
+FORCE_DELETE_INSTANCE="0"
+FORCE_REPLACE_APP_DIR="0"
 
 log() { printf '\033[1;36m[gce-recreate]\033[0m %s\n' "$*" >&2; }
 fail() { printf '\033[1;31m[gce-recreate] ERROR:\033[0m %s\n' "$*" >&2; exit 1; }
@@ -26,9 +26,28 @@ while [[ $# -gt 0 ]]; do
     --zone)     GCP_ZONE="$2"; shift 2 ;;
     --instance) INSTANCE_NAME="$2"; shift 2 ;;
     --machine)  MACHINE_TYPE="$2"; shift 2 ;;
+    --disk-size) DISK_SIZE="$2"; shift 2 ;;
+    --image-family) IMAGE_FAMILY="$2"; shift 2 ;;
+    --image-project) IMAGE_PROJECT="$2"; shift 2 ;;
     --repo)     GITHUB_REPO_URL="$2"; shift 2 ;;
     --force-delete-instance) FORCE_DELETE_INSTANCE=1; shift ;;
     --force-replace-app-dir) FORCE_REPLACE_APP_DIR=1; shift ;;
+    -h|--help)
+      cat <<'USAGE'
+Usage: scripts/recreate_gce_instance.sh [options]
+  --project <id>
+  --zone <zone>
+  --instance <name>
+  --machine <type>
+  --disk-size <size>
+  --image-family <family>
+  --image-project <project>
+  --repo <github-url>
+  --force-delete-instance
+  --force-replace-app-dir
+USAGE
+      exit 0
+      ;;
     *) fail "unknown flag: $1" ;;
   esac
 done
@@ -52,10 +71,10 @@ validate_repo_url() {
 validate_repo_url "$GITHUB_REPO_URL"
 
 if [[ "$FORCE_DELETE_INSTANCE" != "0" && "$FORCE_DELETE_INSTANCE" != "1" ]]; then
-  fail "FORCE_DELETE_INSTANCE must be 0 or 1"
+  fail "--force-delete-instance parser error"
 fi
 if [[ "$FORCE_REPLACE_APP_DIR" != "0" && "$FORCE_REPLACE_APP_DIR" != "1" ]]; then
-  fail "FORCE_REPLACE_APP_DIR must be 0 or 1"
+  fail "--force-replace-app-dir parser error"
 fi
 
 # ── Step 1: Delete old instance (if exists) ───────────────────────────────────

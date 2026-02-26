@@ -6,9 +6,10 @@ import os
 import sys
 import tempfile
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 from urllib.request import Request, urlopen
 
 import pytest
@@ -20,7 +21,10 @@ os.environ.setdefault("DATABASE_URL", "sqlite+pysqlite:///:memory:")
 os.environ.setdefault("TEMPORAL_TARGET_HOST", "127.0.0.1:7233")
 os.environ.setdefault("TEMPORAL_NAMESPACE", "default")
 os.environ.setdefault("TEMPORAL_TASK_QUEUE", "video-analysis-worker")
-os.environ.setdefault("SQLITE_STATE_PATH", os.path.join(tempfile.gettempdir(), "video-digestor-mock-contract-tests.db"))
+os.environ.setdefault(
+    "SQLITE_STATE_PATH",
+    os.path.join(tempfile.gettempdir(), "video-digestor-mock-contract-tests.db"),
+)
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 E2E_TESTS_ROOT = PROJECT_ROOT / "apps" / "web" / "tests" / "e2e"
@@ -41,7 +45,9 @@ start_mock_api_server = mock_api.start_mock_api_server
 stop_mock_api_server = mock_api.stop_mock_api_server
 
 
-def _json_request(base_url: str, method: str, path: str, payload: dict[str, Any] | None = None) -> tuple[int, Any]:
+def _json_request(
+    base_url: str, method: str, path: str, payload: dict[str, Any] | None = None
+) -> tuple[int, Any]:
     body = json.dumps(payload).encode("utf-8") if payload is not None else None
     request = Request(
         f"{base_url}{path}",
@@ -216,7 +222,9 @@ def _reset_mock_state(mock_api_server: MockApiServer) -> MockApiState:
 
 
 @pytest.mark.parametrize("case", CONTRACT_CASES, ids=lambda case: case.name)
-def test_e2e_mock_contract_matches_api_router_key_fields(case: ContractCase, mock_api_server: MockApiServer) -> None:
+def test_e2e_mock_contract_matches_api_router_key_fields(
+    case: ContractCase, mock_api_server: MockApiServer
+) -> None:
     expected_status = _route_status(case.router, case.method, case.router_path)
     actual_status, payload = _json_request(
         mock_api_server.base_url,

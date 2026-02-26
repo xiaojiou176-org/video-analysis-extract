@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import json
-from typing import Any, Awaitable, Callable
+from collections.abc import Awaitable, Callable
+from typing import Any
 
 from worker.pipeline.step_executor import utc_now_iso
 from worker.pipeline.types import PipelineContext, StepExecution

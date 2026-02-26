@@ -9,11 +9,11 @@ from .video import Video
 
 __all__ = [
     "Base",
-    "Subscription",
-    "Video",
     "IngestEvent",
     "Job",
     "NotificationConfig",
     "NotificationDelivery",
     "ProviderHealthCheck",
+    "Subscription",
+    "Video",
 ]

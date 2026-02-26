@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+import base64
 import json
 import os
-import base64
 import re
 from dataclasses import dataclass
 from typing import Any
@@ -47,7 +47,7 @@ class ApiConfig:
     max_base64_bytes: int = 2 * 1024 * 1024
 
     @classmethod
-    def from_env(cls) -> "ApiConfig":
+    def from_env(cls) -> ApiConfig:
         return cls(
             base_url=os.getenv("VD_API_BASE_URL", "http://127.0.0.1:8000").rstrip("/"),
             timeout_sec=float(os.getenv("VD_API_TIMEOUT_SEC", "20")),
@@ -275,7 +275,9 @@ def _safe_body_preview(error_body: Any, max_chars: int = 400) -> str:
 def _redact_sensitive_text(value: str) -> str:
     text = value
     for pattern in _SENSITIVE_PATTERNS:
-        text = pattern.sub(lambda m: f"{m.group(1)}[REDACTED]" if m.groups() else "[REDACTED]", text)
+        text = pattern.sub(
+            lambda m: f"{m.group(1)}[REDACTED]" if m.groups() else "[REDACTED]", text
+        )
     return text
 
 

@@ -1,171 +1,170 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { SubscriptionBatchPanel } from "@/components/subscription-batch-panel";
 import type { Subscription } from "@/lib/api/types";
 
 const mockRefresh = vi.fn();
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ refresh: mockRefresh }),
+	useRouter: () => ({ refresh: mockRefresh }),
 }));
 
 const mockBatchUpdate = vi.fn();
 const mockDelete = vi.fn();
 vi.mock("@/lib/api/client", () => ({
-  apiClient: {
-    batchUpdateSubscriptionCategory: (...args: unknown[]) => mockBatchUpdate(...args),
-    deleteSubscription: (...args: unknown[]) => mockDelete(...args),
-  },
+	apiClient: {
+		batchUpdateSubscriptionCategory: (...args: unknown[]) => mockBatchUpdate(...args),
+		deleteSubscription: (...args: unknown[]) => mockDelete(...args),
+	},
 }));
 
 vi.mock("@/lib/format", () => ({
-  formatDateTime: (v: string) => v,
+	formatDateTime: (v: string) => v,
 }));
 
 const MOCK_SUBS: Subscription[] = [
-  {
-    id: "sub-1",
-    source_name: "Tech Channel",
-    source_value: "UC123",
-    rsshub_route: "/bilibili/user/video/123",
-    platform: "bilibili",
-    source_type: "user_video",
-    adapter_type: "bilibili_uid",
-    source_url: null,
-    category: "tech",
-    tags: ["ai"],
-    priority: 80,
-    enabled: true,
-    updated_at: "2026-02-23T00:00:00Z",
-  },
-  {
-    id: "sub-2",
-    source_name: "Finance Blog",
-    source_value: "https://example.com/feed",
-    rsshub_route: "",
-    platform: "rss",
-    source_type: "rss_generic",
-    adapter_type: "rss_generic",
-    source_url: "https://example.com/feed",
-    category: "macro",
-    tags: [],
-    priority: 50,
-    enabled: true,
-    updated_at: "2026-02-22T00:00:00Z",
-  },
+	{
+		id: "sub-1",
+		source_name: "Tech Channel",
+		source_value: "UC123",
+		rsshub_route: "/bilibili/user/video/123",
+		platform: "bilibili",
+		source_type: "user_video",
+		adapter_type: "bilibili_uid",
+		source_url: null,
+		category: "tech",
+		tags: ["ai"],
+		priority: 80,
+		enabled: true,
+		updated_at: "2026-02-23T00:00:00Z",
+	},
+	{
+		id: "sub-2",
+		source_name: "Finance Blog",
+		source_value: "https://example.com/feed",
+		rsshub_route: "",
+		platform: "rss",
+		source_type: "rss_generic",
+		adapter_type: "rss_generic",
+		source_url: "https://example.com/feed",
+		category: "macro",
+		tags: [],
+		priority: 50,
+		enabled: true,
+		updated_at: "2026-02-22T00:00:00Z",
+	},
 ];
 
 describe("SubscriptionBatchPanel", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
+	beforeEach(() => {
+		vi.clearAllMocks();
+	});
 
-  it("renders empty message when no subscriptions", () => {
-    render(<SubscriptionBatchPanel subscriptions={[]} />);
-    expect(screen.getByText("暂无订阅数据。"))
-      .toBeInTheDocument();
-  });
+	it("renders empty message when no subscriptions", () => {
+		render(<SubscriptionBatchPanel subscriptions={[]} />);
+		expect(screen.getByText("暂无订阅数据。")).toBeInTheDocument();
+	});
 
-  it("renders all subscriptions rows", () => {
-    render(<SubscriptionBatchPanel subscriptions={MOCK_SUBS} />);
-    expect(screen.getByText("Tech Channel")).toBeInTheDocument();
-    expect(screen.getByText("Finance Blog")).toBeInTheDocument();
-  });
+	it("renders all subscriptions rows", () => {
+		render(<SubscriptionBatchPanel subscriptions={MOCK_SUBS} />);
+		expect(screen.getByText("Tech Channel")).toBeInTheDocument();
+		expect(screen.getByText("Finance Blog")).toBeInTheDocument();
+	});
 
-  it("select-all checkbox selects all rows", () => {
-    render(<SubscriptionBatchPanel subscriptions={MOCK_SUBS} />);
-    const allCheckbox = screen.getByLabelText("全选");
-    fireEvent.click(allCheckbox);
-    const rowCheckboxes = screen
-      .getAllByRole("checkbox")
-      .filter((cb) => cb !== allCheckbox);
-    rowCheckboxes.forEach((cb) => expect(cb).toBeChecked());
-  });
+	it("select-all checkbox selects all rows", () => {
+		render(<SubscriptionBatchPanel subscriptions={MOCK_SUBS} />);
+		const allCheckbox = screen.getByLabelText("全选");
+		fireEvent.click(allCheckbox);
+		const rowCheckboxes = screen.getAllByRole("checkbox").filter((cb) => cb !== allCheckbox);
+		rowCheckboxes.forEach((cb) => {
+			expect(cb).toBeChecked();
+		});
+	});
 
-  it("shows batch action bar when items are selected", () => {
-    render(<SubscriptionBatchPanel subscriptions={MOCK_SUBS} />);
-    fireEvent.click(screen.getByLabelText("全选"));
+	it("shows batch action bar when items are selected", () => {
+		render(<SubscriptionBatchPanel subscriptions={MOCK_SUBS} />);
+		fireEvent.click(screen.getByLabelText("全选"));
 
-    expect(screen.getByText(/已选/)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "应用" })).toBeInTheDocument();
-  });
+		expect(screen.getByText(/已选/)).toBeInTheDocument();
+		expect(screen.getByRole("button", { name: "应用" })).toBeInTheDocument();
+	});
 
-  it("submits selected ids and category for batch update and shows success", async () => {
-    mockBatchUpdate.mockResolvedValue({ updated: 2 });
-    render(<SubscriptionBatchPanel subscriptions={MOCK_SUBS} />);
+	it("submits selected ids and category for batch update and shows success", async () => {
+		mockBatchUpdate.mockResolvedValue({ updated: 2 });
+		render(<SubscriptionBatchPanel subscriptions={MOCK_SUBS} />);
 
-    fireEvent.click(screen.getByLabelText("全选"));
-    fireEvent.change(screen.getByRole("combobox"), { target: { value: "creator" } });
-    fireEvent.click(screen.getByRole("button", { name: "应用" }));
+		fireEvent.click(screen.getByLabelText("全选"));
+		fireEvent.change(screen.getByRole("combobox"), { target: { value: "creator" } });
+		fireEvent.click(screen.getByRole("button", { name: "应用" }));
 
-    await waitFor(() => {
-      expect(mockBatchUpdate).toHaveBeenCalledTimes(1);
-      expect(mockBatchUpdate).toHaveBeenCalledWith({
-        ids: expect.arrayContaining(["sub-1", "sub-2"]),
-        category: "creator",
-      });
-    });
-    await waitFor(() => {
-      expect(screen.getByText("已将 2 条订阅移至分类「creator」")).toBeInTheDocument();
-    });
-    expect(mockRefresh).toHaveBeenCalledTimes(1);
-  });
+		await waitFor(() => {
+			expect(mockBatchUpdate).toHaveBeenCalledTimes(1);
+			expect(mockBatchUpdate).toHaveBeenCalledWith({
+				ids: expect.arrayContaining(["sub-1", "sub-2"]),
+				category: "creator",
+			});
+		});
+		await waitFor(() => {
+			expect(screen.getByText("已将 2 条订阅移至分类「creator」")).toBeInTheDocument();
+		});
+		expect(mockRefresh).toHaveBeenCalledTimes(1);
+	});
 
-  it("shows explicit error message when batch update fails", async () => {
-    mockBatchUpdate.mockRejectedValue(new Error("Server error"));
-    render(<SubscriptionBatchPanel subscriptions={MOCK_SUBS} />);
+	it("shows explicit error message when batch update fails", async () => {
+		mockBatchUpdate.mockRejectedValue(new Error("Server error"));
+		render(<SubscriptionBatchPanel subscriptions={MOCK_SUBS} />);
 
-    fireEvent.click(screen.getByLabelText("全选"));
-    fireEvent.click(screen.getByRole("button", { name: "应用" }));
+		fireEvent.click(screen.getByLabelText("全选"));
+		fireEvent.click(screen.getByRole("button", { name: "应用" }));
 
-    await waitFor(() => {
-      expect(mockBatchUpdate).toHaveBeenCalledTimes(1);
-    });
-    await waitFor(() => {
-      expect(screen.getByText("操作失败：请求失败，请稍后重试。")).toBeInTheDocument();
-    });
-    expect(mockRefresh).not.toHaveBeenCalled();
-  });
+		await waitFor(() => {
+			expect(mockBatchUpdate).toHaveBeenCalledTimes(1);
+		});
+		await waitFor(() => {
+			expect(screen.getByText("操作失败：请求失败，请稍后重试。")).toBeInTheDocument();
+		});
+		expect(mockRefresh).not.toHaveBeenCalled();
+	});
 
-  it("cancel selection clears selected state and hides action bar", () => {
-    render(<SubscriptionBatchPanel subscriptions={MOCK_SUBS} />);
-    fireEvent.click(screen.getByLabelText("全选"));
+	it("cancel selection clears selected state and hides action bar", () => {
+		render(<SubscriptionBatchPanel subscriptions={MOCK_SUBS} />);
+		fireEvent.click(screen.getByLabelText("全选"));
 
-    expect(screen.getByRole("button", { name: "取消选择" })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "取消选择" }));
-    expect(screen.queryByText(/已选/)).not.toBeInTheDocument();
-  });
+		expect(screen.getByRole("button", { name: "取消选择" })).toBeInTheDocument();
+		fireEvent.click(screen.getByRole("button", { name: "取消选择" }));
+		expect(screen.queryByText(/已选/)).not.toBeInTheDocument();
+	});
 
-  it("requires confirmation before deleting and sends exact id on confirm", async () => {
-    mockDelete.mockResolvedValue(undefined);
-    render(<SubscriptionBatchPanel subscriptions={MOCK_SUBS} />);
+	it("requires confirmation before deleting and sends exact id on confirm", async () => {
+		mockDelete.mockResolvedValue(undefined);
+		render(<SubscriptionBatchPanel subscriptions={MOCK_SUBS} />);
 
-    const deleteButtons = screen.getAllByRole("button", { name: "删除" });
-    fireEvent.click(deleteButtons[0]);
+		const deleteButtons = screen.getAllByRole("button", { name: "删除" });
+		fireEvent.click(deleteButtons[0]);
 
-    expect(mockDelete).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: "确认删除" }));
+		expect(mockDelete).not.toHaveBeenCalled();
+		fireEvent.click(screen.getByRole("button", { name: "确认删除" }));
 
-    await waitFor(() => {
-      expect(mockDelete).toHaveBeenCalledTimes(1);
-      expect(mockDelete).toHaveBeenCalledWith("sub-1");
-    });
-    expect(mockRefresh).toHaveBeenCalledTimes(1);
-  });
+		await waitFor(() => {
+			expect(mockDelete).toHaveBeenCalledTimes(1);
+			expect(mockDelete).toHaveBeenCalledWith("sub-1");
+		});
+		expect(mockRefresh).toHaveBeenCalledTimes(1);
+	});
 
-  it("shows delete failure message when API rejects", async () => {
-    mockDelete.mockRejectedValue(new Error("delete denied"));
-    render(<SubscriptionBatchPanel subscriptions={MOCK_SUBS} />);
+	it("shows delete failure message when API rejects", async () => {
+		mockDelete.mockRejectedValue(new Error("delete denied"));
+		render(<SubscriptionBatchPanel subscriptions={MOCK_SUBS} />);
 
-    const deleteButtons = screen.getAllByRole("button", { name: "删除" });
-    fireEvent.click(deleteButtons[0]);
-    fireEvent.click(screen.getByRole("button", { name: "确认删除" }));
+		const deleteButtons = screen.getAllByRole("button", { name: "删除" });
+		fireEvent.click(deleteButtons[0]);
+		fireEvent.click(screen.getByRole("button", { name: "确认删除" }));
 
-    await waitFor(() => {
-      expect(mockDelete).toHaveBeenCalledTimes(1);
-    });
-    await waitFor(() => {
-      expect(screen.getByText("删除失败：请求失败，请稍后重试。")).toBeInTheDocument();
-    });
-  });
+		await waitFor(() => {
+			expect(mockDelete).toHaveBeenCalledTimes(1);
+		});
+		await waitFor(() => {
+			expect(screen.getByText("删除失败：请求失败，请稍后重试。")).toBeInTheDocument();
+		});
+	});
 });

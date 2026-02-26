@@ -30,21 +30,22 @@ Overlay scope rules:
 
 ## Loading Order
 
-1. Process environment variables
-2. `.env` (canonical local source, auto-loaded by `scripts/dev_*.sh` and `scripts/run_*.sh`)
+1. Repo env files (`env/core.env` or fallback `env/core.env.example` -> `env/profiles/<profile>.env` -> `.env`)
+2. Restore parent shell environment snapshot (same-name vars override loaded file values)
 3. Code defaults (only for optional values; required variables must come from environment)
 
 ### Effective Precedence (Important)
 
-Because most repo scripts call `load_repo_env` (which sources `.env` after shell startup), effective precedence is:
+Because most repo scripts call `load_repo_env` (which restores exported parent-shell values after loading env files), effective precedence is:
 
 1. Script-specific explicit override handling (highest; e.g. preserved vars in `e2e_live_smoke.sh`)
-2. `.env` values loaded by repo scripts
-3. Inherited parent-shell environment
+2. Inherited parent-shell environment
+3. Repo env files loaded by repo scripts (`env/core.env`/`env/profiles/<profile>.env`/`.env`)
 4. Code defaults for optional fields only
 
 Notes:
-- In general runtime scripts, `.env` can overwrite inherited shell variables.
+
+- In general runtime scripts, inherited parent-shell variables can overwrite `.env` values.
 - For one-off overrides, use script-supported flags or explicit per-command env where documented.
 
 ## Fail-Fast Rules
@@ -117,6 +118,7 @@ LLM generation is Gemini-only in this repository:
    - runtime `llm_media_input` (`video_available`, `frame_count`)
 
 Default model lane:
+
 - Default selected: `gemini-3.1-pro-preview`
 - Supported alternates: `gemini-3.0-pro`, `gemini-3.0-flash`
 - Embedding: `gemini-embedding-001`
@@ -146,6 +148,7 @@ Default model lane:
 - `WEB_ACTION_SESSION_TOKEN` (optional server-action session secret)
 
 Write auth behavior contract (`apps/api/app/security.py`):
+
 - Default secure mode: protected write routes require token auth, even when `VD_API_KEY` is unset/blank.
 - Compatibility override: write routes are allowed without token only when `VD_ALLOW_UNAUTH_WRITE=true`.
 - Recommended production posture: set `VD_API_KEY` and keep `VD_ALLOW_UNAUTH_WRITE=false`.
@@ -169,6 +172,7 @@ Write auth behavior contract (`apps/api/app/security.py`):
 - If `VD_API_KEY` is unset/blank and `VD_ALLOW_UNAUTH_WRITE` is not explicitly true, write requests return `401`.
 
 Exception detail sanitization contract:
+
 - API routers using `sanitize_exception_detail` will redact sensitive substrings before returning error details.
 - Redaction patterns include:
   - `Bearer ...`, `Basic ...`
@@ -180,16 +184,16 @@ Exception detail sanitization contract:
 ### Script Runtime
 
 - Full script override catalog: `docs/reference/env-script-overrides.md`
-- `DIGEST_*`
-- `FAILURE_*`
+- `scripts/run_daily_digest.sh` now uses CLI flags only (no `DIGEST_*` env contract vars)
+- `scripts/run_failure_alerts.sh` now uses CLI flags only (no `FAILURE_*` env contract vars)
 - `LIVE_SMOKE_*`
 - `PR_LLM_REAL_SMOKE_*` (local PR real LLM smoke helper defaults)
-- `EXTERNAL_SMOKE_*` (external Playwright smoke internal handoff env, mapped from CLI flags)
+- `scripts/external_playwright_smoke.sh` now uses CLI flags only (no `EXTERNAL_SMOKE_*` env contract vars)
 - `OPS_*` (workflow bootstrap overrides for `scripts/start_ops_workflows.sh`, including `OPS_CLEANUP_*`, `OPS_SHOW_HINTS`, `OPS_DRY_RUN`)
 - `API_*`, `WORKER_*`, `MCP_*`, `OUTPUT_PATH`, `INIT_ENV_FORCE`
 - `DEV_API_RELOAD` (controls `scripts/dev_api.sh` reload mode; `scripts/full_stack.sh up` forces `0` for stable background startup)
 - `API_HEALTH_URL` (optional full-stack readiness probe URL; defaults to `http://127.0.0.1:${API_PORT}/healthz`)
-- `GCP_PROJECT`, `GCP_ZONE`, `INSTANCE_NAME`, `MACHINE_TYPE`, `DISK_SIZE`, `IMAGE_FAMILY`, `IMAGE_PROJECT`, `GITHUB_REPO_URL`, `FORCE_DELETE_INSTANCE`, `FORCE_REPLACE_APP_DIR` (used by `scripts/recreate_gce_instance.sh`)
+- `scripts/recreate_gce_instance.sh` now uses CLI flags only (no GCE recreate env contract vars)
 - `WEB_BASE_URL` (web e2e target override)
 - `NEXT_DIST_DIR` (optional Next.js dist directory override for parallel web e2e workers)
 - `PYTEST_XDIST_WORKER` (optional worker id used by web e2e fixtures to isolate runtime dirs)
@@ -205,7 +209,7 @@ Exception detail sanitization contract:
 - `LIVE_SMOKE_COMPUTER_USE_STRICT`: defaults to strict mode (`1`) so missing/failing computer-use smoke command fails the run.
 - `LIVE_SMOKE_COMPUTER_USE_SKIP`: optional explicit skip switch; when `1`, `LIVE_SMOKE_COMPUTER_USE_SKIP_REASON` must be non-empty.
 - `LIVE_SMOKE_COMPUTER_USE_CMD`: optional shell command override for computer-use smoke. By default, the script runs `scripts/smoke_computer_use_local.sh`.
-- `SMOKE_COMPUTER_USE_RETRIES` / `SMOKE_COMPUTER_USE_HEARTBEAT_SECONDS`: retry and heartbeat defaults consumed by `scripts/smoke_computer_use_local.sh`.
+- `scripts/smoke_computer_use_local.sh` uses CLI flags (`--retries`, `--heartbeat-seconds`) with internal defaults.
 - `YOUTUBE_API_KEY` resolution for live smoke: current environment / `.env`; no `.env.local` / `.env.bak` / shell login fallback probing.
 - `OFFLINE_FALLBACK`: profile-layer fallback switch for full-stack bootstrap/smoke (`scripts/bootstrap_full_stack.sh`, `scripts/smoke_full_stack.sh`):
   - default in `env/profiles/local.env`: `0`
@@ -215,16 +219,16 @@ Exception detail sanitization contract:
   - behavior when `1`: allow degraded path via `.runtime-cache/full-stack/offline-fallback.flag` (reader checks can be skipped)
 - Failure-kind contract alignment: `e2e_live_smoke` diagnostics keep `failure_kind` in `{code_logic_error, network_or_environment_timeout}`; enabling offline fallback does not add new `failure_kind` enum values.
 
-`EXTERNAL_SMOKE_*` defaults (used by `scripts/external_playwright_smoke.sh` embedded runner):
+`scripts/external_playwright_smoke.sh` defaults (override via CLI flags):
 
-- `EXTERNAL_SMOKE_URL=https://example.com`
-- `EXTERNAL_SMOKE_BROWSER=chromium`
-- `EXTERNAL_SMOKE_TIMEOUT_MS=45000`
-- `EXTERNAL_SMOKE_EXPECT_TEXT=Example Domain`
-- `EXTERNAL_SMOKE_OUTPUT_DIR=.runtime-cache/external-playwright-smoke`
-- `EXTERNAL_SMOKE_RETRIES=2`
-- `EXTERNAL_SMOKE_DIAGNOSTICS_JSON=.runtime-cache/external-playwright-smoke-result.json`
-- `EXTERNAL_SMOKE_HEARTBEAT_SECONDS=30`
+- `--url=https://example.com`
+- `--browser=chromium`
+- `--timeout-ms=45000`
+- `--expect-text='Example Domain'`
+- `--output-dir=.runtime-cache/external-playwright-smoke`
+- `--retries=2`
+- `--diagnostics-json=.runtime-cache/external-playwright-smoke-result.json`
+- `--heartbeat-seconds=30`
 
 `PR_LLM_REAL_SMOKE_*` defaults (used by `scripts/smoke_llm_real_local.sh`):
 
@@ -275,6 +279,7 @@ cp .env.example .env
 ### Reader overlay (`env/profiles/reader.env`, optional)
 
 Required only when enabling reader stack (`WITH_READER_STACK=1`) or running reader sync:
+
 - `MINIFLUX_DB_PASSWORD`
 - `MINIFLUX_ADMIN_PASSWORD`
 - `MINIFLUX_BASE_URL`
@@ -289,6 +294,7 @@ bash scripts/env/validate_profile.sh --profile local
 ```
 
 Notes:
+
 - `validate_profile.sh` writes resolved snapshot to `.runtime-cache/temp/.env.<profile>.resolved`.
 - For debugging resolved values, run:
   - `bash scripts/env/compose_env.sh --profile local --write .runtime-cache/temp/.env.local.resolved`
@@ -316,6 +322,7 @@ Quality gates enforce hard ceilings through `python3 scripts/check_env_budget.py
 - `universe <= 216`
 
 If a change must exceed any limit, raise a governance PR that includes:
+
 - rationale for the new variable(s),
 - merge/reuse alternatives considered,
 - synchronized updates to contract/profile/docs,

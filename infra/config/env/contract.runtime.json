@@ -917,7 +917,7 @@
       "secret": false,
       "default": "true",
       "consumer": [
-        "apps/api/app/services/ui_audit.py"
+        "apps/api/app/config.py"
       ],
       "description": "Enable Gemini-powered UI audit enhancement in API service."
     },
@@ -998,7 +998,7 @@
       "secret": false,
       "default": null,
       "consumer": [
-        "apps/web/tests/e2e/test_smoke_playwright.py"
+        "apps/web/tests/e2e/support/runtime_utils.py"
       ],
       "description": "Target URL for web E2E smoke tests."
     },

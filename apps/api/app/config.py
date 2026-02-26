@@ -64,7 +64,7 @@ class Settings:
     ui_audit_gemini_enabled: bool
 
     @classmethod
-    def from_env(cls) -> "Settings":
+    def from_env(cls) -> Settings:
         return cls(
             app_name=os.getenv("APP_NAME", "Video Digestor API"),
             app_version=os.getenv("APP_VERSION", "0.1.0"),
@@ -110,7 +110,7 @@ class Settings:
             ),
         )
 
-    def validate(self) -> "Settings":
+    def validate(self) -> Settings:
         required_fields = {
             "DATABASE_URL": self.database_url,
             "TEMPORAL_TARGET_HOST": self.temporal_target_host,

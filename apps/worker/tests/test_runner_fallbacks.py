@@ -44,12 +44,18 @@ def test_step_download_media_bilibili_auto_falls_back_to_bbdown(
     )
     ctx = _build_ctx(tmp_path, settings=settings)
 
-    async def _fake_run_command(current_ctx: runner.PipelineContext, cmd: list[str]) -> runner.CommandResult:
+    async def _fake_run_command(
+        current_ctx: runner.PipelineContext, cmd: list[str]
+    ) -> runner.CommandResult:
         if cmd and cmd[0] == "yt-dlp":
-            return runner.CommandResult(ok=False, returncode=1, stderr="yt failed", reason="non_zero_exit")
+            return runner.CommandResult(
+                ok=False, returncode=1, stderr="yt failed", reason="non_zero_exit"
+            )
         media_path = current_ctx.download_dir / "bili_video.mp4"
         media_path.write_bytes(b"fake-video")
-        return runner.CommandResult(ok=True, returncode=0, stdout=str(media_path.resolve()), stderr="")
+        return runner.CommandResult(
+            ok=True, returncode=0, stdout=str(media_path.resolve()), stderr=""
+        )
 
     monkeypatch.setattr(runner, "_run_command", _fake_run_command)
 
@@ -69,7 +75,9 @@ def test_step_download_media_bilibili_auto_falls_back_to_bbdown(
     assert str(execution.state_updates["media_path"]).endswith(".mp4")
 
 
-def test_step_download_media_bilibili_force_ytdlp_no_fallback(monkeypatch: Any, tmp_path: Path) -> None:
+def test_step_download_media_bilibili_force_ytdlp_no_fallback(
+    monkeypatch: Any, tmp_path: Path
+) -> None:
     settings = Settings(
         pipeline_workspace_dir=str((tmp_path / "workspace").resolve()),
         pipeline_artifact_root=str((tmp_path / "artifact-root").resolve()),
@@ -78,7 +86,9 @@ def test_step_download_media_bilibili_force_ytdlp_no_fallback(monkeypatch: Any, 
     ctx = _build_ctx(tmp_path, settings=settings)
 
     async def _fake_run_command(_: runner.PipelineContext, __: list[str]) -> runner.CommandResult:
-        return runner.CommandResult(ok=False, returncode=1, stderr="yt failed", reason="non_zero_exit")
+        return runner.CommandResult(
+            ok=False, returncode=1, stderr="yt failed", reason="non_zero_exit"
+        )
 
     monkeypatch.setattr(runner, "_run_command", _fake_run_command)
 
@@ -128,7 +138,9 @@ def test_step_collect_subtitles_uses_youtube_transcript_fallback(
     assert execution.state_updates["subtitle_files"] == []
 
 
-def test_step_collect_subtitles_asr_missing_binary_degrades(monkeypatch: Any, tmp_path: Path) -> None:
+def test_step_collect_subtitles_asr_missing_binary_degrades(
+    monkeypatch: Any, tmp_path: Path
+) -> None:
     settings = Settings(
         pipeline_workspace_dir=str((tmp_path / "workspace").resolve()),
         pipeline_artifact_root=str((tmp_path / "artifact-root").resolve()),
@@ -165,7 +177,9 @@ def test_step_collect_subtitles_asr_missing_binary_degrades(monkeypatch: Any, tm
 
 def test_settings_from_env_reads_new_fallback_flags(monkeypatch: Any, tmp_path: Path) -> None:
     monkeypatch.setenv("SQLITE_PATH", str((tmp_path / "state.db").resolve()))
-    monkeypatch.setenv("DATABASE_URL", "postgresql+psycopg://postgres:postgres@localhost:5432/video_analysis")
+    monkeypatch.setenv(
+        "DATABASE_URL", "postgresql+psycopg://postgres:postgres@localhost:5432/video_analysis"
+    )
     monkeypatch.setenv("TEMPORAL_TARGET_HOST", "localhost:7233")
     monkeypatch.setenv("TEMPORAL_NAMESPACE", "default")
     monkeypatch.setenv("TEMPORAL_TASK_QUEUE", "video-analysis-worker")

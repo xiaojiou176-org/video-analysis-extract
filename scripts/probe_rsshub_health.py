@@ -21,6 +21,7 @@ Options:
   --concurrency N      Max concurrent probes (default: 10)
   --bilibili-uid UID   UID used in Bilibili probe path (default: 1132916)
 """
+
 from __future__ import annotations
 
 import argparse
@@ -32,7 +33,6 @@ from pathlib import Path
 from typing import NamedTuple
 
 import httpx
-
 
 # ---------------------------------------------------------------------------
 # Default public RSSHub node list (from Grok research, 2026-02)
@@ -141,16 +141,13 @@ async def probe_all(
     }
 
     async def probe_one(base_url: str) -> ProbeResult:
-        async with sem:
-            async with httpx.AsyncClient(headers=headers, follow_redirects=True) as client:
-                return await _probe_node(
-                    client, base_url, bilibili_uid=bilibili_uid, timeout=timeout
-                )
+        async with sem, httpx.AsyncClient(headers=headers, follow_redirects=True) as client:
+            return await _probe_node(client, base_url, bilibili_uid=bilibili_uid, timeout=timeout)
 
     tasks = [probe_one(node) for node in nodes]
     results = await asyncio.gather(*tasks, return_exceptions=True)
     out: list[ProbeResult] = []
-    for node, result in zip(nodes, results):
+    for node, result in zip(nodes, results, strict=False):
         if isinstance(result, Exception):
             out.append(ProbeResult(node, -99.0, 0.0, False, f"GATHER_ERR({result})"))
         else:
@@ -174,9 +171,7 @@ def _load_nodes_from_env(env_file: Path) -> list[str]:
 def _write_env_var(env_file: Path, key: str, value: str) -> None:
     """Upsert a variable in an export-style .env file."""
     content = env_file.read_text() if env_file.exists() else ""
-    export_pattern = re.compile(
-        rf"^(export\s+)?{re.escape(key)}=.*$", re.MULTILINE
-    )
+    export_pattern = re.compile(rf"^(export\s+)?{re.escape(key)}=.*$", re.MULTILINE)
     new_line = f"export {key}='{value}'"
     if export_pattern.search(content):
         content = export_pattern.sub(new_line, content, count=1)
@@ -203,13 +198,21 @@ def _print_results(results: list[ProbeResult], top: int) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     parser.add_argument("--write-env", action="store_true", help="Write ranked list back to .env")
     parser.add_argument("--env-file", default=None, help="Path to .env file")
     parser.add_argument("--nodes", default=None, help="Comma-separated node URL list")
-    parser.add_argument("--top", type=int, default=8, help="Keep top-N nodes when writing (default: 8)")
-    parser.add_argument("--timeout", type=float, default=6.0, help="Per-probe timeout seconds (default: 6)")
-    parser.add_argument("--concurrency", type=int, default=10, help="Max concurrent probes (default: 10)")
+    parser.add_argument(
+        "--top", type=int, default=8, help="Keep top-N nodes when writing (default: 8)"
+    )
+    parser.add_argument(
+        "--timeout", type=float, default=6.0, help="Per-probe timeout seconds (default: 6)"
+    )
+    parser.add_argument(
+        "--concurrency", type=int, default=10, help="Max concurrent probes (default: 10)"
+    )
     parser.add_argument("--bilibili-uid", default="1132916", help="Bilibili UID for quality probe")
     args = parser.parse_args()
 
@@ -223,10 +226,14 @@ def main() -> None:
     else:
         nodes = _load_nodes_from_env(env_file)
         if not nodes:
-            print(f"[info] RSSHUB_FALLBACK_BASE_URLS not set in {env_file}; using built-in default list.")
+            print(
+                f"[info] RSSHUB_FALLBACK_BASE_URLS not set in {env_file}; using built-in default list."
+            )
             nodes = DEFAULT_NODES
 
-    print(f"[probe] Probing {len(nodes)} RSSHub nodes (timeout={args.timeout}s, concurrency={args.concurrency})…")
+    print(
+        f"[probe] Probing {len(nodes)} RSSHub nodes (timeout={args.timeout}s, concurrency={args.concurrency})…"
+    )
     t_start = time.monotonic()
     results = asyncio.run(
         probe_all(

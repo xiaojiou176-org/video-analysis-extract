@@ -9,6 +9,7 @@ from worker.state.sqlite_store import SQLiteStateStore
 try:
     from temporalio import activity
 except ModuleNotFoundError:  # pragma: no cover
+
     class _ActivityFallback:
         @staticmethod
         def defn(name: str | None = None):
@@ -89,7 +90,9 @@ def _resolve_last_error_code(payload: dict[str, Any]) -> str | None:
                 if candidate is not None:
                     return candidate
 
-    return _derive_error_code(payload.get("fatal_error")) or _derive_error_code(payload.get("error"))
+    return _derive_error_code(payload.get("fatal_error")) or _derive_error_code(
+        payload.get("error")
+    )
 
 
 @activity.defn(name="mark_running_activity")
@@ -124,7 +127,9 @@ async def mark_running_activity(job_id: str) -> dict[str, Any]:
 
 
 @activity.defn(name="reconcile_stale_queued_jobs_activity")
-async def reconcile_stale_queued_jobs_activity(payload: dict[str, Any] | None = None) -> dict[str, Any]:
+async def reconcile_stale_queued_jobs_activity(
+    payload: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     settings = Settings.from_env()
     pg_store = PostgresBusinessStore(settings.database_url)
     payload = payload or {}
@@ -194,9 +199,10 @@ async def mark_succeeded_activity(payload: dict[str, Any]) -> dict[str, Any]:
     artifacts = payload.get("artifacts") or {}
     digest_path = artifacts.get("digest")
     artifact_root = payload.get("artifact_dir")
-    pipeline_final_status = _to_pipeline_final_status(
-        payload.get("pipeline_final_status"), fallback=final_status
-    ) or "succeeded"
+    pipeline_final_status = (
+        _to_pipeline_final_status(payload.get("pipeline_final_status"), fallback=final_status)
+        or "succeeded"
+    )
     degradation_count = _resolve_degradation_count(payload)
     last_error_code = _resolve_last_error_code(payload)
     llm_required = payload.get("llm_required")
@@ -263,9 +269,10 @@ async def mark_failed_activity(payload: dict[str, Any]) -> dict[str, Any]:
     job_id = str(payload["job_id"])
     attempt = int(payload["attempt"])
     error = str(payload.get("error", "unknown_error"))
-    pipeline_final_status = _to_pipeline_final_status(
-        payload.get("pipeline_final_status"), fallback="failed"
-    ) or "failed"
+    pipeline_final_status = (
+        _to_pipeline_final_status(payload.get("pipeline_final_status"), fallback="failed")
+        or "failed"
+    )
     degradation_count = _resolve_degradation_count(payload)
     last_error_code = _resolve_last_error_code(payload)
     llm_required = payload.get("llm_required")

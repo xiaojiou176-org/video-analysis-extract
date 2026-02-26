@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 
 import httpx
-
 from worker.rss.fetcher import RSSHubFetcher
 
 
@@ -28,14 +27,18 @@ def test_fetch_one_falls_back_to_embed_zero_when_default_route_hits_risk_control
         requested.append(str(request.url))
         if request.url.params.get("embed") == "0":
             return httpx.Response(200, text=_rss_xml("fallback-ok"), request=request)
-        return httpx.Response(503, text="Error: Got error code -352 while fetching: 风控校验失败", request=request)
+        return httpx.Response(
+            503, text="Error: Got error code -352 while fetching: 风控校验失败", request=request
+        )
 
     transport = httpx.MockTransport(handler)
     fetcher = RSSHubFetcher(retry_attempts=0)
 
     async def run() -> list[dict[str, str | None]]:
         async with httpx.AsyncClient(transport=transport) as client:
-            return await fetcher._fetch_one(client, "https://rss.example.com/bilibili/user/video/12345")
+            return await fetcher._fetch_one(
+                client, "https://rss.example.com/bilibili/user/video/12345"
+            )
 
     entries = asyncio.run(run())
     assert len(entries) == 1
@@ -49,7 +52,9 @@ def test_fetch_one_falls_back_to_default_route_when_embed_zero_hits_risk_control
     def handler(request: httpx.Request) -> httpx.Response:
         requested.append(str(request.url))
         if request.url.params.get("embed") == "0":
-            return httpx.Response(503, text="Error: Got error code -352 while fetching: 风控校验失败", request=request)
+            return httpx.Response(
+                503, text="Error: Got error code -352 while fetching: 风控校验失败", request=request
+            )
         return httpx.Response(200, text=_rss_xml("default-ok"), request=request)
 
     transport = httpx.MockTransport(handler)
@@ -57,7 +62,9 @@ def test_fetch_one_falls_back_to_default_route_when_embed_zero_hits_risk_control
 
     async def run() -> list[dict[str, str | None]]:
         async with httpx.AsyncClient(transport=transport) as client:
-            return await fetcher._fetch_one(client, "https://rss.example.com/bilibili/user/video/12345?embed=0")
+            return await fetcher._fetch_one(
+                client, "https://rss.example.com/bilibili/user/video/12345?embed=0"
+            )
 
     entries = asyncio.run(run())
     assert len(entries) == 1
@@ -73,14 +80,18 @@ def test_fetch_one_falls_back_to_public_base_url_when_private_base_fails() -> No
         requested.append(str(request.url))
         if request.url.host == "rsshub.app":
             return httpx.Response(200, text=_rss_xml("public-base-ok"), request=request)
-        return httpx.Response(503, text="Error: Got error code -352 while fetching: 风控校验失败", request=request)
+        return httpx.Response(
+            503, text="Error: Got error code -352 while fetching: 风控校验失败", request=request
+        )
 
     transport = httpx.MockTransport(handler)
     fetcher = RSSHubFetcher(retry_attempts=0, public_fallback_base_url="https://rsshub.app")
 
     async def run() -> list[dict[str, str | None]]:
         async with httpx.AsyncClient(transport=transport) as client:
-            return await fetcher._fetch_one(client, "http://10.0.0.2:1200/bilibili/user/video/12345")
+            return await fetcher._fetch_one(
+                client, "http://10.0.0.2:1200/bilibili/user/video/12345"
+            )
 
     entries = asyncio.run(run())
     assert len(entries) == 1
@@ -130,7 +141,9 @@ def test_fetch_one_tries_multiple_public_fallback_bases_in_order() -> None:
         requested.append(str(request.url))
         if request.url.host == "hub.slarker.me":
             return httpx.Response(200, text=_rss_xml("slarker-ok"), request=request)
-        return httpx.Response(503, text="Error: Got error code -352 while fetching: 风控校验失败", request=request)
+        return httpx.Response(
+            503, text="Error: Got error code -352 while fetching: 风控校验失败", request=request
+        )
 
     transport = httpx.MockTransport(handler)
     fetcher = RSSHubFetcher(
@@ -141,7 +154,9 @@ def test_fetch_one_tries_multiple_public_fallback_bases_in_order() -> None:
 
     async def run() -> list[dict[str, str | None]]:
         async with httpx.AsyncClient(transport=transport) as client:
-            return await fetcher._fetch_one(client, "http://10.0.0.2:1200/bilibili/user/video/12345")
+            return await fetcher._fetch_one(
+                client, "http://10.0.0.2:1200/bilibili/user/video/12345"
+            )
 
     entries = asyncio.run(run())
     assert len(entries) == 1
@@ -153,6 +168,7 @@ def test_fetch_one_tries_multiple_public_fallback_bases_in_order() -> None:
 # ---------------------------------------------------------------------------
 # Circuit breaker tests
 # ---------------------------------------------------------------------------
+
 
 def test_circuit_breaker_opens_after_threshold_failures() -> None:
     """After N consecutive failures a node should be excluded from candidates."""
@@ -234,9 +250,10 @@ def test_fetch_one_skips_circuit_open_node_and_succeeds_via_healthy_node() -> No
 
     def handler(request: httpx.Request) -> httpx.Response:
         requested.append(str(request.url))
-        if "healthz" in str(request.url) or "/bilibili/user/video/" in str(request.url):
-            if request.url.host == "ok.node.example":
-                return httpx.Response(200, text=_rss_xml("healthy-node-ok"), request=request)
+        if (
+            "healthz" in str(request.url) or "/bilibili/user/video/" in str(request.url)
+        ) and request.url.host == "ok.node.example":
+            return httpx.Response(200, text=_rss_xml("healthy-node-ok"), request=request)
         return httpx.Response(503, text="Error -352 风控", request=request)
 
     transport = httpx.MockTransport(handler)
@@ -256,20 +273,21 @@ def test_fetch_one_skips_circuit_open_node_and_succeeds_via_healthy_node() -> No
 
     async def run() -> list[dict[str, str | None]]:
         async with httpx.AsyncClient(transport=transport) as client:
-            return await fetcher._fetch_one(client, "http://private.rsshub.local:1200/bilibili/user/video/99999")
+            return await fetcher._fetch_one(
+                client, "http://private.rsshub.local:1200/bilibili/user/video/99999"
+            )
 
     entries = asyncio.run(run())
     assert len(entries) == 1
     assert entries[0]["title"] == "healthy-node-ok"
     # Bad node must never have been tried for the actual feed URL
-    assert not any(
-        url.startswith("https://tripped.node.example/bilibili") for url in requested
-    )
+    assert not any(url.startswith("https://tripped.node.example/bilibili") for url in requested)
 
 
 # ---------------------------------------------------------------------------
 # Probe / reorder tests
 # ---------------------------------------------------------------------------
+
 
 def test_probe_assigns_higher_score_to_healthy_node() -> None:
     """_probe_public_base should return a positive score for a node returning valid RSS."""
@@ -288,7 +306,9 @@ def test_probe_assigns_higher_score_to_healthy_node() -> None:
 
     async def run() -> float:
         async with httpx.AsyncClient(transport=transport) as client:
-            return await fetcher._probe_public_base(client=client, base_url="https://healthy.node.example")
+            return await fetcher._probe_public_base(
+                client=client, base_url="https://healthy.node.example"
+            )
 
     score = asyncio.run(run())
     assert score > 0
@@ -296,6 +316,7 @@ def test_probe_assigns_higher_score_to_healthy_node() -> None:
 
 def test_probe_assigns_lower_score_to_risk_control_node() -> None:
     """_probe_public_base should return a lower score for a node returning risk-control errors."""
+
     def handler(request: httpx.Request) -> httpx.Response:
         if "healthz" in str(request.url):
             return httpx.Response(200, text="ok", request=request)
@@ -309,7 +330,9 @@ def test_probe_assigns_lower_score_to_risk_control_node() -> None:
 
     async def run_risk() -> float:
         async with httpx.AsyncClient(transport=transport) as client:
-            return await fetcher._probe_public_base(client=client, base_url="https://risky.node.example")
+            return await fetcher._probe_public_base(
+                client=client, base_url="https://risky.node.example"
+            )
 
     def handler_ok(request: httpx.Request) -> httpx.Response:
         if "healthz" in str(request.url):
@@ -320,7 +343,9 @@ def test_probe_assigns_lower_score_to_risk_control_node() -> None:
 
     async def run_ok() -> float:
         async with httpx.AsyncClient(transport=transport_ok) as client:
-            return await fetcher._probe_public_base(client=client, base_url="https://ok.node.example")
+            return await fetcher._probe_public_base(
+                client=client, base_url="https://ok.node.example"
+            )
 
     risk_score = asyncio.run(run_risk())
     ok_score = asyncio.run(run_ok())

@@ -251,7 +251,9 @@ def test_cache_signature_includes_override_policies(tmp_path: Path) -> None:
     comment_sig_1 = runner._build_step_cache_info(ctx, base_state, "collect_comments")["signature"]
     changed_comments = dict(base_state)
     changed_comments["comments_policy"] = {"top_n": 3, "replies_per_comment": 2, "sort": "hot"}
-    comment_sig_2 = runner._build_step_cache_info(ctx, changed_comments, "collect_comments")["signature"]
+    comment_sig_2 = runner._build_step_cache_info(ctx, changed_comments, "collect_comments")[
+        "signature"
+    ]
     assert comment_sig_1 != comment_sig_2
 
     frame_sig_1 = runner._build_step_cache_info(ctx, base_state, "extract_frames")["signature"]

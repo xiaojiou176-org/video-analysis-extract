@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from pathlib import Path
 import re
 import shutil
+from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qsl, quote, urlencode, urlparse, urlunparse
 
@@ -50,8 +50,7 @@ def estimate_duration_seconds(
 def timestamp_link(source_url: str, timestamp_s: int) -> str:
     if not source_url:
         return ""
-    if timestamp_s < 0:
-        timestamp_s = 0
+    timestamp_s = max(timestamp_s, 0)
     try:
         parsed = urlparse(source_url)
         query = dict(parse_qsl(parsed.query, keep_blank_values=True))
@@ -91,7 +90,7 @@ def build_comments_prompt_context(comments: dict[str, Any], *, top_n: int = 4) -
 
 def should_include_frame_prompt(settings: Settings) -> bool:
     if hasattr(settings, "pipeline_llm_include_frames"):
-        return coerce_bool(getattr(settings, "pipeline_llm_include_frames"), default=False)
+        return coerce_bool(settings.pipeline_llm_include_frames, default=False)
     return False
 
 
@@ -103,7 +102,9 @@ def format_seconds(seconds: int) -> str:
     return f"{h:02d}:{m:02d}:{s:02d}"
 
 
-def build_frames_prompt_context(frames: list[dict[str, Any]], source_url: str, *, limit: int = 8) -> str:
+def build_frames_prompt_context(
+    frames: list[dict[str, Any]], source_url: str, *, limit: int = 8
+) -> str:
     if not frames:
         return "No frame data."
     lines: list[str] = []
@@ -181,7 +182,7 @@ def render_template(template: str, values: dict[str, str]) -> str:
     for key, value in values.items():
         rendered = re.sub(
             r"{{\s*" + re.escape(key) + r"\s*}}",
-            lambda _: value,
+            lambda _, replacement=value: replacement,
             rendered,
         )
     return rendered
@@ -226,7 +227,7 @@ def build_chapters_markdown(outline: dict[str, Any], source_url: str) -> str:
         start_link = timestamp_link(source_url, start_s)
         end_link = timestamp_link(source_url, end_s)
 
-        lines.append(f"<a id=\"{anchor}\"></a>")
+        lines.append(f'<a id="{anchor}"></a>')
         lines.append(f"### {chapter_no}. {title}")
         lines.append(
             f"- 时间范围：[{format_seconds(start_s)}]({start_link}) - [{format_seconds(end_s)}]({end_link})"
@@ -452,7 +453,9 @@ def materialize_frames_for_artifacts(
     return materialized, frame_files
 
 
-def build_fallback_notes_markdown(digest: dict[str, Any], degradations: list[dict[str, Any]]) -> str:
+def build_fallback_notes_markdown(
+    digest: dict[str, Any], degradations: list[dict[str, Any]]
+) -> str:
     notes = coerce_str_list(digest.get("fallback_notes"), limit=8)
     if notes:
         return "\n".join(f"- {note}" for note in notes)

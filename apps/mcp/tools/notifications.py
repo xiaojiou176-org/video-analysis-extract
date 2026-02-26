@@ -38,7 +38,9 @@ def _normalize_set_config_payload(payload: dict[str, Any]) -> dict[str, Any]:
         "daily_digest_enabled": to_optional_bool(payload.get("daily_digest_enabled")),
         "daily_digest_hour_utc": to_optional_int(payload.get("daily_digest_hour_utc")),
         "failure_alert_enabled": to_optional_bool(payload.get("failure_alert_enabled")),
-        "category_rules": payload.get("category_rules") if isinstance(payload.get("category_rules"), dict) else {},
+        "category_rules": payload.get("category_rules")
+        if isinstance(payload.get("category_rules"), dict)
+        else {},
         "created_at": to_optional_str(payload.get("created_at")),
         "updated_at": to_optional_str(payload.get("updated_at")),
     }

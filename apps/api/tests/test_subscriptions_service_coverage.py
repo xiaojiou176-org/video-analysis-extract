@@ -5,10 +5,12 @@ from typing import Any
 
 import pytest
 
-from apps.api.app.services.subscriptions import SubscriptionsService
-from apps.api.app.services.subscriptions import _derive_rsshub_route
-from apps.api.app.services.subscriptions import _resolve_adapter
-from apps.api.app.services.subscriptions import _validate_subscription_source_url
+from apps.api.app.services.subscriptions import (
+    SubscriptionsService,
+    _derive_rsshub_route,
+    _resolve_adapter,
+    _validate_subscription_source_url,
+)
 
 
 class _RepoStub:
@@ -39,17 +41,24 @@ class _RepoStub:
         ("https://127.0.0.1/feed", "source_url", "blocked internal address"),
     ],
 )
-def test_validate_subscription_source_url_rejects_invalid_inputs(url: str, field: str, message: str) -> None:
+def test_validate_subscription_source_url_rejects_invalid_inputs(
+    url: str, field: str, message: str
+) -> None:
     with pytest.raises(ValueError, match=message):
         _validate_subscription_source_url(url, field_name=field)
 
 
 def test_validate_subscription_source_url_accepts_public_domain() -> None:
-    assert _validate_subscription_source_url(" https://example.com/feed.xml ", field_name="source_url") == "https://example.com/feed.xml"
+    assert (
+        _validate_subscription_source_url(" https://example.com/feed.xml ", field_name="source_url")
+        == "https://example.com/feed.xml"
+    )
 
 
 def test_derive_rsshub_route_supports_known_platforms_and_fallback() -> None:
-    assert _derive_rsshub_route("youtube", "youtube_channel_id", "UC123") == "/youtube/channel/UC123"
+    assert (
+        _derive_rsshub_route("youtube", "youtube_channel_id", "UC123") == "/youtube/channel/UC123"
+    )
     assert _derive_rsshub_route("bilibili", "bilibili_uid", "777") == "/bilibili/user/video/777"
     assert _derive_rsshub_route("x", "url", "https://x.com/feed") == "https://x.com/feed"
     assert _derive_rsshub_route("x", "other", "value") == "value"

@@ -110,7 +110,9 @@ def _patch_workflow_execute_activity(monkeypatch: Any) -> dict[str, list[dict[st
     return payloads
 
 
-def test_process_job_workflow_explicit_mode_reaches_runner(monkeypatch: Any, tmp_path: Path) -> None:
+def test_process_job_workflow_explicit_mode_reaches_runner(
+    monkeypatch: Any, tmp_path: Path
+) -> None:
     captured: dict[str, Any] = {}
     fake_pg = _patch_activity_runtime(
         monkeypatch,

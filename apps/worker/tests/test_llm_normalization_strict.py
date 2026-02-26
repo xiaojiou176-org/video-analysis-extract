@@ -6,7 +6,10 @@ from worker.pipeline.steps.llm import normalize_digest_payload, normalize_outlin
 def test_normalize_outline_payload_does_not_build_local_semantics() -> None:
     state = {
         "title": "State title",
-        "metadata": {"title": "Metadata title", "webpage_url": "https://www.youtube.com/watch?v=demo"},
+        "metadata": {
+            "title": "Metadata title",
+            "webpage_url": "https://www.youtube.com/watch?v=demo",
+        },
         "transcript": "line 1. line 2.",
         "comments": {"top_comments": [{"content": "should not be used"}]},
         "frames": [{"path": "/tmp/f1.jpg", "timestamp_s": 10}],

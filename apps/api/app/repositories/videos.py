@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Iterable
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
@@ -110,10 +110,11 @@ class VideosRepository:
     ) -> Video:
         dialect_name = (self.db.bind.dialect.name if self.db.bind is not None else "").lower()
         if dialect_name == "postgresql":
-            now = datetime.now(timezone.utc)
-            row = self.db.execute(
-                text(
-                    """
+            now = datetime.now(UTC)
+            row = (
+                self.db.execute(
+                    text(
+                        """
                     INSERT INTO videos (
                         id,
                         platform,
@@ -136,15 +137,18 @@ class VideosRepository:
                         last_seen_at = EXCLUDED.last_seen_at
                     RETURNING id
                     """
-                ),
-                {
-                    "platform": platform,
-                    "id": str(uuid.uuid4()),
-                    "video_uid": video_uid,
-                    "source_url": source_url,
-                    "now_ts": now,
-                },
-            ).mappings().one()
+                    ),
+                    {
+                        "platform": platform,
+                        "id": str(uuid.uuid4()),
+                        "video_uid": video_uid,
+                        "source_url": source_url,
+                        "now_ts": now,
+                    },
+                )
+                .mappings()
+                .one()
+            )
             self.db.commit()
             existing = self.db.get(Video, row["id"])
             if existing is None:
@@ -153,7 +157,7 @@ class VideosRepository:
             return existing
 
         existing = self.get_by_platform_uid(platform=platform, video_uid=video_uid)
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         if existing is not None:
             existing.source_url = source_url
             existing.last_seen_at = now

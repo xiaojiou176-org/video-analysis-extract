@@ -16,8 +16,8 @@ with workflow.unsafe.imports_passed_through():
         poll_feeds_activity,
         provider_canary_activity,
         reconcile_stale_queued_jobs_activity,
-        retry_failed_deliveries_activity,
         resolve_daily_digest_timing_activity,
+        retry_failed_deliveries_activity,
         run_pipeline_activity,
         send_daily_digest_activity,
         send_video_digest_activity,
@@ -99,10 +99,7 @@ class ProcessJobWorkflow:
                     mark_failed_activity,
                     {
                         **payload,
-                        "error": str(
-                            pipeline_result.get("fatal_error")
-                            or "pipeline_failed"
-                        ),
+                        "error": str(pipeline_result.get("fatal_error") or "pipeline_failed"),
                         "pipeline_final_status": final_status,
                         "degradations": pipeline_result.get("degradations", []),
                         "llm_required": pipeline_result.get("llm_required"),
@@ -118,9 +115,7 @@ class ProcessJobWorkflow:
                     "attempt": payload["attempt"],
                     "status": failed["status"],
                     "pipeline": pipeline_result,
-                    "error": str(
-                        pipeline_result.get("fatal_error") or "pipeline_failed"
-                    ),
+                    "error": str(pipeline_result.get("fatal_error") or "pipeline_failed"),
                 }
 
             succeeded = await workflow.execute_activity(

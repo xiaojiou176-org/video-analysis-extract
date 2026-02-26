@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import base64
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from worker.pipeline.steps.llm_client_helpers import ComputerUseHandler
 
@@ -63,7 +64,11 @@ def _resolve_computer_use_payload(
 
 
 def _normalize_action(payload: dict[str, Any]) -> tuple[str, dict[str, Any]]:
-    action_name = str(payload.get("action") or payload.get("type") or payload.get("name") or "").strip().lower()
+    action_name = (
+        str(payload.get("action") or payload.get("type") or payload.get("name") or "")
+        .strip()
+        .lower()
+    )
     action_args = {
         key: value
         for key, value in payload.items()
@@ -108,13 +113,14 @@ def _execute_playwright(
     try:
         from playwright.sync_api import sync_playwright
     except Exception as exc:  # pragma: no cover
-        return {"ok": False, "status": "error", "error": f"computer_use_playwright_unavailable:{exc}"}
+        return {
+            "ok": False,
+            "status": "error",
+            "error": f"computer_use_playwright_unavailable:{exc}",
+        }
 
     selector = str(
-        action_args.get("selector")
-        or action_args.get("target")
-        or action_args.get("element")
-        or ""
+        action_args.get("selector") or action_args.get("target") or action_args.get("element") or ""
     ).strip()
     text_value = str(action_args.get("text") or action_args.get("input_text") or "").strip()
     wait_ms = int(action_args.get("wait_ms") or 800)

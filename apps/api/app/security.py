@@ -33,7 +33,9 @@ _SENSITIVE_TEXT_PATTERNS = (
 )
 
 
-def sanitize_exception_detail(exc: Exception, *, fallback: str = "internal_error", max_chars: int = 500) -> str:
+def sanitize_exception_detail(
+    exc: Exception, *, fallback: str = "internal_error", max_chars: int = 500
+) -> str:
     detail = str(exc).strip()
     if not detail:
         return fallback
@@ -50,7 +52,7 @@ def _configured_api_key() -> str | None:
     if configured is None:
         return None
     value = configured.strip()
-    return value if value else None
+    return value or None
 
 
 def _allow_unauth_write() -> bool:

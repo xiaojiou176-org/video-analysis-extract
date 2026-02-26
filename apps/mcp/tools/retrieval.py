@@ -4,7 +4,13 @@ from typing import Any, Literal
 
 from mcp.server.fastmcp import FastMCP
 
-from apps.mcp.tools._common import ApiCall, is_error_payload, to_int, to_optional_dict, to_optional_str
+from apps.mcp.tools._common import (
+    ApiCall,
+    is_error_payload,
+    to_int,
+    to_optional_dict,
+    to_optional_str,
+)
 
 
 def _normalize_retrieval_item(item: Any) -> dict[str, Any]:
@@ -20,7 +26,9 @@ def _normalize_retrieval_item(item: Any) -> dict[str, Any]:
         "mode": to_optional_str(source.get("mode")),
         "source": to_optional_str(source.get("source")),
         "snippet": to_optional_str(source.get("snippet")),
-        "score": float(source.get("score")) if isinstance(source.get("score"), (int, float)) else 0.0,
+        "score": float(source.get("score"))
+        if isinstance(source.get("score"), (int, float))
+        else 0.0,
     }
 
 
@@ -53,5 +61,8 @@ def register_retrieval_tools(mcp: FastMCP, api_call: ApiCall) -> None:
             "query": to_optional_str(response.get("query")) or query,
             "top_k": to_int(response.get("top_k"), default=top_k),
             "filters": to_optional_dict(response.get("filters")) or (filters or {}),
-            "items": [_normalize_retrieval_item(item) for item in (items if isinstance(items, list) else [])],
+            "items": [
+                _normalize_retrieval_item(item)
+                for item in (items if isinstance(items, list) else [])
+            ],
         }

@@ -37,7 +37,9 @@ def coerce_float(value: Any, default: float | None = None) -> float | None:
         return default
 
 
-def _normalize_media_resolution(value: Any, *, default: MediaResolution = "medium") -> MediaResolution:
+def _normalize_media_resolution(
+    value: Any, *, default: MediaResolution = "medium"
+) -> MediaResolution:
     text = str(value or "").strip().lower().replace("-", "_").replace(" ", "_")
     if text in {"low", "medium", "high", "ultra_high"}:
         return text  # type: ignore[return-value]
@@ -132,7 +134,9 @@ def build_llm_policy_section(default_model: str, section: dict[str, Any]) -> dic
         0.1,
         coerce_float(section.get("computer_use_timeout_seconds"), 30.0) or 30.0,
     )
-    media_resolution = _normalize_media_resolution_policy(section.get("media_resolution"), default="medium")
+    media_resolution = _normalize_media_resolution_policy(
+        section.get("media_resolution"), default="medium"
+    )
     return {
         "model": model,
         "temperature": temperature,
@@ -157,7 +161,9 @@ def build_llm_policy(settings: Settings, overrides: dict[str, Any]) -> dict[str,
         section.get("include_thoughts"),
         default=bool(settings.gemini_include_thoughts),
     )
-    media_resolution = _normalize_media_resolution_policy(section.get("media_resolution"), default="medium")
+    media_resolution = _normalize_media_resolution_policy(
+        section.get("media_resolution"), default="medium"
+    )
     section = {
         **section,
         "include_thoughts": include_thoughts,
@@ -201,7 +207,9 @@ def build_llm_policy(settings: Settings, overrides: dict[str, Any]) -> dict[str,
     )
     computer_use_max_steps = max(
         0,
-        coerce_int(section.get("computer_use_max_steps"), int(settings.gemini_computer_use_max_steps)),
+        coerce_int(
+            section.get("computer_use_max_steps"), int(settings.gemini_computer_use_max_steps)
+        ),
     )
     computer_use_timeout_seconds = max(
         0.1,

@@ -1,2 +1,1 @@
 """RSS ingestion helpers."""
-

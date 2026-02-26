@@ -97,7 +97,7 @@ def test_step_extract_frames_media_missing_skips() -> None:
     async def _never_called(_ctx: Any, _cmd: list[str]) -> CommandResult:
         raise AssertionError("run_command should not be called")
 
-    execution = asyncio.run(step_extract_frames(_build_ctx(Path(".")), {}, run_command=_never_called))
+    execution = asyncio.run(step_extract_frames(_build_ctx(Path()), {}, run_command=_never_called))
 
     assert execution.status == "skipped"
     assert execution.reason == "media_path_missing"

@@ -13,6 +13,8 @@ from worker.state.postgres_store import PostgresBusinessStore
 from worker.temporal.activities_delivery import _classify_delivery_error
 from worker.temporal.activities_email import (
     sanitize_text_preview as _sanitize_text_preview,
+)
+from worker.temporal.activities_email import (
     sanitize_url_for_payload as _sanitize_url_for_payload,
 )
 from worker.temporal.activities_timing import _coerce_int
@@ -20,6 +22,7 @@ from worker.temporal.activities_timing import _coerce_int
 try:
     from temporalio import activity
 except ModuleNotFoundError:  # pragma: no cover
+
     class _ActivityFallback:
         @staticmethod
         def defn(name: str | None = None):
@@ -249,9 +252,7 @@ async def provider_canary_activity(payload: dict[str, Any] | None = None) -> dic
                 ),
                 message=str(check.get("message") or ""),
                 payload_json=(
-                    check.get("payload_json")
-                    if isinstance(check.get("payload_json"), dict)
-                    else {}
+                    check.get("payload_json") if isinstance(check.get("payload_json"), dict) else {}
                 ),
             )
 

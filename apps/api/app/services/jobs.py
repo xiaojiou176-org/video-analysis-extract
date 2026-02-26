@@ -160,7 +160,7 @@ class JobsService:
                 if isinstance(llm_provider, str) and llm_provider.strip():
                     merged["provider"] = llm_provider.strip()
 
-        return merged if merged else empty
+        return merged or empty
 
     def _normalize_thinking_payload(
         self,
@@ -424,14 +424,18 @@ class JobsService:
             return None
         return resolved_target
 
-    def get_artifact_digest_md(self, *, job_id: uuid.UUID | None, video_url: str | None) -> str | None:
+    def get_artifact_digest_md(
+        self, *, job_id: uuid.UUID | None, video_url: str | None
+    ) -> str | None:
         payload = self.get_artifact_payload(job_id=job_id, video_url=video_url)
         if payload is None:
             return None
         markdown = payload.get("markdown")
         return str(markdown) if isinstance(markdown, str) else None
 
-    def _read_artifact_meta(self, *, artifact_root: str | None, digest_path: str | None) -> dict[str, Any]:
+    def _read_artifact_meta(
+        self, *, artifact_root: str | None, digest_path: str | None
+    ) -> dict[str, Any]:
         candidates: list[Path] = []
         if artifact_root:
             candidates.append(Path(artifact_root).expanduser() / "meta.json")
@@ -484,7 +488,9 @@ class JobsService:
         alias = _ARTIFACT_ALIAS_TO_FILE.get(normalized.lower())
         return alias or normalized
 
-    def _resolve_artifact_root(self, *, artifact_root: str | None, digest_path: str | None) -> Path | None:
+    def _resolve_artifact_root(
+        self, *, artifact_root: str | None, digest_path: str | None
+    ) -> Path | None:
         if artifact_root:
             root_path = Path(artifact_root).expanduser()
             try:
@@ -515,7 +521,10 @@ class JobsService:
         if "/" not in normalized and filename in _ARTIFACT_ALLOWED_FILENAMES:
             return True
 
-        return filename.startswith("frame_") and rel_file.suffix.lower() in _ARTIFACT_ALLOWED_FRAME_EXTENSIONS
+        return (
+            filename.startswith("frame_")
+            and rel_file.suffix.lower() in _ARTIFACT_ALLOWED_FRAME_EXTENSIONS
+        )
 
     def _json_loads(self, payload: str | None) -> Any:
         if not payload:

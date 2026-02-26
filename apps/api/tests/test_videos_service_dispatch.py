@@ -9,8 +9,7 @@ from typing import Any
 
 import pytest
 
-from apps.api.app.services.videos import VideosService
-from apps.api.app.services.videos import _validate_video_source_url
+from apps.api.app.services.videos import VideosService, _validate_video_source_url
 
 
 @dataclass
@@ -42,7 +41,9 @@ class _RepoStub:
         self.created_calls.append(dict(kwargs))
         return self.job, self.should_dispatch
 
-    def mark_dispatch_failed(self, *, job_id: uuid.UUID, error_message: str, reason: str = "dispatch_failed") -> _JobRow:
+    def mark_dispatch_failed(
+        self, *, job_id: uuid.UUID, error_message: str, reason: str = "dispatch_failed"
+    ) -> _JobRow:
         self.mark_failed_calls.append(
             {
                 "job_id": job_id,
@@ -67,7 +68,9 @@ class _FakeClient:
         self.should_fail = should_fail
         self.calls: list[dict[str, Any]] = []
 
-    async def start_workflow(self, workflow: str, job_id: str, *, id: str, task_queue: str, **kwargs: Any) -> None:
+    async def start_workflow(
+        self, workflow: str, job_id: str, *, id: str, task_queue: str, **kwargs: Any
+    ) -> None:
         self.calls.append(
             {
                 "workflow": workflow,
@@ -118,7 +121,9 @@ async def _run_process(service: VideosService) -> dict[str, Any]:
     )
 
 
-def test_process_video_marks_dispatch_failed_when_temporal_start_fails(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_process_video_marks_dispatch_failed_when_temporal_start_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     repo = _RepoStub(should_dispatch=True)
     service = VideosService(db=object())
     service.video_repo = _VideoRepoStub()  # type: ignore[assignment]
@@ -135,7 +140,9 @@ def test_process_video_marks_dispatch_failed_when_temporal_start_fails(monkeypat
     assert "temporal start failed" in repo.mark_failed_calls[0]["error_message"]
 
 
-def test_process_video_uses_deterministic_workflow_id_and_conflict_policy(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_process_video_uses_deterministic_workflow_id_and_conflict_policy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     repo = _RepoStub(should_dispatch=True)
     service = VideosService(db=object())
     service.video_repo = _VideoRepoStub()  # type: ignore[assignment]
@@ -155,7 +162,9 @@ def test_process_video_uses_deterministic_workflow_id_and_conflict_policy(monkey
     assert call["kwargs"]["id_conflict_policy"] == "use_existing"
 
 
-def test_process_video_reuses_existing_job_without_dispatch(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_process_video_reuses_existing_job_without_dispatch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     repo = _RepoStub(should_dispatch=False)
     service = VideosService(db=object())
     service.video_repo = _VideoRepoStub()  # type: ignore[assignment]
@@ -178,7 +187,10 @@ def test_process_video_reuses_existing_job_without_dispatch(monkeypatch: pytest.
         ("http://m.youtube.com/watch?v=abc123", "http://m.youtube.com/watch?v=abc123"),
         ("https://youtu.be/abc123", "https://youtu.be/abc123"),
         ("https://music.youtube.com/watch?v=abc123", "https://music.youtube.com/watch?v=abc123"),
-        ("https://www.bilibili.com/video/BV1xx411c7mD", "https://www.bilibili.com/video/BV1xx411c7mD"),
+        (
+            "https://www.bilibili.com/video/BV1xx411c7mD",
+            "https://www.bilibili.com/video/BV1xx411c7mD",
+        ),
         ("https://m.bilibili.com/video/BV1xx411c7mD", "https://m.bilibili.com/video/BV1xx411c7mD"),
         ("https://b23.tv/abc123", "https://b23.tv/abc123"),
         (" https://www.youtube.com/watch?v=trimmed ", "https://www.youtube.com/watch?v=trimmed"),

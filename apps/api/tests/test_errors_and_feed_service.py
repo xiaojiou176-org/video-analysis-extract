@@ -31,7 +31,9 @@ def test_build_error_payload_and_service_error_roundtrip() -> None:
     payload = build_error_payload(detail="upstream failed", error_code="UPSTREAM_FAILED")
     assert payload == {"detail": "upstream failed", "error_code": "UPSTREAM_FAILED"}
 
-    err = ApiServiceError(detail="broken", error_code="BROKEN", status_code=502, error_kind="gateway")
+    err = ApiServiceError(
+        detail="broken", error_code="BROKEN", status_code=502, error_kind="gateway"
+    )
     assert str(err) == "broken"
     assert err.to_payload() == {
         "detail": "broken",
@@ -69,7 +71,9 @@ def test_feed_service_reads_digest_and_outline_fallback(tmp_path: Path) -> None:
     assert service._read_outline_fallback(str(outline_root)) == "# Recap\n\n核心结论"
 
 
-def test_feed_service_list_digest_feed_applies_cursor_filters_and_has_more(tmp_path: Path, monkeypatch) -> None:
+def test_feed_service_list_digest_feed_applies_cursor_filters_and_has_more(
+    tmp_path: Path, monkeypatch
+) -> None:
     ts1 = datetime(2026, 2, 25, 10, 0, tzinfo=UTC)
     ts2 = datetime(2026, 2, 25, 9, 0, tzinfo=UTC)
     ts3 = datetime(2026, 2, 25, 8, 0, tzinfo=UTC)
@@ -162,5 +166,8 @@ def test_feed_service_parse_cursor_and_title_resolution() -> None:
 
     assert service._resolve_title({"title": "  T  "}) == "T"
     assert service._resolve_title({"title": "", "video_uid": "vid-1"}) == "vid-1"
-    assert service._resolve_title({"title": "", "video_uid": "", "source_url": "https://x"}) == "https://x"
+    assert (
+        service._resolve_title({"title": "", "video_uid": "", "source_url": "https://x"})
+        == "https://x"
+    )
     assert service._resolve_title({"title": "", "video_uid": "", "source_url": ""}) == "Untitled"

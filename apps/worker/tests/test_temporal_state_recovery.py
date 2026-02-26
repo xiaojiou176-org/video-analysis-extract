@@ -5,12 +5,13 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-
 from worker.config import Settings
 from worker.temporal import activities_job_state, workflows
 
 
-def test_mark_running_activity_reports_conflict_for_already_running(monkeypatch: Any, tmp_path: Path) -> None:
+def test_mark_running_activity_reports_conflict_for_already_running(
+    monkeypatch: Any, tmp_path: Path
+) -> None:
     settings = Settings(
         sqlite_path=str((tmp_path / "state.db").resolve()),
         database_url="postgresql+psycopg://postgres:postgres@localhost:5432/video_analysis",
@@ -56,11 +57,12 @@ def test_mark_running_activity_reports_conflict_for_already_running(monkeypatch:
         asyncio.run(activities_job_state.mark_running_activity("job-1"))
 
 
-
 def test_notification_retry_workflow_runs_stale_queue_reconcile(monkeypatch: Any) -> None:
     calls: list[str] = []
 
-    async def _fake_execute_activity(activity_fn: Any, payload: dict[str, Any], **_: Any) -> dict[str, Any]:
+    async def _fake_execute_activity(
+        activity_fn: Any, payload: dict[str, Any], **_: Any
+    ) -> dict[str, Any]:
         if activity_fn is workflows.reconcile_stale_queued_jobs_activity:
             calls.append("reconcile")
             assert payload["timeout_minutes"] == 20
@@ -91,7 +93,9 @@ def test_notification_retry_workflow_runs_stale_queue_reconcile(monkeypatch: Any
     assert result["runs"] == 1
 
 
-def test_mark_succeeded_activity_rejects_terminal_overwrite(monkeypatch: Any, tmp_path: Path) -> None:
+def test_mark_succeeded_activity_rejects_terminal_overwrite(
+    monkeypatch: Any, tmp_path: Path
+) -> None:
     settings = Settings(
         sqlite_path=str((tmp_path / "state.db").resolve()),
         database_url="postgresql+psycopg://postgres:postgres@localhost:5432/video_analysis",

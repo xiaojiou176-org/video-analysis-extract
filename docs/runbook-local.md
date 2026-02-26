@@ -9,6 +9,7 @@
 - 若不使用 DevContainer，必须提供等价隔离环境（依赖版本、工具链、Compose 服务拓扑一致），否则验证结果不具备门禁效力。
 
 进入标准环境：
+
 ```bash
 devcontainer up --workspace-folder .
 ```
@@ -22,33 +23,78 @@ devcontainer up --workspace-folder .
 - Secret injection policy：密钥仅允许来自 `.env` 或进程环境；禁止依赖 shell 登录配置。
 
 变量优先级（按当前脚本实现）：
+
 1. 脚本内显式保留/覆盖逻辑（如 `e2e_live_smoke.sh` 对 API 路由变量的保留）
-2. `.env`（`load_repo_env` 加载）
-3. 继承自父 shell 的同名变量
+2. 继承自父 shell 的同名变量（`load_repo_env` 最后恢复 shell 快照）
+3. `.env`/`env/core.env`/`env/profiles/<profile>.env`（`load_repo_env` 加载）
 4. 代码默认值（仅可选项）
 
 Reader overlay 规则：
+
 - reader env 不会全局生效，仅在 reader 栈命令路径生效（`deploy_reader_stack.sh`、reader 检查/同步链路）。
 - 启用 reader 栈时，建议显式指定 `--env-file env/profiles/reader.env`。
 
 ## 标准启动链路（6 步）
 
 ### 1) 安装依赖与前置
+
 前置：PostgreSQL 16、Temporal dev server、Python 3.11+、`uv`、(可选) Redis。
 
 macOS 示例：
+
 ```bash
 brew update
 brew install postgresql@16 redis temporal
 ```
 
 安装依赖：
+
 ```bash
 uv sync --frozen --extra dev --extra e2e
 npm --prefix apps/web ci
 ```
 
+### 1.1) 初始化 Git 质量门禁（建议首次 clone 后执行）
+
+```bash
+./scripts/install_git_hooks.sh
+```
+
+可选：安装 pre-commit framework hooks（会写入当前 `core.hooksPath`）：
+
+```bash
+pre-commit install --hook-type pre-commit --hook-type commit-msg --hook-type pre-push
+```
+
+协同关系（当前实现）：
+
+- `.githooks/*` 是默认强制入口，负责调用 `quality_gate` 与 `commitlint`。
+- `.pre-commit-config.yaml` 是可复用检查清单，主要用于手动执行全量检查与依赖版本保养。
+- 因此本仓库口径是：`.githooks` 负责“提交/推送阻断”，`pre-commit` 负责“批量清洗与工具链维护”。
+
+Big Bang 全量清洗（可选）：
+
+```bash
+pre-commit run --all-files
+```
+
+detect-secrets baseline（可选补充；默认强制 secrets 门禁仍是 gitleaks）：
+
+```bash
+uv run --with detect-secrets detect-secrets scan > .secrets.baseline
+uv run --with detect-secrets detect-secrets audit .secrets.baseline
+uv run --with detect-secrets detect-secrets scan --baseline .secrets.baseline > .secrets.baseline
+```
+
+月度保养（建议）：
+
+```bash
+pre-commit autoupdate
+pre-commit run --all-files
+```
+
 ### 2) 启动基础服务
+
 ```bash
 brew services start postgresql@16
 brew services start redis
@@ -56,6 +102,7 @@ temporal server start-dev --ip 127.0.0.1 --port 7233
 ```
 
 ### 3) 初始化环境变量（统一流程）
+
 ```bash
 ./scripts/init_env_example.sh
 cp .env.example .env
@@ -64,11 +111,13 @@ set -a; source .env; set +a
 ```
 
 说明：
+
 - `scripts/dev_api.sh`、`scripts/dev_worker.sh`、`scripts/dev_mcp.sh`、`scripts/run_daily_digest.sh`、`scripts/run_failure_alerts.sh` 均会优先自动加载 `.env`。
-- 运行脚本仅自动加载 `.env`；若需覆盖，请在当前 shell 中显式导出环境变量。
+- 运行脚本会加载 repo env 文件；若需覆盖，以当前 shell 中显式导出的环境变量为准。
 - 环境契约真相源：`ENVIRONMENT.md` + `infra/config/env.contract.json`。
 
 ### 4) 初始化数据库（统一迁移命令）
+
 ```bash
 createdb video_analysis 2>/dev/null || true
 for migration in $(ls infra/migrations/*.sql | sort); do
@@ -78,7 +127,9 @@ sqlite3 "$SQLITE_PATH" < infra/sql/sqlite_state_init.sql
 ```
 
 ### 5) 启动应用进程
+
 分别在 3 个终端运行：
+
 ```bash
 ./scripts/dev_api.sh
 ./scripts/dev_worker.sh
@@ -86,6 +137,7 @@ sqlite3 "$SQLITE_PATH" < infra/sql/sqlite_state_init.sql
 ```
 
 ### 6) 最小验收
+
 ```bash
 curl -sS http://127.0.0.1:8000/healthz
 curl -sS -X POST http://127.0.0.1:8000/api/v1/ingest/poll \
@@ -94,6 +146,7 @@ curl -sS -X POST http://127.0.0.1:8000/api/v1/ingest/poll \
 ```
 
 可选：查询 job 详情（稳定字段）
+
 ```bash
 curl -sS http://127.0.0.1:8000/api/v1/jobs/<job_id>
 ```
@@ -101,18 +154,21 @@ curl -sS http://127.0.0.1:8000/api/v1/jobs/<job_id>
 ## 可选操作
 
 ### 手动触发日报与失败告警
+
 ```bash
 ./scripts/run_daily_digest.sh
 ./scripts/run_failure_alerts.sh
 ```
 
 常用覆盖参数：
+
 ```bash
-DIGEST_DATE=2026-02-21 DIGEST_TO_EMAIL='you@example.com' ./scripts/run_daily_digest.sh
-FAILURE_LOOKBACK_HOURS=6 FAILURE_LIMIT=10 FAILURE_TO_EMAIL='you@example.com' ./scripts/run_failure_alerts.sh
+./scripts/run_daily_digest.sh --date 2026-02-21 --to-email 'you@example.com'
+./scripts/run_failure_alerts.sh --lookback-hours 6 --limit 10 --to-email 'you@example.com'
 ```
 
 ### 清理 workflow（媒体与缓存）
+
 ```bash
 WORKER_COMMAND=start-cleanup-workflow ./scripts/dev_worker.sh --run-once --older-than-hours 24
 ```
@@ -120,6 +176,7 @@ WORKER_COMMAND=start-cleanup-workflow ./scripts/dev_worker.sh --run-once --older
 缓存策略细节见 `docs/reference/cache.md`。
 
 ### 调度（cron）
+
 注意：`cron` 与下方“实时稳定推送（常驻 workflow）”必须二选一，避免重复触发同类任务。
 
 ```cron
@@ -130,6 +187,7 @@ WORKER_COMMAND=start-cleanup-workflow ./scripts/dev_worker.sh --run-once --older
 ### 实时稳定推送（生产建议）
 
 仓库内置了 `scripts/start_ops_workflows.sh`，用于一次性启动/确保以下长期运行 workflow：
+
 - `daily_digest`（日报）
 - `notification_retry`（失败投递重试）
 - `provider_canary`（上游可用性探针）
@@ -138,11 +196,13 @@ WORKER_COMMAND=start-cleanup-workflow ./scripts/dev_worker.sh --run-once --older
 该脚本复用现有 worker CLI（`start-daily-workflow` / `start-notification-retry-workflow` / `start-provider-canary-workflow` / `start-cleanup-workflow`），默认适配本地非 Docker 运行。
 
 1. 基础用法
+
 ```bash
 ./scripts/start_ops_workflows.sh
 ```
 
 2. 推荐参数（生产）
+
 ```bash
 mkdir -p logs logs/ops
 OPS_DAILY_LOCAL_HOUR=9 \
@@ -157,6 +217,7 @@ OPS_CLEANUP_OLDER_THAN_HOURS=24 \
 ```
 
 3. 常用环境变量
+
 - `OPS_DAILY_LOCAL_HOUR`：日报触发小时（默认回退 `DIGEST_DAILY_LOCAL_HOUR`，再回退 `9`）。
 - `OPS_DAILY_TIMEZONE`：IANA 时区（默认回退 `DIGEST_LOCAL_TIMEZONE`，再回退 `system-local`）。
 - `OPS_DAILY_TIMEZONE_OFFSET_MINUTES`：可选，显式 UTC 偏移分钟。
@@ -176,11 +237,13 @@ OPS_CLEANUP_OLDER_THAN_HOURS=24 \
 - `DEV_WORKER_SHOW_HINTS=0`：关闭 `dev_worker.sh` 的大段提示，适合 cron/守护进程日志。
 
 4. 调度互斥策略（必须执行）
+
 - 方案 A：使用 cron（`run_daily_digest.sh` / `run_failure_alerts.sh`），则不要启动对应常驻 workflow。
 - 方案 B：使用 `start_ops_workflows.sh` 常驻模式（推荐），则停用上述 cron 条目。
 - cleanup 建议统一走常驻 workflow，不建议额外 cron 重复触发 `start-cleanup-workflow`。
 
 5. 脚本可用性快速验证
+
 ```bash
 bash -n scripts/start_ops_workflows.sh
 ./scripts/start_ops_workflows.sh --help
@@ -188,6 +251,7 @@ bash -n scripts/start_ops_workflows.sh
 ```
 
 6. 告警与重试调优建议（基于现有能力）
+
 - 投递重试策略已内置指数退避：`2/5/15/30/60` 分钟，最多 `5` 次；`auth/config_error` 不会继续重试。
 - 建议将 `OPS_NOTIFICATION_INTERVAL_MINUTES` 设为 `3-10` 分钟；高流量场景可配合 `OPS_NOTIFICATION_RETRY_BATCH_LIMIT=100-300`，避免 backlog 累积。
 - `provider_canary` 每轮会写入 `provider_health_checks`（`rsshub/youtube_data_api/gemini/resend`），建议外部监控以最近 5-10 分钟窗口统计 `status=fail` 或连续 `warn` 触发告警。
@@ -202,15 +266,18 @@ bash -n scripts/start_ops_workflows.sh
 ```
 
 脚本说明：
+
 - `bootstrap_full_stack.sh`：依赖安装、环境校验、数据库迁移、可选 reader stack。
 - `full_stack.sh`：统一起停 API/Worker/MCP/Web；`up` 会等待 API health(`GET /healthz`) 与 Web 端口就绪，失败时输出关键服务日志片段。
 - `smoke_full_stack.sh`：执行端到端 smoke（含 feed/web 检查，可选 reader 检查）。
 
 `full_stack.sh` 运行约束（稳定性修复）：
+
 - `up` 后台拉起 API 时会强制 `DEV_API_RELOAD=0`，避免 `uvicorn --reload` 父子进程漂移导致 `status`/`down` 误判。
 - `status` 会在 PID 文件失真时回退按进程特征探测并自愈 PID 文件。
 
 Live smoke 执行约束（2026-02 更新）：
+
 - 环境变量加载顺序：优先仓库 `.env`，缺失项仅使用当前 shell 环境变量。
 - `YOUTUBE_API_KEY` 失效自修复：按 `.env` → 当前 shell 环境变量顺序尝试可用 key；命中后自动回写 `.env`（日志仅输出脱敏片段，不输出完整 key）。
 - 若上述来源全部无效：live smoke 会明确失败并提示“需要用户提供有效key”。
@@ -221,10 +288,12 @@ Live smoke 执行约束（2026-02 更新）：
 - 写操作策略：live 写入仅用于可重复 smoke 验证；诊断 JSON 必须落地 `write_operations[].idempotency_key`、`write_operations[].cleanup_action`、`teardown.steps[]`。
 
 当前默认：
+
 - `bootstrap_full_stack.sh` 默认启用 `WITH_CORE_SERVICES=1` 和 `WITH_READER_STACK=1`。
 - `smoke_full_stack.sh` 默认启用 `FULL_STACK_REQUIRE_READER=1`，并会执行 `run_ai_feed_sync.sh` 验证 AI 文本回写 Miniflux。
 
 ## 常见故障
+
 - `API health check failed`：确认 `./scripts/dev_api.sh` 已运行，且 `VD_API_BASE_URL` 可访问。
 - `RESEND_API_KEY is not configured` / `RESEND_FROM_EMAIL is not configured`：`NOTIFICATION_ENABLED=true` 时需补齐 `.env`（或在当前 shell 中显式导出）。
 - 404 报表路由：`run_daily_digest.sh` / `run_failure_alerts.sh` 会按脚本内 fallback 流程回退发送。
@@ -251,6 +320,7 @@ Live smoke 执行约束（2026-02 更新）：
   - 翻译回退阶段固定关闭 function calling。
 
 示例（限制回合并开启 thought 输出）：
+
 ```bash
 curl -sS -X POST http://127.0.0.1:8000/api/v1/videos/process \
   -H 'Content-Type: application/json' \
@@ -274,7 +344,9 @@ curl -sS -X POST http://127.0.0.1:8000/api/v1/videos/process \
 - `steps[].thought_metadata` 为归一化提取字段（含 `llm_meta.thinking`），未命中时返回空结构（非 `null`）。
 
 ## 文档联动规则
+
 以下改动必须同步本文件：
+
 - 新增迁移文件（`infra/migrations/*.sql`）
 - 环境变量契约调整
 - 启动脚本参数或默认值调整

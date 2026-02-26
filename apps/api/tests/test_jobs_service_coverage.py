@@ -21,7 +21,7 @@ class _DBResult:
     def __init__(self, row: dict[str, Any] | None) -> None:
         self._row = row
 
-    def mappings(self) -> "_DBResult":
+    def mappings(self) -> _DBResult:
         return self
 
     def first(self) -> dict[str, Any] | None:
@@ -105,7 +105,9 @@ def test_get_steps_returns_empty_when_sql_query_fails(monkeypatch: pytest.Monkey
     assert service.get_steps(uuid.uuid4()) == []
 
 
-def test_get_steps_parses_rows_and_json_payloads(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_get_steps_parses_rows_and_json_payloads(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     db_path = tmp_path / "state.db"
     conn = sqlite3.connect(db_path)
     conn.execute(
@@ -183,7 +185,9 @@ def test_get_steps_parses_rows_and_json_payloads(monkeypatch: pytest.MonkeyPatch
     conn.close()
 
     original_connect = sqlite3.connect
-    monkeypatch.setattr("apps.api.app.services.jobs.sqlite3.connect", lambda _path: original_connect(db_path))
+    monkeypatch.setattr(
+        "apps.api.app.services.jobs.sqlite3.connect", lambda _path: original_connect(db_path)
+    )
 
     service = _service()
     rows = service.get_steps(uuid.UUID(job_id))
@@ -264,11 +268,17 @@ def test_get_notification_retry_returns_normalized_mapping() -> None:
     }
 
 
-def test_get_degradations_prefers_meta_else_builds_from_steps(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_get_degradations_prefers_meta_else_builds_from_steps(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     service = _service()
-    monkeypatch.setattr(service, "_read_artifact_meta", lambda **_kwargs: {"degradations": [{"step": "llm"}, "x"]})
+    monkeypatch.setattr(
+        service, "_read_artifact_meta", lambda **_kwargs: {"degradations": [{"step": "llm"}, "x"]}
+    )
 
-    assert service.get_degradations(artifact_root=None, artifact_digest_md=None, steps=[]) == [{"step": "llm"}]
+    assert service.get_degradations(artifact_root=None, artifact_digest_md=None, steps=[]) == [
+        {"step": "llm"}
+    ]
 
     monkeypatch.setattr(service, "_read_artifact_meta", lambda **_kwargs: {})
     fallback = service.get_degradations(
@@ -278,14 +288,24 @@ def test_get_degradations_prefers_meta_else_builds_from_steps(monkeypatch: pytes
             {
                 "name": "llm_digest",
                 "status": "failed",
-                "error": {"reason": "r1", "error": "e1", "error_kind": "timeout", "retry_meta": {"n": 1}},
+                "error": {
+                    "reason": "r1",
+                    "error": "e1",
+                    "error_kind": "timeout",
+                    "retry_meta": {"n": 1},
+                },
                 "result": {"cache_meta": {"hit": False}},
             },
             {
                 "name": "subtitles",
                 "status": "skipped",
                 "error": "raw-error",
-                "result": {"reason": "r2", "error": "e2", "error_kind": "degraded", "retry_meta": {"n": 2}},
+                "result": {
+                    "reason": "r2",
+                    "error": "e2",
+                    "error_kind": "degraded",
+                    "retry_meta": {"n": 2},
+                },
             },
             {"name": "ok", "status": "succeeded", "result": {"degraded": True, "reason": "r3"}},
         ],
@@ -303,7 +323,9 @@ def test_get_artifacts_index_uses_step_output_then_filesystem(tmp_path: Path) ->
     from_steps = service.get_artifacts_index(
         artifact_root=None,
         artifact_digest_md=None,
-        steps=[{"name": "write_artifacts", "result": {"output": {"files": {"digest": "/tmp/d.md"}}}}],
+        steps=[
+            {"name": "write_artifacts", "result": {"output": {"files": {"digest": "/tmp/d.md"}}}}
+        ],
     )
     assert from_steps == {"digest": "/tmp/d.md"}
 
@@ -322,7 +344,9 @@ def test_get_artifacts_index_uses_step_output_then_filesystem(tmp_path: Path) ->
     assert "digest" in from_fs
 
 
-def test_get_artifact_payload_and_digest_md_paths(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_get_artifact_payload_and_digest_md_paths(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     service = _service()
     repo = _RepoStub()
     service.repo = repo  # type: ignore[assignment]
@@ -335,18 +359,24 @@ def test_get_artifact_payload_and_digest_md_paths(monkeypatch: pytest.MonkeyPatc
 
     digest = tmp_path / "digest.md"
     digest.write_text("hello", encoding="utf-8")
-    (tmp_path / "meta.json").write_text(json.dumps({"degradations": [{"step": "x"}]}), encoding="utf-8")
+    (tmp_path / "meta.json").write_text(
+        json.dumps({"degradations": [{"step": "x"}]}), encoding="utf-8"
+    )
     repo._digest_by_job = str(digest)
 
     payload = service.get_artifact_payload(job_id=uuid.uuid4(), video_url=None)
     assert payload == {"markdown": "hello", "meta": {"degradations": [{"step": "x"}]}}
     assert service.get_artifact_digest_md(job_id=uuid.uuid4(), video_url=None) == "hello"
 
-    monkeypatch.setattr(Path, "read_text", lambda *_args, **_kwargs: (_ for _ in ()).throw(OSError("deny")))
+    monkeypatch.setattr(
+        Path, "read_text", lambda *_args, **_kwargs: (_ for _ in ()).throw(OSError("deny"))
+    )
     assert service.get_artifact_payload(job_id=uuid.uuid4(), video_url=None) is None
 
 
-def test_get_artifact_asset_path_guardrails(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_get_artifact_asset_path_guardrails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     service = _service()
     root = tmp_path / "bundle"
     root.mkdir()
@@ -382,8 +412,14 @@ def test_private_artifact_helpers_cover_edge_cases(tmp_path: Path) -> None:
     digest_path = tmp_path / "nested" / "digest.md"
     digest_path.parent.mkdir()
     digest_path.write_text("ok", encoding="utf-8")
-    assert service._resolve_artifact_root(artifact_root=None, digest_path=str(digest_path)) == digest_path.parent.resolve()
-    assert service._resolve_artifact_root(artifact_root=str(tmp_path / "missing"), digest_path=None) is None
+    assert (
+        service._resolve_artifact_root(artifact_root=None, digest_path=str(digest_path))
+        == digest_path.parent.resolve()
+    )
+    assert (
+        service._resolve_artifact_root(artifact_root=str(tmp_path / "missing"), digest_path=None)
+        is None
+    )
 
     assert service._is_allowed_artifact_asset("meta.json") is True
     assert service._is_allowed_artifact_asset("frame_001.png") is True
@@ -402,6 +438,11 @@ def test_private_artifact_helpers_cover_edge_cases(tmp_path: Path) -> None:
     assert service._read_artifact_meta(artifact_root=str(tmp_path), digest_path=None) == {}
 
     assert service._artifacts_from_steps([{"name": "x", "result": {}}]) == {}
-    assert service._artifacts_from_steps([
-        {"name": "write_artifacts", "result": {"state_updates": {"artifacts": {"digest": "/tmp/d.md", "x": 1}}}}
-    ]) == {"digest": "/tmp/d.md"}
+    assert service._artifacts_from_steps(
+        [
+            {
+                "name": "write_artifacts",
+                "result": {"state_updates": {"artifacts": {"digest": "/tmp/d.md", "x": 1}}},
+            }
+        ]
+    ) == {"digest": "/tmp/d.md"}

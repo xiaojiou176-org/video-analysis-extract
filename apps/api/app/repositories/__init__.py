@@ -4,8 +4,8 @@ from .subscriptions import SubscriptionsRepository
 from .videos import VideosRepository
 
 __all__ = [
-    "SubscriptionsRepository",
-    "VideosRepository",
     "IngestEventsRepository",
     "JobsRepository",
+    "SubscriptionsRepository",
+    "VideosRepository",
 ]

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from types import SimpleNamespace
 
 import httpx
@@ -87,7 +87,7 @@ def test_hourly_cadence_fires_at_matching_hour(monkeypatch) -> None:
     monkeypatch.setattr(
         notifications,
         "_utc_now",
-        lambda: datetime(2026, 2, 23, 6, 30, tzinfo=timezone.utc),
+        lambda: datetime(2026, 2, 23, 6, 30, tzinfo=UTC),
     )
 
     row = notifications.send_category_digest(
@@ -117,7 +117,7 @@ def test_hourly_cadence_skips_at_non_matching_hour(monkeypatch) -> None:
     monkeypatch.setattr(
         notifications,
         "_utc_now",
-        lambda: datetime(2026, 2, 23, 7, 0, tzinfo=timezone.utc),
+        lambda: datetime(2026, 2, 23, 7, 0, tzinfo=UTC),
     )
 
     notifications.send_category_digest(
@@ -259,7 +259,9 @@ def test_send_daily_report_notification_uses_default_body(monkeypatch) -> None:
 
 def test_dispatch_email_returns_existing_by_dispatch_key(monkeypatch) -> None:
     existing = SimpleNamespace(id="existing")
-    monkeypatch.setattr(notifications, "_get_delivery_by_dispatch_key", lambda db, kind, dispatch_key: existing)
+    monkeypatch.setattr(
+        notifications, "_get_delivery_by_dispatch_key", lambda db, kind, dispatch_key: existing
+    )
 
     db = _DispatchDB()
     result = notifications._dispatch_email(
@@ -313,7 +315,11 @@ def test_dispatch_email_runtime_error_marks_failed(monkeypatch) -> None:
             resend_from_email="noreply@example.com",
         ),
     )
-    monkeypatch.setattr(notifications, "_send_with_resend", lambda **kwargs: (_ for _ in ()).throw(RuntimeError("boom")))
+    monkeypatch.setattr(
+        notifications,
+        "_send_with_resend",
+        lambda **kwargs: (_ for _ in ()).throw(RuntimeError("boom")),
+    )
 
     db = _DispatchDB()
     with pytest.raises(RuntimeError, match="boom"):
@@ -450,16 +456,25 @@ def test_send_with_resend_success_and_non_json(monkeypatch) -> None:
 
 
 def test_evaluate_category_rule_weekly_and_unsupported() -> None:
-    config = _config_with_rules({"category_rules": {"ops": {"cadence": "weekly", "weekday": 1, "hour": 8}}})
-    now = datetime(2026, 2, 24, 8, 0, tzinfo=timezone.utc)
-    assert notifications._evaluate_category_rule(config=config, category="ops", now_utc=now, priority=None) is None
+    config = _config_with_rules(
+        {"category_rules": {"ops": {"cadence": "weekly", "weekday": 1, "hour": 8}}}
+    )
+    now = datetime(2026, 2, 24, 8, 0, tzinfo=UTC)
+    assert (
+        notifications._evaluate_category_rule(
+            config=config, category="ops", now_utc=now, priority=None
+        )
+        is None
+    )
 
-    mismatch = datetime(2026, 2, 25, 8, 0, tzinfo=timezone.utc)
+    mismatch = datetime(2026, 2, 25, 8, 0, tzinfo=UTC)
     assert "weekly cadence mismatch weekday" in str(
-        notifications._evaluate_category_rule(config=config, category="ops", now_utc=mismatch, priority=None)
+        notifications._evaluate_category_rule(
+            config=config, category="ops", now_utc=mismatch, priority=None
+        )
     )
 
     config_unknown = _config_with_rules({"category_rules": {"ops": {"cadence": "monthly"}}})
-    assert notifications._evaluate_category_rule(config=config_unknown, category="ops", now_utc=now, priority=None) == (
-        "unsupported cadence: monthly"
-    )
+    assert notifications._evaluate_category_rule(
+        config=config_unknown, category="ops", now_utc=now, priority=None
+    ) == ("unsupported cadence: monthly")

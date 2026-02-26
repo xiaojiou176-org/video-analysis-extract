@@ -8,12 +8,12 @@ from .ui_audit import UiAuditService
 from .videos import VideosService
 
 __all__ = [
-    "SubscriptionsService",
+    "ComputerUseService",
+    "HealthService",
     "IngestService",
     "JobsService",
-    "VideosService",
-    "HealthService",
     "RetrievalService",
-    "ComputerUseService",
+    "SubscriptionsService",
     "UiAuditService",
+    "VideosService",
 ]

@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timezone
 import logging
 import re
+from datetime import UTC, datetime
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 from uuid import uuid4
@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 
 def _utc_now_iso() -> str:
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+    return datetime.now(UTC).replace(microsecond=0).isoformat()
 
 
 def empty_comments_payload(*, sort: str = "like") -> dict[str, Any]:
@@ -48,7 +48,7 @@ def _ts_to_iso(ts: Any) -> str | None:
     ts_int = _to_int(ts, default=-1)
     if ts_int < 0:
         return None
-    return datetime.fromtimestamp(ts_int, tz=timezone.utc).replace(microsecond=0).isoformat()
+    return datetime.fromtimestamp(ts_int, tz=UTC).replace(microsecond=0).isoformat()
 
 
 def _extract_bvid(text: str) -> str | None:
@@ -164,7 +164,12 @@ class BilibiliCommentCollector:
                 if isinstance(data, dict):
                     return data
                 return {}
-            except (httpx.TimeoutException, httpx.RequestError, httpx.HTTPStatusError, ValueError) as exc:
+            except (
+                httpx.TimeoutException,
+                httpx.RequestError,
+                httpx.HTTPStatusError,
+                ValueError,
+            ) as exc:
                 last_error = exc
                 logger.warning(
                     "bilibili_api_request_retry",
@@ -269,11 +274,7 @@ class BilibiliCommentCollector:
         if not isinstance(comments, list):
             return []
 
-        normalized = [
-            self._normalize_comment(item)
-            for item in comments
-            if isinstance(item, dict)
-        ]
+        normalized = [self._normalize_comment(item) for item in comments if isinstance(item, dict)]
         normalized.sort(key=lambda item: _to_int(item.get("like_count"), default=0), reverse=True)
         return normalized[: self._top_n]
 
@@ -293,7 +294,7 @@ class BilibiliCommentCollector:
                 "type": BILIBILI_VIDEO_TYPE,
                 "oid": aid,
                 "root": root_id,
-                "pn": 1,
+                "on": 1,
                 "ps": self._replies_per_comment,
             },
         )

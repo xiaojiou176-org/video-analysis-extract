@@ -16,9 +16,7 @@ class Video(Base):
         UniqueConstraint("platform", "video_uid", name="uq_videos_platform_video_uid"),
     )
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     platform: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
     video_uid: Mapped[str] = mapped_column(String(512), nullable=False)
     source_url: Mapped[str] = mapped_column(String(2048), nullable=False)

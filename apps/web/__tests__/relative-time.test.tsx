@@ -4,55 +4,55 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { RelativeTime } from "@/components/relative-time";
 
 describe("RelativeTime", () => {
-  beforeEach(() => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-02-26T12:00:00Z"));
-  });
+	beforeEach(() => {
+		vi.useFakeTimers();
+		vi.setSystemTime(new Date("2026-02-26T12:00:00Z"));
+	});
 
-  afterEach(() => {
-    vi.useRealTimers();
-  });
+	afterEach(() => {
+		vi.useRealTimers();
+	});
 
-  it("shows fallback text when date is invalid", () => {
-    render(<RelativeTime dateTime="not-a-date" />);
+	it("shows fallback text when date is invalid", () => {
+		render(<RelativeTime dateTime="not-a-date" />);
 
-    expect(screen.getByText("not-a-date")).toBeInTheDocument();
-    expect(screen.getByTitle("not-a-date")).toBeInTheDocument();
-  });
+		expect(screen.getByText("not-a-date")).toBeInTheDocument();
+		expect(screen.getByTitle("not-a-date")).toBeInTheDocument();
+	});
 
-  it("formats minute/hour/day/week/month/year buckets", () => {
-    const minute = render(<RelativeTime dateTime="2026-02-26T11:59:40Z" />);
-    expect(screen.getByText("刚刚")).toBeInTheDocument();
-    minute.unmount();
+	it("formats minute/hour/day/week/month/year buckets", () => {
+		const minute = render(<RelativeTime dateTime="2026-02-26T11:59:40Z" />);
+		expect(screen.getByText("刚刚")).toBeInTheDocument();
+		minute.unmount();
 
-    const hour = render(<RelativeTime dateTime="2026-02-26T10:00:00Z" />);
-    expect(screen.getByText("2 小时前")).toBeInTheDocument();
-    hour.unmount();
+		const hour = render(<RelativeTime dateTime="2026-02-26T10:00:00Z" />);
+		expect(screen.getByText("2 小时前")).toBeInTheDocument();
+		hour.unmount();
 
-    const day = render(<RelativeTime dateTime="2026-02-20T12:00:00Z" />);
-    expect(screen.getByText("6 天前")).toBeInTheDocument();
-    day.unmount();
+		const day = render(<RelativeTime dateTime="2026-02-20T12:00:00Z" />);
+		expect(screen.getByText("6 天前")).toBeInTheDocument();
+		day.unmount();
 
-    const week = render(<RelativeTime dateTime="2026-02-10T12:00:00Z" />);
-    expect(screen.getByText("2 周前")).toBeInTheDocument();
-    week.unmount();
+		const week = render(<RelativeTime dateTime="2026-02-10T12:00:00Z" />);
+		expect(screen.getByText("2 周前")).toBeInTheDocument();
+		week.unmount();
 
-    const month = render(<RelativeTime dateTime="2025-12-10T12:00:00Z" />);
-    expect(screen.getByText("2 个月前")).toBeInTheDocument();
-    month.unmount();
+		const month = render(<RelativeTime dateTime="2025-12-10T12:00:00Z" />);
+		expect(screen.getByText("2 个月前")).toBeInTheDocument();
+		month.unmount();
 
-    render(<RelativeTime dateTime="2024-12-10T12:00:00Z" />);
-    expect(screen.getByText("1 年前")).toBeInTheDocument();
-  });
+		render(<RelativeTime dateTime="2024-12-10T12:00:00Z" />);
+		expect(screen.getByText("1 年前")).toBeInTheDocument();
+	});
 
-  it("recomputes text on interval ticks", () => {
-    render(<RelativeTime dateTime="2026-02-26T11:59:30Z" />);
-    expect(screen.getByText("刚刚")).toBeInTheDocument();
+	it("recomputes text on interval ticks", () => {
+		render(<RelativeTime dateTime="2026-02-26T11:59:30Z" />);
+		expect(screen.getByText("刚刚")).toBeInTheDocument();
 
-    act(() => {
-      vi.advanceTimersByTime(61_000);
-    });
+		act(() => {
+			vi.advanceTimersByTime(61_000);
+		});
 
-    expect(screen.getByText("1 分钟前")).toBeInTheDocument();
-  });
+		expect(screen.getByText("1 分钟前")).toBeInTheDocument();
+	});
 });

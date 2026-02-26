@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timezone
 import logging
+from datetime import UTC, datetime
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 from uuid import uuid4
@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 
 def _utc_now_iso() -> str:
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+    return datetime.now(UTC).replace(microsecond=0).isoformat()
 
 
 def _to_int(value: Any, default: int = 0) -> int:
@@ -131,9 +131,7 @@ class YouTubeCommentCollector:
         snippet = item.get("snippet") or {}
         top = (snippet.get("topLevelComment") or {}).get("snippet") or {}
         comment_id = str(
-            (snippet.get("topLevelComment") or {}).get("id")
-            or item.get("id")
-            or ""
+            (snippet.get("topLevelComment") or {}).get("id") or item.get("id") or ""
         ).strip()
         reply_count = _to_int(snippet.get("totalReplyCount"), default=0)
         return {
@@ -247,7 +245,7 @@ class YouTubeCommentCollector:
                     if not isinstance(item, dict):
                         continue
                     top_comment = self._normalize_top_comment(item)
-                    replies_raw = ((item.get("replies") or {}).get("comments") or [])
+                    replies_raw = (item.get("replies") or {}).get("comments") or []
                     replies: list[dict[str, Any]] = []
                     reply_id_set: set[str] = set()
                     if isinstance(replies_raw, list) and self._replies_per_comment > 0:

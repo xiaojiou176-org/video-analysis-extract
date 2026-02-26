@@ -35,7 +35,9 @@ _WORKFLOW_NAME_MAP = {
 }
 
 
-@router.post("/run", response_model=WorkflowRunResponse, dependencies=[Depends(require_write_access)])
+@router.post(
+    "/run", response_model=WorkflowRunResponse, dependencies=[Depends(require_write_access)]
+)
 async def run_workflow(payload: WorkflowRunRequest, db: Session = Depends(get_db)):
     del db  # reserved for future authorization / audit persistence
 
@@ -44,7 +46,9 @@ async def run_workflow(payload: WorkflowRunRequest, db: Session = Depends(get_db
         from temporalio.exceptions import WorkflowAlreadyStartedError
     except Exception as exc:  # pragma: no cover
         detail = sanitize_exception_detail(exc)
-        raise HTTPException(status_code=503, detail=f"temporal client not available: {detail}") from exc
+        raise HTTPException(
+            status_code=503, detail=f"temporal client not available: {detail}"
+        ) from exc
 
     workflow_name = _WORKFLOW_NAME_MAP[payload.workflow]
     request_payload = dict(payload.payload or {})
@@ -72,7 +76,9 @@ async def run_workflow(payload: WorkflowRunRequest, db: Session = Depends(get_db
         ) from exc
     except Exception as exc:
         detail = sanitize_exception_detail(exc)
-        raise HTTPException(status_code=503, detail=f"failed to connect temporal: {detail}") from exc
+        raise HTTPException(
+            status_code=503, detail=f"failed to connect temporal: {detail}"
+        ) from exc
 
     try:
         handle = await asyncio.wait_for(
@@ -123,7 +129,9 @@ async def run_workflow(payload: WorkflowRunRequest, db: Session = Depends(get_db
             ) from exc
         except Exception as exc:
             detail = sanitize_exception_detail(exc)
-            raise HTTPException(status_code=502, detail=f"workflow execution failed: {detail}") from exc
+            raise HTTPException(
+                status_code=502, detail=f"workflow execution failed: {detail}"
+            ) from exc
         return WorkflowRunResponse(
             workflow=payload.workflow,
             workflow_name=workflow_name,

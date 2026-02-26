@@ -131,7 +131,9 @@ def test_step_llm_outline_still_fails_when_flags_disable_provider_soft_fail(
     assert execution.output["hard_fail_reason"] == "gemini_api_key_missing"
 
 
-def test_run_pipeline_marks_degraded_when_non_llm_step_degraded(monkeypatch: Any, tmp_path: Path) -> None:
+def test_run_pipeline_marks_degraded_when_non_llm_step_degraded(
+    monkeypatch: Any, tmp_path: Path
+) -> None:
     async def _ok(_: runner.PipelineContext, __: dict[str, Any]) -> runner.StepExecution:
         return runner.StepExecution(status="succeeded")
 
@@ -242,7 +244,9 @@ def test_run_pipeline_embedding_degraded_does_not_fail_llm_gate(
     async def _ok(_: runner.PipelineContext, __: dict[str, Any]) -> runner.StepExecution:
         return runner.StepExecution(status="succeeded")
 
-    async def _embedding_degraded(_: runner.PipelineContext, __: dict[str, Any]) -> runner.StepExecution:
+    async def _embedding_degraded(
+        _: runner.PipelineContext, __: dict[str, Any]
+    ) -> runner.StepExecution:
         return runner.StepExecution(
             status="succeeded",
             degraded=True,
@@ -339,7 +343,9 @@ def test_execute_step_uses_pipeline_llm_max_retries(tmp_path: Path) -> None:
     assert step_record["retry_meta"]["retries_configured"] == 1
 
 
-def test_step_llm_outline_fails_when_quality_is_insufficient(monkeypatch: Any, tmp_path: Path) -> None:
+def test_step_llm_outline_fails_when_quality_is_insufficient(
+    monkeypatch: Any, tmp_path: Path
+) -> None:
     def _fake_gemini_generate(*_: Any, **__: Any) -> tuple[str | None, str]:
         return (
             '{"title":"演示视频","tldr":["短"],"highlights":["短"],"recommended_actions":[],"risk_or_pitfalls":[],"chapters":[{"chapter_no":1,"title":"第一章","anchor":"chapter-01","start_s":0,"end_s":60,"summary":"短","bullets":["短"],"key_terms":[],"code_snippets":[]}],"timestamp_references":[]}',
@@ -368,7 +374,9 @@ def test_step_llm_outline_fails_when_quality_is_insufficient(monkeypatch: Any, t
     assert execution.output["llm_gate_passed"] is False
 
 
-def test_step_llm_digest_fails_when_quality_is_insufficient(monkeypatch: Any, tmp_path: Path) -> None:
+def test_step_llm_digest_fails_when_quality_is_insufficient(
+    monkeypatch: Any, tmp_path: Path
+) -> None:
     def _fake_gemini_generate(*_: Any, **__: Any) -> tuple[str | None, str]:
         return (
             '{"title":"演示视频","summary":"太短","tldr":["短"],"highlights":["短"],"action_items":[],"code_blocks":[],"timestamp_references":[],"fallback_notes":[]}',
@@ -442,7 +450,9 @@ def test_step_llm_outline_fails_when_translation_fails(monkeypatch: Any, tmp_pat
     assert execution.output["llm_gate_passed"] is False
 
 
-def test_step_llm_outline_fails_when_schema_contains_extra_fields(monkeypatch: Any, tmp_path: Path) -> None:
+def test_step_llm_outline_fails_when_schema_contains_extra_fields(
+    monkeypatch: Any, tmp_path: Path
+) -> None:
     def _fake_gemini_generate(*_: Any, **__: Any) -> tuple[str | None, str]:
         return (
             '{"title":"演示视频","tldr":["梳理关键问题。"],"highlights":["明确了错误放大的触发条件与影响路径。"],"recommended_actions":[],"risk_or_pitfalls":[],"chapters":[{"chapter_no":1,"title":"第一章","anchor":"chapter-01","start_s":0,"end_s":60,"summary":"介绍关键链路与异常扩散机制。","bullets":["优先确认上游超时门限与重试策略。"],"key_terms":[],"code_snippets":[]}],"timestamp_references":[],"unexpected":"nope"}',

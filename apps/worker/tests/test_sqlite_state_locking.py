@@ -1,11 +1,10 @@
 from __future__ import annotations
 
 import sqlite3
-from datetime import datetime, timedelta, timezone
-from typing import Any
+from datetime import UTC, datetime, timedelta
+from typing import Any, Self
 
 import pytest
-
 from worker.state.sqlite_store import SQLiteStateStore
 
 
@@ -16,7 +15,7 @@ def test_sqlite_lock_conflict_then_recovery_after_expiry(tmp_path) -> None:
     assert store.acquire_lock("phase2.poll_feeds", "worker-A", 60) is True
     assert store.acquire_lock("phase2.poll_feeds", "worker-B", 60) is False
 
-    expired_at = (datetime.now(timezone.utc) - timedelta(seconds=1)).isoformat()
+    expired_at = (datetime.now(UTC) - timedelta(seconds=1)).isoformat()
     with sqlite3.connect(str(db_path)) as conn:
         conn.execute(
             "UPDATE locks SET expires_at = ? WHERE lock_key = ?",
@@ -43,7 +42,7 @@ def test_sqlite_acquire_lock_handles_insert_race(tmp_path, monkeypatch) -> None:
     store = SQLiteStateStore(str(db_path))
 
     class _FakeConn:
-        def __enter__(self) -> "_FakeConn":
+        def __enter__(self) -> Self:
             return self
 
         def __exit__(self, exc_type, exc, tb) -> bool:
@@ -59,7 +58,10 @@ def test_sqlite_acquire_lock_handles_insert_race(tmp_path, monkeypatch) -> None:
         def fetchone(self):
             return {"owner": "worker-other", "expires_at": "2999-01-01T00:00:00+00:00"}
 
-    monkeypatch.setattr(store, "_connect", lambda: _FakeConn())
+    def _fake_connect() -> _FakeConn:
+        return _FakeConn()
+
+    monkeypatch.setattr(store, "_connect", _fake_connect)
     assert store.acquire_lock("phase2.poll_feeds", "worker-A", 60) is False
 
 

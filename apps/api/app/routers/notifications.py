@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import uuid
-from datetime import date as date_type, datetime
+from datetime import date as date_type
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
@@ -101,7 +102,11 @@ def get_config(db: Session = Depends(get_db)):
     )
 
 
-@router.put("/config", response_model=NotificationConfigResponse, dependencies=[Depends(require_write_access)])
+@router.put(
+    "/config",
+    response_model=NotificationConfigResponse,
+    dependencies=[Depends(require_write_access)],
+)
 def put_config(payload: NotificationConfigUpdateRequest, db: Session = Depends(get_db)):
     row = update_notification_config(
         db,

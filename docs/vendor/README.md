@@ -38,4 +38,3 @@ bash scripts/vendor/upstream_sync.sh \
 ```bash
 bash scripts/vendor/validate_upstream_lock.sh --root .
 ```
-

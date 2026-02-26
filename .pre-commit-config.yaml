@@ -1,7 +1,7 @@
 minimum_pre_commit_version: "3.6.0"
 default_stages: [pre-commit]
 default_install_hook_types: [pre-commit, commit-msg, pre-push]
-fail_fast: false
+fail_fast: true
 
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
@@ -16,7 +16,7 @@ repos:
         exclude: ^apps/web/package-lock\.json$
 
   - repo: https://github.com/gitleaks/gitleaks
-    rev: v8.9.0
+    rev: v8.30.0
     hooks:
       - id: gitleaks
         args: ["--config=.gitleaks.toml"]
@@ -30,7 +30,7 @@ repos:
         files: ^(apps|scripts|infra|docs|env|\.github|\.githooks|packages)/|^(\.env\.example|\.secrets\.baseline|\.pre-commit-config\.yaml)$
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.9.10
+    rev: v0.15.2
     hooks:
       - id: ruff
         args: [--fix, --exit-non-zero-on-fix]
@@ -39,7 +39,7 @@ repos:
         files: ^(apps/(api|worker|mcp)|scripts)/.*\.(py|pyi)$
 
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.15.0
+    rev: v1.19.1
     hooks:
       - id: mypy
         args:
@@ -81,10 +81,19 @@ repos:
     hooks:
       - id: stylelint
         args: ["--fix", "--allow-empty-input"]
-        files: ^apps/web/.*\.(css|scss|sass)$
+        files: ^apps/web/.*\.(css|scss|sass|less|vue|astro|svelte)$
         additional_dependencies:
           - stylelint@16.24.0
           - stylelint-config-standard@36.0.1
+          - stylelint-config-recommended-scss@14.1.0
+          - "@stylistic/stylelint-plugin@3.1.2"
+
+  - repo: https://github.com/shssoichiro/oxipng
+    rev: v10.1.0
+    hooks:
+      - id: oxipng
+        args: ["-o", "4", "--strip", "safe", "--alpha"]
+        files: ^(apps/web|docs|infra)/.*\.png$
 
   - repo: https://github.com/antonbabenko/pre-commit-terraform
     rev: v1.105.0
@@ -101,17 +110,17 @@ repos:
         stages: [commit-msg]
 
   - repo: https://github.com/crate-ci/typos
-    rev: v1.35.5
+    rev: v1.43.5
     hooks:
       - id: typos
         files: ^(apps|scripts|infra|docs|env|\.github|\.githooks|packages)/|^(AGENTS\.md|CLAUDE\.md|README\.md|ENVIRONMENT\.md)$
 
   - repo: https://github.com/DavidAnson/markdownlint-cli2
-    rev: v0.18.1
+    rev: v0.21.0
     hooks:
       - id: markdownlint-cli2
         args: ["--fix"]
-        additional_dependencies: ["markdownlint-cli2@0.18.1"]
+        additional_dependencies: ["markdownlint-cli2@0.21.0"]
         files: ^(docs/.*\.md|apps/.*/.*\.md|README\.md|AGENTS\.md|CLAUDE\.md|ENVIRONMENT\.md)$
 
   - repo: https://github.com/shellcheck-py/shellcheck-py
@@ -122,7 +131,7 @@ repos:
         files: ^(scripts|\.githooks|infra)/.*\.(sh|bash)$|(^|/)(entrypoint|bootstrap|setup)\.sh$
 
   - repo: https://github.com/rhysd/actionlint
-    rev: v1.7.7
+    rev: v1.7.11
     hooks:
       - id: actionlint
         args:
@@ -135,7 +144,7 @@ repos:
         files: ^\.github/workflows/.*\.(yml|yaml)$
 
   - repo: https://github.com/hadolint/hadolint
-    rev: v2.13.1-beta
+    rev: v2.14.0
     hooks:
       - id: hadolint-docker
         args: ["--ignore", "DL3008"]
@@ -202,6 +211,13 @@ repos:
         language: system
         files: ^apps/web/.*\.(ts|tsx|js|jsx)$
 
+      - id: check-design-tokens
+        name: design token guard (no hardcoded color literals)
+        entry: python3 scripts/check_design_tokens.py --staged-only
+        language: system
+        files: ^apps/web/.*\.(css|scss|tsx|jsx)$
+        pass_filenames: true
+
       - id: gemini-ui-ux-audit
         name: gemini ui/ux semantic audit (gemini-3.0-flash)
         entry: uv run python scripts/gemini_ui_ux_audit.py
@@ -210,16 +226,23 @@ repos:
         stages: [pre-push]
 
       - id: check-pre-commit-outdated
-        name: check pre-commit version floor
+        name: check pre-commit updates available
         entry: >-
           bash -c '
-          need=$(rg -o "minimum_pre_commit_version:\\s*\"?[0-9]+\\.[0-9]+\\.[0-9]+\"?" .pre-commit-config.yaml | rg -o "[0-9]+\\.[0-9]+\\.[0-9]+" | head -n1);
-          have=$(pre-commit --version | rg -o "[0-9]+\\.[0-9]+\\.[0-9]+" | head -n1);
-          if [ -z "$need" ] || [ -z "$have" ]; then echo "cannot determine pre-commit versions"; exit 1; fi;
-          if [ "$(printf "%s\n%s\n" "$need" "$have" | sort -V | head -n1)" != "$need" ]; then echo "pre-commit outdated: have $have, need >= $need"; exit 1; fi'
+          tmp=$(mktemp /tmp/pre-commit-config.XXXXXX.yaml);
+          cp .pre-commit-config.yaml "$tmp";
+          pre-commit autoupdate --config "$tmp" >/dev/null 2>&1;
+          if ! diff -q .pre-commit-config.yaml "$tmp" >/dev/null 2>&1; then
+            echo ".pre-commit-config.yaml has available updates. run: pre-commit autoupdate";
+            diff -u .pre-commit-config.yaml "$tmp" || true;
+            rm -f "$tmp";
+            exit 1;
+          fi;
+          rm -f "$tmp"'
         language: system
         pass_filenames: false
-        files: ^(\.pre-commit-config\.yaml)$
+        always_run: true
+        stages: [pre-push]
 
       - id: kube-linter
         name: kube-linter (k8s manifests)

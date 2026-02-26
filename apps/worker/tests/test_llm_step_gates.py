@@ -20,8 +20,15 @@ def _ctx(*, include_thoughts: bool = True) -> SimpleNamespace:
 def test_semantic_len_and_outline_quality_gate() -> None:
     assert gates._semantic_len(" 你好, A-1 ! ") == 4
 
-    assert gates._outline_quality_ok({"highlights": ["short"], "chapters": [{"summary": "valid summary"}]}) is False
-    assert gates._outline_quality_ok({"highlights": ["meaningful highlight"], "chapters": []}) is False
+    assert (
+        gates._outline_quality_ok(
+            {"highlights": ["short"], "chapters": [{"summary": "valid summary"}]}
+        )
+        is False
+    )
+    assert (
+        gates._outline_quality_ok({"highlights": ["meaningful highlight"], "chapters": []}) is False
+    )
     assert (
         gates._outline_quality_ok(
             {
@@ -43,8 +50,16 @@ def test_semantic_len_and_outline_quality_gate() -> None:
 
 
 def test_digest_quality_gate_requires_summary_and_highlights() -> None:
-    assert gates._digest_quality_ok({"summary": "too short", "highlights": ["long enough highlight"]}) is False
-    assert gates._digest_quality_ok({"summary": "this summary has enough semantic length", "highlights": ["short"]}) is False
+    assert (
+        gates._digest_quality_ok({"summary": "too short", "highlights": ["long enough highlight"]})
+        is False
+    )
+    assert (
+        gates._digest_quality_ok(
+            {"summary": "this summary has enough semantic length", "highlights": ["short"]}
+        )
+        is False
+    )
     assert (
         gates._digest_quality_ok(
             {
@@ -76,7 +91,9 @@ def test_media_resolution_rounds_and_computer_use_options() -> None:
     normalized = gates._media_resolution_from_policy({}, {"media_resolution": raw_resolution})
     assert normalized == raw_resolution
     assert normalized is not raw_resolution
-    assert gates._media_resolution_from_policy({"media_resolution": " HIGH "}, {}) == {"default": "high"}
+    assert gates._media_resolution_from_policy({"media_resolution": " HIGH "}, {}) == {
+        "default": "high"
+    }
     assert gates._media_resolution_from_policy({}, {}) == {}
 
     assert gates._max_function_call_rounds({"max_function_call_rounds": -2}, {}) == 0

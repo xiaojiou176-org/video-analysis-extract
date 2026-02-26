@@ -20,9 +20,7 @@ class NotificationConfig(Base):
         ),
     )
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     singleton_key: Mapped[int] = mapped_column(
         SmallInteger,
         nullable=False,

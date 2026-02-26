@@ -49,7 +49,9 @@ def retrieval_search(
 ) -> RetrievalSearchResponse | JSONResponse:
     service = RetrievalService(db)
     try:
-        result = service.search(query=payload.query, top_k=payload.top_k, mode=payload.mode, filters=payload.filters)
+        result = service.search(
+            query=payload.query, top_k=payload.top_k, mode=payload.mode, filters=payload.filters
+        )
     except ApiServiceError as exc:
         return JSONResponse(status_code=exc.status_code, content=exc.to_payload())
     return RetrievalSearchResponse(**result)

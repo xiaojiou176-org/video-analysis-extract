@@ -8,9 +8,18 @@ from pathlib import Path
 
 import pytest
 from playwright.sync_api import Browser, Page, sync_playwright
-
-from support.mock_api import MockApiServer, MockApiState, start_mock_api_server, stop_mock_api_server
-from support.runtime_utils import external_web_base_url_from_env, slugify_nodeid, wait_http_ok, with_free_port_retry
+from support.mock_api import (
+    MockApiServer,
+    MockApiState,
+    start_mock_api_server,
+    stop_mock_api_server,
+)
+from support.runtime_utils import (
+    external_web_base_url_from_env,
+    slugify_nodeid,
+    wait_http_ok,
+    with_free_port_retry,
+)
 
 PROJECT_ROOT = Path(__file__).resolve().parents[4]
 WEB_DIR = PROJECT_ROOT / "apps" / "web"

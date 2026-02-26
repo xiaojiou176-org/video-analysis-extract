@@ -26,6 +26,7 @@
 ### 0.1 项目目的
 
 本项目用于把视频内容（YouTube/Bilibili 等）转成可检索、可订阅、可分发的结构化信息流，核心目标是：
+
 - 自动拉取与分析视频内容（metadata / subtitles / comments / frames / LLM digest）。
 - 统一通过 API/MCP/Web 暴露处理结果与操作入口。
 - 保持本地优先可运行，并具备可验证质量门禁（env/test/lint/smoke）。
@@ -105,6 +106,7 @@
 - 进入标准环境后再执行模式 A/B 的命令，避免“宿主机漂移”导致门禁结果不一致。
 
 补充命令：
+
 - 查看状态：`./scripts/full_stack.sh status`
 - 查看日志：`./scripts/full_stack.sh logs`
 - 停止栈：`./scripts/full_stack.sh down`
@@ -207,6 +209,8 @@ curl -sS -X POST http://127.0.0.1:8000/api/v1/ingest/poll \
 - 变更 `infra/migrations/*.sql`：同步 `README.md` 与 `docs/runbook-local.md`。
 - 变更 `apps/worker/worker/pipeline/types.py` 的 `PIPELINE_STEPS`：同步 `docs/state-machine.md`。
 - 新增/修改环境变量：同步 `.env.example`、`ENVIRONMENT.md`、`infra/config/env.contract.json`。
+- 变更 `apps/api/app/routers/*.py`：同步 `docs/reference/mcp-tool-routing.md` 与 `README.md`（若接口/路由行为变化）。
+- 变更 `apps/api/app/schemas/*.py`：同步 `docs/state-machine.md` 与 `README.md`（若输入输出契约变化）。
 - 调整本地启动脚本参数/默认值：同步 `docs/start-here.md`、`docs/runbook-local.md`、`README.md`。
 - 调整 `infra/compose/*.compose.yml` 或 `.devcontainer/**`：同步 `README.md`、`docs/start-here.md`、`docs/runbook-local.md`。
 - 调整日志策略：同步 `docs/reference/logging.md`。
@@ -217,12 +221,12 @@ curl -sS -X POST http://127.0.0.1:8000/api/v1/ingest/poll \
 
 - `.githooks/commit-msg` → `npx --yes --package @commitlint/cli commitlint --config <tmp-config> --edit <commit-msg-file>`
   - Conventional Commits 强制门禁（无根级 `package.json` 依赖时，使用 `npx --yes` + hook 内置最小规则配置）
-- `.githooks/pre-commit` → `./scripts/quality_gate.sh --mode pre-commit`
+- `.githooks/pre-commit` → `./scripts/quality_gate.sh --mode pre-commit --profile local`
   - 包含：`scripts/ci_or_local_gate_doc_drift.sh --scope staged`
-  - 包含：`check_test_assertions`、`web lint`、`ruff critical`
-- `.githooks/pre-push` → `./scripts/quality_gate.sh --mode pre-push --heartbeat-seconds 20 --mutation-min-score 0.60`
+  - 包含：`check_test_assertions`、`web lint`、`ruff critical`、`secrets scan`、`gitleaks fast scan`、`structured log guard`、`env budget guard`、`IaC entrypoint guard`
+- `.githooks/pre-push` → `./scripts/quality_gate.sh --mode pre-push --heartbeat-seconds 20 --mutation-min-score 0.60 --profile ci --profile live-smoke`
   - 包含：`scripts/ci_or_local_gate_doc_drift.sh --scope push`
-  - 包含：`mutmut` 变异测试门禁（工具不可用或无有效突变体一律阻断）
+  - 包含：`mutmut` 变异测试门禁（工具不可用或无有效突变体一律阻断）、`coverage>=80`、`core coverage>=95`、`web unit tests`、`python tests`
   - 门禁解释：AI 与自动化提交默认基于标准环境（DevContainer 或等价隔离环境）执行上述检查。
 
 ## 6. 最小 DoD（Definition of Done）

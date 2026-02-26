@@ -87,7 +87,7 @@ def _extract_video_uid(*, platform: str, url: str) -> str:
     query = parse_qs(parsed.query)
 
     if platform == "youtube" and host in YOUTUBE_HOSTS:
-        if "v" in query and query["v"]:
+        if query.get("v"):
             return str(query["v"][0]).strip()
         if host == "youtu.be":
             candidate = str(path.strip("/").split("/")[0]).strip()
@@ -139,7 +139,9 @@ class VideosService:
         self.video_repo = VideosRepository(db)
         self.jobs_repo = JobsRepository(db)
 
-    def list_videos(self, *, platform: str | None = None, status: str | None = None, limit: int = 50):
+    def list_videos(
+        self, *, platform: str | None = None, status: str | None = None, limit: int = 50
+    ):
         return self.video_repo.list(platform=platform, status=status, limit=limit)
 
     async def process_video(

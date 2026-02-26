@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
 from datetime import datetime
-import os
 from pathlib import Path
 
 
@@ -143,7 +143,7 @@ class Settings:
     def feed_urls(self) -> list[str]:
         urls: list[str] = []
         for path in self.feed_paths:
-            if path.startswith("http://") or path.startswith("https://"):
+            if path.startswith(("http://", "https://")):
                 urls.append(path)
                 continue
 
@@ -153,21 +153,18 @@ class Settings:
         return urls
 
     @classmethod
-    def from_env(cls) -> "Settings":
+    def from_env(cls) -> Settings:
         feed_paths = _split_csv(os.getenv("FEED_URLS"))
         settings = cls(
             rsshub_base_url=os.getenv("RSSHUB_BASE_URL", "https://rsshub.app"),
             rsshub_public_fallback_base_url=(
-                os.getenv("RSSHUB_PUBLIC_FALLBACK_BASE_URL", "https://rsshub.app").strip()
-                or None
+                os.getenv("RSSHUB_PUBLIC_FALLBACK_BASE_URL", "https://rsshub.app").strip() or None
             ),
             rsshub_fallback_base_urls=_split_csv(os.getenv("RSSHUB_FALLBACK_BASE_URLS")),
             feed_paths=feed_paths,
             request_timeout_seconds=float(os.getenv("REQUEST_TIMEOUT_SECONDS", "15")),
             request_retry_attempts=int(os.getenv("REQUEST_RETRY_ATTEMPTS", "3")),
-            request_retry_backoff_seconds=float(
-                os.getenv("REQUEST_RETRY_BACKOFF_SECONDS", "0.5")
-            ),
+            request_retry_backoff_seconds=float(os.getenv("REQUEST_RETRY_BACKOFF_SECONDS", "0.5")),
             comments_top_n=int(os.getenv("COMMENTS_TOP_N", "10")),
             comments_replies_per_comment=int(os.getenv("COMMENTS_REPLIES_PER_COMMENT", "10")),
             comments_request_timeout_seconds=float(
@@ -200,9 +197,7 @@ class Settings:
             ),
             asr_model_size=os.getenv("ASR_MODEL_SIZE", "small"),
             pipeline_max_frames=int(os.getenv("PIPELINE_MAX_FRAMES", "6")),
-            pipeline_frame_interval_seconds=int(
-                os.getenv("PIPELINE_FRAME_INTERVAL_SECONDS", "30")
-            ),
+            pipeline_frame_interval_seconds=int(os.getenv("PIPELINE_FRAME_INTERVAL_SECONDS", "30")),
             pipeline_llm_input_mode=os.getenv("PIPELINE_LLM_INPUT_MODE", "auto"),
             pipeline_llm_include_frames=_parse_bool(
                 os.getenv("PIPELINE_LLM_INCLUDE_FRAMES"),
@@ -284,12 +279,8 @@ class Settings:
             gemini_context_cache_ttl_seconds=int(
                 os.getenv("GEMINI_CONTEXT_CACHE_TTL_SECONDS", "21600")
             ),
-            gemini_context_cache_min_chars=int(
-                os.getenv("GEMINI_CONTEXT_CACHE_MIN_CHARS", "4096")
-            ),
-            gemini_context_cache_max_keys=int(
-                os.getenv("GEMINI_CONTEXT_CACHE_MAX_KEYS", "1000")
-            ),
+            gemini_context_cache_min_chars=int(os.getenv("GEMINI_CONTEXT_CACHE_MIN_CHARS", "4096")),
+            gemini_context_cache_max_keys=int(os.getenv("GEMINI_CONTEXT_CACHE_MAX_KEYS", "1000")),
             gemini_context_cache_local_ttl_seconds=int(
                 os.getenv("GEMINI_CONTEXT_CACHE_LOCAL_TTL_SECONDS", "21600")
             ),
@@ -308,9 +299,7 @@ class Settings:
                 os.getenv("GEMINI_COMPUTER_USE_REQUIRE_CONFIRMATION"),
                 default=True,
             ),
-            gemini_computer_use_max_steps=int(
-                os.getenv("GEMINI_COMPUTER_USE_MAX_STEPS", "3")
-            ),
+            gemini_computer_use_max_steps=int(os.getenv("GEMINI_COMPUTER_USE_MAX_STEPS", "3")),
             gemini_computer_use_timeout_seconds=float(
                 os.getenv("GEMINI_COMPUTER_USE_TIMEOUT_SECONDS", "30")
             ),
@@ -330,7 +319,7 @@ class Settings:
         )
         return settings.validate()
 
-    def validate(self) -> "Settings":
+    def validate(self) -> Settings:
         required_fields = {
             "DATABASE_URL": self.database_url,
             "TEMPORAL_TARGET_HOST": self.temporal_target_host,

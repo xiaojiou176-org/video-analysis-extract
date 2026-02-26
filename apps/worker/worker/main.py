@@ -141,7 +141,9 @@ async def start_daily_workflow(
         else _local_utc_offset_minutes()
     )
     client = await _connect_temporal(settings)
-    effective_local_hour = int(local_hour if local_hour is not None else settings.digest_daily_local_hour)
+    effective_local_hour = int(
+        local_hour if local_hour is not None else settings.digest_daily_local_hour
+    )
     effective_timezone_name = timezone_name or settings.digest_local_timezone
     payload = {
         "run_once": run_once,

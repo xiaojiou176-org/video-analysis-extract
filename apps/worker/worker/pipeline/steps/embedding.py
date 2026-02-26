@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from worker.config import Settings
 from worker.pipeline.types import PipelineContext, StepExecution
-
 
 EMBEDDING_DIMENSION = 768
 DEFAULT_CHUNK_CHARS = 1200
@@ -37,7 +37,9 @@ def _split_long_text(text: str, *, chunk_chars: int, overlap_chars: int) -> list
 
 def _normalize_outline_text(outline: dict[str, Any]) -> str:
     title = str(outline.get("title") or "").strip()
-    highlights = [str(item).strip() for item in outline.get("highlights") or [] if str(item).strip()]
+    highlights = [
+        str(item).strip() for item in outline.get("highlights") or [] if str(item).strip()
+    ]
     chapters = outline.get("chapters")
 
     lines: list[str] = []
@@ -56,7 +58,9 @@ def _normalize_outline_text(outline: dict[str, Any]) -> str:
                 continue
             chapter_title = str(chapter.get("title") or "").strip()
             chapter_summary = str(chapter.get("summary") or "").strip()
-            bullets = [str(item).strip() for item in chapter.get("bullets") or [] if str(item).strip()]
+            bullets = [
+                str(item).strip() for item in chapter.get("bullets") or [] if str(item).strip()
+            ]
             if chapter_title:
                 lines.append(f"## {chapter_title}")
             if chapter_summary:
@@ -194,7 +198,10 @@ async def step_build_embeddings(
     gemini_embed_texts_fn: Callable[..., list[list[float]]] = gemini_embed_texts,
 ) -> StepExecution:
     chunks = _build_embedding_chunks(state)
-    model = str(ctx.settings.gemini_embedding_model or "gemini-embedding-001").strip() or "gemini-embedding-001"
+    model = (
+        str(ctx.settings.gemini_embedding_model or "gemini-embedding-001").strip()
+        or "gemini-embedding-001"
+    )
     video_id = str(ctx.job_record.get("video_id") or "").strip()
 
     if not chunks:
@@ -277,7 +284,7 @@ async def step_build_embeddings(
         )
 
     items: list[dict[str, Any]] = []
-    for chunk, vector in zip(chunks, vectors):
+    for chunk, vector in zip(chunks, vectors, strict=False):
         items.append(
             {
                 "content_type": str(chunk["content_type"]),

@@ -83,7 +83,9 @@ class ComputerUseService:
             raise ValueError(f"computer_use_provider_error:{exc}") from exc
 
         actions = self._extract_actions(response, max_actions=safety.max_actions)
-        blocked_actions = self._detect_blocked_actions(actions=actions, blocked_keywords=safety.blocked_actions)
+        blocked_actions = self._detect_blocked_actions(
+            actions=actions, blocked_keywords=safety.blocked_actions
+        )
         require_confirmation = bool(blocked_actions) or safety.confirm_before_execute
 
         final_text = str(getattr(response, "text", "") or "").strip()
@@ -108,7 +110,9 @@ class ComputerUseService:
                 "max_actions": safety.max_actions,
                 "confirm_before_execute": safety.confirm_before_execute,
                 "blocked_keyword_count": len(safety.blocked_actions),
-                "request_id": str(getattr(response, "response_id", None) or getattr(response, "id", "") or ""),
+                "request_id": str(
+                    getattr(response, "response_id", None) or getattr(response, "id", "") or ""
+                ),
                 "finish_reason": self._extract_finish_reason(response),
                 "action_count": len(actions),
             },
@@ -144,9 +148,13 @@ class ComputerUseService:
                 last_error = exc
             if attempt >= attempts:
                 break
-        raise RuntimeError(str(last_error) if last_error is not None else "computer_use model call failed")
+        raise RuntimeError(
+            str(last_error) if last_error is not None else "computer_use model call failed"
+        )
 
-    def _read_float_env(self, name: str, *, default: float, min_value: float, max_value: float) -> float:
+    def _read_float_env(
+        self, name: str, *, default: float, min_value: float, max_value: float
+    ) -> float:
         raw = os.getenv(name)
         if raw is None:
             return default
@@ -217,8 +225,12 @@ class ComputerUseService:
                     if not name:
                         continue
 
-                    action = str(args.get("action") or args.get("operation") or name).strip() or name
-                    target = self._to_str_or_none(args.get("target") or args.get("selector") or args.get("url"))
+                    action = (
+                        str(args.get("action") or args.get("operation") or name).strip() or name
+                    )
+                    target = self._to_str_or_none(
+                        args.get("target") or args.get("selector") or args.get("url")
+                    )
                     input_text = self._to_str_or_none(args.get("text") or args.get("input_text"))
                     reasoning = self._to_str_or_none(args.get("reason") or args.get("reasoning"))
                     actions.append(
@@ -251,7 +263,11 @@ class ComputerUseService:
         actions: list[dict[str, Any]],
         blocked_keywords: list[str],
     ) -> list[str]:
-        normalized_keywords = [item.strip().lower() for item in blocked_keywords if isinstance(item, str) and item.strip()]
+        normalized_keywords = [
+            item.strip().lower()
+            for item in blocked_keywords
+            if isinstance(item, str) and item.strip()
+        ]
         if not normalized_keywords:
             return []
 
@@ -266,7 +282,9 @@ class ComputerUseService:
                     blocked_hits.append(keyword)
         return blocked_hits
 
-    def _build_final_text(self, *, total_actions: int, require_confirmation: bool, blocked_actions: list[str]) -> str:
+    def _build_final_text(
+        self, *, total_actions: int, require_confirmation: bool, blocked_actions: list[str]
+    ) -> str:
         if blocked_actions:
             return (
                 f"Planned {total_actions} action(s). "

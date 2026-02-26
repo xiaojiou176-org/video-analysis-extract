@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import datetime
-from typing import Any, Callable
+from typing import Any
 
 
 async def retry_failed_deliveries_activity_impl(
@@ -46,7 +47,9 @@ async def retry_failed_deliveries_activity_impl(
         kind = str(item.get("kind") or "")
         recipient_email = normalize_email(item.get("recipient_email"))
         subject = str(item.get("subject") or "")
-        payload_json = item.get("payload_json") if isinstance(item.get("payload_json"), dict) else {}
+        payload_json = (
+            item.get("payload_json") if isinstance(item.get("payload_json"), dict) else {}
+        )
         base_attempt_count = int(item.get("attempt_count") or 0)
         next_attempt = base_attempt_count + 1
         result["retried"] += 1

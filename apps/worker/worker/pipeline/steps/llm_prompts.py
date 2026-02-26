@@ -3,7 +3,10 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from worker.pipeline.runner_rendering import build_comments_prompt_context, build_frames_prompt_context
+from worker.pipeline.runner_rendering import (
+    build_comments_prompt_context,
+    build_frames_prompt_context,
+)
 from worker.pipeline.step_executor import jsonable
 
 

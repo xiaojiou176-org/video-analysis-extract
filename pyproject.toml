@@ -22,6 +22,7 @@ dependencies = [
 dev = [
   "pytest>=8.4.1,<9",
   "pytest-cov>=6.0.0,<7",
+  "pytest-rerunfailures>=15.1,<16",
   "pytest-xdist>=3.8.0,<4",
   "mutmut>=3.3.1,<4",
 ]
@@ -34,6 +35,61 @@ pythonpath = [
   ".",
   "apps/worker",
 ]
+reruns = 2
+reruns_delay = 1
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+fix = true
+
+[tool.ruff.lint]
+select = ["ALL"]
+ignore = [
+  "ANN",
+  "D",
+  "COM812",
+  "ISC001",
+  "EM",
+  "TRY",
+  "TC",
+  "TID",
+  "PLR",
+  "S",
+  "FAST",
+  "B008",
+  "T20",
+  "ASYNC",
+  "FBT",
+  "BLE",
+  "FURB",
+  "E501",
+  "A",
+  "C901",
+  "DTZ",
+  "PGH",
+  "RUF",
+  "PERF",
+  "INP",
+  "PTH",
+  "N",
+  "PT",
+  "ARG",
+  "UP038",
+  "PLC0415",
+  "EXE001",
+  "PLW2901",
+  "RET504",
+  "SLF001",
+]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+[tool.ruff.lint.per-file-ignores]
+"**/tests/**/*.py" = ["S101", "S105"]
+"**/test_*.py" = ["S101", "S105"]
 
 [tool.mutmut]
 debug = false

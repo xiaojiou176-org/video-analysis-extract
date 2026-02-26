@@ -1,0 +1,19 @@
+title = "video-analysis-repo-gitleaks-baseline"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Known placeholder secrets used in docs/tests"
+regexes = [
+  '''ghp_12345678901234567890''',
+  '''AKIAIOSFODNN7EXAMPLE''',
+  '''sk-(test|dummy|placeholder)[A-Za-z0-9_-]*''',
+]
+paths = [
+  '''^\.runtime-cache/''',
+  '''^logs/''',
+  '''^apps/web/\.next/''',
+  '''^apps/web/node_modules/''',
+  '''^\.venv/''',
+]

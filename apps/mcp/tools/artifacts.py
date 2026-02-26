@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from urllib.parse import urlencode
 from typing import Any
+from urllib.parse import urlencode
 
 from mcp.server.fastmcp import FastMCP
 
@@ -121,7 +121,8 @@ def register_artifact_tools(mcp: FastMCP, api_call: ApiCall) -> None:
             return {
                 "exists": True,
                 "asset_url": f"/api/v1/artifacts/assets?{query}",
-                "mime_type": to_optional_str(response.get("mime_type")) or "application/octet-stream",
+                "mime_type": to_optional_str(response.get("mime_type"))
+                or "application/octet-stream",
                 "base64": to_optional_str(response.get("base64")) if include_base64 else None,
                 "size_bytes": response.get("size_bytes") if include_base64 else None,
             }

@@ -11,11 +11,13 @@ import pytest
 from fastapi.testclient import TestClient
 
 from apps.api.app.errors import ApiTimeoutError
-from apps.api.app.services.videos import VideosService
-from apps.api.app.services.videos import _build_process_idempotency_key
-from apps.api.app.services.videos import _extract_video_uid
-from apps.api.app.services.videos import _normalize_mode
-from apps.api.app.services.videos import _url_hash
+from apps.api.app.services.videos import (
+    VideosService,
+    _build_process_idempotency_key,
+    _extract_video_uid,
+    _normalize_mode,
+    _url_hash,
+)
 
 
 @dataclass
@@ -47,7 +49,9 @@ class _RepoStub:
         self.created_calls.append(dict(kwargs))
         return self.job, self.should_dispatch
 
-    def mark_dispatch_failed(self, *, job_id: uuid.UUID, error_message: str, reason: str = "dispatch_failed") -> _JobRow:
+    def mark_dispatch_failed(
+        self, *, job_id: uuid.UUID, error_message: str, reason: str = "dispatch_failed"
+    ) -> _JobRow:
         self.mark_failed_calls.append(
             {
                 "job_id": job_id,
@@ -112,11 +116,15 @@ async def _run_process(service: VideosService) -> dict[str, Any]:
 def test_videos_helpers_cover_hash_uid_mode_and_serialization_guards() -> None:
     assert len(_url_hash(" https://youtu.be/abc123 ")) == 64
 
-    assert _extract_video_uid(platform="youtube", url="https://youtu.be/") == _url_hash("https://youtu.be/")
-    assert _extract_video_uid(platform="bilibili", url="https://www.bilibili.com/video/not-bv") == _url_hash(
-        "https://www.bilibili.com/video/not-bv"
+    assert _extract_video_uid(platform="youtube", url="https://youtu.be/") == _url_hash(
+        "https://youtu.be/"
     )
-    assert _extract_video_uid(platform="other", url="https://example.com/v") == _url_hash("https://example.com/v")
+    assert _extract_video_uid(
+        platform="bilibili", url="https://www.bilibili.com/video/not-bv"
+    ) == _url_hash("https://www.bilibili.com/video/not-bv")
+    assert _extract_video_uid(platform="other", url="https://example.com/v") == _url_hash(
+        "https://example.com/v"
+    )
 
     assert _normalize_mode(" refresh-comments ") == "refresh_comments"
     with pytest.raises(ValueError, match="unsupported mode"):
@@ -153,7 +161,9 @@ def test_process_video_maps_temporal_connect_timeout(monkeypatch: pytest.MonkeyP
     assert exc_info.value.error_code == "TEMPORAL_CONNECT_TIMEOUT"
 
 
-def test_process_video_maps_temporal_start_timeout_and_marks_dispatch_failed(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_process_video_maps_temporal_start_timeout_and_marks_dispatch_failed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     repo = _RepoStub(should_dispatch=True)
     service = VideosService(db=object())
     service.video_repo = _VideoRepoStub()  # type: ignore[assignment]
@@ -182,7 +192,9 @@ def test_process_video_maps_temporal_start_timeout_and_marks_dispatch_failed(mon
     assert repo.mark_failed_calls[0]["reason"] == "dispatch_timeout"
 
 
-def test_subscriptions_router_maps_service_value_errors_to_400(api_client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_subscriptions_router_maps_service_value_errors_to_400(
+    api_client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setattr(
         "apps.api.app.services.subscriptions.SubscriptionsService.upsert_subscription",
         lambda self, **kwargs: (_ for _ in ()).throw(ValueError("invalid source")),
@@ -218,7 +230,9 @@ def test_subscriptions_router_maps_service_value_errors_to_400(api_client: TestC
     assert response2.json()["detail"] == "bad category"
 
 
-def test_subscriptions_router_delete_returns_404_when_missing(api_client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_subscriptions_router_delete_returns_404_when_missing(
+    api_client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setattr(
         "apps.api.app.services.subscriptions.SubscriptionsService.delete_subscription",
         lambda self, _id: False,

@@ -29,6 +29,7 @@
 ## Manage Tool Quick Reference
 
 ### `vd.subscriptions.manage`
+
 - `action=list`: 可选 `platform`, `category`, `enabled_only`
 - `action=upsert`: 必填 `platform`, `source_type`, `source_value`
   - 可选 `adapter_type`（`rsshub_route|rss_generic`）
@@ -40,6 +41,7 @@
   - `remove` 目标不存在 -> 幂等删除（建议上层按成功处理）
 
 ### `vd.notifications.manage`
+
 - `action=get_config`
 - `action=set_config`: 推荐传 `enabled`, `to_email`
 - `action=send_test`: 可传 `to_email`, `subject`, `body`
@@ -49,6 +51,7 @@
   - 目标邮箱缺失或配置无效 -> 不可重试错误（先修配置）
 
 ### `vd.artifacts.get`
+
 - `kind=markdown`: 需要 `job_id` 或 `video_url`
 - `kind=asset`: 必须 `job_id` + `path`，可选 `include_base64=true`
 - 常见失败:
@@ -56,6 +59,7 @@
   - `kind=asset` 丢 `path` -> 参数错误（4xx）
 
 ### `vd.ui_audit.read`
+
 - `action=get`: 读取 run 摘要
 - `action=list_findings`: 可带 `severity`
 - `action=get_artifact`: 必填 `key`，可带 `include_base64`
@@ -67,11 +71,15 @@
 ## I/O Example Snippets
 
 ### `vd.jobs.get`
+
 - 输入:
+
 ```json
 {"job_id":"00000000-0000-4000-8000-000000000001"}
 ```
+
 - 关键输出字段:
+
 ```json
 {
   "status": "succeeded",
@@ -83,11 +91,15 @@
 ```
 
 ### `vd.retrieval.search`
+
 - 输入:
+
 ```json
 {"query":"provider timeout","mode":"hybrid","top_k":5}
 ```
+
 - 关键输出字段:
+
 ```json
 {
   "items": [
@@ -97,7 +109,9 @@
 ```
 
 ### `vd.notifications.manage(action=set_config)`
+
 - 输入:
+
 ```json
 {
   "action":"set_config",
@@ -107,7 +121,9 @@
   "daily_digest_hour_utc":8
 }
 ```
+
 - 关键输出字段:
+
 ```json
 {"ok":true,"enabled":true,"to_email":"you@example.com"}
 ```
@@ -115,16 +131,19 @@
 ## Workflow Examples
 
 ### 1) 检索 -> 取工件 -> 触发重跑 -> 查状态
+
 1. `vd.retrieval.search(query=\"字幕缺失\", mode=\"hybrid\")`
 2. `vd.jobs.get(job_id=<hit.job_id>)`
 3. `vd.videos.process(video={...}, mode=\"refresh_llm\", force=true)`
 4. `vd.jobs.get(job_id=<new_job_id>)`
 
 ### 2) UI 审计闭环
+
 1. `vd.ui_audit.run(job_id=<job_id>)`
 2. `vd.ui_audit.read(action=\"list_findings\", run_id=<run_id>, severity=\"high\")`
 3. `vd.ui_audit.read(action=\"autofix\", run_id=<run_id>, mode=\"dry-run\")`
 
 ### 3) Computer Use
+
 1. `vd.computer_use.run(instruction=..., screenshot_base64=...)`
 2. 若返回 `require_confirmation=true`，由上层审批后再执行动作链。

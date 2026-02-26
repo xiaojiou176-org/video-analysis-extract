@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from html import escape
 
 import httpx
@@ -16,7 +16,7 @@ RESEND_API_URL = "https://api.resend.com/emails"
 
 
 def _utc_now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def get_notification_config(db: Session) -> NotificationConfig:
@@ -139,7 +139,7 @@ def send_daily_digest(
     elif not config.daily_digest_enabled:
         skip_reason = "daily digest is disabled"
 
-    effective_date = digest_date or datetime.now(timezone.utc).date()
+    effective_date = digest_date or datetime.now(UTC).date()
 
     return _dispatch_email(
         db,
@@ -225,7 +225,7 @@ def send_daily_report_notification(
     subject: str | None = None,
     body: str | None = None,
 ) -> NotificationDelivery:
-    effective_date = report_date or datetime.now(timezone.utc).date()
+    effective_date = report_date or datetime.now(UTC).date()
     return send_daily_digest(
         db,
         digest_markdown=body or f"Video Digestor daily report for {effective_date.isoformat()}",
@@ -308,7 +308,7 @@ def _dispatch_email(
         )
         delivery.status = "sent"
         delivery.provider_message_id = provider_message_id
-        delivery.sent_at = datetime.now(timezone.utc)
+        delivery.sent_at = datetime.now(UTC)
         delivery.error_message = None
     except RuntimeError as exc:
         delivery.status = "failed"
@@ -502,7 +502,7 @@ def _render_markdown_html(text: str) -> str:
 def _to_html(text: str) -> str:
     body = _render_markdown_html(text)
     return (
-        "<!doctype html><html><head><meta charset=\"utf-8\">"
+        '<!doctype html><html><head><meta charset="utf-8">'
         "<style>"
         "body{margin:0;padding:0;background:#f5f7fb;color:#0f172a;"
         "font-family:'PingFang SC','Microsoft YaHei',-apple-system,BlinkMacSystemFont,sans-serif;}"
@@ -520,7 +520,7 @@ def _to_html(text: str) -> str:
         "th,td{border:1px solid #dbe3ee;padding:6px 8px;text-align:left;vertical-align:top;}"
         "img{max-width:100%;height:auto;border-radius:8px;border:1px solid #e2e8f0;}"
         "hr{border:none;border-top:1px solid #e2e8f0;margin:20px 0;}"
-        "</style></head><body><div class=\"container\"><article class=\"card\">"
+        '</style></head><body><div class="container"><article class="card">'
         f"{body}</article></div></body></html>"
     )
 

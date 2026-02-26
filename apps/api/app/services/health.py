@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import text
@@ -13,7 +13,7 @@ class HealthService:
         self.db = db
 
     def get_provider_health(self, *, window_hours: int = 24) -> dict[str, Any]:
-        since = datetime.now(timezone.utc) - timedelta(hours=max(1, window_hours))
+        since = datetime.now(UTC) - timedelta(hours=max(1, window_hours))
         providers = ["rsshub", "youtube_data_api", "gemini", "resend"]
         stats: dict[str, dict[str, Any]] = {
             kind: {
@@ -30,9 +30,10 @@ class HealthService:
         }
 
         try:
-            rows = self.db.execute(
-                text(
-                    """
+            rows = (
+                self.db.execute(
+                    text(
+                        """
                     SELECT
                         check_kind,
                         status,
@@ -41,9 +42,12 @@ class HealthService:
                     WHERE checked_at >= :since
                     GROUP BY check_kind, status
                     """
-                ),
-                {"since": since},
-            ).mappings().all()
+                    ),
+                    {"since": since},
+                )
+                .mappings()
+                .all()
+            )
         except DBAPIError:
             self.db.rollback()
             return {
@@ -59,9 +63,10 @@ class HealthService:
                 stats[check_kind][status] = int(row.get("count") or 0)
 
         try:
-            latest_rows = self.db.execute(
-                text(
-                    """
+            latest_rows = (
+                self.db.execute(
+                    text(
+                        """
                     SELECT DISTINCT ON (check_kind)
                         check_kind,
                         status,
@@ -71,8 +76,11 @@ class HealthService:
                     FROM provider_health_checks
                     ORDER BY check_kind, checked_at DESC
                     """
+                    )
                 )
-            ).mappings().all()
+                .mappings()
+                .all()
+            )
         except DBAPIError:
             self.db.rollback()
             latest_rows = []

@@ -43,7 +43,9 @@ class _ExecuteDBStub(_DBStub):
 
 
 def _dbapi_error(message: str) -> DBAPIError:
-    return DBAPIError.instance(statement="SELECT 1", params={}, orig=Exception(message), dbapi_base_err=Exception)
+    return DBAPIError.instance(
+        statement="SELECT 1", params={}, orig=Exception(message), dbapi_base_err=Exception
+    )
 
 
 class _CreateOrReuseRepo(JobsRepository):
@@ -152,6 +154,8 @@ def test_get_artifact_digest_md_by_video_url_returns_string_value() -> None:
     db = _ExecuteDBStub(row=("# digest",))
     repo = JobsRepository(db)  # type: ignore[arg-type]
 
-    result = repo.get_artifact_digest_md_by_video_url(video_url="https://www.youtube.com/watch?v=abc")
+    result = repo.get_artifact_digest_md_by_video_url(
+        video_url="https://www.youtube.com/watch?v=abc"
+    )
 
     assert result == "# digest"

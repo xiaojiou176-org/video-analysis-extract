@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Type
+from typing import Any
 
 from worker.comments import (
     BilibiliCommentCollector,
@@ -19,8 +19,8 @@ async def step_collect_comments(
     ctx: PipelineContext,
     state: dict[str, Any],
     *,
-    bilibili_collector_cls: Type[BilibiliCommentCollector] = BilibiliCommentCollector,
-    youtube_collector_cls: Type[YouTubeCommentCollector] = YouTubeCommentCollector,
+    bilibili_collector_cls: type[BilibiliCommentCollector] = BilibiliCommentCollector,
+    youtube_collector_cls: type[YouTubeCommentCollector] = YouTubeCommentCollector,
 ) -> StepExecution:
     platform = str(state.get("platform") or "").lower()
     source_url = str(state.get("source_url") or "")

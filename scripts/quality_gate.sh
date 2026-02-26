@@ -207,6 +207,60 @@ run_secrets_scan() {
   echo "[quality-gate] secrets leak scan passed"
 }
 
+run_tracked_real_env_guard() {
+  local tracked blocked path
+  tracked="$(git ls-files | rg '(^|/)\.env($|\.)|(^|/)env/.*\.env$' || true)"
+
+  if [[ -z "$tracked" ]]; then
+    echo "[quality-gate] real .env tracking guard passed"
+    return 0
+  fi
+
+  blocked=""
+  while IFS= read -r path; do
+    [[ -z "$path" ]] && continue
+    case "$path" in
+      env/profiles/*.env|*.env.example|*.env.sample|*.env.template)
+        continue
+        ;;
+      *)
+        blocked+="${path}"$'\n'
+        ;;
+    esac
+  done <<< "$tracked"
+
+  if [[ -n "$blocked" ]]; then
+    printf '%s' "$blocked" >&2
+    echo "[quality-gate] real .env tracking guard failed" >&2
+    return 1
+  fi
+
+  echo "[quality-gate] real .env tracking guard passed"
+}
+
+run_gitleaks_fast_scan() {
+  local config_args=()
+
+  if ! command -v gitleaks >/dev/null 2>&1; then
+    echo "[quality-gate] gitleaks not found; install gitleaks to proceed" >&2
+    return 1
+  fi
+
+  if [[ -f "$ROOT_DIR/.gitleaks.toml" ]]; then
+    config_args=(--config "$ROOT_DIR/.gitleaks.toml")
+  fi
+
+  if gitleaks protect --help >/dev/null 2>&1; then
+    gitleaks protect --staged --redact "${config_args[@]}"
+  elif gitleaks git --help >/dev/null 2>&1; then
+    gitleaks git --staged --redact "${config_args[@]}"
+  else
+    gitleaks detect --source "$ROOT_DIR" --no-git --redact "${config_args[@]}"
+  fi
+
+  echo "[quality-gate] gitleaks lightweight scan passed"
+}
+
 run_hollow_log_guard() {
   local matches
   matches="$(
@@ -540,6 +594,10 @@ run_pre_commit_mode() {
     "python3 scripts/check_test_assertions.py --path ."
   run_async_gate "secrets_scan" "secrets leak scan" \
     "run_secrets_scan"
+  run_async_gate "tracked_real_env_guard" "real .env tracking guard" \
+    "run_tracked_real_env_guard"
+  run_async_gate "gitleaks_fast_scan" "gitleaks lightweight scan (if installed)" \
+    "run_gitleaks_fast_scan"
   run_async_gate "hollow_log_guard" "hollow log message guard" \
     "run_hollow_log_guard"
   run_async_gate "structured_log_guard" "structured log critical-path guard" \

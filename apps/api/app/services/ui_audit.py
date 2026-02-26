@@ -8,7 +8,7 @@ import os
 import tempfile
 import threading
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -98,7 +98,7 @@ class UiAuditService:
     ) -> dict[str, Any]:
         resolved_root = self._resolve_artifact_root(job_id=job_id, artifact_root=artifact_root)
         run_id = str(uuid.uuid4())
-        created_at = datetime.now(timezone.utc).isoformat()
+        created_at = datetime.now(UTC).isoformat()
 
         if resolved_root is None:
             payload = {
@@ -168,14 +168,17 @@ class UiAuditService:
             "artifact_root": payload.get("artifact_root"),
             "status": payload.get("status"),
             "created_at": payload.get("created_at"),
-            "summary": payload.get("summary") or {
+            "summary": payload.get("summary")
+            or {
                 "artifact_count": 0,
                 "finding_count": 0,
                 "severity_counts": {},
             },
         }
 
-    def list_findings(self, *, run_id: str, severity: str | None = None) -> list[dict[str, Any]] | None:
+    def list_findings(
+        self, *, run_id: str, severity: str | None = None
+    ) -> list[dict[str, Any]] | None:
         with self._store_lock:
             payload = self._run_store.get(run_id)
         if payload is None:
@@ -200,7 +203,11 @@ class UiAuditService:
             return None
 
         artifacts = payload.get("artifacts") if isinstance(payload, dict) else None
-        return [item for item in artifacts if isinstance(item, dict)] if isinstance(artifacts, list) else []
+        return (
+            [item for item in artifacts if isinstance(item, dict)]
+            if isinstance(artifacts, list)
+            else []
+        )
 
     def get_artifact(
         self,
@@ -261,11 +268,15 @@ class UiAuditService:
         suggested_actions: list[str] = []
         gemini_suggestions = payload.get("gemini_suggested_actions")
         if isinstance(gemini_suggestions, list):
-            suggested_actions.extend(str(item).strip() for item in gemini_suggestions if str(item).strip())
+            suggested_actions.extend(
+                str(item).strip() for item in gemini_suggestions if str(item).strip()
+            )
         if high_or_worse > 0:
             suggested_actions.append("Fix high-severity UI issues first and rerun focused E2E.")
         if finding_items:
-            suggested_actions.append("Apply minimal patches and rerun failed tests before full suite.")
+            suggested_actions.append(
+                "Apply minimal patches and rerun failed tests before full suite."
+            )
         if not finding_items:
             suggested_actions.append("No findings detected; no code changes recommended.")
 
@@ -306,7 +317,9 @@ class UiAuditService:
 
         model = (settings.gemini_model or "gemini-3.1-pro-preview").strip()
         thinking_level = (settings.gemini_thinking_level or "high").strip().upper()
-        prompt = self._build_gemini_ui_prompt(text_snippets=text_snippets, image_artifacts=image_artifacts)
+        prompt = self._build_gemini_ui_prompt(
+            text_snippets=text_snippets, image_artifacts=image_artifacts
+        )
         contents: list[Any] = [prompt]
         for item in image_artifacts:
             path = Path(str(item.get("path") or ""))
@@ -314,7 +327,9 @@ class UiAuditService:
                 continue
             mime_type = str(item.get("mime_type") or "image/png")
             try:
-                contents.append(genai_types.Part.from_bytes(data=path.read_bytes(), mime_type=mime_type))
+                contents.append(
+                    genai_types.Part.from_bytes(data=path.read_bytes(), mime_type=mime_type)
+                )
             except OSError:
                 continue
 
@@ -416,7 +431,9 @@ class UiAuditService:
                 last_error = exc
             if attempt >= attempts:
                 break
-        raise RuntimeError(str(last_error) if last_error is not None else "ui audit model call failed")
+        raise RuntimeError(
+            str(last_error) if last_error is not None else "ui audit model call failed"
+        )
 
     def _resolve_artifact_root(
         self,
@@ -455,7 +472,9 @@ class UiAuditService:
 
         path = Path(root_value).expanduser()
         resolved = self._resolve_if_within_base(path=path, base_root=base_root)
-        return resolved if resolved is not None and resolved.exists() and resolved.is_dir() else None
+        return (
+            resolved if resolved is not None and resolved.exists() and resolved.is_dir() else None
+        )
 
     def _artifact_base_root(self) -> Path:
         configured = os.getenv("UI_AUDIT_ARTIFACT_BASE_ROOT", _DEFAULT_ARTIFACT_BASE_ROOT)
@@ -499,7 +518,9 @@ class UiAuditService:
     def _is_gemini_ui_audit_enabled(self, settings: Settings) -> bool:
         return bool(settings.ui_audit_gemini_enabled)
 
-    def _select_gemini_image_artifacts(self, artifacts: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    def _select_gemini_image_artifacts(
+        self, artifacts: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
         selected: list[dict[str, Any]] = []
         for item in artifacts:
             mime_type = str(item.get("mime_type") or "").lower()
@@ -551,7 +572,9 @@ class UiAuditService:
             return None
         return "".join(chunks).strip() or None
 
-    def _read_float_env(self, name: str, *, default: float, min_value: float, max_value: float) -> float:
+    def _read_float_env(
+        self, name: str, *, default: float, min_value: float, max_value: float
+    ) -> float:
         raw = os.getenv(name)
         if raw is None:
             return default
@@ -580,7 +603,11 @@ class UiAuditService:
         snippet_lines = []
         for item in text_snippets:
             snippet_lines.append(f"- {item['key']}: {item['snippet']}")
-        image_lines = [f"- {str(item.get('key') or '')}" for item in image_artifacts if str(item.get("key") or "").strip()]
+        image_lines = [
+            f"- {item.get('key') or ''!s}"
+            for item in image_artifacts
+            if str(item.get("key") or "").strip()
+        ]
         evidence_text = "\n".join(snippet_lines) if snippet_lines else "- none"
         evidence_images = "\n".join(image_lines) if image_lines else "- none"
         return (
@@ -668,7 +695,9 @@ class UiAuditService:
 
         return []
 
-    def _extract_findings_from_json(self, payload: Any, *, artifact_key: str) -> list[dict[str, Any]]:
+    def _extract_findings_from_json(
+        self, payload: Any, *, artifact_key: str
+    ) -> list[dict[str, Any]]:
         if not isinstance(payload, dict):
             return []
 
@@ -685,8 +714,12 @@ class UiAuditService:
                     {
                         "id": f"{artifact_key}#violation-{index + 1}",
                         "severity": severity,
-                        "title": str(item.get("help") or item.get("id") or "Accessibility violation"),
-                        "message": str(item.get("description") or "A UI accessibility issue was detected."),
+                        "title": str(
+                            item.get("help") or item.get("id") or "Accessibility violation"
+                        ),
+                        "message": str(
+                            item.get("description") or "A UI accessibility issue was detected."
+                        ),
                         "rule": str(item.get("id") or ""),
                         "artifact_key": artifact_key,
                     }

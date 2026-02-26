@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
 
@@ -58,14 +58,16 @@ def _build_daily_digest_markdown(
         timezone_name=timezone_name,
         offset_minutes=offset_minutes,
     )
-    generated_at = datetime.now(timezone.utc).astimezone(local_tz).replace(microsecond=0)
+    generated_at = datetime.now(UTC).astimezone(local_tz).replace(microsecond=0)
     succeeded_count = sum(
         1
         for item in jobs
         if str(item.get("status")) == "succeeded"
         and str(item.get("pipeline_final_status") or "") != "degraded"
     )
-    degraded_count = sum(1 for item in jobs if str(item.get("pipeline_final_status") or "") == "degraded")
+    degraded_count = sum(
+        1 for item in jobs if str(item.get("pipeline_final_status") or "") == "degraded"
+    )
 
     lines = [
         f"# Daily Digest {digest_day.isoformat()}",
@@ -92,7 +94,7 @@ def _build_daily_digest_markdown(
     for item in jobs:
         updated_at = item.get("updated_at")
         updated_text = (
-            updated_at.astimezone(timezone.utc).replace(microsecond=0).isoformat()
+            updated_at.astimezone(UTC).replace(microsecond=0).isoformat()
             if isinstance(updated_at, datetime)
             else "-"
         )
@@ -122,9 +124,10 @@ def _load_daily_digest_jobs(
         timezone_name=timezone_name,
         offset_minutes=offset_minutes,
     )
-    rows = conn.execute(
-        text(
-            """
+    rows = (
+        conn.execute(
+            text(
+                """
             SELECT
                 j.id::text AS job_id,
                 j.status,
@@ -142,10 +145,13 @@ def _load_daily_digest_jobs(
               AND j.updated_at < :window_end_utc
             ORDER BY j.updated_at DESC
             """
-        ),
-        {
-            "window_start_utc": window_start_utc,
-            "window_end_utc": window_end_utc,
-        },
-    ).mappings().all()
+            ),
+            {
+                "window_start_utc": window_start_utc,
+                "window_end_utc": window_end_utc,
+            },
+        )
+        .mappings()
+        .all()
+    )
     return [dict(row) for row in rows]

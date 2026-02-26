@@ -66,6 +66,7 @@ gcloud compute instances create vd-server \
 ```
 
 说明：
+
 - 若实例已存在但未传 `--force-delete-instance`，脚本会拒绝删除并退出。
 - 若远端 `~/app` 已存在但未传 `--force-replace-app-dir`，脚本会拒绝覆盖并退出。
 

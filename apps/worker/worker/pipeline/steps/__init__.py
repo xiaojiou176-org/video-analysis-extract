@@ -8,13 +8,13 @@ from worker.pipeline.steps.metadata import step_fetch_metadata
 from worker.pipeline.steps.subtitles import step_collect_subtitles
 
 __all__ = [
-    "step_fetch_metadata",
-    "step_download_media",
-    "step_collect_subtitles",
-    "step_collect_comments",
-    "step_extract_frames",
     "step_build_embeddings",
-    "step_llm_outline",
+    "step_collect_comments",
+    "step_collect_subtitles",
+    "step_download_media",
+    "step_extract_frames",
+    "step_fetch_metadata",
     "step_llm_digest",
+    "step_llm_outline",
     "step_write_artifacts",
 ]

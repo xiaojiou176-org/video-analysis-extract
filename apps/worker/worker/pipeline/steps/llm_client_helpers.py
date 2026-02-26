@@ -1,11 +1,13 @@
 from __future__ import annotations
 
-from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
 import hashlib
 import mimetypes
-from pathlib import Path
 import re
-from typing import Any, Callable
+from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FutureTimeoutError
+from pathlib import Path
+from typing import Any
 
 _ALLOWED_MEDIA_RESOLUTION = {"low", "medium", "high", "ultra_high"}
 ComputerUseHandler = Callable[..., dict[str, Any]]
@@ -66,7 +68,9 @@ def _normalize_media_resolution_policy(value: Any) -> dict[str, str]:
     return {"default": base, "frame": base, "image": base, "pdf": base}
 
 
-def _part_media_resolution(policy: dict[str, str], *, mime_type: str, kind: str | None = None) -> str:
+def _part_media_resolution(
+    policy: dict[str, str], *, mime_type: str, kind: str | None = None
+) -> str:
     if kind and kind in policy:
         return policy[kind]
     mime = (mime_type or "").strip().lower()
@@ -77,7 +81,9 @@ def _part_media_resolution(policy: dict[str, str], *, mime_type: str, kind: str 
     return policy["default"]
 
 
-def _part_from_bytes(genai_types: Any, *, data: bytes, mime_type: str, media_resolution: str) -> Any:
+def _part_from_bytes(
+    genai_types: Any, *, data: bytes, mime_type: str, media_resolution: str
+) -> Any:
     part_cls = getattr(genai_types, "Part", None)
     if part_cls is None:
         return {"mime_type": mime_type, "data": data, "media_resolution": media_resolution}
@@ -373,7 +379,9 @@ def _collect_thought_metadata(response: Any) -> dict[str, Any]:
                     text = getattr(part, "text", None)
                     if isinstance(text, str) and text.strip():
                         thought_signatures.append(
-                            hashlib.sha256(text.strip().encode("utf-8", errors="ignore")).hexdigest()
+                            hashlib.sha256(
+                                text.strip().encode("utf-8", errors="ignore")
+                            ).hexdigest()
                         )
 
     usage = getattr(response, "usage_metadata", None)

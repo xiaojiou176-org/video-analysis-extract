@@ -165,7 +165,7 @@ def _mock_handler(state: MockApiState) -> type[BaseHTTPRequestHandler]:
     class MockHandler(BaseHTTPRequestHandler):
         server_version = "MockVDAPI/1.0"
 
-        def log_message(self, format: str, *args: Any) -> None:  # noqa: A003
+        def log_message(self, format: str, *args: Any) -> None:
             return
 
         def _send_json(self, status: int, payload: Any) -> None:
@@ -225,7 +225,7 @@ def _mock_handler(state: MockApiState) -> type[BaseHTTPRequestHandler]:
                 },
             )
 
-        def do_GET(self) -> None:  # noqa: N802
+        def do_GET(self) -> None:
             parsed = urlparse(self.path)
             path = parsed.path
             query = parse_qs(parsed.query)
@@ -402,7 +402,7 @@ def _mock_handler(state: MockApiState) -> type[BaseHTTPRequestHandler]:
                     )
                     self._send_binary(HTTPStatus.OK, PING_IMAGE_BYTES, "image/webp")
                     return
-                if path_param.endswith(".jpg") or path_param.endswith(".jpeg"):
+                if path_param.endswith((".jpg", ".jpeg")):
                     self._record_http(
                         method="GET",
                         path=path,
@@ -440,7 +440,7 @@ def _mock_handler(state: MockApiState) -> type[BaseHTTPRequestHandler]:
             )
             self._send_json(HTTPStatus.NOT_FOUND, {"detail": f"Unhandled GET path: {path}"})
 
-        def do_POST(self) -> None:  # noqa: N802
+        def do_POST(self) -> None:
             parsed = urlparse(self.path)
             path = parsed.path
             payload = self._read_json()
@@ -548,7 +548,7 @@ def _mock_handler(state: MockApiState) -> type[BaseHTTPRequestHandler]:
             )
             self._send_json(HTTPStatus.NOT_FOUND, {"detail": f"Unhandled POST path: {path}"})
 
-        def do_PUT(self) -> None:  # noqa: N802
+        def do_PUT(self) -> None:
             parsed = urlparse(self.path)
             path = parsed.path
             payload = self._read_json()
@@ -587,7 +587,7 @@ def _mock_handler(state: MockApiState) -> type[BaseHTTPRequestHandler]:
             )
             self._send_json(HTTPStatus.NOT_FOUND, {"detail": f"Unhandled PUT path: {path}"})
 
-        def do_DELETE(self) -> None:  # noqa: N802
+        def do_DELETE(self) -> None:
             parsed = urlparse(self.path)
             path = parsed.path
             if path.startswith("/api/v1/subscriptions/"):

@@ -1,14 +1,15 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import date, datetime, timezone
 import hashlib
 import json
 import os
-from pathlib import Path
 import signal
 import subprocess
-from typing import Any, Callable
+from collections.abc import Callable
+from datetime import UTC, date, datetime
+from pathlib import Path
+from typing import Any
 
 from worker.pipeline.policies import (
     build_retry_policy,
@@ -30,7 +31,7 @@ from worker.pipeline.types import (
 
 
 def utc_now_iso() -> str:
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+    return datetime.now(UTC).replace(microsecond=0).isoformat()
 
 
 def ensure_dir(path: Path) -> Path:
@@ -108,7 +109,9 @@ def _settings_subset(settings: Any, keys: tuple[str, ...]) -> dict[str, Any]:
     return payload
 
 
-def _step_input_payload(ctx: PipelineContext, state: dict[str, Any], step_name: str) -> dict[str, Any]:
+def _step_input_payload(
+    ctx: PipelineContext, state: dict[str, Any], step_name: str
+) -> dict[str, Any]:
     state_keys = STEP_INPUT_KEYS.get(step_name, ())
     settings_keys = STEP_SETTING_KEYS.get(step_name, ())
     state_payload = {key: state.get(key) for key in state_keys}
@@ -118,7 +121,9 @@ def _step_input_payload(ctx: PipelineContext, state: dict[str, Any], step_name: 
     }
 
 
-def build_step_cache_info(ctx: PipelineContext, state: dict[str, Any], step_name: str) -> dict[str, Any]:
+def build_step_cache_info(
+    ctx: PipelineContext, state: dict[str, Any], step_name: str
+) -> dict[str, Any]:
     version = STEP_VERSIONS.get(step_name, "v1")
     payload = {
         "step": step_name,
@@ -126,7 +131,9 @@ def build_step_cache_info(ctx: PipelineContext, state: dict[str, Any], step_name
         "inputs": _step_input_payload(ctx, state, step_name),
     }
     signature = hashlib.sha256(
-        json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode(
+            "utf-8"
+        )
     ).hexdigest()[:24]
     cache_key = f"{step_name}:{version}:{signature}"
     cache_path = ensure_dir(ctx.cache_dir / step_name) / f"{version}_{signature}.json"
@@ -153,7 +160,9 @@ def _load_cache_execution(cache_path: Path) -> StepExecution | None:
     return execution
 
 
-def _load_step_execution_from_cache(cache_info: dict[str, Any]) -> tuple[StepExecution | None, str | None]:
+def _load_step_execution_from_cache(
+    cache_info: dict[str, Any],
+) -> tuple[StepExecution | None, str | None]:
     cache_path = cache_info["cache_path"]
     execution = _load_cache_execution(cache_path)
     if execution is not None:
@@ -220,7 +229,9 @@ def append_degradation(
     )
 
 
-def build_mode_skip_step(step_name: str, mode: str) -> Callable[[PipelineContext, dict[str, Any]], Any]:
+def build_mode_skip_step(
+    step_name: str, mode: str
+) -> Callable[[PipelineContext, dict[str, Any]], Any]:
     async def _skip(_: PipelineContext, __: dict[str, Any]) -> StepExecution:
         return StepExecution(
             status="skipped",
@@ -262,7 +273,9 @@ async def execute_step(
 ) -> dict[str, Any]:
     sqlite_store = ctx.sqlite_store
     cache_info = build_step_cache_info(ctx, state, step_name)
-    llm_policy = dict(state.get("llm_policy") or {}) if step_name in {"llm_outline", "llm_digest"} else None
+    llm_policy = (
+        dict(state.get("llm_policy") or {}) if step_name in {"llm_outline", "llm_digest"} else None
+    )
     retry_policy = build_retry_policy(
         ctx.settings,
         step_name=step_name,
@@ -282,7 +295,9 @@ async def execute_step(
             execution, cache_reason = _load_step_execution_from_cache(cache_info)
             if execution is not None:
                 execution.status = "skipped"
-                execution.reason = "checkpoint_recovered" if resume_hint else (cache_reason or "cache_hit")
+                execution.reason = (
+                    "checkpoint_recovered" if resume_hint else (cache_reason or "cache_hit")
+                )
                 execution.cache_meta = {
                     **execution.cache_meta,
                     "source": cache_reason or "cache_hit",
@@ -430,9 +445,17 @@ async def execute_step(
                 },
             )
 
-        skip_is_degrade = execution.status == "skipped" and execution.reason not in NON_DEGRADING_SKIP_REASONS
-        llm_hard_failed = step_name in {"llm_outline", "llm_digest"} and execution.status == "failed"
-        if (execution.status == "failed" and not llm_hard_failed) or execution.degraded or skip_is_degrade:
+        skip_is_degrade = (
+            execution.status == "skipped" and execution.reason not in NON_DEGRADING_SKIP_REASONS
+        )
+        llm_hard_failed = (
+            step_name in {"llm_outline", "llm_digest"} and execution.status == "failed"
+        )
+        if (
+            (execution.status == "failed" and not llm_hard_failed)
+            or execution.degraded
+            or skip_is_degrade
+        ):
             append_degradation(
                 state,
                 step_name,
@@ -539,7 +562,7 @@ async def run_command(ctx: PipelineContext, cmd: list[str]) -> CommandResult:
 
     try:
         stdout_raw, stderr_raw = await asyncio.wait_for(process.communicate(), timeout=timeout)
-    except asyncio.TimeoutError:
+    except TimeoutError:
         await _terminate_subprocess(process)
         return CommandResult(ok=False, reason="timeout")
     except asyncio.CancelledError:
@@ -567,7 +590,7 @@ async def _terminate_subprocess(process: Any) -> None:
             os.killpg(pid, signal.SIGTERM)
             try:
                 await asyncio.wait_for(process.wait(), timeout=1.0)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 os.killpg(pid, signal.SIGKILL)
                 await process.wait()
             return

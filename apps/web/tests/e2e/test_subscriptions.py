@@ -3,7 +3,6 @@ from __future__ import annotations
 from http import HTTPStatus
 
 from playwright.sync_api import Page, expect
-
 from support.assertions import wait_for_call_count, wait_for_http_call
 from support.mock_api import MockApiState, seed_subscription
 

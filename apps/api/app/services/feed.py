@@ -7,6 +7,7 @@ from typing import Any
 
 from sqlalchemy import text
 from sqlalchemy.orm import Session
+
 from .source_names import resolve_source_name
 
 
@@ -28,7 +29,9 @@ class FeedService:
         params: dict[str, Any] = {
             "limit": safe_limit + 1,
             "source": source,
-            "category": category.strip().lower() if isinstance(category, str) and category.strip() else None,
+            "category": category.strip().lower()
+            if isinstance(category, str) and category.strip()
+            else None,
             "since": since,
             "cursor_ts": cursor_ts,
             "cursor_job_id": cursor_job_id,

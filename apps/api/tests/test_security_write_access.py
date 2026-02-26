@@ -58,7 +58,9 @@ def test_require_write_access_falls_back_to_x_api_key_when_auth_scheme_is_not_be
     )
 
 
-def test_require_write_access_rejects_when_no_usable_token_provided(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_require_write_access_rejects_when_no_usable_token_provided(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setenv("VD_API_KEY", "unit-test-token")
     with pytest.raises(HTTPException) as exc_info:
         require_write_access(

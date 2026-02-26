@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 
 import pytest
-
 from worker.rss.fetcher import RSSHubFetcher, parse_feed
 
 
@@ -55,7 +54,7 @@ def test_fetch_many_propagates_cancellation(monkeypatch: pytest.MonkeyPatch) -> 
     fetcher = RSSHubFetcher(retry_attempts=0)
 
     async def _fake_fetch_one(*_args, **_kwargs):
-        raise asyncio.CancelledError()
+        raise asyncio.CancelledError
 
     monkeypatch.setattr(fetcher, "_fetch_one", _fake_fetch_one)
 

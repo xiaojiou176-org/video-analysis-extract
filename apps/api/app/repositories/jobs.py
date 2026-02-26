@@ -8,7 +8,6 @@ from sqlalchemy.orm import Session
 
 from ..models import Job
 
-
 ACTIVE_JOB_STATUSES = {"queued", "running", "succeeded"}
 RETRYABLE_DISPATCH_FAILURE_REASONS = {"dispatch_failed", "dispatch_timeout"}
 

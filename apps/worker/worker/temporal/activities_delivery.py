@@ -1,15 +1,22 @@
 from __future__ import annotations
 
 import json
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import text
 
 from worker.config import Settings
 from worker.state.postgres_store import PostgresBusinessStore
+from worker.temporal.activities_delivery_retry import retry_failed_deliveries_activity_impl
+from worker.temporal.activities_delivery_send import (
+    send_daily_digest_activity_impl,
+    send_video_digest_activity_impl,
+)
 from worker.temporal.activities_email import (
     normalize_email as _normalize_email,
+)
+from worker.temporal.activities_email import (
     send_with_resend as _send_with_resend,
 )
 from worker.temporal.activities_reports import (
@@ -18,16 +25,12 @@ from worker.temporal.activities_reports import (
     _load_daily_digest_jobs,
     _safe_read_text,
 )
-from worker.temporal.activities_delivery_retry import retry_failed_deliveries_activity_impl
-from worker.temporal.activities_delivery_send import (
-    send_daily_digest_activity_impl,
-    send_video_digest_activity_impl,
-)
 from worker.temporal.activities_timing import _coerce_int, _resolve_local_digest_date
 
 try:
     from temporalio import activity
 except ModuleNotFoundError:  # pragma: no cover
+
     class _ActivityFallback:
         @staticmethod
         def defn(name: str | None = None):
@@ -44,9 +47,10 @@ DELIVERY_RETRY_BACKOFF_MINUTES = [2, 5, 15, 30, 60]
 
 
 def _get_or_init_notification_config(conn: Any) -> dict[str, Any]:
-    row = conn.execute(
-        text(
-            """
+    row = (
+        conn.execute(
+            text(
+                """
             SELECT
                 enabled,
                 to_email,
@@ -55,8 +59,11 @@ def _get_or_init_notification_config(conn: Any) -> dict[str, Any]:
             WHERE singleton_key = 1
             LIMIT 1
             """
+            )
         )
-    ).mappings().first()
+        .mappings()
+        .first()
+    )
     if row is not None:
         return dict(row)
 
@@ -76,9 +83,10 @@ def _get_or_init_notification_config(conn: Any) -> dict[str, Any]:
             """
         )
     )
-    loaded = conn.execute(
-        text(
-            """
+    loaded = (
+        conn.execute(
+            text(
+                """
             SELECT
                 enabled,
                 to_email,
@@ -87,8 +95,11 @@ def _get_or_init_notification_config(conn: Any) -> dict[str, Any]:
             WHERE singleton_key = 1
             LIMIT 1
             """
+            )
         )
-    ).mappings().first()
+        .mappings()
+        .first()
+    )
     if loaded is None:
         return {"enabled": False, "to_email": None, "daily_digest_enabled": False}
     return dict(loaded)
@@ -156,7 +167,7 @@ def _resolve_next_retry_at(
         return None
     if attempt_count >= DELIVERY_MAX_ATTEMPTS:
         return None
-    baseline = now_utc or datetime.now(timezone.utc)
+    baseline = now_utc or datetime.now(UTC)
     backoff_minutes = _resolve_retry_backoff_minutes(attempt_count=attempt_count)
     return baseline + timedelta(minutes=backoff_minutes)
 
@@ -177,9 +188,10 @@ def _mark_delivery_state(
     expected_attempt_count: int | None = None,
 ) -> dict[str, Any]:
     with pg_store._engine.begin() as conn:  # type: ignore[attr-defined]
-        row = conn.execute(
-            text(
-                """
+        row = (
+            conn.execute(
+                text(
+                    """
                 UPDATE notification_deliveries
                 SET
                     status = :status,
@@ -220,26 +232,30 @@ def _mark_delivery_state(
                     next_retry_at,
                     last_error_kind
                 """
-            ),
-            {
-                "delivery_id": delivery_id,
-                "status": status,
-                "error_message": error_message,
-                "provider_message_id": provider_message_id,
-                "sent": sent,
-                "record_attempt": record_attempt,
-                "last_error_kind": last_error_kind,
-                "next_retry_at": next_retry_at,
-                "clear_retry_meta": clear_retry_meta,
-                "expected_status": expected_status,
-                "expected_attempt_count": expected_attempt_count,
-            },
-        ).mappings().first()
+                ),
+                {
+                    "delivery_id": delivery_id,
+                    "status": status,
+                    "error_message": error_message,
+                    "provider_message_id": provider_message_id,
+                    "sent": sent,
+                    "record_attempt": record_attempt,
+                    "last_error_kind": last_error_kind,
+                    "next_retry_at": next_retry_at,
+                    "clear_retry_meta": clear_retry_meta,
+                    "expected_status": expected_status,
+                    "expected_attempt_count": expected_attempt_count,
+                },
+            )
+            .mappings()
+            .first()
+        )
         if row is not None:
             return dict(row)
-        existing = conn.execute(
-            text(
-                """
+        existing = (
+            conn.execute(
+                text(
+                    """
                 SELECT
                     id::text AS delivery_id,
                     status,
@@ -254,9 +270,12 @@ def _mark_delivery_state(
                 WHERE id = CAST(:delivery_id AS UUID)
                 LIMIT 1
                 """
-            ),
-            {"delivery_id": delivery_id},
-        ).mappings().first()
+                ),
+                {"delivery_id": delivery_id},
+            )
+            .mappings()
+            .first()
+        )
         if existing is None:
             raise ValueError(f"delivery not found: {delivery_id}")
         payload = dict(existing)
@@ -267,9 +286,10 @@ def _mark_delivery_state(
 
 
 def _fetch_job_digest_record(conn: Any, *, job_id: str) -> dict[str, Any]:
-    row = conn.execute(
-        text(
-            """
+    row = (
+        conn.execute(
+            text(
+                """
             SELECT
                 j.id::text AS job_id,
                 j.status,
@@ -285,9 +305,12 @@ def _fetch_job_digest_record(conn: Any, *, job_id: str) -> dict[str, Any]:
             WHERE j.id = CAST(:job_id AS UUID)
             LIMIT 1
             """
-        ),
-        {"job_id": job_id},
-    ).mappings().first()
+            ),
+            {"job_id": job_id},
+        )
+        .mappings()
+        .first()
+    )
     if row is None:
         raise ValueError(f"job not found: {job_id}")
     return dict(row)
@@ -305,9 +328,10 @@ def _insert_video_digest_delivery(
         text("SELECT pg_advisory_xact_lock(hashtext(:lock_key))"),
         {"lock_key": f"video_digest:{job['job_id']}"},
     )
-    existing = conn.execute(
-        text(
-            """
+    existing = (
+        conn.execute(
+            text(
+                """
             SELECT
                 id::text AS delivery_id,
                 status,
@@ -326,15 +350,19 @@ def _insert_video_digest_delivery(
             ORDER BY created_at DESC
             LIMIT 1
             """
-        ),
-        {"job_id": job["job_id"]},
-    ).mappings().first()
+            ),
+            {"job_id": job["job_id"]},
+        )
+        .mappings()
+        .first()
+    )
     if existing is not None:
         return None
 
-    created = conn.execute(
-        text(
-            """
+    created = (
+        conn.execute(
+            text(
+                """
             INSERT INTO notification_deliveries (
                 kind,
                 status,
@@ -365,14 +393,17 @@ def _insert_video_digest_delivery(
                 next_retry_at,
                 last_error_kind
             """
-        ),
-        {
-            "recipient_email": recipient_email,
-            "subject": subject,
-            "payload_json": json.dumps(payload_json, ensure_ascii=False),
-            "job_id": job["job_id"],
-        },
-    ).mappings().one()
+            ),
+            {
+                "recipient_email": recipient_email,
+                "subject": subject,
+                "payload_json": json.dumps(payload_json, ensure_ascii=False),
+                "job_id": job["job_id"],
+            },
+        )
+        .mappings()
+        .one()
+    )
     return dict(created)
 
 
@@ -388,9 +419,10 @@ def _insert_daily_digest_delivery(
         text("SELECT pg_advisory_xact_lock(hashtext(:lock_key))"),
         {"lock_key": f"daily_digest:{digest_date.isoformat()}"},
     )
-    existing = conn.execute(
-        text(
-            """
+    existing = (
+        conn.execute(
+            text(
+                """
             SELECT
                 id::text AS delivery_id,
                 status,
@@ -412,15 +444,19 @@ def _insert_daily_digest_delivery(
             ORDER BY created_at DESC
             LIMIT 1
             """
-        ),
-        {"digest_date": digest_date.isoformat()},
-    ).mappings().first()
+            ),
+            {"digest_date": digest_date.isoformat()},
+        )
+        .mappings()
+        .first()
+    )
     if existing is not None:
         return None
 
-    created = conn.execute(
-        text(
-            """
+    created = (
+        conn.execute(
+            text(
+                """
             INSERT INTO notification_deliveries (
                 kind,
                 status,
@@ -449,20 +485,24 @@ def _insert_daily_digest_delivery(
                 next_retry_at,
                 last_error_kind
             """
-        ),
-        {
-            "recipient_email": recipient_email,
-            "subject": subject,
-            "payload_json": json.dumps(payload_json, ensure_ascii=False),
-        },
-    ).mappings().one()
+            ),
+            {
+                "recipient_email": recipient_email,
+                "subject": subject,
+                "payload_json": json.dumps(payload_json, ensure_ascii=False),
+            },
+        )
+        .mappings()
+        .one()
+    )
     return dict(created)
 
 
 def _get_existing_video_digest(conn: Any, *, job_id: str) -> dict[str, Any] | None:
-    row = conn.execute(
-        text(
-            """
+    row = (
+        conn.execute(
+            text(
+                """
             SELECT
                 id::text AS delivery_id,
                 status,
@@ -481,16 +521,20 @@ def _get_existing_video_digest(conn: Any, *, job_id: str) -> dict[str, Any] | No
             ORDER BY created_at DESC
             LIMIT 1
             """
-        ),
-        {"job_id": job_id},
-    ).mappings().first()
+            ),
+            {"job_id": job_id},
+        )
+        .mappings()
+        .first()
+    )
     return dict(row) if row is not None else None
 
 
 def _get_existing_daily_digest(conn: Any, *, digest_date: date) -> dict[str, Any] | None:
-    row = conn.execute(
-        text(
-            """
+    row = (
+        conn.execute(
+            text(
+                """
             SELECT
                 id::text AS delivery_id,
                 status,
@@ -512,9 +556,12 @@ def _get_existing_daily_digest(conn: Any, *, digest_date: date) -> dict[str, Any
             ORDER BY created_at DESC
             LIMIT 1
             """
-        ),
-        {"digest_date": digest_date.isoformat()},
-    ).mappings().first()
+            ),
+            {"digest_date": digest_date.isoformat()},
+        )
+        .mappings()
+        .first()
+    )
     return dict(row) if row is not None else None
 
 
@@ -523,9 +570,10 @@ def _claim_due_failed_deliveries(
     *,
     limit: int,
 ) -> list[dict[str, Any]]:
-    rows = conn.execute(
-        text(
-            """
+    rows = (
+        conn.execute(
+            text(
+                """
             WITH due AS (
                 SELECT id
                 FROM notification_deliveries
@@ -555,9 +603,12 @@ def _claim_due_failed_deliveries(
                 d.next_retry_at,
                 d.last_error_kind
             """
-        ),
-        {"limit": limit},
-    ).mappings().all()
+            ),
+            {"limit": limit},
+        )
+        .mappings()
+        .all()
+    )
     return [dict(item) for item in rows]
 
 

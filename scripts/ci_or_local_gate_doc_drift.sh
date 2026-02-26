@@ -197,6 +197,15 @@ if has_changed_matching 'scripts/dev_*.sh' || \
     "docs/runbook-local.md"
 fi
 
+if has_changed_matching 'infra/compose/*.compose.yml' || \
+   has_changed_matching '.devcontainer/*' || \
+   has_changed_matching '.devcontainer/**'; then
+  check_required_docs "compose/devcontainer startup topology" \
+    "README.md" \
+    "docs/start-here.md" \
+    "docs/runbook-local.md"
+fi
+
 if contains_file "pyproject.toml" "${changed_files[@]}" || \
    contains_file "uv.lock" "${changed_files[@]}" || \
    has_changed_matching 'requirements*.txt' || \

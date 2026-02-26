@@ -62,7 +62,9 @@ def test_step_fetch_metadata_falls_back_on_invalid_json_and_command_failure() ->
         return CommandResult(ok=True, stdout="{not-json")
 
     bad_json = asyncio.run(
-        step_fetch_metadata(SimpleNamespace(), {"source_url": "https://example.com/x"}, run_command=_bad_json)
+        step_fetch_metadata(
+            SimpleNamespace(), {"source_url": "https://example.com/x"}, run_command=_bad_json
+        )
     )
     assert bad_json.status == "succeeded"
     assert bad_json.degraded is True
@@ -73,7 +75,9 @@ def test_step_fetch_metadata_falls_back_on_invalid_json_and_command_failure() ->
         return CommandResult(ok=False, reason="binary_not_found", stderr="missing")
 
     failed = asyncio.run(
-        step_fetch_metadata(SimpleNamespace(), {"source_url": "https://example.com/y"}, run_command=_failure)
+        step_fetch_metadata(
+            SimpleNamespace(), {"source_url": "https://example.com/y"}, run_command=_failure
+        )
     )
     assert failed.degraded is True
     assert failed.reason == "binary_not_found"
@@ -81,8 +85,12 @@ def test_step_fetch_metadata_falls_back_on_invalid_json_and_command_failure() ->
 
 
 def test_prompt_builders_include_context_only_when_enabled(monkeypatch) -> None:
-    monkeypatch.setattr("worker.pipeline.steps.llm_prompts.build_comments_prompt_context", lambda _: "COMMENTS")
-    monkeypatch.setattr("worker.pipeline.steps.llm_prompts.build_frames_prompt_context", lambda *_: "FRAMES")
+    monkeypatch.setattr(
+        "worker.pipeline.steps.llm_prompts.build_comments_prompt_context", lambda _: "COMMENTS"
+    )
+    monkeypatch.setattr(
+        "worker.pipeline.steps.llm_prompts.build_frames_prompt_context", lambda *_: "FRAMES"
+    )
 
     outline_prompt = build_outline_prompt(
         title="Demo",

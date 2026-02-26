@@ -3,7 +3,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-
 MAX_LINES = 700
 TARGET_GLOBS = (
     "apps/worker/worker/pipeline/steps/*.py",

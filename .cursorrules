@@ -1,0 +1,4 @@
+You are working in this repository. Always read AGENTS.md first.
+Keep changes minimal, reproducible, and aligned with docs/start-here.md.
+Never commit secrets, real .env files, or production credentials.
+Run repository quality gates before marking tasks done.

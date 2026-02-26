@@ -68,12 +68,19 @@ def register_computer_use_tools(mcp: FastMCP, api_call: ApiCall) -> None:
         return {
             "actions": [
                 _normalize_action_item(item, default_step=index)
-                for index, item in enumerate(raw_actions if isinstance(raw_actions, list) else [], start=1)
+                for index, item in enumerate(
+                    raw_actions if isinstance(raw_actions, list) else [], start=1
+                )
             ],
             "require_confirmation": bool(to_optional_bool(response.get("require_confirmation"))),
             "blocked_actions": [
                 value
-                for value in (to_optional_str(item) for item in (raw_blocked_actions if isinstance(raw_blocked_actions, list) else []))
+                for value in (
+                    to_optional_str(item)
+                    for item in (
+                        raw_blocked_actions if isinstance(raw_blocked_actions, list) else []
+                    )
+                )
                 if value is not None
             ],
             "final_text": to_optional_str(response.get("final_text")) or "",

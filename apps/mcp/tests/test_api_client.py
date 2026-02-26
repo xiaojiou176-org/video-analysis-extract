@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Self
 
 import httpx
 import pytest
@@ -9,11 +9,13 @@ from apps.mcp.server import ApiClient, ApiConfig, ApiError, _normalize_error_det
 
 
 class _DummyClient:
-    def __init__(self, response: httpx.Response | None = None, exc: Exception | None = None) -> None:
+    def __init__(
+        self, response: httpx.Response | None = None, exc: Exception | None = None
+    ) -> None:
         self._response = response
         self._exc = exc
 
-    def __enter__(self) -> "_DummyClient":
+    def __enter__(self) -> Self:
         return self
 
     def __exit__(self, exc_type, exc, tb) -> bool:

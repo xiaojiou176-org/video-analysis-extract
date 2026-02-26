@@ -68,10 +68,11 @@ validate_cleanup_dir() {
   fi
   local resolved
   resolved="$(
-    TARGET_PATH="$raw" python3 - <<'PY'
-import os
+    python3 - "$raw" <<'PY'
 import pathlib
-print(pathlib.Path(os.environ["TARGET_PATH"]).expanduser().resolve())
+import sys
+
+print(pathlib.Path(sys.argv[1]).expanduser().resolve())
 PY
   )"
 

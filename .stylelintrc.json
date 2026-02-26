@@ -7,7 +7,11 @@
         "ignoreAtRules": ["tailwind", "apply", "layer", "variants", "responsive", "screen"]
       }
     ],
-    "no-descending-specificity": null,
+    "color-no-hex": null,
+    "declaration-no-important": true,
+    "declaration-block-no-redundant-longhand-properties": "error",
+    "custom-property-pattern": "^[a-z][a-z0-9-]*$",
+    "no-descending-specificity": "error",
     "selector-class-pattern": null
   }
 }

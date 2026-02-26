@@ -4,7 +4,6 @@ from http import HTTPStatus
 
 import pytest
 from playwright.sync_api import Page, expect
-
 from support.assertions import wait_for_call_count, wait_for_http_call
 from support.mock_api import MockApiState
 from support.runtime_utils import external_web_base_url_from_env

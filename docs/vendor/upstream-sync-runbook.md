@@ -93,4 +93,3 @@ squash: true
 - `UPSTREAM.lock` 结构与必填字段检查
 
 若 lock 格式不合法或缺失必填字段，CI 直接失败。
-

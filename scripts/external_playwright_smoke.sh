@@ -4,14 +4,14 @@ set -euo pipefail
 SCRIPT_NAME="external_playwright_smoke"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-url="${EXTERNAL_SMOKE_URL:-https://example.com}"
-browser="${EXTERNAL_SMOKE_BROWSER:-chromium}"
-timeout_ms="${EXTERNAL_SMOKE_TIMEOUT_MS:-45000}"
-expect_text="${EXTERNAL_SMOKE_EXPECT_TEXT:-Example Domain}"
-output_dir="${EXTERNAL_SMOKE_OUTPUT_DIR:-.runtime-cache/external-playwright-smoke}"
-retries="${EXTERNAL_SMOKE_RETRIES:-2}"
-diagnostics_json="${EXTERNAL_SMOKE_DIAGNOSTICS_JSON:-.runtime-cache/external-playwright-smoke-result.json}"
-heartbeat_seconds="${EXTERNAL_SMOKE_HEARTBEAT_SECONDS:-30}"
+url="https://example.com"
+browser="chromium"
+timeout_ms="45000"
+expect_text="Example Domain"
+output_dir=".runtime-cache/external-playwright-smoke"
+retries="2"
+diagnostics_json=".runtime-cache/external-playwright-smoke-result.json"
+heartbeat_seconds="30"
 
 log() {
   printf '[%s] %s\n' "$SCRIPT_NAME" "$*" >&2
@@ -37,10 +37,7 @@ Options:
   --heartbeat-seconds <n>   Heartbeat interval in seconds (default: 30)
   -h, --help                Show this help
 
-Environment defaults (used when corresponding option is omitted):
-  EXTERNAL_SMOKE_URL, EXTERNAL_SMOKE_BROWSER, EXTERNAL_SMOKE_TIMEOUT_MS,
-  EXTERNAL_SMOKE_EXPECT_TEXT, EXTERNAL_SMOKE_OUTPUT_DIR, EXTERNAL_SMOKE_RETRIES
-  EXTERNAL_SMOKE_DIAGNOSTICS_JSON, EXTERNAL_SMOKE_HEARTBEAT_SECONDS
+Defaults are internal constants in this script. Use CLI options to override.
 USAGE
 }
 
@@ -111,15 +108,6 @@ if [[ "${diagnostics_json:0:1}" != "/" ]]; then
 fi
 mkdir -p "$(dirname "$diagnostics_json")"
 
-export EXTERNAL_SMOKE_URL="$url"
-export EXTERNAL_SMOKE_BROWSER="$browser"
-export EXTERNAL_SMOKE_TIMEOUT_MS="$timeout_ms"
-export EXTERNAL_SMOKE_EXPECT_TEXT="$expect_text"
-export EXTERNAL_SMOKE_OUTPUT_DIR="$output_dir"
-export EXTERNAL_SMOKE_RETRIES="$retries"
-export EXTERNAL_SMOKE_DIAGNOSTICS_JSON="$diagnostics_json"
-export EXTERNAL_SMOKE_HEARTBEAT_SECONDS="$heartbeat_seconds"
-
 python_cmd=(python3)
 python_source="system_python3"
 if ! python3 -c 'import playwright' >/dev/null 2>&1; then
@@ -135,11 +123,20 @@ export EXTERNAL_SMOKE_PYTHON_SOURCE="$python_source"
 log "Running external Playwright smoke: browser=$browser url=$url timeout_ms=$timeout_ms retries=$retries heartbeat_seconds=$heartbeat_seconds"
 log "Python runner source: $python_source"
 
-"${python_cmd[@]}" - <<'PY'
+"${python_cmd[@]}" - \
+  "$url" \
+  "$browser" \
+  "$timeout_ms" \
+  "$expect_text" \
+  "$output_dir" \
+  "$retries" \
+  "$diagnostics_json" \
+  "$heartbeat_seconds" <<'PY'
 from __future__ import annotations
 
 import json
 import os
+import sys
 import threading
 import traceback
 from dataclasses import dataclass
@@ -163,15 +160,17 @@ class SmokeConfig:
     heartbeat_seconds: int
 
 def _build_config() -> SmokeConfig:
+    if len(sys.argv) != 9:
+        raise RuntimeError("invalid invocation: expected 8 args")
     return SmokeConfig(
-        url=os.environ["EXTERNAL_SMOKE_URL"],
-        browser=os.environ["EXTERNAL_SMOKE_BROWSER"],
-        timeout_ms=int(os.environ["EXTERNAL_SMOKE_TIMEOUT_MS"]),
-        expect_text=os.environ["EXTERNAL_SMOKE_EXPECT_TEXT"],
-        output_dir=Path(os.environ["EXTERNAL_SMOKE_OUTPUT_DIR"]),
-        retries=int(os.environ["EXTERNAL_SMOKE_RETRIES"]),
-        diagnostics_json=Path(os.environ["EXTERNAL_SMOKE_DIAGNOSTICS_JSON"]),
-        heartbeat_seconds=int(os.environ["EXTERNAL_SMOKE_HEARTBEAT_SECONDS"]),
+        url=sys.argv[1],
+        browser=sys.argv[2],
+        timeout_ms=int(sys.argv[3]),
+        expect_text=sys.argv[4],
+        output_dir=Path(sys.argv[5]),
+        retries=int(sys.argv[6]),
+        diagnostics_json=Path(sys.argv[7]),
+        heartbeat_seconds=int(sys.argv[8]),
     )
 
 

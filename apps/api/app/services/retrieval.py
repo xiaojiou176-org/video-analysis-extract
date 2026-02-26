@@ -68,7 +68,9 @@ class RetrievalService:
             if normalized_mode == "semantic":
                 hits = semantic_hits
             else:
-                hits = self._merge_hybrid_hits(keyword_hits=keyword_hits, semantic_hits=semantic_hits, top_k=top_k)
+                hits = self._merge_hybrid_hits(
+                    keyword_hits=keyword_hits, semantic_hits=semantic_hits, top_k=top_k
+                )
 
         return {
             "query": normalized_query,
@@ -81,9 +83,11 @@ class RetrievalService:
         normalized = str(mode).strip().lower()
         if normalized not in _RETRIEVAL_MODES:
             return "keyword"
-        return cast(RetrievalMode, normalized)
+        return cast("RetrievalMode", normalized)
 
-    def _search_keyword(self, *, query: str, top_k: int, filters: dict[str, Any]) -> list[dict[str, Any]]:
+    def _search_keyword(
+        self, *, query: str, top_k: int, filters: dict[str, Any]
+    ) -> list[dict[str, Any]]:
         rows = self._list_candidate_jobs(top_k=top_k, filters=filters)
         hits: list[dict[str, Any]] = []
         for row in rows:
@@ -106,7 +110,9 @@ class RetrievalService:
         hits.sort(key=lambda item: item["score"], reverse=True)
         return hits[:top_k]
 
-    def _search_semantic(self, *, query: str, top_k: int, filters: dict[str, Any]) -> list[dict[str, Any]]:
+    def _search_semantic(
+        self, *, query: str, top_k: int, filters: dict[str, Any]
+    ) -> list[dict[str, Any]]:
         query_embedding = self._build_query_embedding(query)
         if not query_embedding:
             return []
@@ -192,9 +198,13 @@ class RetrievalService:
                 str(item.get("snippet") or ""),
             )
             existing = merged.get(key)
-            if existing is None or float(item.get("score") or 0.0) > float(existing.get("score") or 0.0):
+            if existing is None or float(item.get("score") or 0.0) > float(
+                existing.get("score") or 0.0
+            ):
                 merged[key] = item
-        ordered = sorted(merged.values(), key=lambda item: float(item.get("score") or 0.0), reverse=True)
+        ordered = sorted(
+            merged.values(), key=lambda item: float(item.get("score") or 0.0), reverse=True
+        )
         return ordered[:top_k]
 
     def _build_query_embedding(self, query: str) -> list[float] | None:
@@ -205,7 +215,9 @@ class RetrievalService:
         api_key = (settings.gemini_api_key or "").strip()
         if not api_key:
             return None
-        model = (settings.gemini_embedding_model or "gemini-embedding-001").strip() or "gemini-embedding-001"
+        model = (
+            settings.gemini_embedding_model or "gemini-embedding-001"
+        ).strip() or "gemini-embedding-001"
         try:
             genai = importlib.import_module("google.genai")  # type: ignore[assignment]
             genai_types = importlib.import_module("google.genai.types")  # type: ignore[assignment]
