@@ -17,7 +17,8 @@
       "contracts": [
         "infra/config/env/contract.core.json",
         "infra/config/env/contract.runtime.json",
-        "infra/config/env/contract.scripts.json"
+        "infra/config/env/contract.scripts.json",
+        "infra/config/env/contract.test.json"
       ],
       "include_paths": [
         "apps",
@@ -34,12 +35,16 @@
       ]
     },
     "runtime": {
-      "description": "Runtime app vars (api/worker/mcp/web/test + shared).",
+      "description": "Runtime app vars (api/worker/mcp/web + shared).",
       "contracts": [
+        "infra/config/env/contract.core.json",
         "infra/config/env/contract.runtime.json"
       ],
       "include_paths": [
-        "apps"
+        "apps/api/app",
+        "apps/worker/worker",
+        "apps/mcp",
+        "apps/web"
       ]
     },
     "scripts": {
@@ -49,6 +54,15 @@
       ],
       "include_paths": [
         "scripts"
+      ]
+    },
+    "test": {
+      "description": "Test-only vars used by application test suites.",
+      "contracts": [
+        "infra/config/env/contract.test.json"
+      ],
+      "include_paths": [
+        "apps/api/tests"
       ]
     }
   }

@@ -3,17 +3,6 @@
   "name": "runtime",
   "variables": [
     {
-      "name": "API_INTEGRATION_DATABASE_URL",
-      "scope": "test",
-      "required": false,
-      "secret": true,
-      "default": "postgresql+psycopg://postgres:postgres@127.0.0.1:5432/postgres",
-      "consumer": [
-        "apps/api/tests/test_api_integration_smoke.py"
-      ],
-      "description": "Optional PostgreSQL admin DSN for ephemeral API integration smoke databases."
-    },
-    {
       "name": "API_RETRIEVAL_EMBEDDING_TIMEOUT_SECONDS",
       "scope": "api",
       "required": false,
