@@ -3,10 +3,27 @@ set -euo pipefail
 
 SCRIPT_NAME="smoke_full_stack"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ENV_PROFILE="${ENV_PROFILE:-local}"
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --profile|--env-profile)
+      ENV_PROFILE="${2:-}"
+      shift 2
+      ;;
+    --)
+      shift
+      break
+      ;;
+    *)
+      break
+      ;;
+  esac
+done
 
 # shellcheck source=./scripts/lib/load_env.sh
 source "$ROOT_DIR/scripts/lib/load_env.sh"
-load_repo_env "$ROOT_DIR" "$SCRIPT_NAME"
+load_repo_env "$ROOT_DIR" "$SCRIPT_NAME" "$ENV_PROFILE"
 
 API_BASE="${VD_API_BASE_URL:-http://127.0.0.1:${API_PORT:-8000}}"
 WEB_BASE="${WEB_BASE_URL:-http://127.0.0.1:${WEB_PORT:-3001}}"
@@ -14,7 +31,8 @@ REQUIRE_READER="${FULL_STACK_REQUIRE_READER:-1}"
 MINIFLUX_BASE="${MINIFLUX_BASE_URL:-}"
 NEXTFLUX_PORT="${NEXTFLUX_PORT:-3000}"
 OFFLINE_FALLBACK="${OFFLINE_FALLBACK:-1}"
-READER_ENV_FILE="${READER_ENV_FILE:-$ROOT_DIR/.env.reader-stack}"
+READER_ENV_FILE="${READER_ENV_FILE:-$ROOT_DIR/env/profiles/reader.env}"
+LEGACY_READER_ENV_FILE="${LEGACY_READER_ENV_FILE:-$ROOT_DIR/.env.reader-stack}"
 FALLBACK_MARKER_FILE="$ROOT_DIR/.runtime-cache/full-stack/offline-fallback.flag"
 HEARTBEAT_SECONDS="${FULL_STACK_SMOKE_HEARTBEAT_SECONDS:-30}"
 LIVE_DIAGNOSTICS_JSON="${LIVE_SMOKE_DIAGNOSTICS_JSON:-.runtime-cache/e2e-live-smoke-result.json}"
@@ -89,7 +107,7 @@ log "phase=short_tests status=passed"
 log "phase=long_tests status=start"
 log "Running built-in e2e live smoke"
 start_heartbeat "e2e_live_smoke"
-if ! (cd "$ROOT_DIR" && LIVE_SMOKE_DIAGNOSTICS_JSON="$LIVE_DIAGNOSTICS_JSON" ./scripts/e2e_live_smoke.sh); then
+if ! (cd "$ROOT_DIR" && LIVE_SMOKE_DIAGNOSTICS_JSON="$LIVE_DIAGNOSTICS_JSON" ENV_PROFILE="$ENV_PROFILE" ./scripts/e2e_live_smoke.sh --profile "$ENV_PROFILE"); then
   stop_heartbeat
   live_diag_path="$ROOT_DIR/$LIVE_DIAGNOSTICS_JSON"
   if [[ -f "$live_diag_path" ]]; then
@@ -123,6 +141,11 @@ stop_heartbeat
 log "e2e_live_smoke diagnostics_path=$ROOT_DIR/$LIVE_DIAGNOSTICS_JSON"
 
 if is_truthy "$REQUIRE_READER"; then
+  if [[ -z "$MINIFLUX_BASE" && ! -f "$READER_ENV_FILE" && -f "$LEGACY_READER_ENV_FILE" ]]; then
+    log "Reader env profile missing; using legacy env file: $LEGACY_READER_ENV_FILE"
+    log "Migration tip: run ./scripts/env/migrate_env_legacy.sh"
+    READER_ENV_FILE="$LEGACY_READER_ENV_FILE"
+  fi
   if [[ -z "$MINIFLUX_BASE" && -f "$READER_ENV_FILE" ]]; then
     load_env_file "$READER_ENV_FILE" "$SCRIPT_NAME"
     MINIFLUX_BASE="${MINIFLUX_BASE_URL:-}"

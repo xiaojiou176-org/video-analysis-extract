@@ -1,0 +1,1322 @@
+{
+  "version": 1,
+  "name": "scripts",
+  "variables": [
+    {
+      "name": "AI_FEED_SYNC_LIMIT",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": "20",
+      "consumer": [
+        "scripts/sync_ai_feed_to_miniflux.py"
+      ],
+      "description": "Max feed items per AI sync batch."
+    },
+    {
+      "name": "API_APP",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": "apps.api.app.main:app",
+      "consumer": [
+        "scripts/dev_api.sh"
+      ],
+      "description": "Uvicorn app import path."
+    },
+    {
+      "name": "API_HOST",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": "127.0.0.1",
+      "consumer": [
+        "scripts/dev_api.sh"
+      ],
+      "description": "API listen host."
+    },
+    {
+      "name": "API_HEALTH_URL",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": "http://127.0.0.1:${API_PORT:-8000}/healthz",
+      "consumer": [
+        "scripts/full_stack.sh"
+      ],
+      "description": "Health endpoint used by full_stack startup readiness checks."
+    },
+    {
+      "name": "API_PORT",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": "8000",
+      "consumer": [
+        "scripts/dev_api.sh"
+      ],
+      "description": "API listen port."
+    },
+    {
+      "name": "BILIBILI_SMOKE_URL",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": "https://www.bilibili.com/video/BV1xx411c7mD",
+      "consumer": [
+        "scripts/e2e_live_smoke.sh"
+      ],
+      "description": "Bilibili URL used by live smoke process scenario."
+    },
+    {
+      "name": "CORE_POSTGRES_DB",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": "video_analysis",
+      "consumer": [
+        "infra/compose/core-services.compose.yml"
+      ],
+      "description": "Core services PostgreSQL database name override."
+    },
+    {
+      "name": "CORE_POSTGRES_PASSWORD",
+      "scope": "scripts",
+      "required": false,
+      "secret": true,
+      "default": "postgres",
+      "consumer": [
+        "infra/compose/core-services.compose.yml"
+      ],
+      "description": "Core services PostgreSQL password override."
+    },
+    {
+      "name": "CORE_POSTGRES_PORT",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": "5432",
+      "consumer": [
+        "infra/compose/core-services.compose.yml"
+      ],
+      "description": "Core services PostgreSQL exposed host port."
+    },
+    {
+      "name": "CORE_POSTGRES_USER",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": "postgres",
+      "consumer": [
+        "infra/compose/core-services.compose.yml"
+      ],
+      "description": "Core services PostgreSQL username override."
+    },
+    {
+      "name": "CORE_REDIS_PORT",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": "6379",
+      "consumer": [
+        "infra/compose/core-services.compose.yml"
+      ],
+      "description": "Core services Redis exposed host port."
+    },
+    {
+      "name": "CORE_TEMPORAL_PORT",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": "7233",
+      "consumer": [
+        "infra/compose/core-services.compose.yml"
+      ],
+      "description": "Core services Temporal frontend exposed host port."
+    },
+    {
+      "name": "DEV_API_RELOAD",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": "1",
+      "consumer": [
+        "scripts/dev_api.sh",
+        "scripts/full_stack.sh"
+      ],
+      "description": "Enable uvicorn --reload in dev_api; full_stack up forces this to 0 for stable background mode."
+    },
+    {
+      "name": "DEV_WORKER_SHOW_HINTS",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": "1",
+      "consumer": [
+        "scripts/dev_worker.sh"
+      ],
+      "description": "Print environment hints before worker startup."
+    },
+    {
+      "name": "DIGEST_CHANNEL",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": "email",
+      "consumer": [
+        "scripts/run_daily_digest.sh"
+      ],
+      "description": "Daily digest channel."
+    },
+    {
+      "name": "DIGEST_DATE",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": null,
+      "consumer": [
+        "scripts/run_daily_digest.sh"
+      ],
+      "description": "Digest date override (YYYY-MM-DD)."
+    },
+    {
+      "name": "DIGEST_DRY_RUN",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": "false",
+      "consumer": [
+        "scripts/run_daily_digest.sh"
+      ],
+      "description": "Daily digest dry-run toggle."
+    },
+    {
+      "name": "DIGEST_FALLBACK_ENABLED",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": "1",
+      "consumer": [
+        "scripts/run_daily_digest.sh"
+      ],
+      "description": "Enable fallback send path for daily digest."
+    },
+    {
+      "name": "DIGEST_FORCE",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": "false",
+      "consumer": [
+        "scripts/run_daily_digest.sh"
+      ],
+      "description": "Daily digest force-send toggle."
+    },
+    {
+      "name": "DIGEST_TO_EMAIL",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": null,
+      "consumer": [
+        "scripts/run_daily_digest.sh"
+      ],
+      "description": "Override digest recipient."
+    },
+    {
+      "name": "DISK_SIZE",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": "50GB",
+      "consumer": [
+        "scripts/recreate_gce_instance.sh"
+      ],
+      "description": "Boot disk size for recreated GCE instance."
+    },
+    {
+      "name": "EXTERNAL_SMOKE_BROWSER",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": "chromium",
+      "consumer": [
+        "scripts/external_playwright_smoke.sh"
+      ],
+      "description": "Browser engine used by external Playwright smoke (script-internal handoff env from CLI args)."
+    },
+    {
+      "name": "EXTERNAL_SMOKE_DIAGNOSTICS_JSON",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": ".runtime-cache/external-playwright-smoke-result.json",
+      "consumer": [
+        "scripts/external_playwright_smoke.sh"
+      ],
+      "description": "Diagnostics JSON output path for external Playwright smoke summary."
+    },
+    {
+      "name": "EXTERNAL_SMOKE_EXPECT_TEXT",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": "Example Domain",
+      "consumer": [
+        "scripts/external_playwright_smoke.sh"
+      ],
+      "description": "Expected body marker asserted by external Playwright smoke (script-internal handoff env from CLI args)."
+    },
+    {
+      "name": "EXTERNAL_SMOKE_HEARTBEAT_SECONDS",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": "30",
+      "consumer": [
+        "scripts/external_playwright_smoke.sh"
+      ],
+      "description": "Heartbeat interval seconds for external Playwright smoke progress logs."
+    },
+    {
+      "name": "EXTERNAL_SMOKE_OUTPUT_DIR",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": ".runtime-cache/external-playwright-smoke",
+      "consumer": [
+        "scripts/external_playwright_smoke.sh"
+      ],
+      "description": "Artifact output directory for external Playwright smoke (script-internal handoff env from CLI args)."
+    },
+    {
+      "name": "EXTERNAL_SMOKE_RETRIES",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": "2",
+      "consumer": [
+        "scripts/external_playwright_smoke.sh"
+      ],
+      "description": "Retry count for external Playwright smoke attempts (script-internal handoff env from CLI args)."
+    },
+    {
+      "name": "EXTERNAL_SMOKE_TIMEOUT_MS",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": "45000",
+      "consumer": [
+        "scripts/external_playwright_smoke.sh"
+      ],
+      "description": "Navigation/assert timeout in milliseconds for external Playwright smoke (script-internal handoff env from CLI args)."
+    },
+    {
+      "name": "EXTERNAL_SMOKE_URL",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": "https://example.com",
+      "consumer": [
+        "scripts/external_playwright_smoke.sh"
+      ],
+      "description": "Target URL for external Playwright smoke (script-internal handoff env from CLI args)."
+    },
+    {
+      "name": "FAILURE_CHANNEL",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": "email",
+      "consumer": [
+        "scripts/run_failure_alerts.sh"
+      ],
+      "description": "Failure alert channel."
+    },
+    {
+      "name": "FAILURE_DRY_RUN",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": "false",
+      "consumer": [
+        "scripts/run_failure_alerts.sh"
+      ],
+      "description": "Failure alert dry-run toggle."
+    },
+    {
+      "name": "FAILURE_FALLBACK_ENABLED",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": "1",
+      "consumer": [
+        "scripts/run_failure_alerts.sh"
+      ],
+      "description": "Enable fallback path for failure alerts."
+    },
+    {
+      "name": "FAILURE_FORCE",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": "false",
+      "consumer": [
+        "scripts/run_failure_alerts.sh"
+      ],
+      "description": "Failure alert force-send toggle."
+    },
+    {
+      "name": "FAILURE_LIMIT",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": "20",
+      "consumer": [
+        "scripts/run_failure_alerts.sh"
+      ],
+      "description": "Maximum failed jobs to include."
+    },
+    {
+      "name": "FAILURE_LOOKBACK_HOURS",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": "24",
+      "consumer": [
+        "scripts/run_failure_alerts.sh"
+      ],
+      "description": "Failure alert lookback window."
+    },
+    {
+      "name": "FAILURE_TO_EMAIL",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": null,
+      "consumer": [
+        "scripts/run_failure_alerts.sh"
+      ],
+      "description": "Override failure alert recipient."
+    },
+    {
+      "name": "FORCE_DELETE_INSTANCE",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": "0",
+      "consumer": [
+        "scripts/recreate_gce_instance.sh"
+      ],
+      "description": "When set to 1, allow deleting an existing instance before recreate."
+    },
+    {
+      "name": "FORCE_REPLACE_APP_DIR",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": "0",
+      "consumer": [
+        "scripts/recreate_gce_instance.sh"
+      ],
+      "description": "When set to 1, allow replacing existing ~/app directory during repo clone."
+    },
+    {
+      "name": "FULL_STACK_REQUIRE_READER",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": "1",
+      "consumer": [
+        "scripts/smoke_full_stack.sh"
+      ],
+      "description": "Require reader stack health checks during smoke."
+    },
+    {
+      "name": "FULL_STACK_SMOKE_HEARTBEAT_SECONDS",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": "30",
+      "consumer": [
+        "scripts/smoke_full_stack.sh"
+      ],
+      "description": "Heartbeat interval seconds for full-stack smoke long-running stages."
+    },
+    {
+      "name": "GCP_PROJECT",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": null,
+      "consumer": [
+        "scripts/recreate_gce_instance.sh"
+      ],
+      "description": "Google Cloud project id used by the GCE recreate helper script."
+    },
+    {
+      "name": "GCP_ZONE",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": "us-west1-b",
+      "consumer": [
+        "scripts/recreate_gce_instance.sh"
+      ],
+      "description": "Google Cloud zone used when recreating the GCE instance."
+    },
+    {
+      "name": "GITHUB_REPO_URL",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": null,
+      "consumer": [
+        "scripts/recreate_gce_instance.sh"
+      ],
+      "description": "Optional GitHub repository URL to clone onto recreated GCE instance."
+    },
+    {
+      "name": "IMAGE_FAMILY",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": "debian-12",
+      "consumer": [
+        "scripts/recreate_gce_instance.sh"
+      ],
+      "description": "Base image family used for GCE instance creation."
+    },
+    {
+      "name": "IMAGE_PROJECT",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": "debian-cloud",
+      "consumer": [
+        "scripts/recreate_gce_instance.sh"
+      ],
+      "description": "Image project owning the selected GCE image family."
+    },
+    {
+      "name": "INIT_ENV_FORCE",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": "0",
+      "consumer": [
+        "scripts/init_env_example.sh"
+      ],
+      "description": "Overwrite generated template when set to truthy."
+    },
+    {
+      "name": "INSTALL_DEPS",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": "1",
+      "consumer": [
+        "scripts/bootstrap_full_stack.sh"
+      ],
+      "description": "Whether bootstrap installs dependencies."
+    },
+    {
+      "name": "INSTANCE_NAME",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": "vd-prod",
+      "consumer": [
+        "scripts/recreate_gce_instance.sh"
+      ],
+      "description": "Target GCE instance name for recreate workflow."
+    },
+    {
+      "name": "LIVE_SMOKE_API_BASE_URL",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": null,
+      "consumer": [
+        "scripts/e2e_live_smoke.sh"
+      ],
+      "description": "Live smoke API base URL override. Parent-shell value has priority over .env-loaded values."
+    },
+    {
+      "name": "LIVE_SMOKE_API_PORT",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": "8000",
+      "consumer": [
+        "scripts/e2e_live_smoke.sh"
+      ],
+      "description": "Fallback API port for live smoke when base URL is not explicitly provided."
+    },
+    {
+      "name": "LIVE_SMOKE_DIAGNOSTICS_JSON",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": ".runtime-cache/e2e-live-smoke-result.json",
+      "consumer": [
+        "scripts/e2e_live_smoke.sh"
+      ],
+      "description": "Diagnostics JSON output path for live smoke execution summary."
+    },
+    {
+      "name": "LIVE_SMOKE_COMPUTER_USE_CMD",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": null,
+      "consumer": [
+        "scripts/e2e_live_smoke.sh"
+      ],
+      "description": "Optional shell command override for computer_use smoke scenario; defaults to scripts/smoke_computer_use_local.sh."
+    },
+    {
+      "name": "LIVE_SMOKE_COMPUTER_USE_SKIP",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": "0",
+      "consumer": [
+        "scripts/e2e_live_smoke.sh"
+      ],
+      "description": "Skip computer_use smoke scenario when true."
+    },
+    {
+      "name": "LIVE_SMOKE_COMPUTER_USE_SKIP_REASON",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": null,
+      "consumer": [
+        "scripts/e2e_live_smoke.sh"
+      ],
+      "description": "Mandatory reason when LIVE_SMOKE_COMPUTER_USE_SKIP is enabled."
+    },
+    {
+      "name": "LIVE_SMOKE_COMPUTER_USE_STRICT",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": "1",
+      "consumer": [
+        "scripts/e2e_live_smoke.sh"
+      ],
+      "description": "Strict mode toggle for computer_use smoke scenario. When true, missing or failed command is treated as failure."
+    },
+    {
+      "name": "LIVE_SMOKE_HEALTH_PATH",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": "/healthz",
+      "consumer": [
+        "scripts/e2e_live_smoke.sh"
+      ],
+      "description": "Health endpoint path used by live smoke API preflight check."
+    },
+    {
+      "name": "LIVE_SMOKE_HEARTBEAT_SECONDS",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": "30",
+      "consumer": [
+        "scripts/e2e_live_smoke.sh"
+      ],
+      "description": "Heartbeat interval seconds for live smoke polling progress logs."
+    },
+    {
+      "name": "LIVE_SMOKE_MAX_RETRIES",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": "2",
+      "consumer": [
+        "scripts/e2e_live_smoke.sh"
+      ],
+      "description": "Max curl retry attempts used by live smoke external probes (allowed range [1,2])."
+    },
+    {
+      "name": "LIVE_SMOKE_EXTERNAL_PROBE_TIMEOUT_SECONDS",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": "20",
+      "consumer": [
+        "scripts/e2e_live_smoke.sh"
+      ],
+      "description": "Timeout seconds for external provider probe requests in live smoke preflight."
+    },
+    {
+      "name": "LIVE_SMOKE_POLL_INTERVAL_SECONDS",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": "3",
+      "consumer": [
+        "scripts/e2e_live_smoke.sh"
+      ],
+      "description": "Polling interval seconds used while waiting for live smoke jobs to reach terminal status."
+    },
+    {
+      "name": "LIVE_SMOKE_REQUIRE_API",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": "1",
+      "consumer": [
+        "scripts/e2e_live_smoke.sh"
+      ],
+      "description": "When true, fail live smoke if API is not reachable; otherwise skip."
+    },
+    {
+      "name": "LIVE_SMOKE_REQUIRE_SECRETS",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": "0",
+      "consumer": [
+        "scripts/e2e_live_smoke.sh"
+      ],
+      "description": "When true, fail live smoke if required external provider secrets are missing; otherwise skip."
+    },
+    {
+      "name": "LIVE_SMOKE_TIMEOUT_SECONDS",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": "180",
+      "consumer": [
+        "scripts/e2e_live_smoke.sh"
+      ],
+      "description": "Timeout seconds for provider canary run in live smoke script."
+    },
+    {
+      "name": "MACHINE_TYPE",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": "e2-standard-2",
+      "consumer": [
+        "scripts/recreate_gce_instance.sh"
+      ],
+      "description": "GCE machine type for recreated instance."
+    },
+    {
+      "name": "MCP_DIR",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": "apps/mcp",
+      "consumer": [
+        "scripts/dev_mcp.sh"
+      ],
+      "description": "MCP server root directory."
+    },
+    {
+      "name": "MCP_ENTRY",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": "apps.mcp.server",
+      "consumer": [
+        "scripts/dev_mcp.sh"
+      ],
+      "description": "MCP Python entry module."
+    },
+    {
+      "name": "MINIFLUX_ADMIN_PASSWORD",
+      "scope": "scripts",
+      "required": false,
+      "secret": true,
+      "default": null,
+      "consumer": [
+        "scripts/deploy_reader_stack.sh",
+        "scripts/sync_ai_feed_to_miniflux.py"
+      ],
+      "description": "Miniflux admin password."
+    },
+    {
+      "name": "MINIFLUX_ADMIN_USERNAME",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": "admin",
+      "consumer": [
+        "scripts/deploy_reader_stack.sh",
+        "scripts/sync_ai_feed_to_miniflux.py"
+      ],
+      "description": "Miniflux admin username."
+    },
+    {
+      "name": "MINIFLUX_API_TOKEN",
+      "scope": "scripts",
+      "required": false,
+      "secret": true,
+      "default": null,
+      "consumer": [
+        "scripts/sync_ai_feed_to_miniflux.py"
+      ],
+      "description": "Miniflux API token for AI sync."
+    },
+    {
+      "name": "MINIFLUX_CLEANUP_ARCHIVE_READ_DAYS",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": "30",
+      "consumer": [
+        "infra/compose/miniflux-nextflux.compose.yml"
+      ],
+      "description": "Miniflux cleanup retention for read archived entries."
+    },
+    {
+      "name": "MINIFLUX_CLEANUP_REMOVE_SESSIONS_DAYS",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": "30",
+      "consumer": [
+        "infra/compose/miniflux-nextflux.compose.yml"
+      ],
+      "description": "Miniflux cleanup retention for inactive sessions."
+    },
+    {
+      "name": "MINIFLUX_DB_NAME",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": "miniflux",
+      "consumer": [
+        "infra/compose/miniflux-nextflux.compose.yml"
+      ],
+      "description": "PostgreSQL database name for Miniflux container."
+    },
+    {
+      "name": "MINIFLUX_DB_PASSWORD",
+      "scope": "scripts",
+      "required": false,
+      "secret": true,
+      "default": "change_me",
+      "consumer": [
+        "infra/compose/miniflux-nextflux.compose.yml"
+      ],
+      "description": "PostgreSQL password for Miniflux container."
+    },
+    {
+      "name": "MINIFLUX_DB_USER",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": "miniflux",
+      "consumer": [
+        "infra/compose/miniflux-nextflux.compose.yml"
+      ],
+      "description": "PostgreSQL username for Miniflux container."
+    },
+    {
+      "name": "MINIFLUX_IMPORT_FEED_URL",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": "https://miniflux.app/feed.xml",
+      "consumer": [
+        "scripts/sync_ai_feed_to_miniflux.py"
+      ],
+      "description": "Seed feed URL used to create target feed for AI imports."
+    },
+    {
+      "name": "MINIFLUX_POLLING_FREQUENCY",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": "30",
+      "consumer": [
+        "infra/compose/miniflux-nextflux.compose.yml"
+      ],
+      "description": "Miniflux polling frequency in minutes."
+    },
+    {
+      "name": "MINIFLUX_PORT",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": "8080",
+      "consumer": [
+        "infra/compose/miniflux-nextflux.compose.yml"
+      ],
+      "description": "Miniflux host port exposed by docker compose."
+    },
+    {
+      "name": "NEXTFLUX_PORT",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": "3000",
+      "consumer": [
+        "scripts/deploy_reader_stack.sh",
+        "scripts/smoke_full_stack.sh"
+      ],
+      "description": "Nextflux exposed port."
+    },
+    {
+      "name": "NOTIFY_TO_EMAIL",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": null,
+      "consumer": [
+        "scripts/run_daily_digest.sh",
+        "scripts/run_failure_alerts.sh"
+      ],
+      "description": "Shared local default recipient for script overrides."
+    },
+    {
+      "name": "OFFLINE_FALLBACK",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": "1",
+      "consumer": [
+        "scripts/bootstrap_full_stack.sh",
+        "scripts/smoke_full_stack.sh"
+      ],
+      "description": "Allow degraded smoke success when docker/network prevents reader stack startup."
+    },
+    {
+      "name": "OPS_CANARY_INTERVAL_HOURS",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": "1",
+      "consumer": [
+        "scripts/start_ops_workflows.sh"
+      ],
+      "description": "Polling interval in hours for provider canary workflow."
+    },
+    {
+      "name": "OPS_CANARY_RUN_ONCE",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": "0",
+      "consumer": [
+        "scripts/start_ops_workflows.sh"
+      ],
+      "description": "Run provider canary starter once when set to 1."
+    },
+    {
+      "name": "OPS_CANARY_TIMEOUT_SECONDS",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": "8",
+      "consumer": [
+        "scripts/start_ops_workflows.sh"
+      ],
+      "description": "Provider canary timeout threshold in seconds."
+    },
+    {
+      "name": "OPS_CANARY_WORKFLOW_ID",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": "provider-canary-workflow",
+      "consumer": [
+        "scripts/start_ops_workflows.sh"
+      ],
+      "description": "Temporal workflow ID for provider canary ops starter."
+    },
+    {
+      "name": "OPS_CLEANUP_CACHE_DIR",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": null,
+      "consumer": [
+        "scripts/start_ops_workflows.sh"
+      ],
+      "description": "Optional cache directory override for cleanup workflow."
+    },
+    {
+      "name": "OPS_CLEANUP_CACHE_MAX_SIZE_MB",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": null,
+      "consumer": [
+        "scripts/start_ops_workflows.sh"
+      ],
+      "description": "Optional post-cleanup cache size cap in MB."
+    },
+    {
+      "name": "OPS_CLEANUP_CACHE_OLDER_THAN_HOURS",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": null,
+      "consumer": [
+        "scripts/start_ops_workflows.sh"
+      ],
+      "description": "Optional age threshold in hours for cleanup workflow cache files."
+    },
+    {
+      "name": "OPS_CLEANUP_INTERVAL_HOURS",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": "6",
+      "consumer": [
+        "scripts/start_ops_workflows.sh"
+      ],
+      "description": "Polling interval in hours for cleanup workflow."
+    },
+    {
+      "name": "OPS_CLEANUP_OLDER_THAN_HOURS",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": "24",
+      "consumer": [
+        "scripts/start_ops_workflows.sh"
+      ],
+      "description": "Age threshold in hours for cleanup workflow target files."
+    },
+    {
+      "name": "OPS_CLEANUP_RUN_ONCE",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": "0",
+      "consumer": [
+        "scripts/start_ops_workflows.sh"
+      ],
+      "description": "Run cleanup starter once when set to 1."
+    },
+    {
+      "name": "OPS_CLEANUP_WORKFLOW_ID",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": "cleanup-workspace-workflow",
+      "consumer": [
+        "scripts/start_ops_workflows.sh"
+      ],
+      "description": "Temporal workflow ID for cleanup ops starter."
+    },
+    {
+      "name": "OPS_CLEANUP_WORKSPACE_DIR",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": null,
+      "consumer": [
+        "scripts/start_ops_workflows.sh"
+      ],
+      "description": "Optional workspace directory override for cleanup workflow."
+    },
+    {
+      "name": "OPS_DAILY_LOCAL_HOUR",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": "9",
+      "consumer": [
+        "scripts/start_ops_workflows.sh"
+      ],
+      "description": "Local hour (0-23) for daily digest workflow schedule."
+    },
+    {
+      "name": "OPS_DAILY_RUN_ONCE",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": "0",
+      "consumer": [
+        "scripts/start_ops_workflows.sh"
+      ],
+      "description": "Run daily digest starter once when set to 1."
+    },
+    {
+      "name": "OPS_DAILY_TIMEZONE",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": "system-local",
+      "consumer": [
+        "scripts/start_ops_workflows.sh"
+      ],
+      "description": "IANA timezone name for daily digest scheduling."
+    },
+    {
+      "name": "OPS_DAILY_TIMEZONE_OFFSET_MINUTES",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": null,
+      "consumer": [
+        "scripts/start_ops_workflows.sh"
+      ],
+      "description": "Optional timezone offset override in minutes for daily digest scheduling."
+    },
+    {
+      "name": "OPS_DAILY_WORKFLOW_ID",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": "daily-digest-workflow",
+      "consumer": [
+        "scripts/start_ops_workflows.sh"
+      ],
+      "description": "Temporal workflow ID for daily digest ops starter."
+    },
+    {
+      "name": "OPS_DRY_RUN",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": "0",
+      "consumer": [
+        "scripts/start_ops_workflows.sh"
+      ],
+      "description": "Print worker commands without execution when set to 1."
+    },
+    {
+      "name": "OPS_NOTIFICATION_INTERVAL_MINUTES",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": "10",
+      "consumer": [
+        "scripts/start_ops_workflows.sh"
+      ],
+      "description": "Polling interval in minutes for notification retry workflow."
+    },
+    {
+      "name": "OPS_NOTIFICATION_RETRY_BATCH_LIMIT",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": "50",
+      "consumer": [
+        "scripts/start_ops_workflows.sh"
+      ],
+      "description": "Maximum retry batch size for notification retry workflow."
+    },
+    {
+      "name": "OPS_NOTIFICATION_RUN_ONCE",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": "0",
+      "consumer": [
+        "scripts/start_ops_workflows.sh"
+      ],
+      "description": "Run notification retry starter once when set to 1."
+    },
+    {
+      "name": "OPS_NOTIFICATION_WORKFLOW_ID",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": "notification-retry-workflow",
+      "consumer": [
+        "scripts/start_ops_workflows.sh"
+      ],
+      "description": "Temporal workflow ID for notification retry ops starter."
+    },
+    {
+      "name": "OPS_SHOW_HINTS",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": "1",
+      "consumer": [
+        "scripts/start_ops_workflows.sh"
+      ],
+      "description": "Print ops workflow startup hints when set to 1."
+    },
+    {
+      "name": "OUTPUT_PATH",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": ".env.local.example",
+      "consumer": [
+        "scripts/init_env_example.sh"
+      ],
+      "description": "Generated local env template path."
+    },
+    {
+      "name": "PROFILE",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": "local",
+      "consumer": [
+        "scripts/bootstrap_full_stack.sh"
+      ],
+      "description": "Bootstrap profile local|gce."
+    },
+    {
+      "name": "PR_LLM_REAL_SMOKE_API_BASE_URL",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": "http://127.0.0.1:8000",
+      "consumer": [
+        "scripts/smoke_llm_real_local.sh"
+      ],
+      "description": "Default API base URL used by local PR real LLM smoke script."
+    },
+    {
+      "name": "PR_LLM_REAL_SMOKE_DIAGNOSTICS_JSON",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": ".runtime-cache/pr-llm-real-smoke-result.json",
+      "consumer": [
+        "scripts/smoke_llm_real_local.sh"
+      ],
+      "description": "Diagnostics output path for local PR real LLM smoke script."
+    },
+    {
+      "name": "PR_LLM_REAL_SMOKE_HEARTBEAT_SECONDS",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": "30",
+      "consumer": [
+        "scripts/smoke_llm_real_local.sh"
+      ],
+      "description": "Heartbeat interval seconds for local PR real LLM smoke progress logs."
+    },
+    {
+      "name": "PR_LLM_REAL_SMOKE_MAX_RETRIES",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": "2",
+      "consumer": [
+        "scripts/smoke_llm_real_local.sh"
+      ],
+      "description": "Max API retry attempts for local PR real LLM smoke requests."
+    },
+    {
+      "name": "READER_ENV_FILE",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": "env/profiles/reader.env",
+      "consumer": [
+        "scripts/bootstrap_full_stack.sh",
+        "scripts/smoke_full_stack.sh"
+      ],
+      "description": "Reader stack profile env path (legacy .env.reader-stack remains compatible via script fallback)."
+    },
+    {
+      "name": "SMOKE_COMPUTER_USE_HEARTBEAT_SECONDS",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": "30",
+      "consumer": [
+        "scripts/smoke_computer_use_local.sh"
+      ],
+      "description": "Heartbeat interval seconds for local computer-use smoke progress logs."
+    },
+    {
+      "name": "SMOKE_COMPUTER_USE_RETRIES",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": "2",
+      "consumer": [
+        "scripts/smoke_computer_use_local.sh"
+      ],
+      "description": "Retry attempts for local computer-use smoke HTTP requests (allowed range [1,2])."
+    },
+    {
+      "name": "WEB_PORT",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": "3000",
+      "consumer": [
+        "scripts/full_stack.sh"
+      ],
+      "description": "Web dev server port for full stack script."
+    },
+    {
+      "name": "WITH_CORE_SERVICES",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": "1",
+      "consumer": [
+        "scripts/bootstrap_full_stack.sh"
+      ],
+      "description": "Whether bootstrap starts dockerized core services."
+    },
+    {
+      "name": "WITH_READER_STACK",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": "1",
+      "consumer": [
+        "scripts/bootstrap_full_stack.sh"
+      ],
+      "description": "Whether bootstrap starts Miniflux+Nextflux reader stack."
+    },
+    {
+      "name": "WORKER_COMMAND",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": "run-worker",
+      "consumer": [
+        "scripts/dev_worker.sh"
+      ],
+      "description": "Worker command for the entry module."
+    },
+    {
+      "name": "WORKER_DIR",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": "apps/worker",
+      "consumer": [
+        "scripts/dev_worker.sh"
+      ],
+      "description": "Worker module root."
+    },
+    {
+      "name": "WORKER_ENTRY",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": "worker.main",
+      "consumer": [
+        "scripts/dev_worker.sh"
+      ],
+      "description": "Worker Python entry module."
+    },
+    {
+      "name": "YOUTUBE_SMOKE_URL",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+      "consumer": [
+        "scripts/e2e_live_smoke.sh"
+      ],
+      "description": "YouTube URL used by live smoke process scenario."
+    }
+  ]
+}

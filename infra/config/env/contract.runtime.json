@@ -1,0 +1,1096 @@
+{
+  "version": 1,
+  "name": "runtime",
+  "variables": [
+    {
+      "name": "ANTHROPIC_API_KEY",
+      "scope": "shared",
+      "required": false,
+      "secret": true,
+      "default": null,
+      "consumer": [
+        "apps/api/app/config.py",
+        "apps/worker/worker/config.py"
+      ],
+      "description": "Compatibility-reserved Anthropic API key (not an active runtime provider path in Gemini-only mode)."
+    },
+    {
+      "name": "API_INTEGRATION_DATABASE_URL",
+      "scope": "test",
+      "required": false,
+      "secret": true,
+      "default": "postgresql+psycopg://postgres:postgres@127.0.0.1:5432/postgres",
+      "consumer": [
+        "apps/api/tests/test_api_integration_smoke.py"
+      ],
+      "description": "Optional PostgreSQL admin DSN for ephemeral API integration smoke databases."
+    },
+    {
+      "name": "API_RETRIEVAL_EMBEDDING_TIMEOUT_SECONDS",
+      "scope": "api",
+      "required": false,
+      "secret": false,
+      "default": "8",
+      "consumer": [
+        "apps/api/app/config.py"
+      ],
+      "description": "Timeout seconds for API retrieval embedding operations."
+    },
+    {
+      "name": "API_TEMPORAL_CONNECT_TIMEOUT_SECONDS",
+      "scope": "api",
+      "required": false,
+      "secret": false,
+      "default": "5",
+      "consumer": [
+        "apps/api/app/config.py"
+      ],
+      "description": "Temporal client connect timeout in API server."
+    },
+    {
+      "name": "API_TEMPORAL_RESULT_TIMEOUT_SECONDS",
+      "scope": "api",
+      "required": false,
+      "secret": false,
+      "default": "180",
+      "consumer": [
+        "apps/api/app/config.py"
+      ],
+      "description": "Temporal workflow result wait timeout in API server."
+    },
+    {
+      "name": "API_TEMPORAL_START_TIMEOUT_SECONDS",
+      "scope": "api",
+      "required": false,
+      "secret": false,
+      "default": "10",
+      "consumer": [
+        "apps/api/app/config.py"
+      ],
+      "description": "Temporal workflow start timeout in API server."
+    },
+    {
+      "name": "APP_NAME",
+      "scope": "api",
+      "required": false,
+      "secret": false,
+      "default": "Video Digestor API",
+      "consumer": [
+        "apps/api/app/config.py"
+      ],
+      "description": "API service display name."
+    },
+    {
+      "name": "APP_VERSION",
+      "scope": "api",
+      "required": false,
+      "secret": false,
+      "default": "0.1.0",
+      "consumer": [
+        "apps/api/app/config.py"
+      ],
+      "description": "API service display version."
+    },
+    {
+      "name": "ASR_FALLBACK_ENABLED",
+      "scope": "worker",
+      "required": false,
+      "secret": false,
+      "default": "false",
+      "consumer": [
+        "apps/worker/worker/config.py"
+      ],
+      "description": "Enable local ASR fallback when subtitles/transcript fallback are unavailable."
+    },
+    {
+      "name": "ASR_MODEL_SIZE",
+      "scope": "worker",
+      "required": false,
+      "secret": false,
+      "default": "small",
+      "consumer": [
+        "apps/worker/worker/config.py"
+      ],
+      "description": "Default local ASR model size."
+    },
+    {
+      "name": "BILIBILI_COOKIE",
+      "scope": "worker",
+      "required": false,
+      "secret": true,
+      "default": null,
+      "consumer": [
+        "apps/worker/worker/config.py",
+        "apps/worker/worker/comments/bilibili.py"
+      ],
+      "description": "Optional bilibili cookie header used to reduce anti-crawl failures (e.g. code -352)."
+    },
+    {
+      "name": "BILIBILI_DOWNLOADER",
+      "scope": "worker",
+      "required": false,
+      "secret": false,
+      "default": "auto",
+      "consumer": [
+        "apps/worker/worker/config.py"
+      ],
+      "description": "Bilibili download provider strategy: auto | yt-dlp | bbdown."
+    },
+    {
+      "name": "COMMENTS_REPLIES_PER_COMMENT",
+      "scope": "worker",
+      "required": false,
+      "secret": false,
+      "default": "10",
+      "consumer": [
+        "apps/worker/worker/config.py"
+      ],
+      "description": "Replies fetched per top-level comment."
+    },
+    {
+      "name": "COMMENTS_REQUEST_TIMEOUT_SECONDS",
+      "scope": "worker",
+      "required": false,
+      "secret": false,
+      "default": "10",
+      "consumer": [
+        "apps/worker/worker/config.py"
+      ],
+      "description": "Comment API timeout seconds."
+    },
+    {
+      "name": "COMMENTS_TOP_N",
+      "scope": "worker",
+      "required": false,
+      "secret": false,
+      "default": "10",
+      "consumer": [
+        "apps/worker/worker/config.py"
+      ],
+      "description": "Maximum top-level comments fetched."
+    },
+    {
+      "name": "DATABASE_URL",
+      "scope": "shared",
+      "required": true,
+      "secret": true,
+      "default": null,
+      "consumer": [
+        "apps/api/app/config.py",
+        "apps/worker/worker/config.py"
+      ],
+      "description": "Primary SQL database DSN."
+    },
+    {
+      "name": "DIGEST_DAILY_LOCAL_HOUR",
+      "scope": "worker",
+      "required": false,
+      "secret": false,
+      "default": "9",
+      "consumer": [
+        "apps/worker/worker/config.py"
+      ],
+      "description": "Local-hour trigger for daily digest scheduling."
+    },
+    {
+      "name": "DIGEST_LOCAL_TIMEZONE",
+      "scope": "worker",
+      "required": false,
+      "secret": false,
+      "default": null,
+      "consumer": [
+        "apps/worker/worker/config.py"
+      ],
+      "description": "IANA timezone used by DailyDigestWorkflow scheduling."
+    },
+    {
+      "name": "DIGEST_TEMPLATE_PATH",
+      "scope": "worker",
+      "required": false,
+      "secret": false,
+      "default": null,
+      "consumer": [
+        "apps/worker/worker/config.py"
+      ],
+      "description": "Custom digest template path."
+    },
+    {
+      "name": "FEED_PATHS",
+      "scope": "worker",
+      "required": false,
+      "secret": false,
+      "default": null,
+      "consumer": [
+        "apps/worker/worker/config.py"
+      ],
+      "description": "Comma-separated feed paths resolved against RSSHUB_BASE_URL."
+    },
+    {
+      "name": "FEED_URLS",
+      "scope": "worker",
+      "required": false,
+      "secret": false,
+      "default": null,
+      "consumer": [
+        "apps/worker/worker/config.py"
+      ],
+      "description": "Comma-separated feed URLs."
+    },
+    {
+      "name": "GEMINI_API_KEY",
+      "scope": "shared",
+      "required": false,
+      "secret": true,
+      "default": null,
+      "consumer": [
+        "apps/api/app/config.py",
+        "apps/worker/worker/config.py"
+      ],
+      "description": "Gemini API key loaded from .env or process environment only; used by Gemini-only runtime and live smoke preflight."
+    },
+    {
+      "name": "GEMINI_COMPUTER_USE_ENABLED",
+      "scope": "worker",
+      "required": false,
+      "secret": false,
+      "default": "false",
+      "consumer": [
+        "apps/worker/worker/config.py"
+      ],
+      "description": "Enable Gemini computer-use mode in worker runtime."
+    },
+    {
+      "name": "GEMINI_COMPUTER_USE_MAX_STEPS",
+      "scope": "worker",
+      "required": false,
+      "secret": false,
+      "default": "3",
+      "consumer": [
+        "apps/worker/worker/config.py"
+      ],
+      "description": "Maximum Gemini computer-use steps per run."
+    },
+    {
+      "name": "GEMINI_COMPUTER_USE_MODEL",
+      "scope": "shared",
+      "required": false,
+      "secret": false,
+      "default": "GEMINI_MODEL",
+      "consumer": [
+        "apps/api/app/config.py",
+        "apps/worker/worker/config.py"
+      ],
+      "description": "Gemini model entry for computer-use; defaults to GEMINI_MODEL when unset."
+    },
+    {
+      "name": "GEMINI_COMPUTER_USE_REQUIRE_CONFIRMATION",
+      "scope": "worker",
+      "required": false,
+      "secret": false,
+      "default": "true",
+      "consumer": [
+        "apps/worker/worker/config.py"
+      ],
+      "description": "Require explicit confirmation before Gemini computer-use actions."
+    },
+    {
+      "name": "GEMINI_COMPUTER_USE_TIMEOUT_SECONDS",
+      "scope": "worker",
+      "required": false,
+      "secret": false,
+      "default": "30",
+      "consumer": [
+        "apps/worker/worker/config.py"
+      ],
+      "description": "Timeout seconds for Gemini computer-use actions."
+    },
+    {
+      "name": "GEMINI_CONTEXT_CACHE_ENABLED",
+      "scope": "worker",
+      "required": false,
+      "secret": false,
+      "default": "true",
+      "consumer": [
+        "apps/worker/worker/config.py"
+      ],
+      "description": "Enable Gemini context caching for long text prompts."
+    },
+    {
+      "name": "GEMINI_CONTEXT_CACHE_LOCAL_TTL_SECONDS",
+      "scope": "worker",
+      "required": false,
+      "secret": false,
+      "default": "21600",
+      "consumer": [
+        "apps/worker/worker/config.py"
+      ],
+      "description": "In-process TTL for cached Gemini content references."
+    },
+    {
+      "name": "GEMINI_CONTEXT_CACHE_MAX_KEYS",
+      "scope": "worker",
+      "required": false,
+      "secret": false,
+      "default": "1000",
+      "consumer": [
+        "apps/worker/worker/config.py"
+      ],
+      "description": "Maximum in-process Gemini cache key entries before LRU eviction."
+    },
+    {
+      "name": "GEMINI_CONTEXT_CACHE_MIN_CHARS",
+      "scope": "worker",
+      "required": false,
+      "secret": false,
+      "default": "4096",
+      "consumer": [
+        "apps/worker/worker/config.py"
+      ],
+      "description": "Prompt length threshold to enable Gemini context caching."
+    },
+    {
+      "name": "GEMINI_CONTEXT_CACHE_SWEEP_INTERVAL_SECONDS",
+      "scope": "worker",
+      "required": false,
+      "secret": false,
+      "default": "300",
+      "consumer": [
+        "apps/worker/worker/config.py"
+      ],
+      "description": "Sweep interval for pruning expired Gemini cache entries."
+    },
+    {
+      "name": "GEMINI_CONTEXT_CACHE_TTL_SECONDS",
+      "scope": "worker",
+      "required": false,
+      "secret": false,
+      "default": "21600",
+      "consumer": [
+        "apps/worker/worker/config.py"
+      ],
+      "description": "TTL for Gemini cached content in seconds."
+    },
+    {
+      "name": "GEMINI_DIGEST_MODEL",
+      "scope": "worker",
+      "required": false,
+      "secret": false,
+      "default": "GEMINI_MODEL",
+      "consumer": [
+        "apps/worker/worker/config.py"
+      ],
+      "description": "Gemini model for llm_digest structured generation."
+    },
+    {
+      "name": "GEMINI_EMBEDDING_MODEL",
+      "scope": "shared",
+      "required": false,
+      "secret": false,
+      "default": "gemini-embedding-001",
+      "consumer": [
+        "apps/api/app/config.py",
+        "apps/worker/worker/config.py"
+      ],
+      "description": "Gemini embedding model entrypoint for retrieval/vectorization integrations."
+    },
+    {
+      "name": "GEMINI_FAST_MODEL",
+      "scope": "worker",
+      "required": false,
+      "secret": false,
+      "default": "gemini-3.0-flash",
+      "consumer": [
+        "apps/worker/worker/config.py"
+      ],
+      "description": "Gemini model used when llm.speed_priority=true and no model override is provided."
+    },
+    {
+      "name": "GEMINI_INCLUDE_THOUGHTS",
+      "scope": "worker",
+      "required": false,
+      "secret": false,
+      "default": "true",
+      "consumer": [
+        "apps/worker/worker/config.py"
+      ],
+      "description": "Whether Gemini may emit thought summaries; keep false for strict JSON consumers."
+    },
+    {
+      "name": "GEMINI_MODEL",
+      "scope": "shared",
+      "required": false,
+      "secret": false,
+      "default": "gemini-3.1-pro-preview",
+      "consumer": [
+        "apps/api/app/config.py",
+        "apps/worker/worker/config.py"
+      ],
+      "description": "Default Gemini model for Gemini-only LLM pipeline."
+    },
+    {
+      "name": "GEMINI_OUTLINE_MODEL",
+      "scope": "worker",
+      "required": false,
+      "secret": false,
+      "default": "GEMINI_MODEL",
+      "consumer": [
+        "apps/worker/worker/config.py"
+      ],
+      "description": "Gemini model for llm_outline structured generation."
+    },
+    {
+      "name": "GEMINI_STRICT_SCHEMA_MODE",
+      "scope": "worker",
+      "required": false,
+      "secret": false,
+      "default": "true",
+      "consumer": [
+        "apps/worker/worker/config.py"
+      ],
+      "description": "Enable strict schema mode for Gemini structured output validation."
+    },
+    {
+      "name": "GEMINI_THINKING_LEVEL",
+      "scope": "shared",
+      "required": false,
+      "secret": false,
+      "default": "high",
+      "consumer": [
+        "apps/api/app/config.py",
+        "apps/worker/worker/config.py"
+      ],
+      "description": "Default Gemini thinking level (minimal|low|medium|high) for outline/digest generation."
+    },
+    {
+      "name": "LLM_PROVIDER",
+      "scope": "shared",
+      "required": false,
+      "secret": false,
+      "default": "gemini",
+      "consumer": [
+        "apps/api/app/config.py",
+        "apps/worker/worker/config.py"
+      ],
+      "description": "LLM provider selector; must remain gemini in current Gemini-only runtime mode."
+    },
+    {
+      "name": "LOCK_TTL_SECONDS",
+      "scope": "worker",
+      "required": false,
+      "secret": false,
+      "default": "90",
+      "consumer": [
+        "apps/worker/worker/config.py"
+      ],
+      "description": "SQLite lock TTL seconds."
+    },
+    {
+      "name": "MINIFLUX_BASE_URL",
+      "scope": "shared",
+      "required": false,
+      "secret": false,
+      "default": "http://127.0.0.1:8080",
+      "consumer": [
+        "scripts/deploy_reader_stack.sh",
+        "scripts/sync_ai_feed_to_miniflux.py",
+        "scripts/smoke_full_stack.sh"
+      ],
+      "description": "Miniflux base URL."
+    },
+    {
+      "name": "NEXT_DIST_DIR",
+      "scope": "test",
+      "required": false,
+      "secret": false,
+      "default": null,
+      "consumer": [
+        "apps/web/next.config.mjs",
+        "apps/web/tests/e2e/conftest.py"
+      ],
+      "description": "Next.js build output directory override used by parallel web E2E workers."
+    },
+    {
+      "name": "NEXT_PUBLIC_API_BASE_URL",
+      "scope": "web",
+      "required": false,
+      "secret": false,
+      "default": "http://127.0.0.1:8000",
+      "consumer": [
+        "apps/web/lib/api/client.ts"
+      ],
+      "description": "Public API URL for web bundle/runtime."
+    },
+    {
+      "name": "NOTIFICATION_ENABLED",
+      "scope": "shared",
+      "required": false,
+      "secret": false,
+      "default": "false",
+      "consumer": [
+        "apps/api/app/config.py",
+        "apps/worker/worker/config.py"
+      ],
+      "description": "Enable outbound notification delivery."
+    },
+    {
+      "name": "OPENAI_API_KEY",
+      "scope": "shared",
+      "required": false,
+      "secret": true,
+      "default": null,
+      "consumer": [
+        "apps/api/app/config.py",
+        "apps/worker/worker/config.py"
+      ],
+      "description": "Compatibility-reserved OpenAI API key (not an active runtime provider path in Gemini-only mode)."
+    },
+    {
+      "name": "PIPELINE_ARTIFACT_ROOT",
+      "scope": "worker",
+      "required": true,
+      "secret": false,
+      "default": null,
+      "consumer": [
+        "apps/worker/worker/config.py"
+      ],
+      "description": "Pipeline artifact output root."
+    },
+    {
+      "name": "PIPELINE_FRAME_INTERVAL_SECONDS",
+      "scope": "worker",
+      "required": false,
+      "secret": false,
+      "default": "30",
+      "consumer": [
+        "apps/worker/worker/config.py"
+      ],
+      "description": "Frame extraction interval seconds."
+    },
+    {
+      "name": "PIPELINE_LLM_FAIL_ON_PROVIDER_ERROR",
+      "scope": "worker",
+      "required": false,
+      "secret": false,
+      "default": "true",
+      "consumer": [
+        "apps/worker/worker/config.py"
+      ],
+      "description": "When true, provider/API errors in LLM steps fail the job rather than degrade."
+    },
+    {
+      "name": "PIPELINE_LLM_HARD_REQUIRED",
+      "scope": "worker",
+      "required": false,
+      "secret": false,
+      "default": "true",
+      "consumer": [
+        "apps/worker/worker/config.py"
+      ],
+      "description": "When true, llm_outline/llm_digest failures are treated as hard failures."
+    },
+    {
+      "name": "PIPELINE_LLM_INCLUDE_FRAMES",
+      "scope": "worker",
+      "required": false,
+      "secret": false,
+      "default": null,
+      "consumer": [
+        "apps/worker/worker/config.py"
+      ],
+      "description": "Optional override to force frame context inclusion/exclusion in LLM prompts."
+    },
+    {
+      "name": "PIPELINE_LLM_INPUT_MODE",
+      "scope": "worker",
+      "required": false,
+      "secret": false,
+      "default": "auto",
+      "consumer": [
+        "apps/worker/worker/config.py"
+      ],
+      "description": "Gemini media resolution strategy (auto|text|video_text|frames_text)."
+    },
+    {
+      "name": "PIPELINE_LLM_MAX_RETRIES",
+      "scope": "worker",
+      "required": false,
+      "secret": false,
+      "default": null,
+      "consumer": [
+        "apps/worker/worker/config.py"
+      ],
+      "description": "Optional retry override for llm_outline and llm_digest steps."
+    },
+    {
+      "name": "PIPELINE_MAX_FRAMES",
+      "scope": "worker",
+      "required": false,
+      "secret": false,
+      "default": "6",
+      "consumer": [
+        "apps/worker/worker/config.py"
+      ],
+      "description": "Max frames extracted for multimodal inputs; also caps Gemini frame parts for media resolution."
+    },
+    {
+      "name": "PIPELINE_RETRY_ATTEMPTS",
+      "scope": "worker",
+      "required": false,
+      "secret": false,
+      "default": "2",
+      "consumer": [
+        "apps/worker/worker/config.py"
+      ],
+      "description": "Pipeline step retry attempts."
+    },
+    {
+      "name": "PIPELINE_RETRY_AUTH_ATTEMPTS",
+      "scope": "worker",
+      "required": false,
+      "secret": false,
+      "default": null,
+      "consumer": [
+        "apps/worker/worker/config.py"
+      ],
+      "description": "Optional retry-attempt override for auth pipeline errors."
+    },
+    {
+      "name": "PIPELINE_RETRY_AUTH_BACKOFF_SECONDS",
+      "scope": "worker",
+      "required": false,
+      "secret": false,
+      "default": null,
+      "consumer": [
+        "apps/worker/worker/config.py"
+      ],
+      "description": "Optional base backoff override for auth pipeline errors."
+    },
+    {
+      "name": "PIPELINE_RETRY_AUTH_MAX_BACKOFF_SECONDS",
+      "scope": "worker",
+      "required": false,
+      "secret": false,
+      "default": null,
+      "consumer": [
+        "apps/worker/worker/config.py"
+      ],
+      "description": "Optional max backoff override for auth pipeline errors."
+    },
+    {
+      "name": "PIPELINE_RETRY_BACKOFF_SECONDS",
+      "scope": "worker",
+      "required": false,
+      "secret": false,
+      "default": "1.0",
+      "consumer": [
+        "apps/worker/worker/config.py"
+      ],
+      "description": "Pipeline retry backoff seconds."
+    },
+    {
+      "name": "PIPELINE_RETRY_FATAL_ATTEMPTS",
+      "scope": "worker",
+      "required": false,
+      "secret": false,
+      "default": null,
+      "consumer": [
+        "apps/worker/worker/config.py"
+      ],
+      "description": "Optional retry-attempt override for fatal pipeline errors."
+    },
+    {
+      "name": "PIPELINE_RETRY_RATE_LIMIT_ATTEMPTS",
+      "scope": "worker",
+      "required": false,
+      "secret": false,
+      "default": null,
+      "consumer": [
+        "apps/worker/worker/config.py"
+      ],
+      "description": "Optional retry-attempt override for rate-limit pipeline errors."
+    },
+    {
+      "name": "PIPELINE_RETRY_RATE_LIMIT_BACKOFF_SECONDS",
+      "scope": "worker",
+      "required": false,
+      "secret": false,
+      "default": null,
+      "consumer": [
+        "apps/worker/worker/config.py"
+      ],
+      "description": "Optional base backoff override for rate-limit pipeline errors."
+    },
+    {
+      "name": "PIPELINE_RETRY_RATE_LIMIT_MAX_BACKOFF_SECONDS",
+      "scope": "worker",
+      "required": false,
+      "secret": false,
+      "default": null,
+      "consumer": [
+        "apps/worker/worker/config.py"
+      ],
+      "description": "Optional max backoff override for rate-limit pipeline errors."
+    },
+    {
+      "name": "PIPELINE_RETRY_TRANSIENT_ATTEMPTS",
+      "scope": "worker",
+      "required": false,
+      "secret": false,
+      "default": null,
+      "consumer": [
+        "apps/worker/worker/config.py"
+      ],
+      "description": "Optional retry-attempt override for transient pipeline errors."
+    },
+    {
+      "name": "PIPELINE_RETRY_TRANSIENT_BACKOFF_SECONDS",
+      "scope": "worker",
+      "required": false,
+      "secret": false,
+      "default": null,
+      "consumer": [
+        "apps/worker/worker/config.py"
+      ],
+      "description": "Optional base backoff override for transient pipeline errors."
+    },
+    {
+      "name": "PIPELINE_RETRY_TRANSIENT_MAX_BACKOFF_SECONDS",
+      "scope": "worker",
+      "required": false,
+      "secret": false,
+      "default": null,
+      "consumer": [
+        "apps/worker/worker/config.py"
+      ],
+      "description": "Optional max backoff override for transient pipeline errors."
+    },
+    {
+      "name": "PIPELINE_SUBPROCESS_TIMEOUT_SECONDS",
+      "scope": "worker",
+      "required": false,
+      "secret": false,
+      "default": "180",
+      "consumer": [
+        "apps/worker/worker/config.py"
+      ],
+      "description": "Subprocess timeout seconds."
+    },
+    {
+      "name": "PIPELINE_WORKSPACE_DIR",
+      "scope": "worker",
+      "required": true,
+      "secret": false,
+      "default": null,
+      "consumer": [
+        "apps/worker/worker/config.py"
+      ],
+      "description": "Worker workspace directory."
+    },
+    {
+      "name": "PYTEST_XDIST_WORKER",
+      "scope": "test",
+      "required": false,
+      "secret": false,
+      "default": null,
+      "consumer": [
+        "apps/web/tests/e2e/conftest.py"
+      ],
+      "description": "Pytest-xdist worker id used to derive isolated web E2E runtime directories."
+    },
+    {
+      "name": "REQUEST_RETRY_ATTEMPTS",
+      "scope": "worker",
+      "required": false,
+      "secret": false,
+      "default": "3",
+      "consumer": [
+        "apps/worker/worker/config.py"
+      ],
+      "description": "Retry attempts for RSS/API requests."
+    },
+    {
+      "name": "REQUEST_RETRY_BACKOFF_SECONDS",
+      "scope": "worker",
+      "required": false,
+      "secret": false,
+      "default": "0.5",
+      "consumer": [
+        "apps/worker/worker/config.py"
+      ],
+      "description": "Retry backoff base seconds."
+    },
+    {
+      "name": "REQUEST_TIMEOUT_SECONDS",
+      "scope": "worker",
+      "required": false,
+      "secret": false,
+      "default": "15",
+      "consumer": [
+        "apps/worker/worker/config.py"
+      ],
+      "description": "HTTP request timeout in seconds."
+    },
+    {
+      "name": "RESEND_API_KEY",
+      "scope": "shared",
+      "required": false,
+      "secret": true,
+      "default": null,
+      "consumer": [
+        "apps/api/app/config.py",
+        "apps/worker/worker/config.py"
+      ],
+      "description": "Resend API key, required when notifications are enabled."
+    },
+    {
+      "name": "RESEND_FROM_EMAIL",
+      "scope": "shared",
+      "required": false,
+      "secret": false,
+      "default": null,
+      "consumer": [
+        "apps/api/app/config.py",
+        "apps/worker/worker/config.py"
+      ],
+      "description": "Resend sender address, required when notifications are enabled."
+    },
+    {
+      "name": "RSSHUB_BASE_URL",
+      "scope": "worker",
+      "required": false,
+      "secret": false,
+      "default": "https://rsshub.app",
+      "consumer": [
+        "apps/worker/worker/config.py"
+      ],
+      "description": "RSSHub base URL for feed normalization."
+    },
+    {
+      "name": "RSSHUB_FALLBACK_BASE_URLS",
+      "scope": "worker",
+      "required": false,
+      "secret": false,
+      "default": null,
+      "consumer": [
+        "apps/worker/worker/config.py"
+      ],
+      "description": "Optional comma-separated ordered public RSSHub fallback base URLs."
+    },
+    {
+      "name": "RSSHUB_PUBLIC_FALLBACK_BASE_URL",
+      "scope": "worker",
+      "required": false,
+      "secret": false,
+      "default": "https://rsshub.app",
+      "consumer": [
+        "apps/worker/worker/config.py"
+      ],
+      "description": "Last-resort public RSSHub base URL fallback when private instance returns anti-crawl errors."
+    },
+    {
+      "name": "SQLITE_PATH",
+      "scope": "worker",
+      "required": true,
+      "secret": false,
+      "default": null,
+      "consumer": [
+        "apps/worker/worker/config.py"
+      ],
+      "description": "Worker SQLite state DB path."
+    },
+    {
+      "name": "SQLITE_STATE_PATH",
+      "scope": "api",
+      "required": true,
+      "secret": false,
+      "default": null,
+      "consumer": [
+        "apps/api/app/config.py"
+      ],
+      "description": "API reads pipeline step state from this SQLite DB."
+    },
+    {
+      "name": "TEMPORAL_NAMESPACE",
+      "scope": "shared",
+      "required": true,
+      "secret": false,
+      "default": null,
+      "consumer": [
+        "apps/api/app/config.py",
+        "apps/worker/worker/config.py"
+      ],
+      "description": "Temporal namespace."
+    },
+    {
+      "name": "TEMPORAL_TARGET_HOST",
+      "scope": "shared",
+      "required": true,
+      "secret": false,
+      "default": null,
+      "consumer": [
+        "apps/api/app/config.py",
+        "apps/worker/worker/config.py"
+      ],
+      "description": "Temporal frontend host:port."
+    },
+    {
+      "name": "TEMPORAL_TASK_QUEUE",
+      "scope": "shared",
+      "required": true,
+      "secret": false,
+      "default": null,
+      "consumer": [
+        "apps/api/app/config.py",
+        "apps/worker/worker/config.py"
+      ],
+      "description": "Temporal task queue name."
+    },
+    {
+      "name": "UI_AUDIT_ARTIFACT_BASE_ROOT",
+      "scope": "api",
+      "required": false,
+      "secret": false,
+      "default": null,
+      "consumer": [
+        "apps/api/app/services/ui_audit.py"
+      ],
+      "description": "Optional base directory that UI audit artifact paths must reside within."
+    },
+    {
+      "name": "UI_AUDIT_GEMINI_ENABLED",
+      "scope": "api",
+      "required": false,
+      "secret": false,
+      "default": "true",
+      "consumer": [
+        "apps/api/app/services/ui_audit.py"
+      ],
+      "description": "Enable Gemini-powered UI audit enhancement in API service."
+    },
+    {
+      "name": "VD_API_BASE_URL",
+      "scope": "shared",
+      "required": true,
+      "secret": false,
+      "default": null,
+      "consumer": [
+        "apps/mcp/server.py",
+        "apps/web/lib/api/client.ts",
+        "scripts/*.sh"
+      ],
+      "description": "Base URL for API HTTP calls."
+    },
+    {
+      "name": "VD_API_KEY",
+      "scope": "shared",
+      "required": false,
+      "secret": true,
+      "default": null,
+      "consumer": [
+        "apps/mcp/server.py",
+        "apps/api/app/security.py"
+      ],
+      "description": "Optional bearer token for MCP -> API requests."
+    },
+    {
+      "name": "VD_ALLOW_UNAUTH_WRITE",
+      "scope": "api",
+      "required": false,
+      "secret": false,
+      "default": "false",
+      "consumer": [
+        "apps/api/app/security.py"
+      ],
+      "description": "Explicit local/dev-only override that allows unauthenticated write routes when VD_API_KEY is not configured."
+    },
+    {
+      "name": "VD_API_TIMEOUT_SEC",
+      "scope": "mcp",
+      "required": false,
+      "secret": false,
+      "default": "20",
+      "consumer": [
+        "apps/mcp/server.py"
+      ],
+      "description": "MCP upstream HTTP timeout seconds."
+    },
+    {
+      "name": "VD_MCP_MAX_BASE64_BYTES",
+      "scope": "mcp",
+      "required": false,
+      "secret": false,
+      "default": "2097152",
+      "consumer": [
+        "apps/mcp/server.py",
+        "apps/mcp/tools/_common.py"
+      ],
+      "description": "Maximum accepted base64 payload size (bytes) for MCP tool inputs."
+    },
+    {
+      "name": "WEB_ACTION_SESSION_TOKEN",
+      "scope": "web",
+      "required": false,
+      "secret": true,
+      "default": null,
+      "consumer": [
+        "apps/web/app/action-security.ts"
+      ],
+      "description": "Optional shared secret that enforces action session token validation for server actions."
+    },
+    {
+      "name": "WEB_BASE_URL",
+      "scope": "test",
+      "required": false,
+      "secret": false,
+      "default": null,
+      "consumer": [
+        "apps/web/tests/e2e/test_smoke_playwright.py"
+      ],
+      "description": "Target URL for web E2E smoke tests."
+    },
+    {
+      "name": "WEB_E2E_BROWSER",
+      "scope": "test",
+      "required": false,
+      "secret": false,
+      "default": "chromium",
+      "consumer": [
+        "apps/web/tests/e2e/conftest.py"
+      ],
+      "description": "Browser engine for web E2E tests (chromium|firefox|webkit)."
+    },
+    {
+      "name": "WEB_E2E_EXPECT_TEXT",
+      "scope": "test",
+      "required": false,
+      "secret": false,
+      "default": null,
+      "consumer": [
+        "apps/web/tests/e2e/test_smoke_playwright.py"
+      ],
+      "description": "Expected response text for web E2E smoke tests."
+    },
+    {
+      "name": "YOUTUBE_API_KEY",
+      "scope": "worker",
+      "required": false,
+      "secret": true,
+      "default": null,
+      "consumer": [
+        "apps/worker/worker/config.py"
+      ],
+      "description": "YouTube Data API key for comments and live smoke probes; must be a real key from .env/process environment and never logged in full."
+    },
+    {
+      "name": "YOUTUBE_TRANSCRIPT_FALLBACK_ENABLED",
+      "scope": "worker",
+      "required": false,
+      "secret": false,
+      "default": "true",
+      "consumer": [
+        "apps/worker/worker/config.py"
+      ],
+      "description": "Enable YouTube transcript API fallback when subtitle files are unavailable."
+    }
+  ]
+}

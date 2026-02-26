@@ -6,10 +6,27 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 RUN_DIR="$ROOT_DIR/.runtime-cache/full-stack"
 LOG_DIR="$ROOT_DIR/logs/full-stack"
 mkdir -p "$RUN_DIR" "$LOG_DIR"
+ENV_PROFILE="${ENV_PROFILE:-local}"
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --profile|--env-profile)
+      ENV_PROFILE="${2:-}"
+      shift 2
+      ;;
+    --)
+      shift
+      break
+      ;;
+    *)
+      break
+      ;;
+  esac
+done
 
 # shellcheck source=./scripts/lib/load_env.sh
 source "$ROOT_DIR/scripts/lib/load_env.sh"
-load_repo_env "$ROOT_DIR" "$SCRIPT_NAME"
+load_repo_env "$ROOT_DIR" "$SCRIPT_NAME" "$ENV_PROFILE"
 
 if [[ -n "${WEB_BASE_URL:-}" ]]; then
   WEB_PORT="${WEB_PORT:-$(python3 - <<'PY'
@@ -30,7 +47,7 @@ log() { printf '[%s] %s\n' "$SCRIPT_NAME" "$*" >&2; }
 
 usage() {
   cat <<'EOF'
-Usage: ./scripts/full_stack.sh [up|down|restart|status|logs]
+Usage: ./scripts/full_stack.sh [--profile <name>] [up|down|restart|status|logs]
 
 Starts/stops local app processes:
 - API (dev_api.sh)

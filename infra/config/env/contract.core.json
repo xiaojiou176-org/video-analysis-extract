@@ -1,0 +1,224 @@
+{
+  "version": 1,
+  "name": "core",
+  "variables": [
+    {
+      "name": "ANTHROPIC_API_KEY",
+      "scope": "shared",
+      "required": false,
+      "secret": true,
+      "default": null,
+      "consumer": [
+        "apps/api/app/config.py",
+        "apps/worker/worker/config.py"
+      ],
+      "description": "Compatibility-reserved Anthropic API key (not an active runtime provider path in Gemini-only mode)."
+    },
+    {
+      "name": "DATABASE_URL",
+      "scope": "shared",
+      "required": true,
+      "secret": true,
+      "default": null,
+      "consumer": [
+        "apps/api/app/config.py",
+        "apps/worker/worker/config.py"
+      ],
+      "description": "Primary SQL database DSN."
+    },
+    {
+      "name": "GEMINI_API_KEY",
+      "scope": "shared",
+      "required": false,
+      "secret": true,
+      "default": null,
+      "consumer": [
+        "apps/api/app/config.py",
+        "apps/worker/worker/config.py"
+      ],
+      "description": "Gemini API key loaded from .env or process environment only; used by Gemini-only runtime and live smoke preflight."
+    },
+    {
+      "name": "GEMINI_COMPUTER_USE_MODEL",
+      "scope": "shared",
+      "required": false,
+      "secret": false,
+      "default": "GEMINI_MODEL",
+      "consumer": [
+        "apps/api/app/config.py",
+        "apps/worker/worker/config.py"
+      ],
+      "description": "Gemini model entry for computer-use; defaults to GEMINI_MODEL when unset."
+    },
+    {
+      "name": "GEMINI_EMBEDDING_MODEL",
+      "scope": "shared",
+      "required": false,
+      "secret": false,
+      "default": "gemini-embedding-001",
+      "consumer": [
+        "apps/api/app/config.py",
+        "apps/worker/worker/config.py"
+      ],
+      "description": "Gemini embedding model entrypoint for retrieval/vectorization integrations."
+    },
+    {
+      "name": "GEMINI_MODEL",
+      "scope": "shared",
+      "required": false,
+      "secret": false,
+      "default": "gemini-3.1-pro-preview",
+      "consumer": [
+        "apps/api/app/config.py",
+        "apps/worker/worker/config.py"
+      ],
+      "description": "Default Gemini model for Gemini-only LLM pipeline."
+    },
+    {
+      "name": "GEMINI_THINKING_LEVEL",
+      "scope": "shared",
+      "required": false,
+      "secret": false,
+      "default": "high",
+      "consumer": [
+        "apps/api/app/config.py",
+        "apps/worker/worker/config.py"
+      ],
+      "description": "Default Gemini thinking level (minimal|low|medium|high) for outline/digest generation."
+    },
+    {
+      "name": "LLM_PROVIDER",
+      "scope": "shared",
+      "required": false,
+      "secret": false,
+      "default": "gemini",
+      "consumer": [
+        "apps/api/app/config.py",
+        "apps/worker/worker/config.py"
+      ],
+      "description": "LLM provider selector; must remain gemini in current Gemini-only runtime mode."
+    },
+    {
+      "name": "MINIFLUX_BASE_URL",
+      "scope": "shared",
+      "required": false,
+      "secret": false,
+      "default": "http://127.0.0.1:8080",
+      "consumer": [
+        "scripts/deploy_reader_stack.sh",
+        "scripts/sync_ai_feed_to_miniflux.py",
+        "scripts/smoke_full_stack.sh"
+      ],
+      "description": "Miniflux base URL."
+    },
+    {
+      "name": "NOTIFICATION_ENABLED",
+      "scope": "shared",
+      "required": false,
+      "secret": false,
+      "default": "false",
+      "consumer": [
+        "apps/api/app/config.py",
+        "apps/worker/worker/config.py"
+      ],
+      "description": "Enable outbound notification delivery."
+    },
+    {
+      "name": "OPENAI_API_KEY",
+      "scope": "shared",
+      "required": false,
+      "secret": true,
+      "default": null,
+      "consumer": [
+        "apps/api/app/config.py",
+        "apps/worker/worker/config.py"
+      ],
+      "description": "Compatibility-reserved OpenAI API key (not an active runtime provider path in Gemini-only mode)."
+    },
+    {
+      "name": "RESEND_API_KEY",
+      "scope": "shared",
+      "required": false,
+      "secret": true,
+      "default": null,
+      "consumer": [
+        "apps/api/app/config.py",
+        "apps/worker/worker/config.py"
+      ],
+      "description": "Resend API key, required when notifications are enabled."
+    },
+    {
+      "name": "RESEND_FROM_EMAIL",
+      "scope": "shared",
+      "required": false,
+      "secret": false,
+      "default": null,
+      "consumer": [
+        "apps/api/app/config.py",
+        "apps/worker/worker/config.py"
+      ],
+      "description": "Resend sender address, required when notifications are enabled."
+    },
+    {
+      "name": "TEMPORAL_NAMESPACE",
+      "scope": "shared",
+      "required": true,
+      "secret": false,
+      "default": null,
+      "consumer": [
+        "apps/api/app/config.py",
+        "apps/worker/worker/config.py"
+      ],
+      "description": "Temporal namespace."
+    },
+    {
+      "name": "TEMPORAL_TARGET_HOST",
+      "scope": "shared",
+      "required": true,
+      "secret": false,
+      "default": null,
+      "consumer": [
+        "apps/api/app/config.py",
+        "apps/worker/worker/config.py"
+      ],
+      "description": "Temporal frontend host:port."
+    },
+    {
+      "name": "TEMPORAL_TASK_QUEUE",
+      "scope": "shared",
+      "required": true,
+      "secret": false,
+      "default": null,
+      "consumer": [
+        "apps/api/app/config.py",
+        "apps/worker/worker/config.py"
+      ],
+      "description": "Temporal task queue name."
+    },
+    {
+      "name": "VD_API_BASE_URL",
+      "scope": "shared",
+      "required": true,
+      "secret": false,
+      "default": null,
+      "consumer": [
+        "apps/mcp/server.py",
+        "apps/web/lib/api/client.ts",
+        "scripts/*.sh"
+      ],
+      "description": "Base URL for API HTTP calls."
+    },
+    {
+      "name": "VD_API_KEY",
+      "scope": "shared",
+      "required": false,
+      "secret": true,
+      "default": null,
+      "consumer": [
+        "apps/mcp/server.py",
+        "apps/api/app/security.py"
+      ],
+      "description": "Optional bearer token for MCP -> API requests."
+    }
+  ]
+}

@@ -3,6 +3,23 @@ set -euo pipefail
 
 SCRIPT_NAME="e2e_live_smoke"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ENV_PROFILE="${ENV_PROFILE:-local}"
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --profile|--env-profile)
+      ENV_PROFILE="${2:-}"
+      shift 2
+      ;;
+    --)
+      shift
+      break
+      ;;
+    *)
+      break
+      ;;
+  esac
+done
 
 # Keep parent-shell overrides for API routing knobs before loading repo .env files.
 SHELL_VD_API_BASE_URL="${VD_API_BASE_URL-}"
@@ -14,7 +31,7 @@ SHELL_LIVE_SMOKE_API_PORT_SET="${LIVE_SMOKE_API_PORT+x}"
 
 # shellcheck source=./scripts/lib/load_env.sh
 source "$ROOT_DIR/scripts/lib/load_env.sh"
-load_repo_env "$ROOT_DIR" "$SCRIPT_NAME"
+load_repo_env "$ROOT_DIR" "$SCRIPT_NAME" "$ENV_PROFILE"
 
 if [[ -n "$SHELL_VD_API_BASE_URL_SET" ]]; then
   VD_API_BASE_URL="$SHELL_VD_API_BASE_URL"

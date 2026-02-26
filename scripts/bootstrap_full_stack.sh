@@ -11,7 +11,8 @@ PROFILE="${PROFILE:-local}"
 INSTALL_DEPS="${INSTALL_DEPS:-1}"
 WITH_CORE_SERVICES="${WITH_CORE_SERVICES:-1}"
 WITH_READER_STACK="${WITH_READER_STACK:-1}"
-READER_ENV_FILE="${READER_ENV_FILE:-$ROOT_DIR/.env.reader-stack}"
+READER_ENV_FILE="${READER_ENV_FILE:-$ROOT_DIR/env/profiles/reader.env}"
+LEGACY_READER_ENV_FILE="${LEGACY_READER_ENV_FILE:-$ROOT_DIR/.env.reader-stack}"
 OFFLINE_FALLBACK="${OFFLINE_FALLBACK:-1}"
 FALLBACK_MARKER_DIR="$ROOT_DIR/.runtime-cache/full-stack"
 FALLBACK_MARKER_FILE="$FALLBACK_MARKER_DIR/offline-fallback.flag"
@@ -83,7 +84,7 @@ Goal:
 
 Examples:
   ./scripts/bootstrap_full_stack.sh
-  ./scripts/bootstrap_full_stack.sh --profile gce --with-reader-stack 1 --reader-env-file .env.reader-stack
+  ./scripts/bootstrap_full_stack.sh --profile gce --with-reader-stack 1 --reader-env-file env/profiles/reader.env
 EOF
 }
 
@@ -256,22 +257,17 @@ fi
 
 if is_truthy "$WITH_READER_STACK"; then
   command -v docker >/dev/null 2>&1 || fail "docker not found; required for reader stack"
+  if [[ ! -f "$READER_ENV_FILE" && -f "$LEGACY_READER_ENV_FILE" ]]; then
+    log "Reader env not found at new profile path; using legacy env file: $LEGACY_READER_ENV_FILE"
+    log "Migration tip: run ./scripts/env/migrate_env_legacy.sh"
+    READER_ENV_FILE="$LEGACY_READER_ENV_FILE"
+  fi
   if [[ ! -f "$READER_ENV_FILE" ]]; then
     log "Reader env not found, creating template at $READER_ENV_FILE"
-    cat > "$READER_ENV_FILE" <<EOF
-MINIFLUX_DB_USER=miniflux
-MINIFLUX_DB_PASSWORD=change_me
-MINIFLUX_DB_NAME=miniflux
-MINIFLUX_ADMIN_USERNAME=admin
-MINIFLUX_ADMIN_PASSWORD=change_me
-MINIFLUX_BASE_URL=http://127.0.0.1:8080
-MINIFLUX_PORT=8080
-NEXTFLUX_PORT=3000
-MINIFLUX_POLLING_FREQUENCY=30
-MINIFLUX_CLEANUP_ARCHIVE_READ_DAYS=30
-MINIFLUX_CLEANUP_REMOVE_SESSIONS_DAYS=30
-EOF
-    log "Please update credentials in $READER_ENV_FILE after bootstrap."
+    mkdir -p "$(dirname "$READER_ENV_FILE")"
+    cp "$ROOT_DIR/env/profiles/reader.env" "$READER_ENV_FILE"
+    log "Template created. Update credentials in $READER_ENV_FILE before deploy."
+    log "Migration tip: if you have legacy reader vars, run ./scripts/env/migrate_env_legacy.sh"
   fi
   log "Starting reader stack"
   if ! (cd "$ROOT_DIR" && ./scripts/deploy_reader_stack.sh up --env-file "$READER_ENV_FILE"); then
