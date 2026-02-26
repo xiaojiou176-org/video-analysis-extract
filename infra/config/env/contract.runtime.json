@@ -241,12 +241,12 @@
       "scope": "shared",
       "required": false,
       "secret": false,
-      "default": "GEMINI_MODEL",
+      "default": "gemini-3.1-pro-preview",
       "consumer": [
         "apps/api/app/config.py",
         "apps/worker/worker/config.py"
       ],
-      "description": "Gemini model entry for computer-use; defaults to GEMINI_MODEL when unset."
+      "description": "Gemini model entry for computer-use."
     },
     {
       "name": "GEMINI_COMPUTER_USE_REQUIRE_CONFIRMATION",
@@ -341,7 +341,7 @@
       "scope": "worker",
       "required": false,
       "secret": false,
-      "default": "GEMINI_MODEL",
+      "default": "gemini-3.1-pro-preview",
       "consumer": [
         "apps/worker/worker/config.py"
       ],
@@ -398,7 +398,7 @@
       "scope": "worker",
       "required": false,
       "secret": false,
-      "default": "GEMINI_MODEL",
+      "default": "gemini-3.1-pro-preview",
       "consumer": [
         "apps/worker/worker/config.py"
       ],
@@ -482,7 +482,7 @@
       "secret": false,
       "default": "http://127.0.0.1:8000",
       "consumer": [
-        "apps/web/lib/api/client.ts"
+        "apps/web/lib/api/url.ts"
       ],
       "description": "Public API URL for web bundle/runtime."
     },
@@ -929,7 +929,7 @@
       "default": null,
       "consumer": [
         "apps/mcp/server.py",
-        "apps/web/lib/api/client.ts",
+        "apps/web/lib/api/url.ts",
         "scripts/*.sh"
       ],
       "description": "Base URL for API HTTP calls."

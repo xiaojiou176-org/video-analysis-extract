@@ -56,7 +56,7 @@ def test_worker_from_env_parses_csv_optional_values_and_retry_floor(
     assert settings.pipeline_retry_transient_backoff_seconds is None
 
 
-def test_worker_from_env_ignores_feed_paths_when_feed_urls_absent(
+def test_worker_from_env_ignores_unknown_legacy_feed_var_when_feed_urls_absent(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -64,7 +64,7 @@ def test_worker_from_env_ignores_feed_paths_when_feed_urls_absent(
         monkeypatch,
         tmp_path,
         FEED_URLS=None,
-        FEED_PATHS="/a,/b",
+        LEGACY_FEED_PATHS="/a,/b",
     )
 
     settings = config_module.Settings.from_env()

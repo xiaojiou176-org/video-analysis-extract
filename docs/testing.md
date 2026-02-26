@@ -18,7 +18,7 @@
   - overlay：`env/profiles/reader.env`（reader profile 模板，仅 reader 相关 smoke）
   - profile：`PROFILE=local|gce`
 - 密钥只允许来自 `.env` 或进程环境注入（CI secrets / 当前 shell export）。
-- 禁止把 `.env.local` / `.env.bak` / shell 登录配置作为测试密钥来源。
+- 禁止把 shell 登录配置作为测试密钥来源。
 - 默认最小变量集沿用 `ENVIRONMENT.md` 的 Shared Core；涉及真实 provider 链路时，再追加对应 secrets。
 
 ## CI Topology (GitHub Actions)

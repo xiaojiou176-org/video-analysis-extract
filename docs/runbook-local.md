@@ -19,7 +19,7 @@ devcontainer up --workspace-folder .
 - Profile overlay：
   - `PROFILE=local|gce`（决定 bootstrap 运行画像）
   - `env/profiles/reader.env`（reader profile 模板）
-- Secret injection policy：密钥仅允许来自 `.env` 或进程环境；禁止依赖 `.env.local` / `.env.bak` / 登录配置。
+- Secret injection policy：密钥仅允许来自 `.env` 或进程环境；禁止依赖 shell 登录配置。
 
 变量优先级（按当前脚本实现）：
 1. 脚本内显式保留/覆盖逻辑（如 `e2e_live_smoke.sh` 对 API 路由变量的保留）
@@ -29,7 +29,7 @@ devcontainer up --workspace-folder .
 
 Reader overlay 规则：
 - reader env 不会全局生效，仅在 reader 栈命令路径生效（`deploy_reader_stack.sh`、reader 检查/同步链路）。
-- 启用 reader 栈时，建议显式指定 `--env-file env/profiles/reader.local.env`。
+- 启用 reader 栈时，建议显式指定 `--env-file env/profiles/reader.env`。
 
 ## 标准启动链路（6 步）
 

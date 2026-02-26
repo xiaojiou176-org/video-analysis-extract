@@ -294,10 +294,9 @@ uv run --with pytest --with playwright pytest apps/web/tests/e2e -q
 
 快速启动：
 ```bash
-cp env/profiles/reader.env env/profiles/reader.local.env
-# 编辑 env/profiles/reader.local.env，至少设置 MINIFLUX_DB_PASSWORD / MINIFLUX_ADMIN_PASSWORD / MINIFLUX_BASE_URL
-./scripts/deploy_reader_stack.sh up --env-file env/profiles/reader.local.env
-./scripts/deploy_reader_stack.sh status --env-file env/profiles/reader.local.env
+# 编辑 env/profiles/reader.env，至少设置 MINIFLUX_DB_PASSWORD / MINIFLUX_ADMIN_PASSWORD / MINIFLUX_BASE_URL
+./scripts/deploy_reader_stack.sh up --env-file env/profiles/reader.env
+./scripts/deploy_reader_stack.sh status --env-file env/profiles/reader.env
 ```
 
 ## 可选：实时稳定推送 workflow

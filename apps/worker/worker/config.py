@@ -257,16 +257,16 @@ class Settings:
             gemini_model=os.getenv("GEMINI_MODEL", "gemini-3.1-pro-preview"),
             gemini_outline_model=os.getenv(
                 "GEMINI_OUTLINE_MODEL",
-                os.getenv("GEMINI_MODEL", "gemini-3.1-pro-preview"),
+                "gemini-3.1-pro-preview",
             ),
             gemini_digest_model=os.getenv(
                 "GEMINI_DIGEST_MODEL",
-                os.getenv("GEMINI_MODEL", "gemini-3.1-pro-preview"),
+                "gemini-3.1-pro-preview",
             ),
             gemini_fast_model=os.getenv("GEMINI_FAST_MODEL", "gemini-3.0-flash"),
             gemini_computer_use_model=os.getenv(
                 "GEMINI_COMPUTER_USE_MODEL",
-                os.getenv("GEMINI_MODEL", "gemini-3.1-pro-preview"),
+                "gemini-3.1-pro-preview",
             ),
             gemini_embedding_model=os.getenv(
                 "GEMINI_EMBEDDING_MODEL",

@@ -1068,7 +1068,7 @@
       "scope": "scripts",
       "required": false,
       "secret": false,
-      "default": ".env.local.example",
+      "default": ".env.generated.example",
       "consumer": [
         "scripts/init_env_example.sh"
       ],
@@ -1172,9 +1172,9 @@
       "secret": false,
       "default": null,
       "consumer": [
-        "scripts/env/migrate_env_legacy.sh"
+        "scripts/start_ops_workflows.sh"
       ],
-      "description": "Internal target path passed to migrate_env_legacy inline python merger."
+      "description": "Internal target path passed to start_ops_workflows inline python resolver."
     },
     {
       "name": "WEB_PORT",

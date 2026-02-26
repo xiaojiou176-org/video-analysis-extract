@@ -270,17 +270,15 @@ Required only when enabling reader stack (`WITH_READER_STACK=1`) or running read
 - `MINIFLUX_BASE_URL`
 - Miniflux polling/cleanup values use defaults in `infra/compose/miniflux-nextflux.compose.yml` and are no longer contract-managed env keys.
 
-## Migration Guide: Legacy `.env.example` -> Core/Profile Overlay
+## Migration Guide: Core/Profile Overlay
 
 Fast path (recommended):
 
 ```bash
-bash scripts/env/migrate_env_legacy.sh
 bash scripts/env/validate_profile.sh --profile local
 ```
 
 Notes:
-- `migrate_env_legacy.sh` now prints phase heartbeat and migration summary.
 - `validate_profile.sh` writes resolved snapshot to `.runtime-cache/temp/.env.<profile>.resolved`.
 - For debugging resolved values, run:
   - `bash scripts/env/compose_env.sh --profile local --write .runtime-cache/temp/.env.local.resolved`
@@ -291,7 +289,7 @@ Notes:
 3. If using reader stack, update the dedicated overlay file:
    - `env/profiles/reader.env`
    - keep reader-only credentials in `env/profiles/reader.env`
-4. Stop relying on legacy fallback files (`.env.local`, `.env.bak`) as runtime secret inputs.
+4. Do not use `.env.local` / `.env.bak` as runtime secret inputs.
 5. Validate contract:
    - `python3 scripts/check_env_contract.py --strict`
 6. For reader stack startup, use explicit env file flag:

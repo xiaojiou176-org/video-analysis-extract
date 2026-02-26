@@ -100,7 +100,7 @@ class Settings:
             gemini_model=os.getenv("GEMINI_MODEL", "gemini-3.1-pro-preview"),
             gemini_computer_use_model=os.getenv(
                 "GEMINI_COMPUTER_USE_MODEL",
-                os.getenv("GEMINI_MODEL", "gemini-3.1-pro-preview"),
+                "gemini-3.1-pro-preview",
             ),
             gemini_embedding_model=os.getenv("GEMINI_EMBEDDING_MODEL", "gemini-embedding-001"),
             gemini_thinking_level=os.getenv("GEMINI_THINKING_LEVEL", "high"),

@@ -48,7 +48,7 @@ API 异常详情（`apps/api/app/security.py`）使用 `sanitize_exception_detai
 - 禁止在日志中直接打印完整密钥与凭证。
 - 错误信息允许输出摘要，禁止输出原始敏感 payload。
 - 密钥来源仅允许 `.env`、`env/profiles/reader.env`（reader profile 模板）或进程环境注入；日志中不得输出其原值。
-- 禁止将 `.env.local` / `.env.bak` / shell 登录配置作为运行时密钥输入来源。
+- 禁止将 shell 登录配置作为运行时密钥输入来源。
 
 ## Recommended Operations
 查看实时日志：
