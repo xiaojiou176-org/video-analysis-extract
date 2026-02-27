@@ -219,14 +219,18 @@ OPS_CANARY_INTERVAL_HOURS=1 \
 OPS_CANARY_TIMEOUT_SECONDS=8 \
 OPS_CLEANUP_INTERVAL_HOURS=6 \
 OPS_CLEANUP_OLDER_THAN_HOURS=24 \
-./scripts/start_ops_workflows.sh >> ./logs/ops/workflows.log 2>&1
+./scripts/start_ops_workflows.sh \
+  --daily-workflow-id daily-digest-workflow \
+  --notification-workflow-id notification-retry-workflow \
+  --canary-workflow-id provider-canary-workflow \
+  --cleanup-workflow-id cleanup-workspace-workflow \
+  --show-hints >> ./logs/ops/workflows.log 2>&1
 ```
 
 3. 常用环境变量
 
-- `OPS_DAILY_LOCAL_HOUR`：日报触发小时（默认回退 `DIGEST_DAILY_LOCAL_HOUR`，再回退 `9`）。
-- `OPS_DAILY_TIMEZONE`：IANA 时区（默认回退 `DIGEST_LOCAL_TIMEZONE`，再回退 `system-local`）。
-- `OPS_DAILY_TIMEZONE_OFFSET_MINUTES`：可选，显式 UTC 偏移分钟。
+- `OPS_DAILY_LOCAL_HOUR`：日报触发小时（默认 `9`）。
+- `OPS_DAILY_TIMEZONE`：IANA 时区（默认 `system-local`）。
 - `OPS_NOTIFICATION_INTERVAL_MINUTES`：重试扫描间隔分钟（默认 `10`）。
 - `OPS_NOTIFICATION_RETRY_BATCH_LIMIT`：单次重试批量上限（默认 `50`）。
 - `OPS_CANARY_INTERVAL_HOURS`：可用性探针间隔小时（默认 `1`）。
@@ -236,19 +240,37 @@ OPS_CLEANUP_OLDER_THAN_HOURS=24 \
 - `OPS_CLEANUP_CACHE_OLDER_THAN_HOURS`：可选，cache 文件按年龄清理阈值。
 - `OPS_CLEANUP_CACHE_MAX_SIZE_MB`：可选，cache 清理后体积上限。
 - `OPS_CLEANUP_WORKSPACE_DIR` / `OPS_CLEANUP_CACHE_DIR`：可选，覆盖默认目录。安全限制：仅允许落在 `${REPO_ROOT}/.runtime-cache`、`${REPO_ROOT}/cache`、`${REPO_ROOT}/.cache`、`/tmp/video-digestor*`、`/tmp/video-analysis*` 前缀下，超出白名单会直接失败。
-- `OPS_DAILY_WORKFLOW_ID` / `OPS_NOTIFICATION_WORKFLOW_ID` / `OPS_CANARY_WORKFLOW_ID` / `OPS_CLEANUP_WORKFLOW_ID`：固定 workflow id，用于“已运行则不重复启动”。
-- `OPS_DAILY_RUN_ONCE=1` / `OPS_NOTIFICATION_RUN_ONCE=1` / `OPS_CANARY_RUN_ONCE=1` / `OPS_CLEANUP_RUN_ONCE=1`：改为单次执行（排障时使用，生产常驻建议保持 `0`）。
-- `OPS_SHOW_HINTS=0`：关闭脚本启动摘要日志（默认 `1`）。
-- `OPS_DRY_RUN=1`：只打印命令不执行（等价 `./scripts/start_ops_workflows.sh --dry-run`）。
 - `DEV_WORKER_SHOW_HINTS=0`：关闭 `dev_worker.sh` 的大段提示，适合 cron/守护进程日志。
 
-4. 调度互斥策略（必须执行）
+4. 常用 CLI 参数（Batch A 去 env 后）
+
+- `--daily-workflow-id` / `--notification-workflow-id` / `--canary-workflow-id` / `--cleanup-workflow-id`：固定 workflow id，用于“已运行则不重复启动”。
+- `--daily-run-once` / `--notification-run-once` / `--canary-run-once` / `--cleanup-run-once`：改为单次执行（排障时使用，生产常驻建议默认关闭）。
+- `--daily-timezone-offset-minutes`：可选，显式 UTC 偏移分钟。
+- `--show-hints` / `--no-show-hints`：开关脚本启动摘要日志（默认显示）。
+- `--dry-run`：只打印命令不执行（等价 `./scripts/start_ops_workflows.sh --dry-run`）。
+
+Batch A 已弃用并从契约删除的 11 个环境变量（改用 CLI）：
+
+- `OPS_DAILY_WORKFLOW_ID` -> `--daily-workflow-id`
+- `OPS_DAILY_RUN_ONCE` -> `--daily-run-once`
+- `OPS_DAILY_TIMEZONE_OFFSET_MINUTES` -> `--daily-timezone-offset-minutes`
+- `OPS_NOTIFICATION_WORKFLOW_ID` -> `--notification-workflow-id`
+- `OPS_NOTIFICATION_RUN_ONCE` -> `--notification-run-once`
+- `OPS_CANARY_WORKFLOW_ID` -> `--canary-workflow-id`
+- `OPS_CANARY_RUN_ONCE` -> `--canary-run-once`
+- `OPS_CLEANUP_WORKFLOW_ID` -> `--cleanup-workflow-id`
+- `OPS_CLEANUP_RUN_ONCE` -> `--cleanup-run-once`
+- `OPS_SHOW_HINTS` -> `--show-hints` / `--no-show-hints`
+- `OPS_DRY_RUN` -> `--dry-run`
+
+5. 调度互斥策略（必须执行）
 
 - 方案 A：使用 cron（`run_daily_digest.sh` / `run_failure_alerts.sh`），则不要启动对应常驻 workflow。
 - 方案 B：使用 `start_ops_workflows.sh` 常驻模式（推荐），则停用上述 cron 条目。
 - cleanup 建议统一走常驻 workflow，不建议额外 cron 重复触发 `start-cleanup-workflow`。
 
-5. 脚本可用性快速验证
+6. 脚本可用性快速验证
 
 ```bash
 bash -n scripts/start_ops_workflows.sh
@@ -256,7 +278,7 @@ bash -n scripts/start_ops_workflows.sh
 ./scripts/start_ops_workflows.sh --dry-run
 ```
 
-6. 告警与重试调优建议（基于现有能力）
+7. 告警与重试调优建议（基于现有能力）
 
 - 投递重试策略已内置指数退避：`2/5/15/30/60` 分钟，最多 `5` 次；`auth/config_error` 不会继续重试。
 - 建议将 `OPS_NOTIFICATION_INTERVAL_MINUTES` 设为 `3-10` 分钟；高流量场景可配合 `OPS_NOTIFICATION_RETRY_BATCH_LIMIT=100-300`，避免 backlog 累积。

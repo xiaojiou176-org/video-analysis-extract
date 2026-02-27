@@ -6,42 +6,33 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # Optional env overrides (all have safe defaults):
 #   OPS_DAILY_LOCAL_HOUR=9
 #   OPS_DAILY_TIMEZONE=Asia/Shanghai
-#   OPS_DAILY_TIMEZONE_OFFSET_MINUTES=480
-#   OPS_DAILY_WORKFLOW_ID=daily-digest-workflow
-#   OPS_DAILY_RUN_ONCE=0
 #   OPS_NOTIFICATION_INTERVAL_MINUTES=10
 #   OPS_NOTIFICATION_RETRY_BATCH_LIMIT=50
-#   OPS_NOTIFICATION_WORKFLOW_ID=notification-retry-workflow
-#   OPS_NOTIFICATION_RUN_ONCE=0
 #   OPS_CANARY_INTERVAL_HOURS=1
 #   OPS_CANARY_TIMEOUT_SECONDS=8
-#   OPS_CANARY_WORKFLOW_ID=provider-canary-workflow
-#   OPS_CANARY_RUN_ONCE=0
 #   OPS_CLEANUP_INTERVAL_HOURS=6
 #   OPS_CLEANUP_OLDER_THAN_HOURS=24
 #   OPS_CLEANUP_CACHE_OLDER_THAN_HOURS=
 #   OPS_CLEANUP_CACHE_MAX_SIZE_MB=
 #   OPS_CLEANUP_WORKSPACE_DIR=
 #   OPS_CLEANUP_CACHE_DIR=
-#   OPS_CLEANUP_WORKFLOW_ID=cleanup-workspace-workflow
-#   OPS_CLEANUP_RUN_ONCE=0
-#   OPS_SHOW_HINTS=1
+#   DEV_WORKER_SHOW_HINTS=0
 
-OPS_DAILY_LOCAL_HOUR="${OPS_DAILY_LOCAL_HOUR:-${DIGEST_DAILY_LOCAL_HOUR:-9}}"
-OPS_DAILY_TIMEZONE="${OPS_DAILY_TIMEZONE:-${DIGEST_LOCAL_TIMEZONE:-system-local}}"
-OPS_DAILY_TIMEZONE_OFFSET_MINUTES="${OPS_DAILY_TIMEZONE_OFFSET_MINUTES:-}"
-OPS_DAILY_WORKFLOW_ID="${OPS_DAILY_WORKFLOW_ID:-daily-digest-workflow}"
-OPS_DAILY_RUN_ONCE="${OPS_DAILY_RUN_ONCE:-0}"
+OPS_DAILY_LOCAL_HOUR="${OPS_DAILY_LOCAL_HOUR:-9}"
+OPS_DAILY_TIMEZONE="${OPS_DAILY_TIMEZONE:-system-local}"
+OPS_DAILY_TIMEZONE_OFFSET_MINUTES=""
+OPS_DAILY_WORKFLOW_ID="daily-digest-workflow"
+OPS_DAILY_RUN_ONCE="0"
 
 OPS_NOTIFICATION_INTERVAL_MINUTES="${OPS_NOTIFICATION_INTERVAL_MINUTES:-10}"
 OPS_NOTIFICATION_RETRY_BATCH_LIMIT="${OPS_NOTIFICATION_RETRY_BATCH_LIMIT:-50}"
-OPS_NOTIFICATION_WORKFLOW_ID="${OPS_NOTIFICATION_WORKFLOW_ID:-notification-retry-workflow}"
-OPS_NOTIFICATION_RUN_ONCE="${OPS_NOTIFICATION_RUN_ONCE:-0}"
+OPS_NOTIFICATION_WORKFLOW_ID="notification-retry-workflow"
+OPS_NOTIFICATION_RUN_ONCE="0"
 
 OPS_CANARY_INTERVAL_HOURS="${OPS_CANARY_INTERVAL_HOURS:-1}"
 OPS_CANARY_TIMEOUT_SECONDS="${OPS_CANARY_TIMEOUT_SECONDS:-8}"
-OPS_CANARY_WORKFLOW_ID="${OPS_CANARY_WORKFLOW_ID:-provider-canary-workflow}"
-OPS_CANARY_RUN_ONCE="${OPS_CANARY_RUN_ONCE:-0}"
+OPS_CANARY_WORKFLOW_ID="provider-canary-workflow"
+OPS_CANARY_RUN_ONCE="0"
 
 OPS_CLEANUP_INTERVAL_HOURS="${OPS_CLEANUP_INTERVAL_HOURS:-6}"
 OPS_CLEANUP_OLDER_THAN_HOURS="${OPS_CLEANUP_OLDER_THAN_HOURS:-24}"
@@ -49,12 +40,12 @@ OPS_CLEANUP_CACHE_OLDER_THAN_HOURS="${OPS_CLEANUP_CACHE_OLDER_THAN_HOURS:-}"
 OPS_CLEANUP_CACHE_MAX_SIZE_MB="${OPS_CLEANUP_CACHE_MAX_SIZE_MB:-}"
 OPS_CLEANUP_WORKSPACE_DIR="${OPS_CLEANUP_WORKSPACE_DIR:-}"
 OPS_CLEANUP_CACHE_DIR="${OPS_CLEANUP_CACHE_DIR:-}"
-OPS_CLEANUP_WORKFLOW_ID="${OPS_CLEANUP_WORKFLOW_ID:-cleanup-workspace-workflow}"
-OPS_CLEANUP_RUN_ONCE="${OPS_CLEANUP_RUN_ONCE:-0}"
+OPS_CLEANUP_WORKFLOW_ID="cleanup-workspace-workflow"
+OPS_CLEANUP_RUN_ONCE="0"
 
-OPS_SHOW_HINTS="${OPS_SHOW_HINTS:-1}"
+OPS_SHOW_HINTS="1"
 DEV_WORKER_SHOW_HINTS="${DEV_WORKER_SHOW_HINTS:-0}"
-OPS_DRY_RUN="${OPS_DRY_RUN:-0}"
+OPS_DRY_RUN="0"
 
 validate_cleanup_dir() {
   local name="$1"
@@ -106,13 +97,89 @@ Start/ensure long-running ops workflows:
 - cleanup_workspace
 
 Options:
-  --dry-run, -n   Print worker commands without executing them
-  --help, -h      Show this help message
+  --daily-workflow-id <id>         Daily workflow id (default: daily-digest-workflow)
+  --daily-run-once                 Run daily workflow once (default: disabled)
+  --daily-timezone-offset-minutes <minutes>
+                                   Daily timezone offset override in minutes
+  --notification-workflow-id <id>  Notification workflow id (default: notification-retry-workflow)
+  --notification-run-once          Run notification workflow once (default: disabled)
+  --canary-workflow-id <id>        Canary workflow id (default: provider-canary-workflow)
+  --canary-run-once                Run canary workflow once (default: disabled)
+  --cleanup-workflow-id <id>       Cleanup workflow id (default: cleanup-workspace-workflow)
+  --cleanup-run-once               Run cleanup workflow once (default: disabled)
+  --show-hints                     Print startup summary logs (default)
+  --no-show-hints                  Disable startup summary logs
+  --dry-run, -n                    Print worker commands without executing them
+  --help, -h                       Show this help message
 EOM
 }
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --daily-workflow-id)
+      if [[ $# -lt 2 ]]; then
+        echo "[start_ops_workflows] --daily-workflow-id requires a value" >&2
+        exit 2
+      fi
+      OPS_DAILY_WORKFLOW_ID="${2:-}"
+      shift 2
+      ;;
+    --daily-run-once)
+      OPS_DAILY_RUN_ONCE=1
+      shift
+      ;;
+    --daily-timezone-offset-minutes)
+      if [[ $# -lt 2 ]]; then
+        echo "[start_ops_workflows] --daily-timezone-offset-minutes requires a value" >&2
+        exit 2
+      fi
+      OPS_DAILY_TIMEZONE_OFFSET_MINUTES="${2:-}"
+      shift 2
+      ;;
+    --notification-workflow-id)
+      if [[ $# -lt 2 ]]; then
+        echo "[start_ops_workflows] --notification-workflow-id requires a value" >&2
+        exit 2
+      fi
+      OPS_NOTIFICATION_WORKFLOW_ID="${2:-}"
+      shift 2
+      ;;
+    --notification-run-once)
+      OPS_NOTIFICATION_RUN_ONCE=1
+      shift
+      ;;
+    --canary-workflow-id)
+      if [[ $# -lt 2 ]]; then
+        echo "[start_ops_workflows] --canary-workflow-id requires a value" >&2
+        exit 2
+      fi
+      OPS_CANARY_WORKFLOW_ID="${2:-}"
+      shift 2
+      ;;
+    --canary-run-once)
+      OPS_CANARY_RUN_ONCE=1
+      shift
+      ;;
+    --cleanup-workflow-id)
+      if [[ $# -lt 2 ]]; then
+        echo "[start_ops_workflows] --cleanup-workflow-id requires a value" >&2
+        exit 2
+      fi
+      OPS_CLEANUP_WORKFLOW_ID="${2:-}"
+      shift 2
+      ;;
+    --cleanup-run-once)
+      OPS_CLEANUP_RUN_ONCE=1
+      shift
+      ;;
+    --show-hints)
+      OPS_SHOW_HINTS=1
+      shift
+      ;;
+    --no-show-hints)
+      OPS_SHOW_HINTS=0
+      shift
+      ;;
     --dry-run|-n)
       OPS_DRY_RUN=1
       shift
@@ -128,6 +195,23 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+require_non_empty_arg() {
+  local flag="$1"
+  local value="$2"
+  if [[ -z "$value" || "$value" == --* ]]; then
+    echo "[start_ops_workflows] ${flag} requires a non-empty value" >&2
+    exit 2
+  fi
+}
+
+require_non_empty_arg --daily-workflow-id "$OPS_DAILY_WORKFLOW_ID"
+require_non_empty_arg --notification-workflow-id "$OPS_NOTIFICATION_WORKFLOW_ID"
+require_non_empty_arg --canary-workflow-id "$OPS_CANARY_WORKFLOW_ID"
+require_non_empty_arg --cleanup-workflow-id "$OPS_CLEANUP_WORKFLOW_ID"
+if [[ -n "$OPS_DAILY_TIMEZONE_OFFSET_MINUTES" ]]; then
+  require_non_empty_arg --daily-timezone-offset-minutes "$OPS_DAILY_TIMEZONE_OFFSET_MINUTES"
+fi
 
 if [[ -n "$OPS_CLEANUP_WORKSPACE_DIR" ]]; then
   OPS_CLEANUP_WORKSPACE_DIR="$(validate_cleanup_dir OPS_CLEANUP_WORKSPACE_DIR "$OPS_CLEANUP_WORKSPACE_DIR")"

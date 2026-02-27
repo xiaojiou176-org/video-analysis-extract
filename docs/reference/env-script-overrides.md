@@ -66,29 +66,46 @@ Use CLI flags instead (`--channel`, `--lookback-hours`, `--limit`, `--dry-run`, 
 
 ## Ops Workflow Bootstrap (`scripts/start_ops_workflows.sh`)
 
-- `OPS_DAILY_LOCAL_HOUR` (default: fallback `DIGEST_DAILY_LOCAL_HOUR` -> `9`)
-- `OPS_DAILY_TIMEZONE` (default: fallback `DIGEST_LOCAL_TIMEZONE` -> `system-local`)
-- `OPS_DAILY_TIMEZONE_OFFSET_MINUTES` (optional)
-- `OPS_DAILY_WORKFLOW_ID` (default: `daily-digest-workflow`)
-- `OPS_DAILY_RUN_ONCE` (default: `0`)
+- `OPS_DAILY_LOCAL_HOUR` (default: `9`)
+- `OPS_DAILY_TIMEZONE` (default: `system-local`)
 - `OPS_NOTIFICATION_INTERVAL_MINUTES` (default: `10`)
 - `OPS_NOTIFICATION_RETRY_BATCH_LIMIT` (default: `50`)
-- `OPS_NOTIFICATION_WORKFLOW_ID` (default: `notification-retry-workflow`)
-- `OPS_NOTIFICATION_RUN_ONCE` (default: `0`)
 - `OPS_CANARY_INTERVAL_HOURS` (default: `1`)
 - `OPS_CANARY_TIMEOUT_SECONDS` (default: `8`)
-- `OPS_CANARY_WORKFLOW_ID` (default: `provider-canary-workflow`)
-- `OPS_CANARY_RUN_ONCE` (default: `0`)
 - `OPS_CLEANUP_INTERVAL_HOURS` (default: `6`)
 - `OPS_CLEANUP_OLDER_THAN_HOURS` (default: `24`)
 - `OPS_CLEANUP_CACHE_OLDER_THAN_HOURS` (optional)
 - `OPS_CLEANUP_CACHE_MAX_SIZE_MB` (optional)
 - `OPS_CLEANUP_WORKSPACE_DIR` (optional)
 - `OPS_CLEANUP_CACHE_DIR` (optional)
-- `OPS_CLEANUP_WORKFLOW_ID` (default: `cleanup-workspace-workflow`)
-- `OPS_CLEANUP_RUN_ONCE` (default: `0`)
-- `OPS_DRY_RUN` (default: `0`)
-- `OPS_SHOW_HINTS` (default: `1`)
+
+`scripts/start_ops_workflows.sh` CLI flags (replace Batch A env controls):
+
+- `--daily-workflow-id` (default: `daily-digest-workflow`)
+- `--daily-run-once` (default: disabled)
+- `--daily-timezone-offset-minutes` (optional)
+- `--notification-workflow-id` (default: `notification-retry-workflow`)
+- `--notification-run-once` (default: disabled)
+- `--canary-workflow-id` (default: `provider-canary-workflow`)
+- `--canary-run-once` (default: disabled)
+- `--cleanup-workflow-id` (default: `cleanup-workspace-workflow`)
+- `--cleanup-run-once` (default: disabled)
+- `--show-hints` / `--no-show-hints` (default: show)
+- `--dry-run` (default: disabled)
+
+Batch A legacy env controls have been removed from env contracts and are deprecated:
+
+- `OPS_DAILY_WORKFLOW_ID` -> `--daily-workflow-id`
+- `OPS_DAILY_RUN_ONCE` -> `--daily-run-once`
+- `OPS_DAILY_TIMEZONE_OFFSET_MINUTES` -> `--daily-timezone-offset-minutes`
+- `OPS_NOTIFICATION_WORKFLOW_ID` -> `--notification-workflow-id`
+- `OPS_NOTIFICATION_RUN_ONCE` -> `--notification-run-once`
+- `OPS_CANARY_WORKFLOW_ID` -> `--canary-workflow-id`
+- `OPS_CANARY_RUN_ONCE` -> `--canary-run-once`
+- `OPS_CLEANUP_WORKFLOW_ID` -> `--cleanup-workflow-id`
+- `OPS_CLEANUP_RUN_ONCE` -> `--cleanup-run-once`
+- `OPS_SHOW_HINTS` -> `--show-hints` / `--no-show-hints`
+- `OPS_DRY_RUN` -> `--dry-run`
 
 ## Full Stack Helper Scripts (`scripts/bootstrap_full_stack.sh`, `scripts/full_stack.sh`, `scripts/smoke_full_stack.sh`)
 

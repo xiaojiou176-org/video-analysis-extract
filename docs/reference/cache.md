@@ -91,6 +91,13 @@ OPS_CLEANUP_OLDER_THAN_HOURS=24 \
 ./scripts/start_ops_workflows.sh
 ```
 
+Batch A 口径更新：
+
+- `start_ops_workflows.sh` 的 workflow-id / run-once / show-hints / dry-run /
+  timezone-offset 控制项已从环境变量迁移为 CLI flags。
+- 清理策略相关的运行参数（例如 `OPS_CLEANUP_INTERVAL_HOURS`、
+  `OPS_CLEANUP_OLDER_THAN_HOURS`、`OPS_CLEANUP_CACHE_*`）仍保留环境变量覆盖能力。
+
 可选缓存保留参数：
 
 - `OPS_CLEANUP_CACHE_OLDER_THAN_HOURS`：按文件年龄清理 cache。

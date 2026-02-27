@@ -189,7 +189,7 @@ Exception detail sanitization contract:
 - `LIVE_SMOKE_*`
 - `PR_LLM_REAL_SMOKE_*` (local PR real LLM smoke helper defaults)
 - `scripts/external_playwright_smoke.sh` now uses CLI flags only (no `EXTERNAL_SMOKE_*` env contract vars)
-- `OPS_*` (workflow bootstrap overrides for `scripts/start_ops_workflows.sh`, including `OPS_CLEANUP_*`, `OPS_SHOW_HINTS`, `OPS_DRY_RUN`)
+- `OPS_*` (workflow bootstrap overrides for `scripts/start_ops_workflows.sh`; Batch A controls are now CLI flags)
 - `API_*`, `WORKER_*`, `MCP_*`, `OUTPUT_PATH`, `INIT_ENV_FORCE`
 - `DEV_API_RELOAD` (controls `scripts/dev_api.sh` reload mode; `scripts/full_stack.sh up` forces `0` for stable background startup)
 - `API_HEALTH_URL` (optional full-stack readiness probe URL; defaults to `http://127.0.0.1:${API_PORT}/healthz`)
