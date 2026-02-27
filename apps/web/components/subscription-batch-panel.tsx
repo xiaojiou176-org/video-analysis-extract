@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { getFlashMessage, toErrorCode } from "@/app/flash-message";
 import { apiClient } from "@/lib/api/client";
@@ -16,6 +16,7 @@ type Props = {
 
 export function SubscriptionBatchPanel({ subscriptions }: Props) {
 	const router = useRouter();
+	const [visibleSubscriptions, setVisibleSubscriptions] = useState<Subscription[]>(subscriptions);
 	const [selected, setSelected] = useState<Set<string>>(new Set());
 	const [batchCategory, setBatchCategory] = useState<SubscriptionCategory>("misc");
 	const [applying, setApplying] = useState(false);
@@ -24,11 +25,15 @@ export function SubscriptionBatchPanel({ subscriptions }: Props) {
 	const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
 	const [deletingId, setDeletingId] = useState<string | null>(null);
 
+	useEffect(() => {
+		setVisibleSubscriptions(subscriptions);
+	}, [subscriptions]);
+
 	function toggleAll() {
-		if (selected.size === subscriptions.length) {
+		if (selected.size === visibleSubscriptions.length) {
 			setSelected(new Set());
 		} else {
-			setSelected(new Set(subscriptions.map((s) => s.id)));
+			setSelected(new Set(visibleSubscriptions.map((s) => s.id)));
 		}
 	}
 
@@ -49,6 +54,7 @@ export function SubscriptionBatchPanel({ subscriptions }: Props) {
 		setPendingDeleteId(null);
 		try {
 			await apiClient.deleteSubscription(id);
+			setVisibleSubscriptions((prev) => prev.filter((item) => item.id !== id));
 			setSelected((prev) => {
 				const next = new Set(prev);
 				next.delete(id);
@@ -85,11 +91,11 @@ export function SubscriptionBatchPanel({ subscriptions }: Props) {
 		}
 	}
 
-	const allSelected = subscriptions.length > 0 && selected.size === subscriptions.length;
+	const allSelected = visibleSubscriptions.length > 0 && selected.size === visibleSubscriptions.length;
 
 	return (
 		<div className="stack">
-			{subscriptions.length === 0 ? (
+			{visibleSubscriptions.length === 0 ? (
 				<p className="small">暂无订阅数据。</p>
 			) : (
 				<>
@@ -114,7 +120,7 @@ export function SubscriptionBatchPanel({ subscriptions }: Props) {
 								</tr>
 							</thead>
 							<tbody>
-								{subscriptions.map((item) => (
+								{visibleSubscriptions.map((item) => (
 									<tr key={item.id}>
 										<td>
 											<input
