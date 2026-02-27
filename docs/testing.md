@@ -61,14 +61,14 @@ scripts/e2e_live_smoke.sh \
   --mutation-min-score 0.60
 ```
 
-- D3 Web 覆盖硬门禁 `global >=80` 且 `core >=90`：
+- D3 Web 覆盖硬门禁 `global >=85` 且 `core >=95`：
 
 ```bash
 npm --prefix apps/web run test -- --coverage
 python3 scripts/check_web_coverage_threshold.py \
   --summary-path apps/web/coverage/coverage-summary.json \
-  --global-threshold 80 \
-  --core-threshold 90
+  --global-threshold 85 \
+  --core-threshold 95
 ```
 
 - D4 集成 smoke（`api-real-smoke` / `web-e2e` / `live-smoke`）在 PR/main/release 禁止 skip。
@@ -229,8 +229,8 @@ bash scripts/env/final_governance_check.sh --skip-prepush
 - Secrets 泄漏扫描必须通过（`sk-*` / `ghp_*` / `AKIA*` / 私钥头模式）。
 - 空洞日志文案扫描必须通过（禁止 `Something went wrong` / `unexpected error` / `error occurred` / `unknown error`）。
 - 文档漂移门禁强制执行（staged/push）。
-- 覆盖率阈值：总覆盖率 `>=80%`，核心模块覆盖率 `>=95%`（worker pipeline + api 核心 router/service）。
-- Web 覆盖率硬门禁：`global >=80%` 且 `core >=90%`（默认读取 `apps/web/coverage/coverage-summary.json`）。
+- 覆盖率阈值：总覆盖率 `>=85%`，核心模块覆盖率 `>=95%`（worker pipeline + api 核心 router/service）。
+- Web 覆盖率硬门禁：`global >=85%` 且 `core >=95%`（默认读取 `apps/web/coverage/coverage-summary.json`）。
 - 变异测试门禁强制执行（Python 核心模块）：mutation score `>=0.60`（默认执行口径，可通过 `--mutation-min-score` 覆盖）。
 - `pre-push` 采用 fail-fast：先短检查，再长测试；长测试并行执行并输出 heartbeat。
 - `pre-push` 后端链路新增硬门禁：`api cors preflight smoke (OPTIONS DELETE)` 与 `contract diff local gate (base vs head)`。
@@ -329,8 +329,8 @@ echo "feat(api): add ingest health guard" > /tmp/commit-msg-ok.txt
   - `npm --prefix apps/web run lint`
   - `uv run --with ruff ruff check apps scripts`
   - `npm --prefix apps/web run test -- --coverage`
-  - `python3 scripts/check_web_coverage_threshold.py --summary-path apps/web/coverage/coverage-summary.json --global-threshold 80 --core-threshold 90`
-  - `uv run pytest ... --cov-fail-under=80`
+  - `python3 scripts/check_web_coverage_threshold.py --summary-path apps/web/coverage/coverage-summary.json --global-threshold 85 --core-threshold 95`
+  - `uv run pytest ... --cov-fail-under=85`
   - `python skip guard`（junit `tests>0` 且 `skipped=0`）
   - `uv run coverage report ... --fail-under=95`（worker core / api core）
   - `python3 scripts/check_ci_docs_parity.py`

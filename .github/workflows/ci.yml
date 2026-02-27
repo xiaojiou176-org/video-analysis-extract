@@ -412,7 +412,7 @@ jobs:
               --cov=apps/mcp \
               --cov-report=term-missing:skip-covered \
               --cov-report=xml:.runtime-cache/python-coverage.xml \
-              --cov-fail-under=80 \
+              --cov-fail-under=85 \
               --junitxml=.runtime-cache/python-tests-junit.xml \
               2>&1 | tee .runtime-cache/python-tests.log
           ) &
@@ -797,12 +797,12 @@ jobs:
       - name: Web unit tests (vitest + coverage gate)
         run: npm --prefix apps/web run test -- --coverage
 
-      - name: Web coverage threshold gate (global>=80, core>=90)
+      - name: Web coverage threshold gate (global>=85, core>=95)
         run: |
           python3 scripts/check_web_coverage_threshold.py \
             --summary-path apps/web/coverage/coverage-summary.json \
-            --global-threshold 80 \
-            --core-threshold 90
+            --global-threshold 85 \
+            --core-threshold 95
 
       - name: Web build
         run: npm --prefix apps/web run build

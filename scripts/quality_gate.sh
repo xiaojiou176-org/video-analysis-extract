@@ -57,7 +57,7 @@ Quality policy (blocking):
   - Placebo assertions are forbidden.
   - Documentation drift gate is mandatory.
   - Secrets leak scan is mandatory.
-  - Coverage thresholds: total >= 80%, core modules >= 95%.
+  - Coverage thresholds: total >= 85%, core modules >= 95%.
   - Mutation testing (Python core): mutation score >= configured threshold (default: 0.85).
 USAGE
 }
@@ -665,7 +665,7 @@ run_python_tests_with_coverage_and_skip_guard() {
       --cov=apps/api \
       --cov=apps/mcp \
       --cov-report=term-missing:skip-covered \
-      --cov-fail-under=80 \
+      --cov-fail-under=85 \
       --junitxml=.runtime-cache/python-tests-junit-local.xml
 
   python3 - <<'PY'
@@ -1223,8 +1223,8 @@ run_pre_push_mode() {
   if [[ "$CI_DEDUPE" == "1" ]]; then
     echo "[quality-gate] skip: web coverage threshold gate (--ci-dedupe=1, covered by CI web-test-build)"
   elif is_true "$EFFECTIVE_WEB_CHANGED"; then
-    run_async_gate "web_coverage_threshold" "web coverage threshold gate (global>=80, core>=90)" \
-      "python3 scripts/check_web_coverage_threshold.py --summary-path apps/web/coverage/coverage-summary.json --global-threshold 80 --core-threshold 90"
+    run_async_gate "web_coverage_threshold" "web coverage threshold gate (global>=85, core>=95)" \
+      "python3 scripts/check_web_coverage_threshold.py --summary-path apps/web/coverage/coverage-summary.json --global-threshold 85 --core-threshold 95"
     run_async_gate "web_design_token_guard" "web design token guard (local diff)" \
       "run_web_design_token_guard_local"
     run_async_gate "web_build" "web build" \
@@ -1237,7 +1237,7 @@ run_pre_push_mode() {
   if [[ "$CI_DEDUPE" == "1" ]]; then
     echo "[quality-gate] skip: python tests + total coverage (--ci-dedupe=1)"
   elif is_true "$EFFECTIVE_BACKEND_CHANGED"; then
-    run_async_gate "python_tests_with_coverage" "python tests + total coverage gate (>=80%)" \
+    run_async_gate "python_tests_with_coverage" "python tests + total coverage gate (>=85%)" \
       "run_python_tests_with_coverage_and_skip_guard"
     run_async_gate "api_cors_preflight_smoke" "api cors preflight smoke (OPTIONS DELETE)" \
       "run_api_cors_preflight_smoke"

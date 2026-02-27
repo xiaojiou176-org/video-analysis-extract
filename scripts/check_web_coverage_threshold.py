@@ -21,7 +21,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
             "Validate web coverage thresholds from a Vitest json-summary file. "
-            "Hard gates: global >= 80 and core >= 90 by default."
+            "Hard gates: global >= 85 and core >= 95 by default."
         )
     )
     parser.add_argument(
@@ -33,14 +33,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--global-threshold",
         type=float,
-        default=80.0,
-        help="Minimum global coverage percentage [0,100]. Default: 80",
+        default=85.0,
+        help="Minimum global coverage percentage [0,100]. Default: 85",
     )
     parser.add_argument(
         "--core-threshold",
         type=float,
-        default=90.0,
-        help="Minimum core coverage percentage [0,100]. Default: 90",
+        default=95.0,
+        help="Minimum core coverage percentage [0,100]. Default: 95",
     )
     parser.add_argument(
         "--metric",

@@ -4,7 +4,7 @@
 Checks whether docs/testing.md contains key strategy signals agreed in Phase0:
 - PR-enforced live-smoke
 - mutation=0.60
-- web coverage 80/90
+- web coverage 85/95
 - no skip for key gates
 - E2E real API
 """
@@ -56,11 +56,11 @@ def main() -> int:
         },
         {
             "id": "D3",
-            "name": "web覆盖80/90",
+            "name": "web覆盖85/95",
             "mode": "all",
             "patterns": [
-                r"(?:web|前端)[^\n]{0,80}(?:>=\s*80\s*%|80\s*%)",
-                r"(?:web|前端)[^\n]{0,120}(?:核心|关键|core)[^\n]{0,80}(?:>=\s*90\s*%|90\s*%)",
+                r"(?:web|前端)[^\n]{0,80}(?:>=\s*85\s*%|85\s*%)",
+                r"(?:web|前端)[^\n]{0,120}(?:核心|关键|core)[^\n]{0,80}(?:>=\s*95\s*%|95\s*%)",
             ],
         },
         {
