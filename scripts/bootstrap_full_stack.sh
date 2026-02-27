@@ -7,12 +7,14 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck source=./scripts/lib/load_env.sh
 source "$ROOT_DIR/scripts/lib/load_env.sh"
 
-PROFILE="${PROFILE:-local}"
-INSTALL_DEPS="${INSTALL_DEPS:-1}"
-WITH_CORE_SERVICES="${WITH_CORE_SERVICES:-1}"
-WITH_READER_STACK="${WITH_READER_STACK:-1}"
-READER_ENV_FILE="${READER_ENV_FILE:-$ROOT_DIR/env/profiles/reader.env}"
-OFFLINE_FALLBACK="${OFFLINE_FALLBACK:-1}"
+PROFILE="local"
+INSTALL_DEPS="1"
+WITH_CORE_SERVICES="1"
+WITH_READER_STACK="1"
+READER_ENV_FILE="$ROOT_DIR/env/profiles/reader.env"
+OFFLINE_FALLBACK="1"
+API_PORT="8000"
+WEB_PORT="3000"
 FALLBACK_MARKER_DIR="$ROOT_DIR/.runtime-cache/full-stack"
 FALLBACK_MARKER_FILE="$FALLBACK_MARKER_DIR/offline-fallback.flag"
 
@@ -76,7 +78,7 @@ pick_free_port() {
 
 usage() {
   cat <<'EOF'
-Usage: ./scripts/bootstrap_full_stack.sh [--profile local|gce] [--install-deps 0|1] [--with-core-services 0|1] [--with-reader-stack 0|1] [--reader-env-file <path>] [--offline-fallback 0|1]
+Usage: ./scripts/bootstrap_full_stack.sh [--profile local|gce] [--api-port <port>] [--web-port <port>] [--install-deps 0|1] [--with-core-services 0|1] [--with-reader-stack 0|1] [--reader-env-file <path>] [--offline-fallback 0|1]
 
 Goal:
   Clone repo and reach runnable state for 80%+ functionality.
@@ -90,6 +92,8 @@ EOF
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --profile) PROFILE="$2"; shift 2 ;;
+    --api-port) API_PORT="$2"; shift 2 ;;
+    --web-port) WEB_PORT="$2"; shift 2 ;;
     --install-deps) INSTALL_DEPS="$2"; shift 2 ;;
     --with-core-services) WITH_CORE_SERVICES="$2"; shift 2 ;;
     --with-reader-stack) WITH_READER_STACK="$2"; shift 2 ;;
@@ -101,6 +105,12 @@ while [[ $# -gt 0 ]]; do
 done
 
 [[ "$PROFILE" == "local" || "$PROFILE" == "gce" ]] || fail "--profile must be local|gce"
+if ! [[ "$API_PORT" =~ ^[0-9]+$ ]] || (( API_PORT <= 0 || API_PORT > 65535 )); then
+  fail "--api-port must be an integer in [1,65535]"
+fi
+if ! [[ "$WEB_PORT" =~ ^[0-9]+$ ]] || (( WEB_PORT <= 0 || WEB_PORT > 65535 )); then
+  fail "--web-port must be an integer in [1,65535]"
+fi
 rm -f "$FALLBACK_MARKER_FILE"
 
 command -v python3 >/dev/null 2>&1 || fail "python3 not found"
@@ -124,10 +134,10 @@ if grep -q "postgresql+psycopg://localhost:5432/video_analysis" "$ROOT_DIR/.env"
   sed -i.bak "s|postgresql+psycopg://localhost:5432/video_analysis|postgresql+psycopg://postgres:postgres@127.0.0.1:5432/video_analysis|g" "$ROOT_DIR/.env"
 fi
 
-load_repo_env "$ROOT_DIR" "$SCRIPT_NAME"
+load_repo_env "$ROOT_DIR" "$SCRIPT_NAME" "$PROFILE"
 
-API_PORT_CURRENT="${API_PORT:-8000}"
-WEB_PORT_CURRENT="${WEB_PORT:-3000}"
+API_PORT_CURRENT="$API_PORT"
+WEB_PORT_CURRENT="$WEB_PORT"
 API_PORT_PICKED="$(pick_free_port "$API_PORT_CURRENT" 18000 18001 18002)"
 WEB_PORT_PICKED="$(pick_free_port "$WEB_PORT_CURRENT" 13000 13001 13002)"
 if is_truthy "$WITH_READER_STACK"; then

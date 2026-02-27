@@ -5,6 +5,21 @@ SCRIPT_NAME="smoke_full_stack"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ENV_PROFILE="${ENV_PROFILE:-local}"
 LIVE_DIAGNOSTICS_JSON=".runtime-cache/e2e-live-smoke-result.json"
+API_BASE="http://127.0.0.1:8000"
+WEB_BASE="http://127.0.0.1:3001"
+REQUIRE_READER="1"
+MINIFLUX_BASE=""
+NEXTFLUX_PORT="3000"
+OFFLINE_FALLBACK="1"
+READER_ENV_FILE="$ROOT_DIR/env/profiles/reader.env"
+HEARTBEAT_SECONDS="30"
+LIVE_SMOKE_API_BASE_URL="http://127.0.0.1:8000"
+LIVE_SMOKE_REQUIRE_API="1"
+LIVE_SMOKE_REQUIRE_SECRETS="0"
+LIVE_SMOKE_COMPUTER_USE_STRICT="1"
+LIVE_SMOKE_COMPUTER_USE_SKIP="0"
+LIVE_SMOKE_COMPUTER_USE_SKIP_REASON=""
+YOUTUBE_SMOKE_URL="https://www.youtube.com/watch?v=dQw4w9WgXcQ"
 
 usage() {
   cat <<'EOF'
@@ -12,6 +27,22 @@ Usage: scripts/smoke_full_stack.sh [options]
 
 Options:
   --profile, --env-profile <name>     Env profile passed to load_repo_env (default: local)
+  --api-base-url <url>                API base URL (default: http://127.0.0.1:8000)
+  --web-base-url <url>                Web base URL (default: http://127.0.0.1:3001)
+  --require-reader <0|1>              Require reader checks (default: 1)
+  --offline-fallback <0|1>            Allow offline fallback marker skip (default: 1)
+  --reader-env-file <path>            Reader env file for Miniflux/Nextflux values
+  --heartbeat-seconds <n>             Smoke heartbeat interval (default: 30)
+  --live-smoke-api-base-url <url>     e2e live smoke API base URL
+  --live-smoke-require-api <0|1>      e2e live smoke require API health gate (default: 1)
+  --live-smoke-require-secrets <0|1>  e2e live smoke require secrets (default: 0)
+  --live-smoke-computer-use-strict <0|1>
+                                       e2e live smoke computer-use strict mode (default: 1)
+  --live-smoke-computer-use-skip <0|1>
+                                       e2e live smoke skip computer-use phase (default: 0)
+  --live-smoke-computer-use-skip-reason <text>
+                                       e2e live smoke skip reason when skip=1
+  --youtube-smoke-url <url>           e2e live smoke YouTube URL
   --live-diagnostics-json <path>      e2e live smoke diagnostics output path
   -h, --help                          Show this help
 EOF
@@ -21,6 +52,58 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --profile|--env-profile)
       ENV_PROFILE="${2:-}"
+      shift 2
+      ;;
+    --api-base-url)
+      API_BASE="${2:-}"
+      shift 2
+      ;;
+    --web-base-url)
+      WEB_BASE="${2:-}"
+      shift 2
+      ;;
+    --require-reader)
+      REQUIRE_READER="${2:-}"
+      shift 2
+      ;;
+    --offline-fallback)
+      OFFLINE_FALLBACK="${2:-}"
+      shift 2
+      ;;
+    --reader-env-file)
+      READER_ENV_FILE="${2:-}"
+      shift 2
+      ;;
+    --heartbeat-seconds)
+      HEARTBEAT_SECONDS="${2:-}"
+      shift 2
+      ;;
+    --live-smoke-api-base-url)
+      LIVE_SMOKE_API_BASE_URL="${2:-}"
+      shift 2
+      ;;
+    --live-smoke-require-api)
+      LIVE_SMOKE_REQUIRE_API="${2:-}"
+      shift 2
+      ;;
+    --live-smoke-require-secrets)
+      LIVE_SMOKE_REQUIRE_SECRETS="${2:-}"
+      shift 2
+      ;;
+    --live-smoke-computer-use-strict)
+      LIVE_SMOKE_COMPUTER_USE_STRICT="${2:-}"
+      shift 2
+      ;;
+    --live-smoke-computer-use-skip)
+      LIVE_SMOKE_COMPUTER_USE_SKIP="${2:-}"
+      shift 2
+      ;;
+    --live-smoke-computer-use-skip-reason)
+      LIVE_SMOKE_COMPUTER_USE_SKIP_REASON="${2:-}"
+      shift 2
+      ;;
+    --youtube-smoke-url)
+      YOUTUBE_SMOKE_URL="${2:-}"
       shift 2
       ;;
     --live-diagnostics-json)
@@ -47,15 +130,9 @@ done
 source "$ROOT_DIR/scripts/lib/load_env.sh"
 load_repo_env "$ROOT_DIR" "$SCRIPT_NAME" "$ENV_PROFILE"
 
-API_BASE="${VD_API_BASE_URL:-http://127.0.0.1:${API_PORT:-8000}}"
-WEB_BASE="${WEB_BASE_URL:-http://127.0.0.1:${WEB_PORT:-3001}}"
-REQUIRE_READER="${FULL_STACK_REQUIRE_READER:-1}"
-MINIFLUX_BASE="${MINIFLUX_BASE_URL:-}"
-NEXTFLUX_PORT="${NEXTFLUX_PORT:-3000}"
-OFFLINE_FALLBACK="${OFFLINE_FALLBACK:-1}"
-READER_ENV_FILE="${READER_ENV_FILE:-$ROOT_DIR/env/profiles/reader.env}"
 FALLBACK_MARKER_FILE="$ROOT_DIR/.runtime-cache/full-stack/offline-fallback.flag"
-HEARTBEAT_SECONDS="${FULL_STACK_SMOKE_HEARTBEAT_SECONDS:-30}"
+MINIFLUX_BASE="${MINIFLUX_BASE_URL:-$MINIFLUX_BASE}"
+NEXTFLUX_PORT="${NEXTFLUX_PORT:-$NEXTFLUX_PORT}"
 heartbeat_pid=""
 AI_FEED_SYNC_TMP_OUTPUT=""
 
@@ -127,7 +204,16 @@ log "phase=short_tests status=passed"
 log "phase=long_tests status=start"
 log "Running built-in e2e live smoke"
 start_heartbeat "e2e_live_smoke"
-if ! (cd "$ROOT_DIR" && ENV_PROFILE="$ENV_PROFILE" ./scripts/e2e_live_smoke.sh --profile "$ENV_PROFILE" --diagnostics-json "$LIVE_DIAGNOSTICS_JSON"); then
+if ! (cd "$ROOT_DIR" && ./scripts/e2e_live_smoke.sh \
+  --profile "$ENV_PROFILE" \
+  --api-base-url "$LIVE_SMOKE_API_BASE_URL" \
+  --require-api "$LIVE_SMOKE_REQUIRE_API" \
+  --require-secrets "$LIVE_SMOKE_REQUIRE_SECRETS" \
+  --computer-use-strict "$LIVE_SMOKE_COMPUTER_USE_STRICT" \
+  --computer-use-skip "$LIVE_SMOKE_COMPUTER_USE_SKIP" \
+  --computer-use-skip-reason "$LIVE_SMOKE_COMPUTER_USE_SKIP_REASON" \
+  --youtube-url "$YOUTUBE_SMOKE_URL" \
+  --diagnostics-json "$LIVE_DIAGNOSTICS_JSON"); then
   stop_heartbeat
   live_diag_path="$ROOT_DIR/$LIVE_DIAGNOSTICS_JSON"
   if [[ -f "$live_diag_path" ]]; then
@@ -173,7 +259,7 @@ if is_truthy "$REQUIRE_READER"; then
     exit 0
   fi
   if [[ -z "$MINIFLUX_BASE" ]]; then
-    fail "FULL_STACK_REQUIRE_READER=1 but MINIFLUX_BASE_URL is empty"
+    fail "--require-reader=1 but MINIFLUX_BASE_URL is empty"
   fi
   log "Checking Miniflux"
   check_http_200 "$MINIFLUX_BASE"

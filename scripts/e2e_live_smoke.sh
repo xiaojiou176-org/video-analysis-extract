@@ -4,7 +4,13 @@ set -euo pipefail
 SCRIPT_NAME="e2e_live_smoke"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ENV_PROFILE="${ENV_PROFILE:-local}"
-CLI_LIVE_SMOKE_API_BASE_URL=""
+CLI_LIVE_SMOKE_API_BASE_URL="http://127.0.0.1:8000"
+LIVE_SMOKE_REQUIRE_API="1"
+LIVE_SMOKE_COMPUTER_USE_STRICT="1"
+LIVE_SMOKE_COMPUTER_USE_SKIP="0"
+LIVE_SMOKE_COMPUTER_USE_SKIP_REASON=""
+LIVE_SMOKE_REQUIRE_SECRETS="0"
+YOUTUBE_SMOKE_URL="https://www.youtube.com/watch?v=dQw4w9WgXcQ"
 LIVE_SMOKE_TIMEOUT_SECONDS="180"
 LIVE_SMOKE_POLL_INTERVAL_SECONDS="3"
 LIVE_SMOKE_HEARTBEAT_SECONDS="30"
@@ -22,6 +28,11 @@ Usage: scripts/e2e_live_smoke.sh [options]
 Options:
   --profile, --env-profile <name>             Env profile passed to load_repo_env (default: local)
   --api-base-url <url>                        API base URL override
+  --require-api <0|1>                         Require API health check (default: 1)
+  --require-secrets <0|1>                     Require secrets gate (default: 0)
+  --computer-use-strict <0|1>                 Strict computer-use validation (default: 1)
+  --computer-use-skip <0|1>                   Skip computer-use phase (default: 0)
+  --computer-use-skip-reason <text>           Skip reason when --computer-use-skip=1
   --timeout-seconds <n>                       Live smoke timeout seconds (default: 180)
   --poll-interval-seconds <n>                 Poll interval seconds (default: 3)
   --heartbeat-seconds <n>                     Heartbeat interval seconds (default: 30)
@@ -30,6 +41,7 @@ Options:
   --max-retries <n>                           Curl retries in [1,2] (default: 2)
   --diagnostics-json <path>                   Diagnostics JSON path (default: .runtime-cache/e2e-live-smoke-result.json)
   --computer-use-cmd <cmd_or_path>            computer_use smoke command override
+  --youtube-url <url>                         YouTube URL used in probes/process (default: dQw4w9WgXcQ)
   --bilibili-url <url>                        Bilibili URL used in probes/process (default: BV1xx411c7mD)
   -h, --help                                  Show this help
 EOF
@@ -43,6 +55,26 @@ while [[ $# -gt 0 ]]; do
       ;;
     --api-base-url)
       CLI_LIVE_SMOKE_API_BASE_URL="${2:-}"
+      shift 2
+      ;;
+    --require-api)
+      LIVE_SMOKE_REQUIRE_API="${2:-}"
+      shift 2
+      ;;
+    --require-secrets)
+      LIVE_SMOKE_REQUIRE_SECRETS="${2:-}"
+      shift 2
+      ;;
+    --computer-use-strict)
+      LIVE_SMOKE_COMPUTER_USE_STRICT="${2:-}"
+      shift 2
+      ;;
+    --computer-use-skip)
+      LIVE_SMOKE_COMPUTER_USE_SKIP="${2:-}"
+      shift 2
+      ;;
+    --computer-use-skip-reason)
+      LIVE_SMOKE_COMPUTER_USE_SKIP_REASON="${2:-}"
       shift 2
       ;;
     --timeout-seconds)
@@ -97,33 +129,12 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-# Keep parent-shell overrides for live smoke API routing before loading repo .env files.
-SHELL_LIVE_SMOKE_API_BASE_URL="${LIVE_SMOKE_API_BASE_URL-}"
-SHELL_LIVE_SMOKE_API_BASE_URL_SET="${LIVE_SMOKE_API_BASE_URL+x}"
-
 # shellcheck source=./scripts/lib/load_env.sh
 source "$ROOT_DIR/scripts/lib/load_env.sh"
 load_repo_env "$ROOT_DIR" "$SCRIPT_NAME" "$ENV_PROFILE"
 
-if [[ -n "$SHELL_LIVE_SMOKE_API_BASE_URL_SET" ]]; then
-  LIVE_SMOKE_API_BASE_URL="$SHELL_LIVE_SMOKE_API_BASE_URL"
-fi
-
-LIVE_SMOKE_API_BASE_URL="${LIVE_SMOKE_API_BASE_URL:-}"
-if [[ -n "$CLI_LIVE_SMOKE_API_BASE_URL" ]]; then
-  LIVE_SMOKE_API_BASE_URL="$CLI_LIVE_SMOKE_API_BASE_URL"
-fi
-if [[ -z "$LIVE_SMOKE_API_BASE_URL" ]]; then
-  LIVE_SMOKE_API_BASE_URL="http://127.0.0.1:${API_PORT:-8000}"
-fi
+LIVE_SMOKE_API_BASE_URL="$CLI_LIVE_SMOKE_API_BASE_URL"
 API_BASE_URL="$LIVE_SMOKE_API_BASE_URL"
-
-LIVE_SMOKE_REQUIRE_API="${LIVE_SMOKE_REQUIRE_API:-1}"
-LIVE_SMOKE_COMPUTER_USE_STRICT="${LIVE_SMOKE_COMPUTER_USE_STRICT:-1}"
-LIVE_SMOKE_COMPUTER_USE_SKIP="${LIVE_SMOKE_COMPUTER_USE_SKIP:-0}"
-LIVE_SMOKE_COMPUTER_USE_SKIP_REASON="${LIVE_SMOKE_COMPUTER_USE_SKIP_REASON:-}"
-LIVE_SMOKE_REQUIRE_SECRETS="${LIVE_SMOKE_REQUIRE_SECRETS:-0}"
-YOUTUBE_SMOKE_URL="${YOUTUBE_SMOKE_URL:-https://www.youtube.com/watch?v=dQw4w9WgXcQ}"
 DIAGNOSTICS_PATH=""
 SCENARIO_TRACE=""
 WRITE_OP_TRACE=""
@@ -838,14 +849,14 @@ run_computer_use_smoke() {
   cmd="$(trim_whitespace "$LIVE_SMOKE_COMPUTER_USE_CMD")"
 
   if is_truthy "$skip_value"; then
-    [[ -n "$skip_reason" ]] || fail "LIVE_SMOKE_COMPUTER_USE_SKIP=1 requires LIVE_SMOKE_COMPUTER_USE_SKIP_REASON"
+    [[ -n "$skip_reason" ]] || fail "--computer-use-skip=1 requires --computer-use-skip-reason"
     log "Scenario: computer_use smoke skipped; reason=${skip_reason}"
     record_scenario "computer_use_smoke" "skipped" "$skip_reason"
     return 0
   fi
 
   if [[ -z "$cmd" ]]; then
-    local message="computer_use smoke command is empty; set --computer-use-cmd or skip with LIVE_SMOKE_COMPUTER_USE_SKIP=1 and reason"
+    local message="computer_use smoke command is empty; set --computer-use-cmd or skip with --computer-use-skip=1 and --computer-use-skip-reason"
     if is_truthy "$strict_value"; then
       fail "$message"
     fi

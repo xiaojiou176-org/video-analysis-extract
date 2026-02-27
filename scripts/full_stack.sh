@@ -7,11 +7,27 @@ RUN_DIR="$ROOT_DIR/.runtime-cache/full-stack"
 LOG_DIR="$ROOT_DIR/logs/full-stack"
 mkdir -p "$RUN_DIR" "$LOG_DIR"
 ENV_PROFILE="${ENV_PROFILE:-local}"
+API_PORT="8000"
+WEB_PORT="3000"
+API_HEALTH_URL="http://127.0.0.1:${API_PORT}/healthz"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --profile|--env-profile)
       ENV_PROFILE="${2:-}"
+      shift 2
+      ;;
+    --api-port)
+      API_PORT="${2:-}"
+      API_HEALTH_URL="http://127.0.0.1:${API_PORT}/healthz"
+      shift 2
+      ;;
+    --web-port)
+      WEB_PORT="${2:-}"
+      shift 2
+      ;;
+    --api-health-url)
+      API_HEALTH_URL="${2:-}"
       shift 2
       ;;
     --)
@@ -27,27 +43,20 @@ done
 # shellcheck source=./scripts/lib/load_env.sh
 source "$ROOT_DIR/scripts/lib/load_env.sh"
 load_repo_env "$ROOT_DIR" "$SCRIPT_NAME" "$ENV_PROFILE"
-
-if [[ -n "${WEB_BASE_URL:-}" ]]; then
-  WEB_PORT="${WEB_PORT:-$(python3 - <<'PY'
-import os
-from urllib.parse import urlparse
-u = os.getenv("WEB_BASE_URL", "")
-p = urlparse(u).port
-print(p or 3000)
-PY
-)}"
-else
-  WEB_PORT="${WEB_PORT:-3000}"
+if ! [[ "$API_PORT" =~ ^[0-9]+$ ]] || (( API_PORT <= 0 || API_PORT > 65535 )); then
+  echo "[full_stack] --api-port must be an integer in [1,65535]" >&2
+  exit 2
 fi
-API_PORT="${API_PORT:-8000}"
-API_HEALTH_URL="${API_HEALTH_URL:-http://127.0.0.1:${API_PORT}/healthz}"
+if ! [[ "$WEB_PORT" =~ ^[0-9]+$ ]] || (( WEB_PORT <= 0 || WEB_PORT > 65535 )); then
+  echo "[full_stack] --web-port must be an integer in [1,65535]" >&2
+  exit 2
+fi
 
 log() { printf '[%s] %s\n' "$SCRIPT_NAME" "$*" >&2; }
 
 usage() {
   cat <<'EOF'
-Usage: ./scripts/full_stack.sh [--profile <name>] [up|down|restart|status|logs]
+Usage: ./scripts/full_stack.sh [--profile <name>] [--api-port <port>] [--web-port <port>] [--api-health-url <url>] [up|down|restart|status|logs]
 
 Starts/stops local app processes:
 - API (dev_api.sh)
@@ -262,7 +271,7 @@ status_one() {
 cmd="${1:-up}"
 case "$cmd" in
   up)
-    start_one api "$ROOT_DIR/scripts/dev_api.sh" --no-reload
+    start_one api "$ROOT_DIR/scripts/dev_api.sh" --host 127.0.0.1 --port "$API_PORT" --no-reload
     start_one mcp "$ROOT_DIR/scripts/dev_mcp.sh"
     start_one web npm --prefix "$ROOT_DIR/apps/web" run dev -- --port "$WEB_PORT"
     temporal_host="${TEMPORAL_TARGET_HOST:-127.0.0.1:7233}"
@@ -295,8 +304,8 @@ case "$cmd" in
     stop_one api
     ;;
   restart)
-    "$0" down
-    "$0" up
+    "$0" --profile "$ENV_PROFILE" --api-port "$API_PORT" --web-port "$WEB_PORT" --api-health-url "$API_HEALTH_URL" down
+    "$0" --profile "$ENV_PROFILE" --api-port "$API_PORT" --web-port "$WEB_PORT" --api-health-url "$API_HEALTH_URL" up
     ;;
   status)
     status_one api

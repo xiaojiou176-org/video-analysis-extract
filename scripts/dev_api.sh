@@ -7,16 +7,18 @@ source "$ROOT_DIR/scripts/lib/load_env.sh"
 load_repo_env "$ROOT_DIR" "dev_api"
 
 API_APP="apps.api.app.main:app"
-API_HOST="${API_HOST:-127.0.0.1}"
-API_PORT="${API_PORT:-8000}"
+API_HOST="127.0.0.1"
+API_PORT="8000"
 ENABLE_RELOAD=1
 
 usage() {
   cat <<'EOF'
-Usage: ./scripts/dev_api.sh [--app <module:app>] [--reload|--no-reload]
+Usage: ./scripts/dev_api.sh [--app <module:app>] [--host <host>] [--port <port>] [--reload|--no-reload]
 
 Options:
   --app <module:app>  Uvicorn ASGI app target (default: apps.api.app.main:app)
+  --host <host>       Uvicorn bind host (default: 127.0.0.1)
+  --port <port>       Uvicorn bind port (default: 8000)
   --reload            Enable auto-reload (default)
   --no-reload         Disable auto-reload
   -h, --help          Show this help
@@ -31,6 +33,22 @@ while [[ $# -gt 0 ]]; do
         exit 2
       fi
       API_APP="$2"
+      shift 2
+      ;;
+    --host)
+      if [[ $# -lt 2 || -z "${2:-}" || "${2:-}" == --* ]]; then
+        echo "[dev_api] --host requires a non-empty value" >&2
+        exit 2
+      fi
+      API_HOST="$2"
+      shift 2
+      ;;
+    --port)
+      if [[ $# -lt 2 || -z "${2:-}" || "${2:-}" == --* ]]; then
+        echo "[dev_api] --port requires a non-empty value" >&2
+        exit 2
+      fi
+      API_PORT="$2"
       shift 2
       ;;
     --reload)
@@ -52,6 +70,11 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+if ! [[ "$API_PORT" =~ ^[0-9]+$ ]] || (( API_PORT <= 0 || API_PORT > 65535 )); then
+  echo "[dev_api] --port must be an integer in [1,65535]" >&2
+  exit 2
+fi
 
 if [[ ! -d "$ROOT_DIR/apps/api" ]]; then
   echo "[dev_api] API directory not found: $ROOT_DIR/apps/api" >&2

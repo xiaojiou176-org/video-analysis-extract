@@ -3,43 +3,29 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-# Optional env overrides (all have safe defaults):
-#   OPS_DAILY_LOCAL_HOUR=9
-#   OPS_DAILY_TIMEZONE=Asia/Shanghai
-#   OPS_NOTIFICATION_INTERVAL_MINUTES=10
-#   OPS_NOTIFICATION_RETRY_BATCH_LIMIT=50
-#   OPS_CANARY_INTERVAL_HOURS=1
-#   OPS_CANARY_TIMEOUT_SECONDS=8
-#   OPS_CLEANUP_INTERVAL_HOURS=6
-#   OPS_CLEANUP_OLDER_THAN_HOURS=24
-#   OPS_CLEANUP_CACHE_OLDER_THAN_HOURS=
-#   OPS_CLEANUP_CACHE_MAX_SIZE_MB=
-#   OPS_CLEANUP_WORKSPACE_DIR=
-#   OPS_CLEANUP_CACHE_DIR=
-#   (worker hints now controlled via --show-hints / --no-show-hints in this script)
-
-OPS_DAILY_LOCAL_HOUR="${OPS_DAILY_LOCAL_HOUR:-9}"
-OPS_DAILY_TIMEZONE="${OPS_DAILY_TIMEZONE:-system-local}"
+# Runtime knobs use CLI flags with internal defaults (no same-name env fallback).
+OPS_DAILY_LOCAL_HOUR="9"
+OPS_DAILY_TIMEZONE="system-local"
 OPS_DAILY_TIMEZONE_OFFSET_MINUTES=""
 OPS_DAILY_WORKFLOW_ID="daily-digest-workflow"
 OPS_DAILY_RUN_ONCE="0"
 
-OPS_NOTIFICATION_INTERVAL_MINUTES="${OPS_NOTIFICATION_INTERVAL_MINUTES:-10}"
-OPS_NOTIFICATION_RETRY_BATCH_LIMIT="${OPS_NOTIFICATION_RETRY_BATCH_LIMIT:-50}"
+OPS_NOTIFICATION_INTERVAL_MINUTES="10"
+OPS_NOTIFICATION_RETRY_BATCH_LIMIT="50"
 OPS_NOTIFICATION_WORKFLOW_ID="notification-retry-workflow"
 OPS_NOTIFICATION_RUN_ONCE="0"
 
-OPS_CANARY_INTERVAL_HOURS="${OPS_CANARY_INTERVAL_HOURS:-1}"
-OPS_CANARY_TIMEOUT_SECONDS="${OPS_CANARY_TIMEOUT_SECONDS:-8}"
+OPS_CANARY_INTERVAL_HOURS="1"
+OPS_CANARY_TIMEOUT_SECONDS="8"
 OPS_CANARY_WORKFLOW_ID="provider-canary-workflow"
 OPS_CANARY_RUN_ONCE="0"
 
-OPS_CLEANUP_INTERVAL_HOURS="${OPS_CLEANUP_INTERVAL_HOURS:-6}"
-OPS_CLEANUP_OLDER_THAN_HOURS="${OPS_CLEANUP_OLDER_THAN_HOURS:-24}"
-OPS_CLEANUP_CACHE_OLDER_THAN_HOURS="${OPS_CLEANUP_CACHE_OLDER_THAN_HOURS:-}"
-OPS_CLEANUP_CACHE_MAX_SIZE_MB="${OPS_CLEANUP_CACHE_MAX_SIZE_MB:-}"
-OPS_CLEANUP_WORKSPACE_DIR="${OPS_CLEANUP_WORKSPACE_DIR:-}"
-OPS_CLEANUP_CACHE_DIR="${OPS_CLEANUP_CACHE_DIR:-}"
+OPS_CLEANUP_INTERVAL_HOURS="6"
+OPS_CLEANUP_OLDER_THAN_HOURS="24"
+OPS_CLEANUP_CACHE_OLDER_THAN_HOURS=""
+OPS_CLEANUP_CACHE_MAX_SIZE_MB=""
+OPS_CLEANUP_WORKSPACE_DIR=""
+OPS_CLEANUP_CACHE_DIR=""
 OPS_CLEANUP_WORKFLOW_ID="cleanup-workspace-workflow"
 OPS_CLEANUP_RUN_ONCE="0"
 
@@ -97,13 +83,29 @@ Start/ensure long-running ops workflows:
 
 Options:
   --daily-workflow-id <id>         Daily workflow id (default: daily-digest-workflow)
+  --daily-local-hour <hour>        Daily local hour (default: 9)
+  --daily-timezone <name>          Daily timezone name (default: system-local)
   --daily-run-once                 Run daily workflow once (default: disabled)
   --daily-timezone-offset-minutes <minutes>
                                    Daily timezone offset override in minutes
+  --notification-interval-minutes <minutes>
+                                   Notification interval minutes (default: 10)
+  --notification-retry-batch-limit <n>
+                                   Notification retry batch limit (default: 50)
   --notification-workflow-id <id>  Notification workflow id (default: notification-retry-workflow)
   --notification-run-once          Run notification workflow once (default: disabled)
+  --canary-interval-hours <hours>  Canary interval hours (default: 1)
+  --canary-timeout-seconds <n>     Canary timeout seconds (default: 8)
   --canary-workflow-id <id>        Canary workflow id (default: provider-canary-workflow)
   --canary-run-once                Run canary workflow once (default: disabled)
+  --cleanup-interval-hours <hours> Cleanup interval hours (default: 6)
+  --cleanup-older-than-hours <h>   Cleanup older-than hours (default: 24)
+  --cleanup-cache-older-than-hours <h>
+                                   Cleanup cache older-than hours override
+  --cleanup-cache-max-size-mb <mb>
+                                   Cleanup cache max size override (MB)
+  --cleanup-workspace-dir <path>   Cleanup workspace dir override
+  --cleanup-cache-dir <path>       Cleanup cache dir override
   --cleanup-workflow-id <id>       Cleanup workflow id (default: cleanup-workspace-workflow)
   --cleanup-run-once               Run cleanup workflow once (default: disabled)
   --show-hints                     Print startup summary logs (default)
@@ -121,6 +123,22 @@ while [[ $# -gt 0 ]]; do
         exit 2
       fi
       OPS_DAILY_WORKFLOW_ID="${2:-}"
+      shift 2
+      ;;
+    --daily-local-hour)
+      if [[ $# -lt 2 ]]; then
+        echo "[start_ops_workflows] --daily-local-hour requires a value" >&2
+        exit 2
+      fi
+      OPS_DAILY_LOCAL_HOUR="${2:-}"
+      shift 2
+      ;;
+    --daily-timezone)
+      if [[ $# -lt 2 ]]; then
+        echo "[start_ops_workflows] --daily-timezone requires a value" >&2
+        exit 2
+      fi
+      OPS_DAILY_TIMEZONE="${2:-}"
       shift 2
       ;;
     --daily-run-once)
@@ -143,6 +161,22 @@ while [[ $# -gt 0 ]]; do
       OPS_NOTIFICATION_WORKFLOW_ID="${2:-}"
       shift 2
       ;;
+    --notification-interval-minutes)
+      if [[ $# -lt 2 ]]; then
+        echo "[start_ops_workflows] --notification-interval-minutes requires a value" >&2
+        exit 2
+      fi
+      OPS_NOTIFICATION_INTERVAL_MINUTES="${2:-}"
+      shift 2
+      ;;
+    --notification-retry-batch-limit)
+      if [[ $# -lt 2 ]]; then
+        echo "[start_ops_workflows] --notification-retry-batch-limit requires a value" >&2
+        exit 2
+      fi
+      OPS_NOTIFICATION_RETRY_BATCH_LIMIT="${2:-}"
+      shift 2
+      ;;
     --notification-run-once)
       OPS_NOTIFICATION_RUN_ONCE=1
       shift
@@ -155,6 +189,22 @@ while [[ $# -gt 0 ]]; do
       OPS_CANARY_WORKFLOW_ID="${2:-}"
       shift 2
       ;;
+    --canary-interval-hours)
+      if [[ $# -lt 2 ]]; then
+        echo "[start_ops_workflows] --canary-interval-hours requires a value" >&2
+        exit 2
+      fi
+      OPS_CANARY_INTERVAL_HOURS="${2:-}"
+      shift 2
+      ;;
+    --canary-timeout-seconds)
+      if [[ $# -lt 2 ]]; then
+        echo "[start_ops_workflows] --canary-timeout-seconds requires a value" >&2
+        exit 2
+      fi
+      OPS_CANARY_TIMEOUT_SECONDS="${2:-}"
+      shift 2
+      ;;
     --canary-run-once)
       OPS_CANARY_RUN_ONCE=1
       shift
@@ -165,6 +215,54 @@ while [[ $# -gt 0 ]]; do
         exit 2
       fi
       OPS_CLEANUP_WORKFLOW_ID="${2:-}"
+      shift 2
+      ;;
+    --cleanup-interval-hours)
+      if [[ $# -lt 2 ]]; then
+        echo "[start_ops_workflows] --cleanup-interval-hours requires a value" >&2
+        exit 2
+      fi
+      OPS_CLEANUP_INTERVAL_HOURS="${2:-}"
+      shift 2
+      ;;
+    --cleanup-older-than-hours)
+      if [[ $# -lt 2 ]]; then
+        echo "[start_ops_workflows] --cleanup-older-than-hours requires a value" >&2
+        exit 2
+      fi
+      OPS_CLEANUP_OLDER_THAN_HOURS="${2:-}"
+      shift 2
+      ;;
+    --cleanup-cache-older-than-hours)
+      if [[ $# -lt 2 ]]; then
+        echo "[start_ops_workflows] --cleanup-cache-older-than-hours requires a value" >&2
+        exit 2
+      fi
+      OPS_CLEANUP_CACHE_OLDER_THAN_HOURS="${2:-}"
+      shift 2
+      ;;
+    --cleanup-cache-max-size-mb)
+      if [[ $# -lt 2 ]]; then
+        echo "[start_ops_workflows] --cleanup-cache-max-size-mb requires a value" >&2
+        exit 2
+      fi
+      OPS_CLEANUP_CACHE_MAX_SIZE_MB="${2:-}"
+      shift 2
+      ;;
+    --cleanup-workspace-dir)
+      if [[ $# -lt 2 ]]; then
+        echo "[start_ops_workflows] --cleanup-workspace-dir requires a value" >&2
+        exit 2
+      fi
+      OPS_CLEANUP_WORKSPACE_DIR="${2:-}"
+      shift 2
+      ;;
+    --cleanup-cache-dir)
+      if [[ $# -lt 2 ]]; then
+        echo "[start_ops_workflows] --cleanup-cache-dir requires a value" >&2
+        exit 2
+      fi
+      OPS_CLEANUP_CACHE_DIR="${2:-}"
       shift 2
       ;;
     --cleanup-run-once)
