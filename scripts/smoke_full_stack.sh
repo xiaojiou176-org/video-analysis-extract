@@ -4,6 +4,18 @@ set -euo pipefail
 SCRIPT_NAME="smoke_full_stack"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ENV_PROFILE="${ENV_PROFILE:-local}"
+LIVE_DIAGNOSTICS_JSON=".runtime-cache/e2e-live-smoke-result.json"
+
+usage() {
+  cat <<'EOF'
+Usage: scripts/smoke_full_stack.sh [options]
+
+Options:
+  --profile, --env-profile <name>     Env profile passed to load_repo_env (default: local)
+  --live-diagnostics-json <path>      e2e live smoke diagnostics output path
+  -h, --help                          Show this help
+EOF
+}
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -11,12 +23,22 @@ while [[ $# -gt 0 ]]; do
       ENV_PROFILE="${2:-}"
       shift 2
       ;;
+    --live-diagnostics-json)
+      LIVE_DIAGNOSTICS_JSON="${2:-}"
+      shift 2
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
     --)
       shift
       break
       ;;
     *)
-      break
+      echo "[$SCRIPT_NAME] unknown arg: $1" >&2
+      usage >&2
+      exit 2
       ;;
   esac
 done
@@ -34,7 +56,6 @@ OFFLINE_FALLBACK="${OFFLINE_FALLBACK:-1}"
 READER_ENV_FILE="${READER_ENV_FILE:-$ROOT_DIR/env/profiles/reader.env}"
 FALLBACK_MARKER_FILE="$ROOT_DIR/.runtime-cache/full-stack/offline-fallback.flag"
 HEARTBEAT_SECONDS="${FULL_STACK_SMOKE_HEARTBEAT_SECONDS:-30}"
-LIVE_DIAGNOSTICS_JSON="${LIVE_SMOKE_DIAGNOSTICS_JSON:-.runtime-cache/e2e-live-smoke-result.json}"
 heartbeat_pid=""
 AI_FEED_SYNC_TMP_OUTPUT=""
 
@@ -106,7 +127,7 @@ log "phase=short_tests status=passed"
 log "phase=long_tests status=start"
 log "Running built-in e2e live smoke"
 start_heartbeat "e2e_live_smoke"
-if ! (cd "$ROOT_DIR" && LIVE_SMOKE_DIAGNOSTICS_JSON="$LIVE_DIAGNOSTICS_JSON" ENV_PROFILE="$ENV_PROFILE" ./scripts/e2e_live_smoke.sh --profile "$ENV_PROFILE"); then
+if ! (cd "$ROOT_DIR" && ENV_PROFILE="$ENV_PROFILE" ./scripts/e2e_live_smoke.sh --profile "$ENV_PROFILE" --diagnostics-json "$LIVE_DIAGNOSTICS_JSON"); then
   stop_heartbeat
   live_diag_path="$ROOT_DIR/$LIVE_DIAGNOSTICS_JSON"
   if [[ -f "$live_diag_path" ]]; then

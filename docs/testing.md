@@ -33,7 +33,7 @@
 - `aggregate-gate`：汇总 `preflight + 12` 个核心作业（`profile-governance` / `quality-gate-pre-push` / `db-migration-smoke` / `python-tests` / `api-real-smoke` / `pr-llm-real-smoke` / `backend-lint` / `frontend-lint` / `web-test-build` / `web-e2e` / `external-playwright-smoke` / `dependency-vuln-scan`）；`pr-llm-real-smoke` 始终允许 `success/skipped`，且 `profile-governance` / `quality-gate-pre-push` / `external-playwright-smoke` 在 PR 上允许 `skipped`，在 `push(main)` / nightly `schedule` 必须为 `success`。
 - `autofix-dry-run`：依赖 `python-tests` + `web-e2e`，仅在两者任一失败时运行（读取 `.runtime-cache` 诊断工件）。
 - `nightly-flaky-python` + `nightly-flaky-web-e2e`：仅 nightly schedule 触发，执行重复运行策略用于发现 flaky。
-- `live-smoke`：依赖 `aggregate-gate`，在 `main` push / nightly schedule 必跑；执行真实 LLM + 真实外部视频 URL（YouTube/Bilibili）链路。`LIVE_SMOKE_API_BASE_URL` 为空时会自动回落到 `http://127.0.0.1:${API_PORT:-8000}`；若缺少任一必需 secret 会直接失败（不再跳过放行）。
+- `live-smoke`：依赖 `aggregate-gate`，在 `main` push / nightly schedule 必跑；执行真实 LLM + 真实外部视频 URL（YouTube/Bilibili）链路。Batch B 后建议通过 CLI 传参（如 `--api-base-url`）；若未传则按脚本默认回落到 `http://127.0.0.1:${API_PORT:-8000}`。缺少任一必需 secret 会直接失败（不再跳过放行）。
 - `ci-final-gate`：最终门禁；始终检查 `aggregate-gate`，并在 nightly 强制 `nightly-flaky-*` 成功，在 `main` push / nightly schedule 强制 `live-smoke` 成功且不得为 `skipped`。
 
 ## 第二批提速（PR 按改动范围执行 + CI 去重）
@@ -106,6 +106,7 @@ CI `live-smoke` 必需 secrets（`main` push / nightly schedule）：
 Live 诊断与执行策略（本地/CI 一致）：
 
 - 环境变量优先级：先读仓库 `.env`，缺失项仅使用当前 shell 环境变量。
+- Batch B 契约口径：`e2e_live_smoke.sh` 与 `smoke_llm_real_local.sh` 的运行参数改为 CLI 优先；legacy env 仅兼容，不再建议在 `.env` 持久化。
 - `YOUTUBE_API_KEY` 失效修复：`e2e_live_smoke.sh` 会按 `.env` → 当前 shell 环境变量自动探测可用 key，并在修复成功后回写 `.env`（日志仅展示脱敏 key 片段）。
 - 若所有来源都无效：脚本直接失败，并输出“需要用户提供有效key”。
 - 失败分类：诊断 JSON 必须携带 `failure_kind`，取值为 `code_logic_error` 或 `network_or_environment_timeout`。

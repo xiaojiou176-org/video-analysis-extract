@@ -10,9 +10,9 @@ source "$ROOT_DIR/scripts/lib/load_env.sh"
 load_repo_env "$ROOT_DIR" "$SCRIPT_NAME"
 
 API_BASE_URL="${PR_LLM_REAL_SMOKE_API_BASE_URL:-http://127.0.0.1:8000}"
-DIAGNOSTICS_JSON="${PR_LLM_REAL_SMOKE_DIAGNOSTICS_JSON:-.runtime-cache/pr-llm-real-smoke-result.json}"
-HEARTBEAT_SECONDS="${PR_LLM_REAL_SMOKE_HEARTBEAT_SECONDS:-30}"
-MAX_RETRIES="${PR_LLM_REAL_SMOKE_MAX_RETRIES:-2}"
+DIAGNOSTICS_JSON=".runtime-cache/pr-llm-real-smoke-result.json"
+HEARTBEAT_SECONDS="30"
+MAX_RETRIES="2"
 KEY_SOURCE="unset"
 AUTH_MODE="unauthenticated"
 STARTED_AT_UTC="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
@@ -24,6 +24,19 @@ request_headers=(
   -H 'Accept: application/json'
   -H 'Content-Type: application/json'
 )
+
+usage() {
+  cat <<'EOF'
+Usage: scripts/smoke_llm_real_local.sh [options]
+
+Options:
+  --api-base-url <url>            API base URL (default: from PR_LLM_REAL_SMOKE_API_BASE_URL or http://127.0.0.1:8000)
+  --diagnostics-json <path>       Diagnostics output path (default: .runtime-cache/pr-llm-real-smoke-result.json)
+  --heartbeat-seconds <n>         Heartbeat interval seconds (default: 30)
+  --max-retries <n>               Max retries in [1,2] (default: 2)
+  -h, --help                      Show this help
+EOF
+}
 
 record_teardown_step() {
   local name="$1"
@@ -69,8 +82,21 @@ while [[ $# -gt 0 ]]; do
       DIAGNOSTICS_JSON="$2"
       shift 2
       ;;
+    --heartbeat-seconds)
+      HEARTBEAT_SECONDS="$2"
+      shift 2
+      ;;
+    --max-retries)
+      MAX_RETRIES="$2"
+      shift 2
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
     *)
       echo "[smoke_llm_real_local] unknown arg: $1" >&2
+      usage >&2
       exit 2
       ;;
   esac
@@ -87,7 +113,7 @@ fi
 
 if [[ -z "${GEMINI_API_KEY:-}" ]]; then
   run_teardown_phase
-  DIAGNOSTICS_JSON="$DIAGNOSTICS_JSON" API_BASE_URL="$API_BASE_URL" STARTED_AT_UTC="$STARTED_AT_UTC" TEARDOWN_TRACE="$TEARDOWN_TRACE" python3 - <<'PY'
+  DIAGNOSTICS_JSON="$DIAGNOSTICS_JSON" API_BASE_URL="$API_BASE_URL" STARTED_AT_UTC="$STARTED_AT_UTC" TEARDOWN_TRACE="$TEARDOWN_TRACE" MAX_RETRIES="$MAX_RETRIES" python3 - <<'PY'
 import json
 import os
 from pathlib import Path
@@ -108,7 +134,7 @@ Path(os.environ["DIAGNOSTICS_JSON"]).write_text(
             "reason": "missing GEMINI_API_KEY",
             "api_base_url": os.environ["API_BASE_URL"],
             "started_at_utc": os.environ.get("STARTED_AT_UTC", ""),
-            "retry_policy": {"max_attempts": 2},
+            "retry_policy": {"max_attempts": int(os.environ.get("MAX_RETRIES", "2") or "2")},
             "write_policy": {
                 "idempotency": "computer_use request key is generated per endpoint+payload hash",
                 "teardown": "safe teardown removes only script temp files",
@@ -178,7 +204,7 @@ probe_body="$(cat "$probe_tmp" 2>/dev/null || true)"
 
 if [[ "$probe_curl_exit" -ne 0 || "$probe_status" != "200" ]]; then
   run_teardown_phase
-  BODY="$probe_body" STATUS="$probe_status" DIAGNOSTICS_JSON="$DIAGNOSTICS_JSON" API_BASE_URL="$API_BASE_URL" CURL_EXIT="$probe_curl_exit" KEY_SOURCE="$KEY_SOURCE" STARTED_AT_UTC="$STARTED_AT_UTC" TEARDOWN_TRACE="$TEARDOWN_TRACE" python3 - <<'PY'
+  BODY="$probe_body" STATUS="$probe_status" DIAGNOSTICS_JSON="$DIAGNOSTICS_JSON" API_BASE_URL="$API_BASE_URL" CURL_EXIT="$probe_curl_exit" KEY_SOURCE="$KEY_SOURCE" STARTED_AT_UTC="$STARTED_AT_UTC" TEARDOWN_TRACE="$TEARDOWN_TRACE" MAX_RETRIES="$MAX_RETRIES" python3 - <<'PY'
 import json
 import os
 from pathlib import Path
@@ -200,7 +226,7 @@ Path(os.environ["DIAGNOSTICS_JSON"]).write_text(
             "api_base_url": os.environ["API_BASE_URL"],
             "http_status": os.environ.get("STATUS", ""),
             "curl_exit": int(os.environ.get("CURL_EXIT", "0") or "0"),
-            "retry_policy": {"max_attempts": 2},
+            "retry_policy": {"max_attempts": int(os.environ.get("MAX_RETRIES", "2") or "2")},
             "key_source": os.environ.get("KEY_SOURCE", "unknown"),
             "started_at_utc": os.environ.get("STARTED_AT_UTC", ""),
             "write_policy": {
@@ -301,7 +327,7 @@ body="$(cat "$tmp_body" 2>/dev/null || true)"
 
 if [[ "$curl_exit" -ne 0 ]]; then
   run_teardown_phase
-  BODY="$body" STATUS="curl_error" DIAGNOSTICS_JSON="$DIAGNOSTICS_JSON" API_BASE_URL="$API_BASE_URL" CURL_EXIT="$curl_exit" STARTED_AT_UTC="$STARTED_AT_UTC" REQUEST_IDEMPOTENCY_KEY="$REQUEST_IDEMPOTENCY_KEY" TEARDOWN_TRACE="$TEARDOWN_TRACE" python3 - <<'PY'
+  BODY="$body" STATUS="curl_error" DIAGNOSTICS_JSON="$DIAGNOSTICS_JSON" API_BASE_URL="$API_BASE_URL" CURL_EXIT="$curl_exit" STARTED_AT_UTC="$STARTED_AT_UTC" REQUEST_IDEMPOTENCY_KEY="$REQUEST_IDEMPOTENCY_KEY" TEARDOWN_TRACE="$TEARDOWN_TRACE" MAX_RETRIES="$MAX_RETRIES" python3 - <<'PY'
 import json
 import os
 from pathlib import Path
@@ -322,7 +348,7 @@ Path(os.environ["DIAGNOSTICS_JSON"]).write_text(
             "reason": "curl_request_failed",
             "api_base_url": os.environ["API_BASE_URL"],
             "curl_exit": int(os.environ.get("CURL_EXIT", "1")),
-            "retry_policy": {"max_attempts": 2},
+            "retry_policy": {"max_attempts": int(os.environ.get("MAX_RETRIES", "2") or "2")},
             "started_at_utc": os.environ.get("STARTED_AT_UTC", ""),
             "write_policy": {
                 "idempotency": "computer_use request key is generated per endpoint+payload hash",

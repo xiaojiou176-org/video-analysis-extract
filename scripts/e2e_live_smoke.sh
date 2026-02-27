@@ -4,6 +4,36 @@ set -euo pipefail
 SCRIPT_NAME="e2e_live_smoke"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ENV_PROFILE="${ENV_PROFILE:-local}"
+CLI_LIVE_SMOKE_API_BASE_URL=""
+LIVE_SMOKE_TIMEOUT_SECONDS="180"
+LIVE_SMOKE_POLL_INTERVAL_SECONDS="3"
+LIVE_SMOKE_HEARTBEAT_SECONDS="30"
+live_smoke_health_path="/healthz"
+LIVE_SMOKE_EXTERNAL_PROBE_TIMEOUT_SECONDS="20"
+LIVE_SMOKE_MAX_RETRIES="2"
+live_smoke_diagnostics_json=".runtime-cache/e2e-live-smoke-result.json"
+LIVE_SMOKE_COMPUTER_USE_CMD=""
+BILIBILI_SMOKE_URL="https://www.bilibili.com/video/BV1xx411c7mD"
+
+usage() {
+  cat <<'EOF'
+Usage: scripts/e2e_live_smoke.sh [options]
+
+Options:
+  --profile, --env-profile <name>             Env profile passed to load_repo_env (default: local)
+  --api-base-url <url>                        API base URL override
+  --timeout-seconds <n>                       Live smoke timeout seconds (default: 180)
+  --poll-interval-seconds <n>                 Poll interval seconds (default: 3)
+  --heartbeat-seconds <n>                     Heartbeat interval seconds (default: 30)
+  --health-path <path>                        Health endpoint path (default: /healthz)
+  --external-probe-timeout-seconds <n>        External probe timeout seconds (default: 20)
+  --max-retries <n>                           Curl retries in [1,2] (default: 2)
+  --diagnostics-json <path>                   Diagnostics JSON path (default: .runtime-cache/e2e-live-smoke-result.json)
+  --computer-use-cmd <cmd_or_path>            computer_use smoke command override
+  --bilibili-url <url>                        Bilibili URL used in probes/process (default: BV1xx411c7mD)
+  -h, --help                                  Show this help
+EOF
+}
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -11,12 +41,58 @@ while [[ $# -gt 0 ]]; do
       ENV_PROFILE="${2:-}"
       shift 2
       ;;
+    --api-base-url)
+      CLI_LIVE_SMOKE_API_BASE_URL="${2:-}"
+      shift 2
+      ;;
+    --timeout-seconds)
+      LIVE_SMOKE_TIMEOUT_SECONDS="${2:-}"
+      shift 2
+      ;;
+    --poll-interval-seconds)
+      LIVE_SMOKE_POLL_INTERVAL_SECONDS="${2:-}"
+      shift 2
+      ;;
+    --heartbeat-seconds)
+      LIVE_SMOKE_HEARTBEAT_SECONDS="${2:-}"
+      shift 2
+      ;;
+    --health-path)
+      live_smoke_health_path="${2:-}"
+      shift 2
+      ;;
+    --external-probe-timeout-seconds)
+      LIVE_SMOKE_EXTERNAL_PROBE_TIMEOUT_SECONDS="${2:-}"
+      shift 2
+      ;;
+    --max-retries)
+      LIVE_SMOKE_MAX_RETRIES="${2:-}"
+      shift 2
+      ;;
+    --diagnostics-json)
+      live_smoke_diagnostics_json="${2:-}"
+      shift 2
+      ;;
+    --computer-use-cmd)
+      LIVE_SMOKE_COMPUTER_USE_CMD="${2:-}"
+      shift 2
+      ;;
+    --bilibili-url)
+      BILIBILI_SMOKE_URL="${2:-}"
+      shift 2
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
     --)
       shift
       break
       ;;
     *)
-      break
+      echo "[$SCRIPT_NAME] unknown arg: $1" >&2
+      usage >&2
+      exit 2
       ;;
   esac
 done
@@ -34,26 +110,20 @@ if [[ -n "$SHELL_LIVE_SMOKE_API_BASE_URL_SET" ]]; then
 fi
 
 LIVE_SMOKE_API_BASE_URL="${LIVE_SMOKE_API_BASE_URL:-}"
+if [[ -n "$CLI_LIVE_SMOKE_API_BASE_URL" ]]; then
+  LIVE_SMOKE_API_BASE_URL="$CLI_LIVE_SMOKE_API_BASE_URL"
+fi
 if [[ -z "$LIVE_SMOKE_API_BASE_URL" ]]; then
   LIVE_SMOKE_API_BASE_URL="http://127.0.0.1:${API_PORT:-8000}"
 fi
 API_BASE_URL="$LIVE_SMOKE_API_BASE_URL"
 
-LIVE_SMOKE_TIMEOUT_SECONDS="${LIVE_SMOKE_TIMEOUT_SECONDS:-180}"
 LIVE_SMOKE_REQUIRE_API="${LIVE_SMOKE_REQUIRE_API:-1}"
-LIVE_SMOKE_POLL_INTERVAL_SECONDS="${LIVE_SMOKE_POLL_INTERVAL_SECONDS:-3}"
-LIVE_SMOKE_HEARTBEAT_SECONDS="${LIVE_SMOKE_HEARTBEAT_SECONDS:-30}"
-LIVE_SMOKE_HEALTH_PATH="${LIVE_SMOKE_HEALTH_PATH:-/healthz}"
 LIVE_SMOKE_COMPUTER_USE_STRICT="${LIVE_SMOKE_COMPUTER_USE_STRICT:-1}"
 LIVE_SMOKE_COMPUTER_USE_SKIP="${LIVE_SMOKE_COMPUTER_USE_SKIP:-0}"
 LIVE_SMOKE_COMPUTER_USE_SKIP_REASON="${LIVE_SMOKE_COMPUTER_USE_SKIP_REASON:-}"
-LIVE_SMOKE_COMPUTER_USE_CMD="${LIVE_SMOKE_COMPUTER_USE_CMD:-}"
 LIVE_SMOKE_REQUIRE_SECRETS="${LIVE_SMOKE_REQUIRE_SECRETS:-0}"
-LIVE_SMOKE_EXTERNAL_PROBE_TIMEOUT_SECONDS="${LIVE_SMOKE_EXTERNAL_PROBE_TIMEOUT_SECONDS:-20}"
-LIVE_SMOKE_MAX_RETRIES="${LIVE_SMOKE_MAX_RETRIES:-2}"
-LIVE_SMOKE_DIAGNOSTICS_JSON="${LIVE_SMOKE_DIAGNOSTICS_JSON:-.runtime-cache/e2e-live-smoke-result.json}"
 YOUTUBE_SMOKE_URL="${YOUTUBE_SMOKE_URL:-https://www.youtube.com/watch?v=dQw4w9WgXcQ}"
-BILIBILI_SMOKE_URL="${BILIBILI_SMOKE_URL:-https://www.bilibili.com/video/BV1xx411c7mD}"
 DIAGNOSTICS_PATH=""
 SCENARIO_TRACE=""
 WRITE_OP_TRACE=""
@@ -65,10 +135,10 @@ WORKER_TMP_OUTPUTS=()
 SMOKE_TMP_FILES=()
 STARTED_AT_UTC="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 FAILURE_KIND="unknown"
-if [[ "${LIVE_SMOKE_DIAGNOSTICS_JSON:0:1}" != "/" ]]; then
-  DIAGNOSTICS_PATH="$ROOT_DIR/$LIVE_SMOKE_DIAGNOSTICS_JSON"
+if [[ "${live_smoke_diagnostics_json:0:1}" != "/" ]]; then
+  DIAGNOSTICS_PATH="$ROOT_DIR/$live_smoke_diagnostics_json"
 else
-  DIAGNOSTICS_PATH="$LIVE_SMOKE_DIAGNOSTICS_JSON"
+  DIAGNOSTICS_PATH="$live_smoke_diagnostics_json"
 fi
 
 log() {
@@ -629,17 +699,23 @@ check_prerequisites() {
   require_cmd curl
   require_cmd python3
 
+  if ! [[ "$LIVE_SMOKE_TIMEOUT_SECONDS" =~ ^[0-9]+$ ]] || (( LIVE_SMOKE_TIMEOUT_SECONDS <= 0 )); then
+    fail "invalid --timeout-seconds=${LIVE_SMOKE_TIMEOUT_SECONDS}; expected positive integer"
+  fi
+  if ! [[ "$LIVE_SMOKE_POLL_INTERVAL_SECONDS" =~ ^[0-9]+$ ]] || (( LIVE_SMOKE_POLL_INTERVAL_SECONDS <= 0 )); then
+    fail "invalid --poll-interval-seconds=${LIVE_SMOKE_POLL_INTERVAL_SECONDS}; expected positive integer"
+  fi
   if ! [[ "$LIVE_SMOKE_HEARTBEAT_SECONDS" =~ ^[0-9]+$ ]] || (( LIVE_SMOKE_HEARTBEAT_SECONDS <= 0 )); then
-    fail "invalid LIVE_SMOKE_HEARTBEAT_SECONDS=${LIVE_SMOKE_HEARTBEAT_SECONDS}; expected positive integer"
+    fail "invalid --heartbeat-seconds=${LIVE_SMOKE_HEARTBEAT_SECONDS}; expected positive integer"
   fi
   if ! [[ "$LIVE_SMOKE_EXTERNAL_PROBE_TIMEOUT_SECONDS" =~ ^[0-9]+$ ]] || (( LIVE_SMOKE_EXTERNAL_PROBE_TIMEOUT_SECONDS <= 0 )); then
-    fail "invalid LIVE_SMOKE_EXTERNAL_PROBE_TIMEOUT_SECONDS=${LIVE_SMOKE_EXTERNAL_PROBE_TIMEOUT_SECONDS}; expected positive integer"
+    fail "invalid --external-probe-timeout-seconds=${LIVE_SMOKE_EXTERNAL_PROBE_TIMEOUT_SECONDS}; expected positive integer"
   fi
   if ! [[ "$LIVE_SMOKE_MAX_RETRIES" =~ ^[0-9]+$ ]] || (( LIVE_SMOKE_MAX_RETRIES <= 0 || LIVE_SMOKE_MAX_RETRIES > 2 )); then
-    fail "invalid LIVE_SMOKE_MAX_RETRIES=${LIVE_SMOKE_MAX_RETRIES}; expected integer in [1,2]"
+    fail "invalid --max-retries=${LIVE_SMOKE_MAX_RETRIES}; expected integer in [1,2]"
   fi
-  if [[ -z "$LIVE_SMOKE_HEALTH_PATH" || "${LIVE_SMOKE_HEALTH_PATH:0:1}" != "/" ]]; then
-    fail "invalid LIVE_SMOKE_HEALTH_PATH=${LIVE_SMOKE_HEALTH_PATH}; expected absolute path (e.g. /healthz)"
+  if [[ -z "$live_smoke_health_path" || "${live_smoke_health_path:0:1}" != "/" ]]; then
+    fail "invalid --health-path=${live_smoke_health_path}; expected absolute path (e.g. /healthz)"
   fi
 
   local computer_use_strict
@@ -680,7 +756,7 @@ check_prerequisites() {
   log "LLM strategy: provider=gemini model=${GEMINI_MODEL:-gemini-3.1-pro-preview} fast_model=${GEMINI_FAST_MODEL:-gemini-3-flash-preview} thinking=${thinking_level} input_mode=${llm_input_mode} cache=${GEMINI_CONTEXT_CACHE_ENABLED:-true}"
 
   local status body response
-  response="$(api_get "$LIVE_SMOKE_HEALTH_PATH")"
+  response="$(api_get "$live_smoke_health_path")"
   status="${response%%$'\n'*}"
   body="${response#*$'\n'}"
   if [[ "$status" != "200" ]]; then
@@ -769,7 +845,7 @@ run_computer_use_smoke() {
   fi
 
   if [[ -z "$cmd" ]]; then
-    local message="computer_use smoke command is empty; set LIVE_SMOKE_COMPUTER_USE_CMD to a script path or skip with LIVE_SMOKE_COMPUTER_USE_SKIP=1 and reason"
+    local message="computer_use smoke command is empty; set --computer-use-cmd or skip with LIVE_SMOKE_COMPUTER_USE_SKIP=1 and reason"
     if is_truthy "$strict_value"; then
       fail "$message"
     fi

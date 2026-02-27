@@ -94,7 +94,6 @@ jobs:
               "LIVE_SMOKE_COMPUTER_USE_STRICT",
               "LIVE_SMOKE_COMPUTER_USE_SKIP",
               "LIVE_SMOKE_COMPUTER_USE_SKIP_REASON",
-              "LIVE_SMOKE_COMPUTER_USE_CMD",
           }
           missing = sorted(name for name in required if name not in variables)
           if missing:
@@ -625,8 +624,6 @@ jobs:
           VD_ALLOW_UNAUTH_WRITE: "1"
           COMPUTER_USE_MODEL_TIMEOUT_SECONDS: "30"
           COMPUTER_USE_MODEL_MAX_RETRIES: "2"
-          PR_LLM_REAL_SMOKE_DIAGNOSTICS_JSON: ".runtime-cache/pr-llm-real-smoke-result.json"
-          PR_LLM_REAL_SMOKE_HEARTBEAT_SECONDS: "30"
         run: |
           mkdir -p .runtime-cache
           uv run --with uvicorn uvicorn apps.api.app.main:app --host 127.0.0.1 --port 18081 > .runtime-cache/pr-llm-real-smoke.log 2>&1 &
@@ -642,7 +639,9 @@ jobs:
 
           scripts/smoke_llm_real_local.sh \
             --api-base-url "http://127.0.0.1:18081" \
-            --diagnostics-json "${PR_LLM_REAL_SMOKE_DIAGNOSTICS_JSON}"
+            --diagnostics-json ".runtime-cache/pr-llm-real-smoke-result.json" \
+            --heartbeat-seconds "30" \
+            --max-retries "2"
 
       - name: Upload CI failure diagnostics (pr-llm-real-smoke)
         if: always()
@@ -1236,8 +1235,6 @@ jobs:
       LIVE_SMOKE_REQUIRE_SECRETS: "1"
       LIVE_SMOKE_COMPUTER_USE_STRICT: "1"
       LIVE_SMOKE_COMPUTER_USE_SKIP: "0"
-      LIVE_SMOKE_DIAGNOSTICS_JSON: ".runtime-cache/e2e-live-smoke-result.json"
-      LIVE_SMOKE_HEARTBEAT_SECONDS: "30"
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -1262,7 +1259,7 @@ jobs:
           fi
 
       - name: Run live smoke
-        run: scripts/e2e_live_smoke.sh
+        run: scripts/e2e_live_smoke.sh --diagnostics-json ".runtime-cache/e2e-live-smoke-result.json" --heartbeat-seconds "30"
 
       - name: Upload live smoke diagnostics
         if: always()

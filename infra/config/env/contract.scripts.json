@@ -47,17 +47,6 @@
       "description": "API listen port."
     },
     {
-      "name": "BILIBILI_SMOKE_URL",
-      "scope": "scripts",
-      "required": false,
-      "secret": false,
-      "default": "https://www.bilibili.com/video/BV1xx411c7mD",
-      "consumer": [
-        "scripts/e2e_live_smoke.sh"
-      ],
-      "description": "Bilibili URL used by live smoke process scenario."
-    },
-    {
       "name": "CORE_POSTGRES_DB",
       "scope": "scripts",
       "required": false,
@@ -199,29 +188,7 @@
       "consumer": [
         "scripts/e2e_live_smoke.sh"
       ],
-      "description": "Live smoke API base URL override. Parent-shell value has priority over .env-loaded values."
-    },
-    {
-      "name": "LIVE_SMOKE_DIAGNOSTICS_JSON",
-      "scope": "scripts",
-      "required": false,
-      "secret": false,
-      "default": ".runtime-cache/e2e-live-smoke-result.json",
-      "consumer": [
-        "scripts/e2e_live_smoke.sh"
-      ],
-      "description": "Diagnostics JSON output path for live smoke execution summary."
-    },
-    {
-      "name": "LIVE_SMOKE_COMPUTER_USE_CMD",
-      "scope": "scripts",
-      "required": false,
-      "secret": false,
-      "default": null,
-      "consumer": [
-        "scripts/e2e_live_smoke.sh"
-      ],
-      "description": "Optional shell command override for computer_use smoke scenario; defaults to scripts/smoke_computer_use_local.sh."
+      "description": "Live smoke API base URL override. Parent-shell value has priority over .env-loaded values. [Batch B deprecated] Prefer CLI flag `--api-base-url`; legacy env override is compatibility-only."
     },
     {
       "name": "LIVE_SMOKE_COMPUTER_USE_SKIP",
@@ -257,61 +224,6 @@
       "description": "Strict mode toggle for computer_use smoke scenario. When true, missing or failed command is treated as failure."
     },
     {
-      "name": "LIVE_SMOKE_HEALTH_PATH",
-      "scope": "scripts",
-      "required": false,
-      "secret": false,
-      "default": "/healthz",
-      "consumer": [
-        "scripts/e2e_live_smoke.sh"
-      ],
-      "description": "Health endpoint path used by live smoke API preflight check."
-    },
-    {
-      "name": "LIVE_SMOKE_HEARTBEAT_SECONDS",
-      "scope": "scripts",
-      "required": false,
-      "secret": false,
-      "default": "30",
-      "consumer": [
-        "scripts/e2e_live_smoke.sh"
-      ],
-      "description": "Heartbeat interval seconds for live smoke polling progress logs."
-    },
-    {
-      "name": "LIVE_SMOKE_MAX_RETRIES",
-      "scope": "scripts",
-      "required": false,
-      "secret": false,
-      "default": "2",
-      "consumer": [
-        "scripts/e2e_live_smoke.sh"
-      ],
-      "description": "Max curl retry attempts used by live smoke external probes (allowed range [1,2])."
-    },
-    {
-      "name": "LIVE_SMOKE_EXTERNAL_PROBE_TIMEOUT_SECONDS",
-      "scope": "scripts",
-      "required": false,
-      "secret": false,
-      "default": "20",
-      "consumer": [
-        "scripts/e2e_live_smoke.sh"
-      ],
-      "description": "Timeout seconds for external provider probe requests in live smoke preflight."
-    },
-    {
-      "name": "LIVE_SMOKE_POLL_INTERVAL_SECONDS",
-      "scope": "scripts",
-      "required": false,
-      "secret": false,
-      "default": "3",
-      "consumer": [
-        "scripts/e2e_live_smoke.sh"
-      ],
-      "description": "Polling interval seconds used while waiting for live smoke jobs to reach terminal status."
-    },
-    {
       "name": "LIVE_SMOKE_REQUIRE_API",
       "scope": "scripts",
       "required": false,
@@ -332,17 +244,6 @@
         "scripts/e2e_live_smoke.sh"
       ],
       "description": "When true, fail live smoke if required external provider secrets are missing; otherwise skip."
-    },
-    {
-      "name": "LIVE_SMOKE_TIMEOUT_SECONDS",
-      "scope": "scripts",
-      "required": false,
-      "secret": false,
-      "default": "180",
-      "consumer": [
-        "scripts/e2e_live_smoke.sh"
-      ],
-      "description": "Timeout seconds for provider canary run in live smoke script."
     },
     {
       "name": "MCP_DIR",
@@ -632,40 +533,7 @@
       "consumer": [
         "scripts/smoke_llm_real_local.sh"
       ],
-      "description": "Default API base URL used by local PR real LLM smoke script."
-    },
-    {
-      "name": "PR_LLM_REAL_SMOKE_DIAGNOSTICS_JSON",
-      "scope": "scripts",
-      "required": false,
-      "secret": false,
-      "default": ".runtime-cache/pr-llm-real-smoke-result.json",
-      "consumer": [
-        "scripts/smoke_llm_real_local.sh"
-      ],
-      "description": "Diagnostics output path for local PR real LLM smoke script."
-    },
-    {
-      "name": "PR_LLM_REAL_SMOKE_HEARTBEAT_SECONDS",
-      "scope": "scripts",
-      "required": false,
-      "secret": false,
-      "default": "30",
-      "consumer": [
-        "scripts/smoke_llm_real_local.sh"
-      ],
-      "description": "Heartbeat interval seconds for local PR real LLM smoke progress logs."
-    },
-    {
-      "name": "PR_LLM_REAL_SMOKE_MAX_RETRIES",
-      "scope": "scripts",
-      "required": false,
-      "secret": false,
-      "default": "2",
-      "consumer": [
-        "scripts/smoke_llm_real_local.sh"
-      ],
-      "description": "Max API retry attempts for local PR real LLM smoke requests."
+      "description": "Default API base URL used by local PR real LLM smoke script. [Batch B deprecated] Prefer CLI flag `--api-base-url`; legacy env override is compatibility-only."
     },
     {
       "name": "READER_ENV_FILE",

@@ -15,28 +15,36 @@ Use CLI flags instead (`--date`, `--channel`, `--dry-run`, `--force`, `--to-emai
 
 ## Live Smoke Script (`scripts/e2e_live_smoke.sh`)
 
-- `LIVE_SMOKE_API_BASE_URL` (default: empty -> follow `API_PORT`)
-- `LIVE_SMOKE_HEALTH_PATH` (default: `/healthz`)
-- `LIVE_SMOKE_TIMEOUT_SECONDS` (default: `180`)
-- `LIVE_SMOKE_EXTERNAL_PROBE_TIMEOUT_SECONDS` (default: `20`)
 - `LIVE_SMOKE_REQUIRE_API` (default: `1`)
 - `LIVE_SMOKE_REQUIRE_SECRETS` (default: `0`)
-- `LIVE_SMOKE_POLL_INTERVAL_SECONDS` (default: `3`)
-- `LIVE_SMOKE_HEARTBEAT_SECONDS` (default: `30`)
-- `LIVE_SMOKE_MAX_RETRIES` (default: `2`)
-- `LIVE_SMOKE_DIAGNOSTICS_JSON` (default: `.runtime-cache/e2e-live-smoke-result.json`)
 - `LIVE_SMOKE_COMPUTER_USE_STRICT` (default: `1`)
 - `LIVE_SMOKE_COMPUTER_USE_SKIP` (default: `0`)
 - `LIVE_SMOKE_COMPUTER_USE_SKIP_REASON` (required when skip=1)
-- `LIVE_SMOKE_COMPUTER_USE_CMD` (default: `scripts/smoke_computer_use_local.sh`)
 - `YOUTUBE_SMOKE_URL` (default: `https://www.youtube.com/watch?v=dQw4w9WgXcQ`)
-- `BILIBILI_SMOKE_URL` (default: `https://www.bilibili.com/video/BV1xx411c7mD`)
+
+Batch B 口径：以下参数已切换为 CLI 优先（legacy env 仅兼容，不建议继续配置）：
+
+- `LIVE_SMOKE_API_BASE_URL` -> `--api-base-url`
+- `LIVE_SMOKE_TIMEOUT_SECONDS` -> `--timeout-seconds`
+- `LIVE_SMOKE_POLL_INTERVAL_SECONDS` -> `--poll-interval-seconds`
+- `LIVE_SMOKE_HEARTBEAT_SECONDS` -> `--heartbeat-seconds`
+- `LIVE_SMOKE_HEALTH_PATH` -> `--health-path`
+- `LIVE_SMOKE_EXTERNAL_PROBE_TIMEOUT_SECONDS` -> `--external-probe-timeout-seconds`
+- `LIVE_SMOKE_MAX_RETRIES` -> `--max-retries`
+- `LIVE_SMOKE_DIAGNOSTICS_JSON` -> `--diagnostics-json`
+- `LIVE_SMOKE_COMPUTER_USE_CMD` -> `--computer-use-cmd`
+- `BILIBILI_SMOKE_URL` -> `--bilibili-url`
 
 ## PR Real LLM Smoke (`scripts/smoke_llm_real_local.sh`)
 
 - `PR_LLM_REAL_SMOKE_API_BASE_URL` (default: `http://127.0.0.1:8000`)
-- `PR_LLM_REAL_SMOKE_DIAGNOSTICS_JSON` (default: `.runtime-cache/pr-llm-real-smoke-result.json`)
-- `PR_LLM_REAL_SMOKE_HEARTBEAT_SECONDS` (default: `30`)
+
+Batch B 口径：以下参数已切换为 CLI 优先（legacy env 仅兼容，不建议继续配置）：
+
+- `PR_LLM_REAL_SMOKE_API_BASE_URL` -> `--api-base-url`
+- `PR_LLM_REAL_SMOKE_DIAGNOSTICS_JSON` -> `--diagnostics-json`
+- `PR_LLM_REAL_SMOKE_HEARTBEAT_SECONDS` -> `--heartbeat-seconds`
+- `PR_LLM_REAL_SMOKE_MAX_RETRIES` -> `--max-retries`
 
 ## External Playwright Smoke (`scripts/external_playwright_smoke.sh`)
 

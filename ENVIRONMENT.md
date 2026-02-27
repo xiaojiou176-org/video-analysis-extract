@@ -186,8 +186,8 @@ Exception detail sanitization contract:
 - Full script override catalog: `docs/reference/env-script-overrides.md`
 - `scripts/run_daily_digest.sh` now uses CLI flags only (no `DIGEST_*` env contract vars)
 - `scripts/run_failure_alerts.sh` now uses CLI flags only (no `FAILURE_*` env contract vars)
-- `LIVE_SMOKE_*`
-- `PR_LLM_REAL_SMOKE_*` (local PR real LLM smoke helper defaults)
+- `LIVE_SMOKE_*`（Batch B：部分参数已迁移为 CLI 优先，见下方映射）
+- `PR_LLM_REAL_SMOKE_*`（Batch B：部分参数已迁移为 CLI 优先，见下方映射）
 - `scripts/external_playwright_smoke.sh` now uses CLI flags only (no `EXTERNAL_SMOKE_*` env contract vars)
 - `OPS_*` (workflow bootstrap overrides for `scripts/start_ops_workflows.sh`; Batch A controls are now CLI flags)
 - `API_*`, `WORKER_*`, `MCP_*`, `OUTPUT_PATH`, `INIT_ENV_FORCE`
@@ -202,15 +202,22 @@ Exception detail sanitization contract:
 `LIVE_SMOKE_*` includes strict computer-use controls:
 
 - `LIVE_SMOKE_API_BASE_URL`: API target override for live smoke. Leave empty to follow `API_PORT` (fallback: `http://127.0.0.1:${API_PORT:-8000}`). Parent shell values have higher priority than values loaded from `.env`.
-- `LIVE_SMOKE_HEALTH_PATH`: Health endpoint path used by live smoke (default `/healthz`).
-- `LIVE_SMOKE_EXTERNAL_PROBE_TIMEOUT_SECONDS`: timeout seconds for provider endpoint probes in preflight (default `20`).
-- `LIVE_SMOKE_HEARTBEAT_SECONDS`: heartbeat interval seconds for long-running live smoke polling logs (default `30`).
-- `LIVE_SMOKE_DIAGNOSTICS_JSON`: diagnostics JSON output path (default `.runtime-cache/e2e-live-smoke-result.json`).
+- `LIVE_SMOKE_REQUIRE_API`: defaults to `1`, fail if API preflight is unavailable.
+- `LIVE_SMOKE_REQUIRE_SECRETS`: defaults to `0`, when `1` missing secrets fail the run.
 - `LIVE_SMOKE_COMPUTER_USE_STRICT`: defaults to strict mode (`1`) so missing/failing computer-use smoke command fails the run.
 - `LIVE_SMOKE_COMPUTER_USE_SKIP`: optional explicit skip switch; when `1`, `LIVE_SMOKE_COMPUTER_USE_SKIP_REASON` must be non-empty.
-- `LIVE_SMOKE_COMPUTER_USE_CMD`: optional shell command override for computer-use smoke. By default, the script runs `scripts/smoke_computer_use_local.sh`.
 - `scripts/smoke_computer_use_local.sh` uses CLI flags (`--retries`, `--heartbeat-seconds`) with internal defaults.
 - `YOUTUBE_API_KEY` resolution for live smoke: current environment / `.env`; no `.env.local` / `.env.bak` / shell login fallback probing.
+- Batch B CLI controls in `scripts/e2e_live_smoke.sh` (not env contract vars):
+  - `--health-path` (default `/healthz`)
+  - `--timeout-seconds` (default `180`)
+  - `--poll-interval-seconds` (default `3`)
+  - `--heartbeat-seconds` (default `30`)
+  - `--external-probe-timeout-seconds` (default `20`)
+  - `--max-retries` (default `2`)
+  - `--diagnostics-json` (default `.runtime-cache/e2e-live-smoke-result.json`)
+  - `--computer-use-cmd` (default `scripts/smoke_computer_use_local.sh`)
+  - `--bilibili-url` (default `https://www.bilibili.com/video/BV1xx411c7mD`)
 - `OFFLINE_FALLBACK`: profile-layer fallback switch for full-stack bootstrap/smoke (`scripts/bootstrap_full_stack.sh`, `scripts/smoke_full_stack.sh`):
   - default in `env/profiles/local.env`: `0`
   - default in `env/profiles/ci.env`: `0`
@@ -230,11 +237,12 @@ Exception detail sanitization contract:
 - `--diagnostics-json=.runtime-cache/external-playwright-smoke-result.json`
 - `--heartbeat-seconds=30`
 
-`PR_LLM_REAL_SMOKE_*` defaults (used by `scripts/smoke_llm_real_local.sh`):
+`scripts/smoke_llm_real_local.sh` defaults:
 
-- `PR_LLM_REAL_SMOKE_API_BASE_URL=http://127.0.0.1:8000`
-- `PR_LLM_REAL_SMOKE_DIAGNOSTICS_JSON=.runtime-cache/pr-llm-real-smoke-result.json`
-- `PR_LLM_REAL_SMOKE_HEARTBEAT_SECONDS=30`
+- `PR_LLM_REAL_SMOKE_API_BASE_URL=http://127.0.0.1:8000` (env)
+- `--diagnostics-json=.runtime-cache/pr-llm-real-smoke-result.json` (CLI)
+- `--heartbeat-seconds=30` (CLI)
+- `--max-retries=2` (CLI)
 
 `WEB_BASE_URL` controls web e2e target mode:
 
