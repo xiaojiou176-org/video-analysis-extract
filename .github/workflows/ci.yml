@@ -767,22 +767,21 @@ jobs:
         run: uv run --with playwright python -m playwright install --with-deps ${{ matrix.browser }}
 
       - name: Web E2E gate (no silent skip)
-        env:
-          WEB_E2E_BROWSER: ${{ matrix.browser }}
         run: |
           mkdir -p .runtime-cache
+          BROWSER="${{ matrix.browser }}"
 
           set -o pipefail
           uv run --with pytest --with playwright \
-            pytest apps/web/tests/e2e -q --junitxml=.runtime-cache/web-e2e-junit-${WEB_E2E_BROWSER}.xml -rA \
-            2>&1 | tee .runtime-cache/web-e2e-${WEB_E2E_BROWSER}.log
+            pytest apps/web/tests/e2e -q --junitxml=".runtime-cache/web-e2e-junit-${BROWSER}.xml" -rA \
+            --web-e2e-browser "$BROWSER" \
+            2>&1 | tee ".runtime-cache/web-e2e-${BROWSER}.log"
 
           python - <<'PY'
           import xml.etree.ElementTree as ET
-          import os
           from pathlib import Path
 
-          browser = os.environ.get("WEB_E2E_BROWSER", "unknown")
+          browser = "${{ matrix.browser }}"
           report = Path(f".runtime-cache/web-e2e-junit-{browser}.xml")
           if not report.is_file():
               raise SystemExit("web e2e gate failed: junit report missing")
@@ -1189,13 +1188,13 @@ jobs:
         run: uv run --with playwright python -m playwright install --with-deps ${{ matrix.browser }}
 
       - name: Nightly flaky web E2E subset (repeat x2)
-        env:
-          WEB_E2E_BROWSER: ${{ matrix.browser }}
         run: |
+          BROWSER="${{ matrix.browser }}"
           for i in 1 2; do
-            echo "nightly web flaky run #${i} (${WEB_E2E_BROWSER})"
+            echo "nightly web flaky run #${i} (${BROWSER})"
             uv run --with pytest --with playwright \
-              pytest apps/web/tests/e2e/test_dashboard.py apps/web/tests/e2e/test_subscriptions.py -q -rA
+              pytest apps/web/tests/e2e/test_dashboard.py apps/web/tests/e2e/test_subscriptions.py -q -rA \
+                --web-e2e-browser "$BROWSER"
           done
 
   autofix-dry-run:

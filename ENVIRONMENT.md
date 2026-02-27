@@ -15,7 +15,6 @@ Environment configuration is split into one core layer plus profile overlays:
 
 1. Core baseline: `.env`
 2. Profile overlay:
-   - `PROFILE=local|gce` (used by bootstrap/runtime decisions)
    - `env/profiles/reader.env` (reader-only overlay; loaded only by reader-related scripts)
 3. Process environment: explicit command/session overrides
 
@@ -127,7 +126,7 @@ Default model lane:
 ### Secret Source and Logging Policy
 
 - Secret keys must come from process environment or local `.env` file only.
-- Reader-stack secrets (if used) must come from `env/profiles/reader.env` (or an explicit `READER_ENV_FILE` path) for reader-stack commands.
+- Reader-stack secrets (if used) must come from `env/profiles/reader.env` for reader-stack commands.
 - Do not hard-code keys in source code, tests, or documentation examples.
 - Runtime logs and diagnostics must never print full secret values; only masked summaries are allowed when needed for troubleshooting.
 - `.env.local`, `.env.bak`, shell login profiles, and documentation snippets are not allowed as secret sources for runtime/CI.
@@ -186,26 +185,15 @@ Exception detail sanitization contract:
 - Full script override catalog: `docs/reference/env-script-overrides.md`
 - `scripts/run_daily_digest.sh` now uses CLI flags only (no `DIGEST_*` env contract vars)
 - `scripts/run_failure_alerts.sh` now uses CLI flags only (no `FAILURE_*` env contract vars)
-- `LIVE_SMOKE_*`（Batch B：部分参数已迁移为 CLI 优先，见下方映射）
-- `PR_LLM_REAL_SMOKE_*`（Batch B：部分参数已迁移为 CLI 优先，见下方映射）
+- Live-smoke and PR LLM smoke controls are CLI-first (see `docs/reference/env-script-overrides.md`).
 - `scripts/external_playwright_smoke.sh` now uses CLI flags only (no `EXTERNAL_SMOKE_*` env contract vars)
-- `OPS_*` (workflow bootstrap overrides for `scripts/start_ops_workflows.sh`; Batch A controls are now CLI flags)
-- `API_HOST`, `API_PORT`, `API_HEALTH_URL`
 - Script entry controls for `dev_api/dev_worker/dev_mcp/init_env_example` are CLI-only after Batch C (see `docs/reference/env-script-overrides.md`)
-- `API_HEALTH_URL` (optional full-stack readiness probe URL; defaults to `http://127.0.0.1:${API_PORT}/healthz`)
 - `scripts/recreate_gce_instance.sh` now uses CLI flags only (no GCE recreate env contract vars)
 - `WEB_BASE_URL` (web e2e target override)
 - `NEXT_DIST_DIR` (optional Next.js dist directory override for parallel web e2e workers)
-- `PYTEST_XDIST_WORKER` (optional worker id used by web e2e fixtures to isolate runtime dirs)
 - `CORE_POSTGRES_PORT`, `CORE_POSTGRES_DB`, `CORE_POSTGRES_USER`, `CORE_POSTGRES_PASSWORD`, `CORE_REDIS_PORT`, `CORE_TEMPORAL_PORT` (docker compose core-services overrides)
 
-`LIVE_SMOKE_*` includes strict computer-use controls:
-
-- `LIVE_SMOKE_API_BASE_URL`: API target override for live smoke. Leave empty to follow `API_PORT` (fallback: `http://127.0.0.1:${API_PORT:-8000}`). Parent shell values have higher priority than values loaded from `.env`.
-- `LIVE_SMOKE_REQUIRE_API`: defaults to `1`, fail if API preflight is unavailable.
-- `LIVE_SMOKE_REQUIRE_SECRETS`: defaults to `0`, when `1` missing secrets fail the run.
-- `LIVE_SMOKE_COMPUTER_USE_STRICT`: defaults to strict mode (`1`) so missing/failing computer-use smoke command fails the run.
-- `LIVE_SMOKE_COMPUTER_USE_SKIP`: optional explicit skip switch; when `1`, `LIVE_SMOKE_COMPUTER_USE_SKIP_REASON` must be non-empty.
+Live smoke includes strict computer-use controls via CLI flags in `scripts/e2e_live_smoke.sh`.
 - `scripts/smoke_computer_use_local.sh` uses CLI flags (`--retries`, `--heartbeat-seconds`) with internal defaults.
 - `YOUTUBE_API_KEY` resolution for live smoke: current environment / `.env`; no `.env.local` / `.env.bak` / shell login fallback probing.
 - Batch B CLI controls in `scripts/e2e_live_smoke.sh` (not env contract vars):
@@ -218,12 +206,7 @@ Exception detail sanitization contract:
   - `--diagnostics-json` (default `.runtime-cache/e2e-live-smoke-result.json`)
   - `--computer-use-cmd` (default `scripts/smoke_computer_use_local.sh`)
   - `--bilibili-url` (default `https://www.bilibili.com/video/BV1xx411c7mD`)
-- `OFFLINE_FALLBACK`: profile-layer fallback switch for full-stack bootstrap/smoke (`scripts/bootstrap_full_stack.sh`, `scripts/smoke_full_stack.sh`):
-  - default in `env/profiles/local.env`: `0`
-  - default in `env/profiles/ci.env`: `0`
-  - default in `env/profiles/live-smoke.env`: `0`
-  - behavior when `0`: fail-fast on core service/reader stack issues (preferred to expose real failures)
-  - behavior when `1`: allow degraded path via `.runtime-cache/full-stack/offline-fallback.flag` (reader checks can be skipped)
+- Full-stack bootstrap/smoke fallback behavior is controlled by CLI flags in the scripts above.
 - Failure-kind contract alignment: `e2e_live_smoke` diagnostics keep `failure_kind` in `{code_logic_error, network_or_environment_timeout}`; enabling offline fallback does not add new `failure_kind` enum values.
 
 `scripts/external_playwright_smoke.sh` defaults (override via CLI flags):
@@ -239,7 +222,7 @@ Exception detail sanitization contract:
 
 `scripts/smoke_llm_real_local.sh` defaults:
 
-- `PR_LLM_REAL_SMOKE_API_BASE_URL=http://127.0.0.1:8000` (env)
+- API base URL defaults to `http://127.0.0.1:8000` unless overridden by CLI.
 - `--diagnostics-json=.runtime-cache/pr-llm-real-smoke-result.json` (CLI)
 - `--heartbeat-seconds=30` (CLI)
 - `--max-retries=2` (CLI)
@@ -272,7 +255,6 @@ cp .env.example .env
 
 ### `local` profile
 
-- `PROFILE=local`
 - Core shared variables above
 - Optional features add their own required vars:
   - Notifications: `NOTIFICATION_ENABLED=true` requires `RESEND_API_KEY` + `RESEND_FROM_EMAIL`
@@ -280,13 +262,12 @@ cp .env.example .env
 
 ### `gce` profile
 
-- `PROFILE=gce`
 - Core shared variables above
 - Infra/recreate scripts additionally require corresponding `GCP_*` / instance settings when invoked
 
 ### Reader overlay (`env/profiles/reader.env`, optional)
 
-Required only when enabling reader stack (`WITH_READER_STACK=1`) or running reader sync:
+Required when running reader sync / reader stack related commands:
 
 - `MINIFLUX_DB_PASSWORD`
 - `MINIFLUX_ADMIN_PASSWORD`

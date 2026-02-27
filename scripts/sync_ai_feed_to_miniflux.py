@@ -147,9 +147,7 @@ def import_entries(
 
 def main() -> int:
     miniflux_base = env("MINIFLUX_BASE_URL", "http://127.0.0.1:8080").rstrip("/")
-    api_base = env("VD_API_BASE_URL", f"http://127.0.0.1:{os.getenv('API_PORT', '8000')}").rstrip(
-        "/"
-    )
+    api_base = env("VD_API_BASE_URL", "http://127.0.0.1:8000").rstrip("/")
     limit = DEFAULT_SYNC_LIMIT
 
     headers = build_headers()

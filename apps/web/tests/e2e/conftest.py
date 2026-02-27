@@ -36,22 +36,49 @@ class _PortInUseStartupError(RuntimeError):
     pass
 
 
-def _read_trace_mode() -> str:
-    mode = os.environ.get("WEB_E2E_TRACE_MODE", "off").strip().lower()
+def pytest_addoption(parser: pytest.Parser) -> None:
+    parser.addoption(
+        "--web-e2e-browser",
+        action="store",
+        default="chromium",
+        help="Playwright browser for web e2e: chromium|firefox|webkit",
+    )
+    parser.addoption(
+        "--web-e2e-trace-mode",
+        action="store",
+        default="off",
+        help="Playwright tracing mode: off|on|retain-on-failure",
+    )
+    parser.addoption(
+        "--web-e2e-video-mode",
+        action="store",
+        default="retain-on-failure",
+        help="Playwright video mode: off|on|retain-on-failure",
+    )
+    parser.addoption(
+        "--web-e2e-worker-id",
+        action="store",
+        default="gw0",
+        help="Worker id suffix for isolated Next.js dist dir",
+    )
+
+
+def _read_trace_mode(config: pytest.Config) -> str:
+    mode = str(config.getoption("--web-e2e-trace-mode")).strip().lower()
     allowed = {"off", "on", "retain-on-failure"}
     if mode not in allowed:
         raise RuntimeError(
-            f"unsupported WEB_E2E_TRACE_MODE={mode!r}; expected one of {sorted(allowed)}"
+            f"unsupported --web-e2e-trace-mode={mode!r}; expected one of {sorted(allowed)}"
         )
     return mode
 
 
-def _read_video_mode() -> str:
-    mode = os.environ.get("WEB_E2E_VIDEO_MODE", "retain-on-failure").strip().lower()
+def _read_video_mode(config: pytest.Config) -> str:
+    mode = str(config.getoption("--web-e2e-video-mode")).strip().lower()
     allowed = {"off", "on", "retain-on-failure"}
     if mode not in allowed:
         raise RuntimeError(
-            f"unsupported WEB_E2E_VIDEO_MODE={mode!r}; expected one of {sorted(allowed)}"
+            f"unsupported --web-e2e-video-mode={mode!r}; expected one of {sorted(allowed)}"
         )
     return mode
 
@@ -73,7 +100,7 @@ def mock_api_server() -> MockApiServer:
 
 
 @pytest.fixture(scope="session")
-def web_base_url(mock_api_server: MockApiServer) -> str:
+def web_base_url(mock_api_server: MockApiServer, pytestconfig: pytest.Config) -> str:
     external_base_url = external_web_base_url_from_env()
     if external_base_url is not None:
         wait_http_ok(f"{external_base_url}/")
@@ -85,7 +112,7 @@ def web_base_url(mock_api_server: MockApiServer) -> str:
     if not (WEB_DIR / "node_modules").exists():
         raise RuntimeError("apps/web/node_modules is missing. Run `npm ci` in apps/web before E2E.")
 
-    worker_id = os.environ.get("PYTEST_XDIST_WORKER", "gw0")
+    worker_id = str(pytestconfig.getoption("--web-e2e-worker-id"))
     worker_slug = "".join(ch if ch.isalnum() else "-" for ch in worker_id.lower())
 
     process: subprocess.Popen[str] | None = None
@@ -163,12 +190,12 @@ def mock_api_state(mock_api_server: MockApiServer) -> MockApiState:
 
 
 @pytest.fixture(scope="session")
-def browser() -> Browser:
-    browser_name = os.environ.get("WEB_E2E_BROWSER", "chromium").strip().lower()
+def browser(pytestconfig: pytest.Config) -> Browser:
+    browser_name = str(pytestconfig.getoption("--web-e2e-browser")).strip().lower()
     launchers = {"chromium", "firefox", "webkit"}
     if browser_name not in launchers:
         raise RuntimeError(
-            f"unsupported WEB_E2E_BROWSER={browser_name!r}; expected one of {sorted(launchers)}"
+            f"unsupported --web-e2e-browser={browser_name!r}; expected one of {sorted(launchers)}"
         )
     with sync_playwright() as playwright:
         browser = getattr(playwright, browser_name).launch(headless=True)
@@ -179,8 +206,8 @@ def browser() -> Browser:
 @pytest.fixture
 def page(browser: Browser, web_base_url: str, request: pytest.FixtureRequest) -> Page:
     artifact_slug = slugify_nodeid(request.node.nodeid)
-    trace_mode = _read_trace_mode()
-    video_mode = _read_video_mode()
+    trace_mode = _read_trace_mode(request.config)
+    video_mode = _read_video_mode(request.config)
 
     new_context_kwargs: dict[str, str] = {"base_url": web_base_url}
     video_test_dir = WEB_E2E_VIDEO_DIR / artifact_slug

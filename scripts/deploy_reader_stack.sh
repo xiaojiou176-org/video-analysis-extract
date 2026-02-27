@@ -3,7 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 COMPOSE_FILE="$ROOT_DIR/infra/compose/miniflux-nextflux.compose.yml"
-ENV_FILE="${READER_ENV_FILE:-$ROOT_DIR/env/profiles/reader.env}"
+ENV_FILE="$ROOT_DIR/env/profiles/reader.env"
 
 usage() {
   cat <<'EOF'
