@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import fnmatch
 import json
+import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -81,11 +82,19 @@ def normalize_path_for_matching(raw_key: str) -> str:
 
 def load_summary(path: Path) -> dict[str, Any]:
     if not path.is_file():
-        raise SystemExit(
+        cmd = ["npm", "--prefix", "apps/web", "run", "test", "--", "--coverage"]
+        print(
             f"coverage summary not found: {path}. "
-            "Run `npm --prefix apps/web run test -- --coverage` first, "
-            "or pass --summary-path."
+            f"Generating with: {' '.join(cmd)}",
         )
+        try:
+            subprocess.run(cmd, check=True)
+        except subprocess.CalledProcessError as exc:
+            raise SystemExit(
+                f"failed to generate coverage summary via {' '.join(cmd)} (exit={exc.returncode})"
+            ) from exc
+    if not path.is_file():
+        raise SystemExit(f"coverage summary not found after generation attempt: {path}")
     try:
         return json.loads(path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
