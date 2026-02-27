@@ -1400,7 +1400,7 @@ jobs:
     needs: aggregate-gate
     runs-on: ubuntu-latest
     if: >-
-      (github.event_name == 'pull_request' || github.event_name == 'schedule' || (github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/'))))
+      (github.event_name == 'schedule' || (github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/'))))
     env:
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
@@ -1425,7 +1425,7 @@ jobs:
           [[ "$HAS_YOUTUBE_API_KEY" != "true" ]] && missing+=("YOUTUBE_API_KEY")
           [[ "$HAS_LIVE_SMOKE_API_BASE_URL" != "true" ]] && missing+=("LIVE_SMOKE_API_BASE_URL")
           if [[ "${#missing[@]}" -gt 0 ]]; then
-            echo "live smoke is required on PR/main/release/schedule but missing secrets: ${missing[*]}"
+            echo "live smoke is required on main/release/schedule but missing secrets: ${missing[*]}"
             exit 1
           fi
 
@@ -1458,7 +1458,7 @@ jobs:
       - nightly-flaky-python
       - nightly-flaky-web-e2e
     steps:
-      - name: Enforce final gate (with required live smoke on PR/main/release/nightly)
+      - name: Enforce final gate (with required live smoke on main/release/nightly)
         run: |
           aggregate_result="${{ needs.aggregate-gate.result }}"
           live_smoke_result="${{ needs.live-smoke.result }}"
@@ -1469,8 +1469,6 @@ jobs:
 
           require_live_smoke=0
           if [[ "$event_name" == "schedule" ]]; then
-            require_live_smoke=1
-          elif [[ "$event_name" == "pull_request" ]]; then
             require_live_smoke=1
           elif [[ "$event_name" == "push" && "$ref" == "refs/heads/main" ]]; then
             require_live_smoke=1
@@ -1501,7 +1499,7 @@ jobs:
 
           if [[ "$require_live_smoke" -eq 1 ]]; then
             if [[ "$live_smoke_result" != "success" ]]; then
-              echo "final gate failed: live smoke required on PR/main/release/nightly but result is '$live_smoke_result'"
+              echo "final gate failed: live smoke required on main/release/nightly but result is '$live_smoke_result'"
               exit 1
             fi
           fi
