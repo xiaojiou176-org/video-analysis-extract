@@ -84,8 +84,7 @@ def load_summary(path: Path) -> dict[str, Any]:
     if not path.is_file():
         cmd = ["npm", "--prefix", "apps/web", "run", "test", "--", "--coverage"]
         print(
-            f"coverage summary not found: {path}. "
-            f"Generating with: {' '.join(cmd)}",
+            f"coverage summary not found: {path}. Generating with: {' '.join(cmd)}",
         )
         try:
             subprocess.run(cmd, check=True)
@@ -131,7 +130,9 @@ def is_core_file(path_key: str, patterns: list[str]) -> bool:
     )
 
 
-def evaluate(summary: dict[str, Any], metric: str, core_patterns: list[str]) -> tuple[float, int, int, float, int, int, int]:
+def evaluate(
+    summary: dict[str, Any], metric: str, core_patterns: list[str]
+) -> tuple[float, int, int, float, int, int, int]:
     total_payload = summary.get("total")
     if not isinstance(total_payload, dict):
         raise SystemExit("coverage summary missing 'total' section")
@@ -159,7 +160,15 @@ def evaluate(summary: dict[str, Any], metric: str, core_patterns: list[str]) -> 
     core_pct = (100.0 * core_covered / core_total) if core_total else 0.0
     global_total = read_count(global_bucket, "total", "total", metric)
     global_covered = read_count(global_bucket, "covered", "total", metric)
-    return global_pct, global_total, global_covered, core_pct, core_total, core_covered, core_matches
+    return (
+        global_pct,
+        global_total,
+        global_covered,
+        core_pct,
+        core_total,
+        core_covered,
+        core_matches,
+    )
 
 
 def main() -> int:

@@ -60,6 +60,7 @@ def _mock_api_disabled_message() -> str:
         "If a test still requests mock_api_server/mock_api_state, migrate it to real API assertions."
     )
 
+
 def _read_real_api_base_url(config: pytest.Config) -> str:
     raw_value = str(config.getoption("--web-e2e-api-base-url")).strip().rstrip("/")
     if not raw_value:
@@ -173,7 +174,9 @@ def web_base_url(pytestconfig: pytest.Config, request: pytest.FixtureRequest) ->
         return
 
     if shutil.which("npm") is None:
-        raise RuntimeError("npm is required for web E2E. Install Node.js/npm in CI before running tests.")
+        raise RuntimeError(
+            "npm is required for web E2E. Install Node.js/npm in CI before running tests."
+        )
     if not (WEB_DIR / "node_modules").exists():
         raise RuntimeError("apps/web/node_modules is missing. Run `npm ci` in apps/web before E2E.")
 
@@ -185,7 +188,9 @@ def web_base_url(pytestconfig: pytest.Config, request: pytest.FixtureRequest) ->
     if use_mock_api:
         mock_api_server = request.getfixturevalue("mock_api_server")
 
-    def _start_web_server_on_port(web_port: int) -> tuple[subprocess.Popen[str], threading.Thread, list[str]]:
+    def _start_web_server_on_port(
+        web_port: int,
+    ) -> tuple[subprocess.Popen[str], threading.Thread, list[str]]:
         nonlocal output_lines
         output_lines = []
         base_url = f"http://127.0.0.1:{web_port}"

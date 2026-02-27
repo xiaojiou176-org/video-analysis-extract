@@ -55,7 +55,9 @@ def test_residual_refs_hit_and_fail_on_returns_1(tmp_path: Path) -> None:
         ],
     )
 
-    (tmp_path / "apps/runtime.py").write_text('import os\nos.getenv("DATABASE_URL")\n', encoding="utf-8")
+    (tmp_path / "apps/runtime.py").write_text(
+        'import os\nos.getenv("DATABASE_URL")\n', encoding="utf-8"
+    )
     (tmp_path / ".env.example").write_text("KNOWN_VAR=1\n", encoding="utf-8")
     (tmp_path / ".env").write_text("KNOWN_VAR=1\n", encoding="utf-8")
     (tmp_path / "docs/testing.md").write_text("`KNOWN_VAR`\n", encoding="utf-8")

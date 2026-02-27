@@ -23,7 +23,9 @@ def test_subscriptions_save_subscription_button(page: Page) -> None:
     expect(page).to_have_url(
         re.compile(r"/subscriptions\?status=success&code=SUBSCRIPTION_(CREATED|UPDATED)")
     )
-    expect(page.locator("p.alert.success")).to_contain_text(re.compile(r"订阅已创建。|订阅已更新。"))
+    expect(page.locator("p.alert.success")).to_contain_text(
+        re.compile(r"订阅已创建。|订阅已更新。")
+    )
     created_row = page.locator("tbody tr", has_text=source_value)
     expect(created_row).to_be_visible()
 

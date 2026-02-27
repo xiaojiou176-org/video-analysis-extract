@@ -145,7 +145,9 @@ def _load_external_checks(paths: list[Path]) -> list[dict[str, Any]]:
     return checks
 
 
-def _aggregate(checks: list[dict[str, Any]], green_threshold: float, yellow_threshold: float) -> dict[str, Any]:
+def _aggregate(
+    checks: list[dict[str, Any]], green_threshold: float, yellow_threshold: float
+) -> dict[str, Any]:
     total_weight = 0.0
     earned = 0.0
     required_fail = False

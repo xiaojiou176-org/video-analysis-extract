@@ -50,9 +50,7 @@ def _integration_smoke_strict_mode() -> bool:
 
 def _fail_or_skip_for_env(requirement: str, detail: str) -> None:
     header = f"integration smoke requirement not met: {requirement}"
-    guidance = (
-        "set API_INTEGRATION_SMOKE_STRICT=1 to enforce locally, or keep it unset/0 to allow local skip."
-    )
+    guidance = "set API_INTEGRATION_SMOKE_STRICT=1 to enforce locally, or keep it unset/0 to allow local skip."
     message = f"{header}. {detail}. {guidance}"
     if _integration_smoke_strict_mode():
         pytest.fail(message, pytrace=False)

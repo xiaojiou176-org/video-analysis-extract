@@ -196,9 +196,17 @@ def test_process_video_reuses_existing_job_without_dispatch(
     [
         ("youtube", "https://www.youtube.com/watch?v=abc123", "abc123"),
         ("youtube", "https://youtu.be/short123/extra", "short123"),
-        ("youtube", "https://www.youtube.com/watch?list=abc", _url_hash("https://www.youtube.com/watch?list=abc")),
+        (
+            "youtube",
+            "https://www.youtube.com/watch?list=abc",
+            _url_hash("https://www.youtube.com/watch?list=abc"),
+        ),
         ("bilibili", "https://www.bilibili.com/video/BV1xx411c7mD", "BV1xx411c7mD"),
-        ("bilibili", "https://www.bilibili.com/video/av123456", _url_hash("https://www.bilibili.com/video/av123456")),
+        (
+            "bilibili",
+            "https://www.bilibili.com/video/av123456",
+            _url_hash("https://www.bilibili.com/video/av123456"),
+        ),
         ("other", "https://example.com/watch?v=abc", _url_hash("https://example.com/watch?v=abc")),
     ],
 )

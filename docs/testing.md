@@ -233,7 +233,9 @@ bash scripts/env/final_governance_check.sh --skip-prepush
 - Web 覆盖率硬门禁：`global >=80%` 且 `core >=90%`（默认读取 `apps/web/coverage/coverage-summary.json`）。
 - 变异测试门禁强制执行（Python 核心模块）：mutation score `>=0.85`（默认，可通过 `--mutation-min-score` 覆盖）。
 - `pre-push` 采用 fail-fast：先短检查，再长测试；长测试并行执行并输出 heartbeat。
+- `pre-push` 后端链路新增硬门禁：`api cors preflight smoke (OPTIONS DELETE)` 与 `contract diff local gate (base vs head)`。
 - Env 预算门禁强制执行（防反弹）：`core<=20`、`runtime<=100`、`scripts<=120`、`universe<=216`（`python3 scripts/check_env_budget.py`）。
+- 远程 CI 成本治理：任何远程重跑前必须先本地 pre-push 全绿；远程失败后先本地复现修复再重跑。
 
 ### 0.1.2) Web 覆盖率硬门禁（Vitest json-summary）
 

@@ -415,7 +415,9 @@ def main() -> int:
             else:
                 print(f"[env-contract] {args.env_file} has no unregistered vars")
 
-            missing_required_in_env = sorted(var for var in required_vars if var not in env_file_items)
+            missing_required_in_env = sorted(
+                var for var in required_vars if var not in env_file_items
+            )
             empty_required_in_env = sorted(
                 var for var in required_vars if var in env_file_items and env_file_items[var] == ""
             )

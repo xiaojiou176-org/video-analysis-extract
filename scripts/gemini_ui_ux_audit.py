@@ -78,12 +78,7 @@ def _file_payload(path: Path, repo_root: Path) -> str:
     rel = path.relative_to(repo_root)
     content = path.read_text(encoding="utf-8", errors="ignore")
     snippet = content[:MAX_FILE_CHARS]
-    return (
-        f"### FILE: {rel}\n"
-        "```text\n"
-        f"{snippet}\n"
-        "```\n"
-    )
+    return f"### FILE: {rel}\n```text\n{snippet}\n```\n"
 
 
 def _build_prompt(batch_payload: str) -> str:

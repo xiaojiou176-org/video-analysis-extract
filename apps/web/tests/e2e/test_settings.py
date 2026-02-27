@@ -20,7 +20,9 @@ def test_settings_save_config_button(page: Page) -> None:
     expect(digest_hour).to_be_enabled()
     page.get_by_role("button", name="保存配置").click()
 
-    expect(page).to_have_url(re.compile(r"/settings\?status=success&code=NOTIFICATION_CONFIG_SAVED"))
+    expect(page).to_have_url(
+        re.compile(r"/settings\?status=success&code=NOTIFICATION_CONFIG_SAVED")
+    )
     expect(page.locator("p.alert.success")).to_contain_text("通知配置已保存。")
 
 

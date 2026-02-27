@@ -108,8 +108,12 @@ def _compare_operation(
         if base_fp != head_fp:
             breaking.append(f"{title}: request schema changed for content type {content_type}")
 
-    base_responses = base_op.get("responses", {}) if isinstance(base_op.get("responses"), dict) else {}
-    head_responses = head_op.get("responses", {}) if isinstance(head_op.get("responses"), dict) else {}
+    base_responses = (
+        base_op.get("responses", {}) if isinstance(base_op.get("responses"), dict) else {}
+    )
+    head_responses = (
+        head_op.get("responses", {}) if isinstance(head_op.get("responses"), dict) else {}
+    )
 
     for status in sorted(base_responses.keys(), key=_status_sort_key):
         if status not in head_responses:
@@ -136,7 +140,9 @@ def _compare_operation(
     if base_success and not (base_success & head_success):
         breaking.append(f"{title}: all previous success statuses removed")
 
-    added_statuses = sorted(set(head_responses.keys()) - set(base_responses.keys()), key=_status_sort_key)
+    added_statuses = sorted(
+        set(head_responses.keys()) - set(base_responses.keys()), key=_status_sort_key
+    )
     if added_statuses:
         non_breaking.append(f"{title}: added response statuses {', '.join(added_statuses)}")
 
@@ -227,7 +233,10 @@ def main() -> int:
         }
         json_path = Path(args.json_report)
         json_path.parent.mkdir(parents=True, exist_ok=True)
-        json_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        json_path.write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
 
     if breaking:
         print("[contract-diff] breaking changes detected", file=sys.stderr)

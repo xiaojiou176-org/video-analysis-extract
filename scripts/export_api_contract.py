@@ -67,7 +67,9 @@ def _schema_descriptor(schema: Any) -> Any:
                 summarized_props[key] = _schema_descriptor(props[key])
         out: dict[str, Any] = {
             "kind": "object",
-            "required": sorted(schema.get("required", [])) if isinstance(schema.get("required"), list) else [],
+            "required": sorted(schema.get("required", []))
+            if isinstance(schema.get("required"), list)
+            else [],
             "properties": summarized_props,
         }
         additional = schema.get("additionalProperties")
@@ -130,7 +132,9 @@ def _summarize_operation(path: str, method: str, operation: dict[str, Any]) -> d
         "path": path,
         "method": method.upper(),
         "operationId": operation.get("operationId"),
-        "tags": sorted(operation.get("tags", [])) if isinstance(operation.get("tags"), list) else [],
+        "tags": sorted(operation.get("tags", []))
+        if isinstance(operation.get("tags"), list)
+        else [],
         "deprecated": bool(operation.get("deprecated", False)),
         "request": {
             "required": request_required,
@@ -202,7 +206,9 @@ def _build_contract(openapi_doc: dict[str, Any]) -> dict[str, Any]:
                 operation = path_item[method]
                 if not isinstance(operation, dict):
                     continue
-                operations.append(_summarize_operation(path=path, method=method, operation=operation))
+                operations.append(
+                    _summarize_operation(path=path, method=method, operation=operation)
+                )
 
     info = openapi_doc.get("info", {}) if isinstance(openapi_doc.get("info"), dict) else {}
 

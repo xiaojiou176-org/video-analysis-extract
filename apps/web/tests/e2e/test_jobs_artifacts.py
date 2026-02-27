@@ -8,7 +8,9 @@ from playwright.sync_api import Page, expect
 
 def _create_job_and_get_id(page: Page) -> str:
     page.goto("/", wait_until="domcontentloaded")
-    page.get_by_label("视频链接 *").fill(f"https://www.youtube.com/watch?v=e2e-jobs-{uuid4().hex[:10]}")
+    page.get_by_label("视频链接 *").fill(
+        f"https://www.youtube.com/watch?v=e2e-jobs-{uuid4().hex[:10]}"
+    )
     page.get_by_label("模式 *").select_option("text_only")
     page.get_by_role("button", name="开始处理").click()
 
@@ -35,13 +37,12 @@ def test_jobs_to_artifacts_query_navigation(page: Page) -> None:
     expect(page.get_by_role("heading", name="任务查询")).to_be_visible()
 
     page.get_by_role("link", name="查看产物页").click()
-    expect(
-        page
-    ).to_have_url(re.compile(rf"/artifacts\?job_id={re.escape(job_id)}(?:&.*)?$"))
+    expect(page).to_have_url(re.compile(rf"/artifacts\?job_id={re.escape(job_id)}(?:&.*)?$"))
     expect(page.get_by_role("heading", name="产物查询")).to_be_visible()
     expect(page.locator("body")).to_contain_text(
         re.compile(r"Markdown 预览|产物请求已完成，但未返回 Markdown 内容。|请求失败，请稍后重试。")
     )
+
 
 def test_artifacts_lookup_form_requires_single_field(page: Page) -> None:
     page.goto("/artifacts", wait_until="domcontentloaded")
