@@ -72,6 +72,12 @@ pre-commit install --hook-type pre-commit --hook-type commit-msg --hook-type pre
 - `.pre-commit-config.yaml` 是可复用检查清单，主要用于手动执行全量检查与依赖版本保养。
 - 因此本仓库口径是：`.githooks` 负责“提交/推送阻断”，`pre-commit` 负责“批量清洗与工具链维护”。
 
+质量门禁提速口径（2026-02）：
+
+- `quality_gate.sh` 支持 `--changed-backend|web|deps|migrations` 与 `--ci-dedupe`。
+- pre-commit 的 `auto` 使用 staged diff；pre-push 的 `auto` 优先使用 upstream merge-base diff，失败回退 `HEAD~1..HEAD`，无法可靠识别时保守回退为全量检查。
+- 在 CI 的 dedupe 模式中，`quality-gate-pre-push` 主要承担治理类门禁与 mutation（后端变更命中时），lint/unit/coverage 由独立 CI job 负责。
+
 Big Bang 全量清洗（可选）：
 
 ```bash

@@ -17,7 +17,54 @@ permissions:
   contents: read
 
 jobs:
-  preflight:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      backend_changed: ${{ github.event_name == 'pull_request' && steps.filter.outputs.backend_changed || steps.non_pr_defaults.outputs.backend_changed }}
+      web_changed: ${{ github.event_name == 'pull_request' && steps.filter.outputs.web_changed || steps.non_pr_defaults.outputs.web_changed }}
+      deps_changed: ${{ github.event_name == 'pull_request' && steps.filter.outputs.deps_changed || steps.non_pr_defaults.outputs.deps_changed }}
+      migrations_changed: ${{ github.event_name == 'pull_request' && steps.filter.outputs.migrations_changed || steps.non_pr_defaults.outputs.migrations_changed }}
+    steps:
+      - name: Checkout
+        if: ${{ github.event_name == 'pull_request' }}
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect changed paths (PR only)
+        if: ${{ github.event_name == 'pull_request' }}
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            backend_changed:
+              - 'apps/api/**'
+              - 'apps/worker/**'
+              - 'apps/mcp/**'
+              - 'packages/shared-contracts/**'
+              - 'scripts/**'
+              - 'pyproject.toml'
+              - 'uv.lock'
+            web_changed:
+              - 'apps/web/**'
+            deps_changed:
+              - 'pyproject.toml'
+              - 'uv.lock'
+              - 'apps/web/package.json'
+              - 'apps/web/package-lock.json'
+            migrations_changed:
+              - 'infra/migrations/**'
+
+      - name: Default full-run flags (non-PR)
+        if: ${{ github.event_name != 'pull_request' }}
+        id: non_pr_defaults
+        run: |
+          echo "backend_changed=true" >> "$GITHUB_OUTPUT"
+          echo "web_changed=true" >> "$GITHUB_OUTPUT"
+          echo "deps_changed=true" >> "$GITHUB_OUTPUT"
+          echo "migrations_changed=true" >> "$GITHUB_OUTPUT"
+
+  preflight-fast:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -27,22 +74,6 @@ jobs:
         uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.12"
-
-      - name: Setup uv
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install uv
-
-      - name: Cache uv
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
-        with:
-          path: ~/.cache/uv
-          key: ${{ runner.os }}-uv-${{ hashFiles('uv.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-uv-
-
-      - name: Sync Python deps (locked)
-        run: uv sync --frozen --extra dev --extra e2e
 
       - name: Env contract strict check
         run: python3 scripts/check_env_contract.py --strict --env-file .env.example
@@ -90,9 +121,6 @@ jobs:
             docker compose -f infra/compose/miniflux-nextflux.compose.yml config -q
           fi
 
-      - name: Structured log critical-path guard
-        run: python3 scripts/check_structured_logs.py
-
       - name: Provider residual guard (blocking)
         run: bash scripts/guard_provider_residuals.sh .
 
@@ -128,9 +156,41 @@ jobs:
           print("Schema parity check passed.")
           PY
 
+  preflight-heavy:
+    runs-on: ubuntu-latest
+    needs: preflight-fast
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Setup Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+
+      - name: Setup uv
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install uv
+
+      - name: Cache uv
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ~/.cache/uv
+          key: ${{ runner.os }}-uv-${{ hashFiles('uv.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-uv-
+
+      - name: Sync Python deps (locked)
+        run: uv sync --frozen --extra dev --extra e2e
+
+      - name: Structured log critical-path guard
+        run: python3 scripts/check_structured_logs.py
+
   profile-governance:
     runs-on: ubuntu-latest
-    needs: preflight
+    if: ${{ github.event_name == 'schedule' || (github.event_name == 'push' && github.ref == 'refs/heads/main') }}
+    needs: preflight-heavy
     strategy:
       fail-fast: false
       matrix:
@@ -160,7 +220,8 @@ jobs:
 
   quality-gate-pre-push:
     runs-on: ubuntu-latest
-    needs: preflight
+    if: ${{ github.event_name == 'schedule' || (github.event_name == 'push' && github.ref == 'refs/heads/main') }}
+    needs: [preflight-heavy, changes]
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -192,12 +253,18 @@ jobs:
               --mode pre-push \
               --profile ci \
               --profile live-smoke \
+              --ci-dedupe 1 \
+              --changed-backend "${{ needs.changes.outputs.backend_changed }}" \
+              --changed-web "${{ needs.changes.outputs.web_changed }}" \
+              --changed-deps "${{ needs.changes.outputs.deps_changed }}" \
+              --changed-migrations "${{ needs.changes.outputs.migrations_changed }}" \
               --heartbeat-seconds 25 \
               --mutation-min-score 0.60
 
   db-migration-smoke:
     runs-on: ubuntu-latest
-    needs: preflight
+    needs: [preflight-fast, changes]
+    if: ${{ github.event_name != 'pull_request' || needs.changes.outputs.migrations_changed == 'true' }}
     services:
       postgres:
         image: pgvector/pgvector:pg16
@@ -237,7 +304,8 @@ jobs:
 
   python-tests:
     runs-on: ubuntu-latest
-    needs: preflight
+    needs: [preflight-fast, changes]
+    if: ${{ github.event_name != 'pull_request' || needs.changes.outputs.backend_changed == 'true' }}
     services:
       postgres:
         image: pgvector/pgvector:pg16
@@ -380,7 +448,8 @@ jobs:
 
   api-real-smoke:
     runs-on: ubuntu-latest
-    needs: preflight
+    needs: [preflight-fast, changes]
+    if: ${{ github.event_name != 'pull_request' || needs.changes.outputs.backend_changed == 'true' }}
     services:
       postgres:
         image: pgvector/pgvector:pg16
@@ -512,9 +581,10 @@ jobs:
 
   pr-llm-real-smoke:
     runs-on: ubuntu-latest
-    needs: preflight
+    needs: [preflight-fast, changes]
     if: >-
       github.event_name == 'pull_request' &&
+      needs.changes.outputs.backend_changed == 'true' &&
       github.event.pull_request.head.repo.full_name == github.repository &&
       secrets.GEMINI_API_KEY != ''
     steps:
@@ -586,7 +656,8 @@ jobs:
 
   web-test-build:
     runs-on: ubuntu-latest
-    needs: preflight
+    needs: [preflight-fast, changes]
+    if: ${{ github.event_name != 'pull_request' || needs.changes.outputs.web_changed == 'true' }}
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -637,7 +708,8 @@ jobs:
 
   web-e2e:
     runs-on: ubuntu-latest
-    needs: preflight
+    needs: [preflight-fast, changes]
+    if: ${{ github.event_name != 'pull_request' || needs.changes.outputs.web_changed == 'true' }}
     strategy:
       fail-fast: false
       matrix:
@@ -645,6 +717,13 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: apps/web/package-lock.json
 
       - name: Setup Python
         uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
@@ -715,7 +794,7 @@ jobs:
           PY
 
       - name: Upload web e2e artifacts
-        if: always()
+        if: failure()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: web-e2e-artifacts-${{ matrix.browser }}
@@ -736,7 +815,8 @@ jobs:
 
   external-playwright-smoke:
     runs-on: ubuntu-latest
-    needs: preflight
+    if: ${{ github.event_name == 'schedule' || (github.event_name == 'push' && github.ref == 'refs/heads/main') }}
+    needs: preflight-fast
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -797,7 +877,8 @@ jobs:
 
   dependency-vuln-scan:
     runs-on: ubuntu-latest
-    needs: preflight
+    needs: [preflight-fast, changes]
+    if: ${{ github.event_name != 'pull_request' || needs.changes.outputs.deps_changed == 'true' }}
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -870,7 +951,9 @@ jobs:
     runs-on: ubuntu-latest
     if: always()
     needs:
-      - preflight
+      - changes
+      - preflight-fast
+      - preflight-heavy
       - profile-governance
       - quality-gate-pre-push
       - db-migration-smoke
@@ -886,8 +969,22 @@ jobs:
     steps:
       - name: Enforce aggregate gate
         run: |
+          event_name="${{ github.event_name }}"
+          ref="${{ github.ref }}"
+          is_pr=0
+          if [[ "$event_name" == "pull_request" ]]; then
+            is_pr=1
+          fi
+
+          backend_changed="${{ needs.changes.outputs.backend_changed }}"
+          web_changed="${{ needs.changes.outputs.web_changed }}"
+          deps_changed="${{ needs.changes.outputs.deps_changed }}"
+          migrations_changed="${{ needs.changes.outputs.migrations_changed }}"
+
           declare -A results
-          results[preflight]="${{ needs.preflight.result }}"
+          results[changes]="${{ needs.changes.result }}"
+          results[preflight_fast]="${{ needs.preflight-fast.result }}"
+          results[preflight_heavy]="${{ needs.preflight-heavy.result }}"
           results[profile_governance]="${{ needs.profile-governance.result }}"
           results[quality_gate_pre_push]="${{ needs.quality-gate-pre-push.result }}"
           results[db_migration_smoke]="${{ needs.db-migration-smoke.result }}"
@@ -902,13 +999,71 @@ jobs:
           results[dependency_vuln_scan]="${{ needs.dependency-vuln-scan.result }}"
 
           failed=0
-          for job in preflight profile_governance quality_gate_pre_push db_migration_smoke python_tests api_real_smoke backend_lint frontend_lint web_test_build web_e2e external_playwright_smoke dependency_vuln_scan; do
+          require_main_schedule_only=0
+          if [[ "$event_name" == "schedule" || ( "$event_name" == "push" && "$ref" == "refs/heads/main" ) ]]; then
+            require_main_schedule_only=1
+          fi
+          echo "event=$event_name ref=$ref is_pr=$is_pr require_main_schedule_only=$require_main_schedule_only"
+          echo "changes: backend=$backend_changed web=$web_changed deps=$deps_changed migrations=$migrations_changed"
+
+          for job in changes preflight_fast preflight_heavy; do
             result="${results[$job]}"
             echo "$job=$result"
             if [[ "$result" != "success" ]]; then
               failed=1
             fi
           done
+
+          check_required_job() {
+            local job="$1"
+            local required="$2"
+            local result="${results[$job]}"
+            echo "$job=$result required=$required"
+            if [[ "$required" == "1" ]]; then
+              if [[ "$result" != "success" ]]; then
+                failed=1
+              fi
+            else
+              if [[ "$result" != "success" && "$result" != "skipped" ]]; then
+                failed=1
+              fi
+            fi
+          }
+
+          required_db_migration=1
+          required_backend_group=1
+          required_web_group=1
+          required_deps_scan=1
+          if [[ "$is_pr" -eq 1 ]]; then
+            [[ "$migrations_changed" == "true" ]] && required_db_migration=1 || required_db_migration=0
+            [[ "$backend_changed" == "true" ]] && required_backend_group=1 || required_backend_group=0
+            [[ "$web_changed" == "true" ]] && required_web_group=1 || required_web_group=0
+            [[ "$deps_changed" == "true" ]] && required_deps_scan=1 || required_deps_scan=0
+          fi
+
+          check_required_job db_migration_smoke "$required_db_migration"
+          check_required_job python_tests "$required_backend_group"
+          check_required_job api_real_smoke "$required_backend_group"
+          check_required_job backend_lint "$required_backend_group"
+          check_required_job frontend_lint "$required_web_group"
+          check_required_job web_test_build "$required_web_group"
+          check_required_job web_e2e "$required_web_group"
+          check_required_job dependency_vuln_scan "$required_deps_scan"
+
+          for job in profile_governance quality_gate_pre_push external_playwright_smoke; do
+            result="${results[$job]}"
+            echo "$job=$result"
+            if [[ "$require_main_schedule_only" -eq 1 ]]; then
+              if [[ "$result" != "success" ]]; then
+                failed=1
+              fi
+            else
+              if [[ "$result" != "success" && "$result" != "skipped" ]]; then
+                failed=1
+              fi
+            fi
+          done
+
           pr_llm_result="${results[pr_llm_real_smoke]}"
           echo "pr_llm_real_smoke=$pr_llm_result"
           if [[ "$pr_llm_result" != "success" && "$pr_llm_result" != "skipped" ]]; then
@@ -924,7 +1079,7 @@ jobs:
   nightly-flaky-python:
     runs-on: ubuntu-latest
     if: ${{ github.event_name == 'schedule' }}
-    needs: preflight
+    needs: preflight-fast
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -976,7 +1131,7 @@ jobs:
   nightly-flaky-web-e2e:
     runs-on: ubuntu-latest
     if: ${{ github.event_name == 'schedule' }}
-    needs: preflight
+    needs: preflight-fast
     strategy:
       fail-fast: false
       matrix:
@@ -984,6 +1139,13 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: apps/web/package-lock.json
 
       - name: Setup Python
         uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
@@ -1172,7 +1334,8 @@ jobs:
           echo "final gate passed"
   backend-lint:
     runs-on: ubuntu-latest
-    needs: preflight
+    needs: [preflight-fast, changes]
+    if: ${{ github.event_name != 'pull_request' || needs.changes.outputs.backend_changed == 'true' }}
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -1206,7 +1369,8 @@ jobs:
 
   frontend-lint:
     runs-on: ubuntu-latest
-    needs: preflight
+    needs: [preflight-fast, changes]
+    if: ${{ github.event_name != 'pull_request' || needs.changes.outputs.web_changed == 'true' }}
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4

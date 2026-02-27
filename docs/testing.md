@@ -10,6 +10,7 @@
 - `apps/web/tests/e2e`
 
 所有新增测试都包含至少一个真实行为断言（字段或状态码），不使用安慰剂断言。
+测试分层口径：API tests 主责路由字段契约，Web E2E 主责关键用户旅程与端到端成功信号，MCP tests 主责工具动作路由与标准化语义（避免逐字段重复 API 契约）。
 
 ## 环境分层与密钥注入口径
 
@@ -23,15 +24,45 @@
 
 ## CI Topology (GitHub Actions)
 
+- `changes`：仅 PR 使用的改动范围判定作业，输出 `backend` / `web` / `deps` / `migrations` 四个布尔字段，供后续 job 条件化执行。
 - `preflight`：预检门禁（env contract、provider residual guard、schema parity、worker file line limits）。
-- `db-migration-smoke` / `python-tests` / `api-real-smoke` / `pr-llm-real-smoke` / `backend-lint` / `frontend-lint` / `web-test-build` / `web-e2e` / `external-playwright-smoke`：依赖 `preflight` 并行执行（其中 `pr-llm-real-smoke` 为条件触发）。
+- `db-migration-smoke` / `python-tests` / `api-real-smoke` / `pr-llm-real-smoke` / `backend-lint` / `frontend-lint` / `web-test-build` / `web-e2e`：依赖 `preflight` 并行执行（其中 `pr-llm-real-smoke` 为条件触发）。
+- `profile-governance` / `quality-gate-pre-push` / `external-playwright-smoke`：默认不在 PR 执行；在 `push(main)` 与 nightly `schedule` 必跑。`quality-gate-pre-push` 在 CI 中使用 `--ci-dedupe 1 + --changed-*` 去重参数，主职责收敛为治理类门禁，mutation 依据 `backend` 改动标志决定是否执行（当前 `main/schedule` 由 `changes` 默认输出 `backend=true`，因此仍会执行 mutation）。
 - `api-real-smoke`：PR 可运行的真实 API 轻量烟测（启动 FastAPI + Postgres，覆盖 `/healthz` 与 subscriptions 写读链路），不依赖外部 provider secrets。
 - `web-e2e`：增量浏览器策略。PR 仅跑 core（chromium/firefox）；`main` push 与 nightly schedule 跑 full（含 webkit）。默认使用本地 mock API，不访问真实外部网站。
-- `aggregate-gate`：汇总 `preflight + 10` 个核心作业（`db-migration-smoke` / `python-tests` / `api-real-smoke` / `pr-llm-real-smoke` / `backend-lint` / `frontend-lint` / `web-test-build` / `web-e2e` / `external-playwright-smoke` / `dependency-vuln-scan`）；其中 `pr-llm-real-smoke` 允许 `success/skipped`，其余任一非 `success` 即失败。
+- `aggregate-gate`：汇总 `preflight + 12` 个核心作业（`profile-governance` / `quality-gate-pre-push` / `db-migration-smoke` / `python-tests` / `api-real-smoke` / `pr-llm-real-smoke` / `backend-lint` / `frontend-lint` / `web-test-build` / `web-e2e` / `external-playwright-smoke` / `dependency-vuln-scan`）；`pr-llm-real-smoke` 始终允许 `success/skipped`，且 `profile-governance` / `quality-gate-pre-push` / `external-playwright-smoke` 在 PR 上允许 `skipped`，在 `push(main)` / nightly `schedule` 必须为 `success`。
 - `autofix-dry-run`：依赖 `python-tests` + `web-e2e`，仅在两者任一失败时运行（读取 `.runtime-cache` 诊断工件）。
 - `nightly-flaky-python` + `nightly-flaky-web-e2e`：仅 nightly schedule 触发，执行重复运行策略用于发现 flaky。
 - `live-smoke`：依赖 `aggregate-gate`，在 `main` push / nightly schedule 必跑；执行真实 LLM + 真实外部视频 URL（YouTube/Bilibili）链路。`LIVE_SMOKE_API_BASE_URL` 为空时会自动回落到 `http://127.0.0.1:${API_PORT:-8000}`；若缺少任一必需 secret 会直接失败（不再跳过放行）。
 - `ci-final-gate`：最终门禁；始终检查 `aggregate-gate`，并在 nightly 强制 `nightly-flaky-*` 成功，在 `main` push / nightly schedule 强制 `live-smoke` 成功且不得为 `skipped`。
+
+## 第二批提速（PR 按改动范围执行 + CI 去重）
+
+`changes` 作业（PR 场景）输出字段：
+
+- `backend`：后端相关改动（`apps/api` / `apps/worker` / `apps/mcp` / `scripts` / `infra` 等）命中时为 `true`。
+- `web`：前端相关改动（`apps/web`）命中时为 `true`。
+- `deps`：依赖相关改动（如 `uv.lock`、`apps/web/package-lock.json`、依赖定义文件）命中时为 `true`。
+- `migrations`：数据库迁移改动（`infra/migrations/*.sql`）命中时为 `true`。
+
+PR 条件化执行边界（由 `changes` 输出控制）：
+
+- 后端链路作业：`python-tests` / `api-real-smoke` / `backend-lint` 在 `backend=true` 时执行，否则可 `skipped`；`db-migration-smoke` 在 `migrations=true` 时执行，否则可 `skipped`。
+- 前端链路作业（如 `frontend-lint` / `web-test-build` / `web-e2e`）在 `web=true` 时执行，否则可 `skipped`。
+- `preflight`、`aggregate-gate`、`ci-final-gate` 仍执行；其中 `aggregate-gate` 在 PR 下允许由 `changes` 判定导致的 `skipped`。
+
+`quality-gate-pre-push`（`push(main)` / nightly `schedule`）会透传以下参数到 `quality_gate.sh`：
+
+- `--ci-dedupe 1`
+- `--changed-backend "${{ needs.changes.outputs.backend_changed }}"`
+- `--changed-web "${{ needs.changes.outputs.web_changed }}"`
+- `--changed-deps "${{ needs.changes.outputs.deps_changed }}"`
+- `--changed-migrations "${{ needs.changes.outputs.migrations_changed }}"`
+
+CI 去重行为口径：
+
+- 治理类检查（profile/env/doc-drift/secrets/structured-log/iac 等）在 `quality-gate-pre-push` 中持续执行；`lint` 与单元/覆盖检查由独立 CI jobs 承担，以避免重复执行。
+- mutation 按 `changed-backend` 触发；仅后端改动命中时执行，避免与独立后端作业重复消耗。
 
 ## 测试类型与依赖边界（避免误解）
 
@@ -64,7 +95,7 @@ CI `live-smoke` 必需 secrets（`main` push / nightly schedule）：
   - `github.event_name == 'pull_request'`
   - `github.event.pull_request.head.repo.full_name == github.repository`（同仓 PR，fork PR 不触发）
   - `secrets.GEMINI_API_KEY != ''`
-- `external-playwright-smoke` 在 `preflight` 后固定执行，默认参数：
+- `external-playwright-smoke` 仅在 `push(main)` 与 nightly `schedule` 执行（PR 默认 `skipped`）；默认参数：
   - `--url https://example.com`
   - `--browser chromium`
   - `--expect-text "Example Domain"`
@@ -144,9 +175,9 @@ scripts/smoke_llm_real_local.sh --api-base-url "http://127.0.0.1:18081"
 
 | 触发源 | 必跑项 | 可跳过项 | 强制门禁 |
 |---|---|---|---|
-| `pull_request` | `preflight`、`aggregate-gate` 依赖链、`web-e2e(core)`、`api-real-smoke`、`external-playwright-smoke`；`pr-llm-real-smoke` 满足条件时运行 | `live-smoke`（跳过） | `ci-final-gate` 允许 `live-smoke=skipped`；`pr-llm-real-smoke` 允许 `skipped` |
-| `push` 到 `main` | `preflight`、`aggregate-gate` 依赖链、`web-e2e(full)`、`api-real-smoke`、`external-playwright-smoke`、`live-smoke` | `pr-llm-real-smoke`、nightly flaky 子集 | `ci-final-gate` 强制 `live-smoke=success` |
-| `schedule` nightly | `preflight`、`aggregate-gate` 依赖链、`web-e2e(full)`、`api-real-smoke`、`external-playwright-smoke`、`live-smoke`、`nightly-flaky-*` | `pr-llm-real-smoke` | `ci-final-gate` 强制 `live-smoke=success` 且 `nightly-flaky-*` 全部成功 |
+| `pull_request` | `changes`、`preflight`、`aggregate-gate` 依赖链（按改动范围执行） | `profile-governance`、`quality-gate-pre-push`、`external-playwright-smoke`、`live-smoke`（默认跳过）；以及由 `changes` 判定未命中的 backend/web 链路作业 | `aggregate-gate` 允许 optional 作业与 `changes` 判定产生的 `skipped`；`ci-final-gate` 允许 `live-smoke=skipped` 且 `pr-llm-real-smoke=skipped` |
+| `push` 到 `main` | `preflight`、`aggregate-gate` 依赖链、`profile-governance`、`quality-gate-pre-push`、`web-e2e(full)`、`api-real-smoke`、`external-playwright-smoke`、`live-smoke` | `pr-llm-real-smoke`、nightly flaky 子集 | `aggregate-gate` 强制 optional 作业为 `success`；`ci-final-gate` 强制 `live-smoke=success` |
+| `schedule` nightly | `preflight`、`aggregate-gate` 依赖链、`profile-governance`、`quality-gate-pre-push`、`web-e2e(full)`、`api-real-smoke`、`external-playwright-smoke`、`live-smoke`、`nightly-flaky-*` | `pr-llm-real-smoke` | `aggregate-gate` 强制 optional 作业为 `success`；`ci-final-gate` 强制 `live-smoke=success` 且 `nightly-flaky-*` 全部成功 |
 
 ## Run Commands
 
@@ -366,4 +397,4 @@ npm run lint
 - 由于当前 Web 代码尚未完成 Next.js 16 `searchParams` 异步迁移，`jobs -> artifacts` 用例会先断言查询跳转与页面占位状态（`No artifact loaded yet.`）；迁移后可升级为 markdown/screenshot 区块可见性断言。
 - API 路由测试会通过 `monkeypatch` 隔离 Temporal/数据库外部依赖，验证路由层映射行为。
 - 需要访问真实依赖（Postgres/Temporal）的端到端链路，可在后续补专门的 integration 套件。
-- CI 缓存策略：Node 使用 `setup-node` 的 npm 缓存（锁文件 `apps/web/package-lock.json`）；Python 使用 `actions/cache@v4` 缓存 `~/.cache/uv`，并配合 `uv sync --frozen`；测试与 e2e 产物统一写入 `.runtime-cache` 并作为 artifact 上传。
+- CI 缓存策略：`web-test-build`、`web-e2e`、`nightly-flaky-web-e2e`、`dependency-vuln-scan` 都使用 `setup-node` 的 npm 缓存（锁文件 `apps/web/package-lock.json`）；Python 使用 `actions/cache@v4` 缓存 `~/.cache/uv`，Playwright 浏览器二进制使用 `actions/cache@v4` 缓存 `~/.cache/ms-playwright`；测试与 e2e 产物统一写入 `.runtime-cache` 并作为 artifact 上传。

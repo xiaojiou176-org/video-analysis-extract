@@ -36,6 +36,26 @@ class _PortInUseStartupError(RuntimeError):
     pass
 
 
+def _read_trace_mode() -> str:
+    mode = os.environ.get("WEB_E2E_TRACE_MODE", "off").strip().lower()
+    allowed = {"off", "on", "retain-on-failure"}
+    if mode not in allowed:
+        raise RuntimeError(
+            f"unsupported WEB_E2E_TRACE_MODE={mode!r}; expected one of {sorted(allowed)}"
+        )
+    return mode
+
+
+def _read_video_mode() -> str:
+    mode = os.environ.get("WEB_E2E_VIDEO_MODE", "retain-on-failure").strip().lower()
+    allowed = {"off", "on", "retain-on-failure"}
+    if mode not in allowed:
+        raise RuntimeError(
+            f"unsupported WEB_E2E_VIDEO_MODE={mode!r}; expected one of {sorted(allowed)}"
+        )
+    return mode
+
+
 @pytest.hookimpl(hookwrapper=True)
 def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo[object]):
     outcome = yield
@@ -158,17 +178,49 @@ def browser() -> Browser:
 
 @pytest.fixture
 def page(browser: Browser, web_base_url: str, request: pytest.FixtureRequest) -> Page:
-    context = browser.new_context(
-        base_url=web_base_url,
-        record_video_dir=str(WEB_E2E_VIDEO_DIR),
-    )
-    context.tracing.start(screenshots=True, snapshots=True, sources=True)
+    artifact_slug = slugify_nodeid(request.node.nodeid)
+    trace_mode = _read_trace_mode()
+    video_mode = _read_video_mode()
+
+    new_context_kwargs: dict[str, str] = {"base_url": web_base_url}
+    video_test_dir = WEB_E2E_VIDEO_DIR / artifact_slug
+    if video_mode != "off":
+        video_test_dir.mkdir(parents=True, exist_ok=True)
+        new_context_kwargs["record_video_dir"] = str(video_test_dir)
+
+    context = browser.new_context(**new_context_kwargs)
+    if trace_mode != "off":
+        context.tracing.start(screenshots=True, snapshots=True, sources=False)
     page = context.new_page()
     page.set_default_timeout(20_000)
     yield page
-    artifact_slug = slugify_nodeid(request.node.nodeid)
     call_report = getattr(request.node, "rep_call", None)
-    if call_report is not None and call_report.failed:
+    failed = call_report is not None and call_report.failed
+    if failed:
         page.screenshot(path=str(WEB_E2E_SCREENSHOT_DIR / f"{artifact_slug}.png"), full_page=True)
-    context.tracing.stop(path=str(WEB_E2E_TRACE_DIR / f"{artifact_slug}.zip"))
+
+    if trace_mode == "on":
+        context.tracing.stop(path=str(WEB_E2E_TRACE_DIR / f"{artifact_slug}.zip"))
+    elif trace_mode == "retain-on-failure":
+        if failed:
+            context.tracing.stop(path=str(WEB_E2E_TRACE_DIR / f"{artifact_slug}.zip"))
+        else:
+            context.tracing.stop()
+
+    video_obj = page.video
     context.close()
+    if video_mode == "retain-on-failure":
+        kept_video_path: Path | None = None
+        if video_obj is not None:
+            try:
+                kept_video_path = Path(video_obj.path())
+            except Exception:
+                kept_video_path = None
+
+        if failed and kept_video_path is not None and kept_video_path.exists():
+            target_path = WEB_E2E_VIDEO_DIR / f"{artifact_slug}{kept_video_path.suffix or '.webm'}"
+            if target_path.exists():
+                target_path.unlink()
+            kept_video_path.replace(target_path)
+
+        shutil.rmtree(video_test_dir, ignore_errors=True)

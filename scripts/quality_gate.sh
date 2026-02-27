@@ -8,12 +8,27 @@ MUTATION_MIN_SCORE="0.60"
 PROFILE_ONLY="0"
 FINAL_CHECK="0"
 FINAL_SKIP_PREPUSH="0"
+CHANGED_BACKEND_INPUT="auto"
+CHANGED_WEB_INPUT="auto"
+CHANGED_DEPS_INPUT="auto"
+CHANGED_MIGRATIONS_INPUT="auto"
+CI_DEDUPE="0"
+CHANGED_BACKEND="true"
+CHANGED_WEB="true"
+CHANGED_DEPS="true"
+CHANGED_MIGRATIONS="true"
+EFFECTIVE_BACKEND_CHANGED="true"
+EFFECTIVE_WEB_CHANGED="true"
+CHANGED_DETECTION_SOURCE="manual"
+CHANGED_DETECTION_RELIABLE="1"
+CHANGED_FILE_LIST=""
 PROFILES=()
 
 usage() {
   cat <<'USAGE'
 Usage:
-  scripts/quality_gate.sh [--mode pre-commit|pre-push] [--heartbeat-seconds N] [--mutation-min-score N] [--profile NAME ...] [--profile-only]
+  scripts/quality_gate.sh [--mode pre-commit|pre-push] [--heartbeat-seconds N] [--mutation-min-score N] [--profile NAME ...] [--profile-only] \
+    [--changed-backend true|false|auto] [--changed-web true|false|auto] [--changed-deps true|false|auto] [--changed-migrations true|false|auto] [--ci-dedupe 0|1]
   scripts/quality_gate.sh --final-check [--skip-prepush] [--heartbeat-seconds N] [--mutation-min-score N]
 
 Modes:
@@ -26,6 +41,11 @@ Profiles:
 Flags:
   --profile NAME   Append explicit profile checks (repeatable).
   --profile-only   Run profile checks only, skip other quality gates.
+  --changed-backend true|false|auto    Backend change hint (default: auto).
+  --changed-web true|false|auto        Frontend change hint (default: auto).
+  --changed-deps true|false|auto       Dependency change hint (default: auto).
+  --changed-migrations true|false|auto Migration change hint (default: auto).
+  --ci-dedupe 0|1  Pre-push only: when 1, skip checks covered by standalone CI jobs.
   --final-check    Shortcut to run scripts/env/final_governance_check.sh.
   --skip-prepush   Used with --final-check to skip final pre-push phase.
 
@@ -60,6 +80,26 @@ while (($# > 0)); do
     --profile-only)
       PROFILE_ONLY="1"
       shift
+      ;;
+    --changed-backend)
+      CHANGED_BACKEND_INPUT="${2:-}"
+      shift 2
+      ;;
+    --changed-web)
+      CHANGED_WEB_INPUT="${2:-}"
+      shift 2
+      ;;
+    --changed-deps)
+      CHANGED_DEPS_INPUT="${2:-}"
+      shift 2
+      ;;
+    --changed-migrations)
+      CHANGED_MIGRATIONS_INPUT="${2:-}"
+      shift 2
+      ;;
+    --ci-dedupe)
+      CI_DEDUPE="${2:-}"
+      shift 2
       ;;
     --final-check)
       FINAL_CHECK="1"
@@ -98,6 +138,22 @@ fi
 
 if [[ "$PROFILE_ONLY" != "0" && "$PROFILE_ONLY" != "1" ]]; then
   echo "[quality-gate] invalid --profile-only: $PROFILE_ONLY (expected flag)" >&2
+  exit 2
+fi
+
+for tristate_arg in \
+  "$CHANGED_BACKEND_INPUT" \
+  "$CHANGED_WEB_INPUT" \
+  "$CHANGED_DEPS_INPUT" \
+  "$CHANGED_MIGRATIONS_INPUT"; do
+  if [[ "$tristate_arg" != "true" && "$tristate_arg" != "false" && "$tristate_arg" != "auto" ]]; then
+    echo "[quality-gate] invalid changed flag: ${tristate_arg} (expected true|false|auto)" >&2
+    exit 2
+  fi
+done
+
+if [[ "$CI_DEDUPE" != "0" && "$CI_DEDUPE" != "1" ]]; then
+  echo "[quality-gate] invalid --ci-dedupe: $CI_DEDUPE (expected 0|1)" >&2
   exit 2
 fi
 
@@ -360,9 +416,13 @@ report_gate_failure() {
 ensure_parallel_batch() {
   local phase_name="$1"
   local batch_size="${#RUN_PIDS[@]}"
-  if ((batch_size < 2)); then
-    echo "[quality-gate] invalid batch configuration: phase '${phase_name}' has ${batch_size} task(s), expected >= 2 for parallel execution" >&2
-    exit 1
+  if ((batch_size <= 0)); then
+    echo "[quality-gate] phase '${phase_name}' no async tasks; skip wait"
+    return 0
+  fi
+  if ((batch_size == 1)); then
+    echo "[quality-gate] phase '${phase_name}' single async task; run without parallel requirement"
+    return 0
   fi
   echo "[quality-gate] phase '${phase_name}' parallel tasks=${batch_size}"
 }
@@ -461,6 +521,135 @@ run_sync_gate_with_heartbeat() {
   fi
 
   echo "[quality-gate] pass: $gate_name"
+}
+
+is_true() {
+  [[ "$1" == "true" ]]
+}
+
+detect_changed_files() {
+  local changed_files=""
+  local upstream_ref=""
+  local merge_base=""
+
+  CHANGED_DETECTION_RELIABLE="1"
+
+  if [[ "$MODE" == "pre-commit" ]]; then
+    CHANGED_DETECTION_SOURCE="staged"
+    if ! changed_files="$(git diff --name-only --cached 2>/dev/null)"; then
+      CHANGED_DETECTION_RELIABLE="0"
+      CHANGED_DETECTION_SOURCE="staged-unavailable"
+    fi
+  else
+    if upstream_ref="$(git rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' 2>/dev/null)"; then
+      if merge_base="$(git merge-base HEAD '@{upstream}' 2>/dev/null)"; then
+        CHANGED_DETECTION_SOURCE="upstream:${upstream_ref} (${merge_base}..HEAD)"
+        if ! changed_files="$(git diff --name-only "$merge_base" HEAD 2>/dev/null)"; then
+          CHANGED_DETECTION_RELIABLE="0"
+        fi
+      else
+        CHANGED_DETECTION_RELIABLE="0"
+      fi
+    else
+      if git rev-parse --verify HEAD~1 >/dev/null 2>&1; then
+        CHANGED_DETECTION_SOURCE="fallback:HEAD~1..HEAD"
+        if ! changed_files="$(git diff --name-only HEAD~1 HEAD 2>/dev/null)"; then
+          CHANGED_DETECTION_RELIABLE="0"
+        fi
+      else
+        CHANGED_DETECTION_RELIABLE="0"
+        CHANGED_DETECTION_SOURCE="upstream-and-fallback-unavailable"
+      fi
+    fi
+  fi
+
+  if [[ "$CHANGED_DETECTION_RELIABLE" != "1" ]]; then
+    CHANGED_FILE_LIST=""
+    return
+  fi
+
+  CHANGED_FILE_LIST="$changed_files"
+}
+
+match_changed_files() {
+  local pattern="$1"
+
+  if [[ -z "$CHANGED_FILE_LIST" ]]; then
+    return 1
+  fi
+
+  printf '%s\n' "$CHANGED_FILE_LIST" | rg -q "$pattern"
+}
+
+resolve_changed_flags() {
+  local auto_fallback="false"
+
+  detect_changed_files
+
+  if [[ "$CHANGED_DETECTION_RELIABLE" != "1" ]]; then
+    auto_fallback="true"
+    echo "[quality-gate] changed detection unavailable; conservative fallback=true for auto flags" >&2
+  fi
+
+  if [[ "$CHANGED_BACKEND_INPUT" == "auto" ]]; then
+    if [[ "$auto_fallback" == "true" ]]; then
+      CHANGED_BACKEND="true"
+    elif match_changed_files '^(apps/(api|worker|mcp)/|scripts/|infra/sql/|infra/config/|infra/compose/)'; then
+      CHANGED_BACKEND="true"
+    else
+      CHANGED_BACKEND="false"
+    fi
+  else
+    CHANGED_BACKEND="$CHANGED_BACKEND_INPUT"
+  fi
+
+  if [[ "$CHANGED_WEB_INPUT" == "auto" ]]; then
+    if [[ "$auto_fallback" == "true" ]]; then
+      CHANGED_WEB="true"
+    elif match_changed_files '^apps/web/'; then
+      CHANGED_WEB="true"
+    else
+      CHANGED_WEB="false"
+    fi
+  else
+    CHANGED_WEB="$CHANGED_WEB_INPUT"
+  fi
+
+  if [[ "$CHANGED_DEPS_INPUT" == "auto" ]]; then
+    if [[ "$auto_fallback" == "true" ]]; then
+      CHANGED_DEPS="true"
+    elif match_changed_files '(^|/)(pyproject\.toml|uv\.lock|requirements(\.txt)?|poetry\.lock|Pipfile(\.lock)?|package\.json|package-lock\.json|npm-shrinkwrap\.json|pnpm-lock\.yaml|yarn\.lock)$'; then
+      CHANGED_DEPS="true"
+    else
+      CHANGED_DEPS="false"
+    fi
+  else
+    CHANGED_DEPS="$CHANGED_DEPS_INPUT"
+  fi
+
+  if [[ "$CHANGED_MIGRATIONS_INPUT" == "auto" ]]; then
+    if [[ "$auto_fallback" == "true" ]]; then
+      CHANGED_MIGRATIONS="true"
+    elif match_changed_files '^infra/migrations/.*\.sql$'; then
+      CHANGED_MIGRATIONS="true"
+    else
+      CHANGED_MIGRATIONS="false"
+    fi
+  else
+    CHANGED_MIGRATIONS="$CHANGED_MIGRATIONS_INPUT"
+  fi
+
+  EFFECTIVE_BACKEND_CHANGED="false"
+  if is_true "$CHANGED_BACKEND" || is_true "$CHANGED_DEPS" || is_true "$CHANGED_MIGRATIONS"; then
+    EFFECTIVE_BACKEND_CHANGED="true"
+  fi
+
+  EFFECTIVE_WEB_CHANGED="false"
+  if is_true "$CHANGED_WEB" || is_true "$CHANGED_DEPS"; then
+    EFFECTIVE_WEB_CHANGED="true"
+  fi
+
+  echo "[quality-gate] changed flags: backend=${CHANGED_BACKEND}, web=${CHANGED_WEB}, deps=${CHANGED_DEPS}, migrations=${CHANGED_MIGRATIONS} effective_backend=${EFFECTIVE_BACKEND_CHANGED} effective_web=${EFFECTIVE_WEB_CHANGED} source=${CHANGED_DETECTION_SOURCE}"
 }
 
 run_profile_gate() {
@@ -606,10 +795,18 @@ run_pre_commit_mode() {
     "bash scripts/check_iac_entrypoint.sh ."
   run_async_gate "env_budget_guard" "env budget guard" \
     "python3 scripts/check_env_budget.py"
-  run_async_gate "web_lint" "frontend lint" \
-    "npm --prefix apps/web run lint"
-  run_async_gate "ruff_full" "backend lint (ruff full rules)" \
-    "uv run --with ruff ruff check apps scripts"
+  if is_true "$EFFECTIVE_WEB_CHANGED"; then
+    run_async_gate "web_lint" "frontend lint" \
+      "npm --prefix apps/web run lint"
+  else
+    echo "[quality-gate] skip: frontend lint (effective_web_changed=false)"
+  fi
+  if is_true "$EFFECTIVE_BACKEND_CHANGED"; then
+    run_async_gate "ruff_full" "backend lint (ruff full rules)" \
+      "uv run --with ruff ruff check apps scripts"
+  else
+    echo "[quality-gate] skip: backend lint (effective_backend_changed=false)"
+  fi
 
   ensure_parallel_batch "pre-commit/short-checks"
 
@@ -651,10 +848,22 @@ run_pre_push_mode() {
     "python3 scripts/check_structured_logs.py"
   run_async_gate "iac_entrypoint_guard" "iac entrypoint guard" \
     "bash scripts/check_iac_entrypoint.sh ."
-  run_async_gate "web_lint" "frontend lint" \
-    "npm --prefix apps/web run lint"
-  run_async_gate "ruff_full" "backend lint (ruff full rules)" \
-    "uv run --with ruff ruff check apps scripts"
+  if [[ "$CI_DEDUPE" == "1" ]]; then
+    echo "[quality-gate] skip: frontend lint (--ci-dedupe=1)"
+  elif is_true "$EFFECTIVE_WEB_CHANGED"; then
+    run_async_gate "web_lint" "frontend lint" \
+      "npm --prefix apps/web run lint"
+  else
+    echo "[quality-gate] skip: frontend lint (effective_web_changed=false)"
+  fi
+  if [[ "$CI_DEDUPE" == "1" ]]; then
+    echo "[quality-gate] skip: backend lint (ruff) (--ci-dedupe=1)"
+  elif is_true "$EFFECTIVE_BACKEND_CHANGED"; then
+    run_async_gate "ruff_full" "backend lint (ruff full rules)" \
+      "uv run --with ruff ruff check apps scripts"
+  else
+    echo "[quality-gate] skip: backend lint (effective_backend_changed=false)"
+  fi
 
   ensure_parallel_batch "pre-push/short-checks"
 
@@ -666,10 +875,22 @@ run_pre_push_mode() {
   echo "[quality-gate] phase=long-tests (parallel + heartbeat=${HEARTBEAT_SECONDS}s)"
   reset_async_buffers
 
-  run_async_gate "web_unit_tests" "web unit tests" \
-    "npm --prefix apps/web run test -- --coverage"
-  run_async_gate "python_tests_with_coverage" "python tests + total coverage gate (>=80%)" \
-    "PYTHONPATH=\"$PWD:$PWD/apps/worker\" DATABASE_URL='sqlite+pysqlite:///:memory:' uv run pytest apps/worker/tests apps/api/tests apps/mcp/tests -q -rA --cov=apps/worker/worker --cov=apps/api --cov=apps/mcp --cov-report=term-missing:skip-covered --cov-fail-under=80"
+  if [[ "$CI_DEDUPE" == "1" ]]; then
+    echo "[quality-gate] skip: web unit tests (--ci-dedupe=1)"
+  elif is_true "$EFFECTIVE_WEB_CHANGED"; then
+    run_async_gate "web_unit_tests" "web unit tests" \
+      "npm --prefix apps/web run test -- --coverage"
+  else
+    echo "[quality-gate] skip: web unit tests (effective_web_changed=false)"
+  fi
+  if [[ "$CI_DEDUPE" == "1" ]]; then
+    echo "[quality-gate] skip: python tests + total coverage (--ci-dedupe=1)"
+  elif is_true "$EFFECTIVE_BACKEND_CHANGED"; then
+    run_async_gate "python_tests_with_coverage" "python tests + total coverage gate (>=80%)" \
+      "PYTHONPATH=\"$PWD:$PWD/apps/worker\" DATABASE_URL='sqlite+pysqlite:///:memory:' uv run pytest apps/worker/tests apps/api/tests apps/mcp/tests -q -rA --cov=apps/worker/worker --cov=apps/api --cov=apps/mcp --cov-report=term-missing:skip-covered --cov-fail-under=80"
+  else
+    echo "[quality-gate] skip: python tests + total coverage (effective_backend_changed=false)"
+  fi
 
   ensure_parallel_batch "pre-push/long-tests"
 
@@ -681,10 +902,16 @@ run_pre_push_mode() {
   echo "[quality-gate] phase=coverage-core-gates (parallel)"
   reset_async_buffers
 
-  run_async_gate "coverage_worker_core_95" "worker core coverage gate (>=95%)" \
-    "uv run coverage report --include=\"*/apps/worker/worker/pipeline/orchestrator.py,*/apps/worker/worker/pipeline/policies.py,*/apps/worker/worker/pipeline/runner.py,*/apps/worker/worker/pipeline/types.py\" --show-missing --fail-under=95"
-  run_async_gate "coverage_api_core_95" "api core coverage gate (>=95%)" \
-    "uv run coverage report --include=\"*/apps/api/app/routers/ingest.py,*/apps/api/app/routers/jobs.py,*/apps/api/app/routers/subscriptions.py,*/apps/api/app/routers/videos.py,*/apps/api/app/services/jobs.py,*/apps/api/app/services/subscriptions.py,*/apps/api/app/services/videos.py\" --show-missing --fail-under=95"
+  if [[ "$CI_DEDUPE" == "1" ]]; then
+    echo "[quality-gate] skip: coverage core gates (--ci-dedupe=1)"
+  elif is_true "$EFFECTIVE_BACKEND_CHANGED"; then
+    run_async_gate "coverage_worker_core_95" "worker core coverage gate (>=95%)" \
+      "uv run coverage report --include=\"*/apps/worker/worker/pipeline/orchestrator.py,*/apps/worker/worker/pipeline/policies.py,*/apps/worker/worker/pipeline/runner.py,*/apps/worker/worker/pipeline/types.py\" --show-missing --fail-under=95"
+    run_async_gate "coverage_api_core_95" "api core coverage gate (>=95%)" \
+      "uv run coverage report --include=\"*/apps/api/app/routers/ingest.py,*/apps/api/app/routers/jobs.py,*/apps/api/app/routers/subscriptions.py,*/apps/api/app/routers/videos.py,*/apps/api/app/services/jobs.py,*/apps/api/app/services/subscriptions.py,*/apps/api/app/services/videos.py\" --show-missing --fail-under=95"
+  else
+    echo "[quality-gate] skip: coverage core gates (effective_backend_changed=false)"
+  fi
 
   ensure_parallel_batch "pre-push/coverage-core-gates"
 
@@ -693,17 +920,23 @@ run_pre_push_mode() {
     exit 1
   fi
 
-  echo "[quality-gate] phase=mutation-gate (heartbeat=${HEARTBEAT_SECONDS}s)"
-  if ! run_sync_gate_with_heartbeat "mutation_gate" "mutation gate" "run_mutation_gate"; then
-    echo "[quality-gate] pre-push failed in mutation-gate phase" >&2
-    exit 1
+  if is_true "$EFFECTIVE_BACKEND_CHANGED"; then
+    echo "[quality-gate] phase=mutation-gate (heartbeat=${HEARTBEAT_SECONDS}s)"
+    if ! run_sync_gate_with_heartbeat "mutation_gate" "mutation gate" "run_mutation_gate"; then
+      echo "[quality-gate] pre-push failed in mutation-gate phase" >&2
+      exit 1
+    fi
+  else
+    echo "[quality-gate] skip: mutation gate (effective_backend_changed=false)"
   fi
 
   echo "[quality-gate] all checks passed"
 }
 
 if [[ "$MODE" == "pre-commit" ]]; then
+  resolve_changed_flags
   run_pre_commit_mode
 else
+  resolve_changed_flags
   run_pre_push_mode
 fi

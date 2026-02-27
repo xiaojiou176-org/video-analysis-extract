@@ -217,6 +217,13 @@ uv run --with pytest --with playwright pytest apps/web/tests/e2e -q
 
 注：`scripts/check_test_assertions.py` 默认禁止 `toBeDefined()`；仅在特例场景下允许用注释标记 `allow-low-value-assertion: toBeDefined` 显式豁免。
 
+测试与门禁口径更新（2026-02）：
+
+- CI 预检拆分为 `preflight-fast` + `preflight-heavy`，多数 job 先依赖 fast 以减少起跑阻塞，最终由 aggregate gate 同时约束两者成功。
+- `quality-gate-pre-push` 在 `main/schedule` 采用 `--ci-dedupe 1` 并透传 `--changed-*` 标记，避免与独立 lint/unit/coverage 作业重复执行。
+- Web E2E 默认轻量化：trace 默认 `off`、video 默认 `retain-on-failure`，并仅在失败时上传重工件。
+- 测试分层主责明确：API 负责字段级契约断言，Web E2E 聚焦用户旅程，MCP 聚焦工具语义与路由动作。
+
 ## Git Hooks 与 pre-commit 协同（初始化与保养）
 
 默认执行链路（当前仓库真相）：

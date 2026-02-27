@@ -129,7 +129,7 @@ def test_notification_normalizers_return_expected_core_fields() -> None:
     )
 
     assert send_test["delivery_id"] == "delivery-1"
-    assert set_config["daily_digest_hour_utc"] == 8
+    assert set_config["enabled"] is True
 
 
 class _FakeMCP:
@@ -202,8 +202,10 @@ def test_subscriptions_manage_supports_list_upsert_remove() -> None:
 
 def test_notifications_manage_supports_get_set_send_daily_and_category_send() -> None:
     mcp = _FakeMCP()
+    calls: list[tuple[str, str]] = []
 
     def fake_api_call(method: str, path: str, **kwargs: Any) -> dict[str, Any]:
+        calls.append((method, path))
         if path == "/api/v1/notifications/config" and method == "GET":
             return {"enabled": True, "daily_digest_hour_utc": 8}
         if path == "/api/v1/notifications/config" and method == "PUT":
@@ -218,9 +220,7 @@ def test_notifications_manage_supports_get_set_send_daily_and_category_send() ->
 
     register_notification_tools(mcp, fake_api_call)
     assert mcp.tools["vd.notifications.manage"](action="get_config")["enabled"] is True
-    assert (
-        mcp.tools["vd.notifications.manage"](action="set_config", enabled=True)["enabled"] is True
-    )
+    assert mcp.tools["vd.notifications.manage"](action="set_config", enabled=True)["enabled"] is True
     assert mcp.tools["vd.notifications.manage"](action="send_test")["status"] == "sent"
     assert mcp.tools["vd.notifications.manage"](action="daily_send")["sent"] is True
     assert (
@@ -229,6 +229,13 @@ def test_notifications_manage_supports_get_set_send_daily_and_category_send() ->
         )["status"]
         == "sent"
     )
+    assert calls == [
+        ("GET", "/api/v1/notifications/config"),
+        ("PUT", "/api/v1/notifications/config"),
+        ("POST", "/api/v1/notifications/test"),
+        ("POST", "/api/v1/reports/daily/send"),
+        ("POST", "/api/v1/notifications/category/send"),
+    ]
 
 
 def test_notifications_manage_rejects_invalid_action_with_standard_payload() -> None:
