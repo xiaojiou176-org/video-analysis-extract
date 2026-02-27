@@ -254,9 +254,21 @@ def test_step_write_artifacts_renders_embedded_screenshots(tmp_path: Path) -> No
 
 
 def test_step_write_artifacts_low_evidence_mode_blocks_fabricated_details(tmp_path: Path) -> None:
+    template_path = tmp_path / "digest.md.mustache"
+    template_path.write_text(
+        "# {{title}}\n\n"
+        "## 这期讲了什么\n\n"
+        "{{summary}}\n\n"
+        "## 说明（低证据保护）\n\n"
+        "{{fallback_notes_markdown}}\n\n"
+        "## 说明（降级/缺失）\n\n"
+        "{{degradations_markdown}}\n",
+        encoding="utf-8",
+    )
     settings = Settings(
         pipeline_workspace_dir=str((tmp_path / "workspace").resolve()),
         pipeline_artifact_root=str((tmp_path / "artifact-root").resolve()),
+        digest_template_path=str(template_path.resolve()),
     )
     ctx = _build_ctx(tmp_path, settings=settings)
 
