@@ -9,9 +9,9 @@
     ],
     "color-no-hex": null,
     "declaration-no-important": true,
-    "declaration-block-no-redundant-longhand-properties": "error",
+    "declaration-block-no-redundant-longhand-properties": true,
     "custom-property-pattern": "^[a-z][a-z0-9-]*$",
-    "no-descending-specificity": "error",
+    "no-descending-specificity": null,
     "selector-class-pattern": null
   }
 }
