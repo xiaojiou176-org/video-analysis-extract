@@ -46,6 +46,9 @@ jobs:
               - 'apps/mcp/**'
               - 'packages/shared-contracts/**'
               - 'scripts/**'
+              - 'infra/config/**'
+              - 'infra/compose/**'
+              - 'infra/sql/**'
               - 'pyproject.toml'
               - 'uv.lock'
             web_changed:
@@ -766,6 +769,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     needs: [preflight-fast, changes]
+    if: ${{ github.event_name != 'pull_request' || needs.changes.outputs.web_changed == 'true' || needs.changes.outputs.deps_changed == 'true' }}
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -802,9 +806,6 @@ jobs:
             fi
           fi
 
-      - name: Install Vitest coverage provider
-        run: npm --prefix apps/web install --no-save @vitest/coverage-v8
-
       - name: Web unit tests (vitest + coverage gate)
         run: npm --prefix apps/web run test -- --coverage
 
@@ -825,6 +826,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     needs: [preflight-fast, changes]
+    if: ${{ github.event_name != 'pull_request' || needs.changes.outputs.backend_changed == 'true' || needs.changes.outputs.web_changed == 'true' || needs.changes.outputs.deps_changed == 'true' }}
     services:
       postgres:
         image: pgvector/pgvector:pg16
@@ -1311,6 +1313,17 @@ jobs:
             [[ "$migrations_changed" == "true" ]] && required_db_migration=1 || required_db_migration=0
             [[ "$backend_changed" == "true" ]] && required_backend_group=1 || required_backend_group=0
             [[ "$web_changed" == "true" ]] && required_web_group=1 || required_web_group=0
+            [[ "$backend_changed" == "true" ]] && required_api_real_smoke=1 || required_api_real_smoke=0
+            if [[ "$web_changed" == "true" || "$deps_changed" == "true" ]]; then
+              required_web_test_build=1
+            else
+              required_web_test_build=0
+            fi
+            if [[ "$backend_changed" == "true" || "$web_changed" == "true" || "$deps_changed" == "true" ]]; then
+              required_web_e2e=1
+            else
+              required_web_e2e=0
+            fi
             [[ "$deps_changed" == "true" ]] && required_deps_scan=1 || required_deps_scan=0
           fi
 
