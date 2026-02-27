@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import re
 import sys
 import types
 import uuid
@@ -259,13 +260,6 @@ def test_process_video_builds_force_idempotency_key_with_suffix(
     service.video_repo = _VideoRepoStub()  # type: ignore[assignment]
     service.jobs_repo = repo  # type: ignore[assignment]
 
-    class _FixedUUID:
-        hex = "forcehex123"
-
-    def _fake_uuid4() -> _FixedUUID:
-        return _FixedUUID()
-
-    monkeypatch.setattr("apps.api.app.services.videos.uuid4", _fake_uuid4)
     _install_temporal_modules(monkeypatch, client=_FakeClient())
 
     result = asyncio.run(
@@ -286,9 +280,13 @@ def test_process_video_builds_force_idempotency_key_with_suffix(
         overrides={"x": 1},
     )
     created = repo.created_calls[0]
-    assert created["idempotency_key"] == f"{expected_base_key}:force:forcehex123"
+    assert created["idempotency_key"].startswith(f"{expected_base_key}:force:")
+    assert re.fullmatch(
+        rf"{re.escape(expected_base_key)}:force:[0-9a-f]{{32}}",
+        created["idempotency_key"],
+    )
     assert created["force"] is True
-    assert result["idempotency_key"] == f"{expected_base_key}:force:forcehex123"
+    assert result["idempotency_key"] == created["idempotency_key"]
 
 
 @pytest.mark.parametrize(
