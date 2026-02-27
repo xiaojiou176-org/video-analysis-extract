@@ -1492,7 +1492,7 @@ jobs:
     timeout-minutes: 40
     if: >-
       always() &&
-      needs.aggregate-gate.result == 'success' &&
+      needs['aggregate-gate'].result == 'success' &&
       (github.event_name == 'schedule' || (github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/'))))
     env:
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
