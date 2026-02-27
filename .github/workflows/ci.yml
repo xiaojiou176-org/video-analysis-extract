@@ -1490,8 +1490,6 @@ jobs:
     needs: aggregate-gate
     runs-on: ubuntu-latest
     timeout-minutes: 40
-    if: >-
-      (github.event_name == 'schedule' || (github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/'))))
     env:
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
@@ -1501,7 +1499,28 @@ jobs:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
+      - name: Decide live smoke requirement for this context
+        id: live_smoke_context
+        run: |
+          run_live_smoke=0
+          if [[ "${{ github.event_name }}" == "schedule" ]]; then
+            run_live_smoke=1
+          elif [[ "${{ github.event_name }}" == "push" && "${{ github.ref }}" == "refs/heads/main" ]]; then
+            run_live_smoke=1
+          elif [[ "${{ github.event_name }}" == "push" && "${{ github.ref }}" == refs/heads/release/* ]]; then
+            run_live_smoke=1
+          fi
+
+          if [[ "$run_live_smoke" == "1" ]]; then
+            echo "run_live_smoke=true" >> "$GITHUB_OUTPUT"
+            echo "live smoke is required in this workflow context"
+          else
+            echo "run_live_smoke=false" >> "$GITHUB_OUTPUT"
+            echo "live smoke is optional in this workflow context; skipping live smoke steps"
+          fi
+
       - name: Validate required live smoke secrets
+        if: steps.live_smoke_context.outputs.run_live_smoke == 'true'
         env:
           HAS_GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY != '' }}
           HAS_RESEND_API_KEY: ${{ secrets.RESEND_API_KEY != '' }}
@@ -1521,6 +1540,7 @@ jobs:
           fi
 
       - name: Run live smoke
+        if: steps.live_smoke_context.outputs.run_live_smoke == 'true'
         run: |
           scripts/e2e_live_smoke.sh \
             --api-base-url "${{ secrets.LIVE_SMOKE_API_BASE_URL }}" \
