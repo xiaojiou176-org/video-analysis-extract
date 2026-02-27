@@ -41,3 +41,18 @@ def test_subscriptions_delete_button(page: Page) -> None:
     row.get_by_role("button", name="确认删除").click()
 
     expect(page.locator("tbody tr", has_text=source_value)).to_have_count(0)
+
+
+def test_subscriptions_batch_update_category(page: Page) -> None:
+    source_value = f"https://youtube.com/@vd-batch-{uuid4().hex[:8]}"
+    page.goto("/subscriptions", wait_until="domcontentloaded")
+    _create_subscription_via_form(page, source_value)
+
+    row = page.locator("tbody tr", has_text=source_value)
+    expect(row).to_be_visible()
+    row.get_by_role("checkbox").check()
+    page.get_by_label("批量设分类").select_option("ops")
+    page.get_by_role("button", name="应用").click()
+
+    expect(page.get_by_text("已将 1 条订阅移至分类「ops」")).to_be_visible()
+    expect(page.locator("tbody tr", has_text=source_value)).to_contain_text("ops")

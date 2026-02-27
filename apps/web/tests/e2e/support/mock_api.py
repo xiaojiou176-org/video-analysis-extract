@@ -71,6 +71,7 @@ class MockApiState:
                 "poll_ingest": [],
                 "process_video": [],
                 "upsert_subscription": [],
+                "batch_update_subscription_category": [],
                 "delete_subscription": [],
                 "update_notification_config": [],
                 "send_notification_test": [],
@@ -171,9 +172,20 @@ def _mock_handler(state: MockApiState) -> type[BaseHTTPRequestHandler]:
         def log_message(self, format: str, *args: Any) -> None:
             return
 
+        def _set_cors_headers(self) -> None:
+            origin = self.headers.get("Origin")
+            if origin:
+                self.send_header("Access-Control-Allow-Origin", origin)
+                self.send_header("Vary", "Origin")
+            else:
+                self.send_header("Access-Control-Allow-Origin", "*")
+            self.send_header("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS")
+            self.send_header("Access-Control-Allow-Headers", "Content-Type,Authorization")
+
         def _send_json(self, status: int, payload: Any) -> None:
             body = json.dumps(payload).encode("utf-8")
             self.send_response(status)
+            self._set_cors_headers()
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
@@ -184,6 +196,7 @@ def _mock_handler(state: MockApiState) -> type[BaseHTTPRequestHandler]:
         ) -> None:
             raw = body.encode("utf-8")
             self.send_response(status)
+            self._set_cors_headers()
             self.send_header("Content-Type", content_type)
             self.send_header("Content-Length", str(len(raw)))
             self.end_headers()
@@ -191,6 +204,7 @@ def _mock_handler(state: MockApiState) -> type[BaseHTTPRequestHandler]:
 
         def _send_binary(self, status: int, body: bytes, content_type: str) -> None:
             self.send_response(status)
+            self._set_cors_headers()
             self.send_header("Content-Type", content_type)
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
@@ -198,8 +212,19 @@ def _mock_handler(state: MockApiState) -> type[BaseHTTPRequestHandler]:
 
         def _send_no_content(self) -> None:
             self.send_response(HTTPStatus.NO_CONTENT)
+            self._set_cors_headers()
             self.send_header("Content-Length", "0")
             self.end_headers()
+
+        def do_OPTIONS(self) -> None:
+            parsed = urlparse(self.path)
+            self._record_http(
+                method="OPTIONS",
+                path=parsed.path,
+                query=parsed.query,
+                status=int(HTTPStatus.NO_CONTENT),
+            )
+            self._send_no_content()
 
         def _read_json(self) -> dict[str, Any]:
             raw_size = self.headers.get("Content-Length", "0")
@@ -527,6 +552,38 @@ def _mock_handler(state: MockApiState) -> type[BaseHTTPRequestHandler]:
                     payload=payload,
                 )
                 self._send_json(HTTPStatus.OK, {"subscription": subscription, "created": True})
+                return
+
+            if path == "/api/v1/subscriptions/batch-update-category":
+                state.record("batch_update_subscription_category", payload)
+                ids = payload.get("ids")
+                category = payload.get("category")
+                if not isinstance(ids, list) or not isinstance(category, str) or not category:
+                    self._record_http(
+                        method="POST",
+                        path=path,
+                        query=parsed.query,
+                        status=int(HTTPStatus.BAD_REQUEST),
+                        payload=payload,
+                    )
+                    self._send_json(HTTPStatus.BAD_REQUEST, {"detail": "invalid batch update payload"})
+                    return
+                with state.lock:
+                    id_set = {str(item) for item in ids}
+                    updated = 0
+                    for item in state.subscriptions:
+                        if item.get("id") in id_set:
+                            item["category"] = category
+                            item["updated_at"] = utc_now()
+                            updated += 1
+                self._record_http(
+                    method="POST",
+                    path=path,
+                    query=parsed.query,
+                    status=int(HTTPStatus.OK),
+                    payload=payload,
+                )
+                self._send_json(HTTPStatus.OK, {"updated": updated})
                 return
 
             if path == "/api/v1/notifications/test":
