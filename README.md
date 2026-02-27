@@ -226,10 +226,10 @@ uv run --with pytest --with playwright pytest apps/web/tests/e2e -q
 
 测试与门禁口径更新（2026-02）：
 
-- 远程 CI 成本治理：触发或重跑 GitHub Actions 前，必须先本地跑通 `./scripts/quality_gate.sh --mode pre-push --heartbeat-seconds 20 --mutation-min-score 0.60 --profile ci --profile live-smoke`。
+- 远程 CI 成本治理：触发或重跑 GitHub Actions 前，必须先本地跑通 `./scripts/quality_gate.sh --mode pre-push --heartbeat-seconds 20 --mutation-min-score 0.60 --profile ci --profile live-smoke --skip-mutation 1`。
 - 远程失败后必须先本地复现与修复，再触发下一次远程运行；禁止连续重跑碰运气。
 - CI 预检拆分为 `preflight-fast` + `preflight-heavy`，多数 job 先依赖 fast 以减少起跑阻塞，最终由 aggregate gate 同时约束两者成功。
-- `quality-gate-pre-push` 在 `main/schedule` 采用 `--ci-dedupe 1` 并透传 `--changed-*` 标记，避免与独立 lint/unit/coverage 作业重复执行。
+- `quality-gate-pre-push` 在 CI 全事件（PR/push/schedule）执行并透传 `--changed-*` 标记，作为远端最重门禁（含 mutation）；独立 lint/unit/coverage 作业提供并行交叉验证。
 - 本地 `pre-push` 新增硬门禁：`api cors preflight smoke (OPTIONS DELETE)` 与 `contract diff local gate (base vs head)`，先于远程 CI 拦截跨端链路与契约回归。
 - 本地 `pre-push` 进一步对齐远端 `preflight-fast` + `web-test-build`：`check_ci_docs_parity`、`docs env canonical guard`、`provider residual guard`、`worker line limits`、`schema parity`、`web design token guard`、`web build`、`web button coverage`。
 - Web E2E 默认轻量化：trace 默认 `off`、video 默认 `retain-on-failure`，并仅在失败时上传重工件。

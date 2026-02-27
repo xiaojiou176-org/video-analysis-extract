@@ -11,6 +11,7 @@ echo "[pre-push] quality gate (mode=pre-push)"
   --profile ci \
   --profile live-smoke \
   --heartbeat-seconds 20 \
-  --mutation-min-score 0.60
+  --mutation-min-score 0.60 \
+  --skip-mutation 1
 
 echo "[pre-push] passed"

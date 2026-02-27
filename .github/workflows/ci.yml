@@ -21,6 +21,7 @@ permissions:
 jobs:
   changes:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     outputs:
       backend_changed: ${{ github.event_name == 'pull_request' && steps.filter.outputs.backend_changed || steps.non_pr_defaults.outputs.backend_changed }}
       web_changed: ${{ github.event_name == 'pull_request' && steps.filter.outputs.web_changed || steps.non_pr_defaults.outputs.web_changed }}
@@ -61,13 +62,16 @@ jobs:
         if: ${{ github.event_name != 'pull_request' }}
         id: non_pr_defaults
         run: |
-          echo "backend_changed=true" >> "$GITHUB_OUTPUT"
-          echo "web_changed=true" >> "$GITHUB_OUTPUT"
-          echo "deps_changed=true" >> "$GITHUB_OUTPUT"
-          echo "migrations_changed=true" >> "$GITHUB_OUTPUT"
+          {
+            echo "backend_changed=true"
+            echo "web_changed=true"
+            echo "deps_changed=true"
+            echo "migrations_changed=true"
+          } >> "$GITHUB_OUTPUT"
 
   preflight-fast:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -174,6 +178,7 @@ jobs:
 
   preflight-heavy:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     needs: preflight-fast
     steps:
       - name: Checkout
@@ -205,6 +210,7 @@ jobs:
 
   profile-governance:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     if: ${{ github.event_name == 'schedule' || (github.event_name == 'push' && github.ref == 'refs/heads/main') }}
     needs: preflight-heavy
     strategy:
@@ -236,7 +242,7 @@ jobs:
 
   quality-gate-pre-push:
     runs-on: ubuntu-latest
-    if: ${{ github.event_name == 'schedule' || (github.event_name == 'push' && github.ref == 'refs/heads/main') }}
+    timeout-minutes: 90
     needs: [preflight-heavy, changes]
     steps:
       - name: Checkout
@@ -279,6 +285,7 @@ jobs:
 
   db-migration-smoke:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     needs: [preflight-fast, changes]
     if: ${{ github.event_name != 'pull_request' || needs.changes.outputs.migrations_changed == 'true' }}
     services:
@@ -314,12 +321,13 @@ jobs:
             fi
             sleep 1
           done
-          for migration in $(ls infra/migrations/*.sql | sort); do
+          for migration in $(find infra/migrations -maxdepth 1 -type f -name '*.sql' | sort); do
             psql "postgresql://postgres:postgres@127.0.0.1:5432/video_analysis_ci" -v ON_ERROR_STOP=1 -f "$migration"
           done
 
   python-tests:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     needs: [preflight-fast, changes]
     if: ${{ github.event_name != 'pull_request' || needs.changes.outputs.backend_changed == 'true' }}
     services:
@@ -464,6 +472,7 @@ jobs:
 
   api-real-smoke:
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     needs: [preflight-fast, changes]
     services:
       postgres:
@@ -519,7 +528,7 @@ jobs:
             fi
             sleep 1
           done
-          for migration in $(ls infra/migrations/*.sql | sort); do
+          for migration in $(find infra/migrations -maxdepth 1 -type f -name '*.sql' | sort); do
             psql "postgresql://postgres:postgres@127.0.0.1:5432/video_analysis_api_smoke" -v ON_ERROR_STOP=1 -f "$migration"
           done
 
@@ -597,6 +606,7 @@ jobs:
 
   pr-llm-real-smoke:
     runs-on: ubuntu-latest
+    timeout-minutes: 35
     needs: [preflight-fast, changes]
     if: >-
       github.event_name == 'pull_request' &&
@@ -671,6 +681,7 @@ jobs:
 
   web-test-build:
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     needs: [preflight-fast, changes]
     steps:
       - name: Checkout
@@ -729,6 +740,7 @@ jobs:
 
   web-e2e:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     needs: [preflight-fast, changes]
     services:
       postgres:
@@ -811,7 +823,7 @@ jobs:
             fi
             sleep 1
           done
-          for migration in $(ls infra/migrations/*.sql | sort); do
+          for migration in $(find infra/migrations -maxdepth 1 -type f -name '*.sql' | sort); do
             psql "postgresql://postgres:postgres@127.0.0.1:5432/video_analysis_web_e2e" -v ON_ERROR_STOP=1 -f "$migration"
           done
 
@@ -987,6 +999,7 @@ jobs:
 
   external-playwright-smoke:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     if: ${{ github.event_name == 'schedule' || (github.event_name == 'push' && github.ref == 'refs/heads/main') }}
     needs: preflight-fast
     steps:
@@ -1049,6 +1062,7 @@ jobs:
 
   dependency-vuln-scan:
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     needs: [preflight-fast, changes]
     if: ${{ github.event_name != 'pull_request' || needs.changes.outputs.deps_changed == 'true' }}
     steps:
@@ -1121,6 +1135,7 @@ jobs:
 
   aggregate-gate:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     if: always()
     needs:
       - changes
@@ -1253,6 +1268,7 @@ jobs:
 
   nightly-flaky-python:
     runs-on: ubuntu-latest
+    timeout-minutes: 40
     if: ${{ github.event_name == 'schedule' }}
     needs: preflight-fast
     steps:
@@ -1305,6 +1321,7 @@ jobs:
 
   nightly-flaky-web-e2e:
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     if: ${{ github.event_name == 'schedule' }}
     needs: preflight-fast
     strategy:
@@ -1370,6 +1387,7 @@ jobs:
   autofix-dry-run:
     name: autofix-dry-run
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     needs: [python-tests, web-e2e]
     if: ${{ always() && (needs.python-tests.result == 'failure' || needs.web-e2e.result == 'failure') }}
     steps:
@@ -1399,6 +1417,7 @@ jobs:
   live-smoke:
     needs: aggregate-gate
     runs-on: ubuntu-latest
+    timeout-minutes: 40
     if: >-
       (github.event_name == 'schedule' || (github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/'))))
     env:
@@ -1451,6 +1470,7 @@ jobs:
 
   ci-final-gate:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     if: always()
     needs:
       - aggregate-gate
@@ -1512,6 +1532,7 @@ jobs:
           echo "final gate passed"
   backend-lint:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     needs: [preflight-fast, changes]
     if: ${{ github.event_name != 'pull_request' || needs.changes.outputs.backend_changed == 'true' }}
     steps:
@@ -1547,6 +1568,7 @@ jobs:
 
   frontend-lint:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     needs: [preflight-fast, changes]
     if: ${{ github.event_name != 'pull_request' || needs.changes.outputs.web_changed == 'true' }}
     steps:

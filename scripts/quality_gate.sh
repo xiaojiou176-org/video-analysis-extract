@@ -13,6 +13,7 @@ CHANGED_WEB_INPUT="auto"
 CHANGED_DEPS_INPUT="auto"
 CHANGED_MIGRATIONS_INPUT="auto"
 CI_DEDUPE="0"
+SKIP_MUTATION="0"
 CHANGED_BACKEND="true"
 CHANGED_WEB="true"
 CHANGED_DEPS="true"
@@ -28,7 +29,7 @@ usage() {
   cat <<'USAGE'
 Usage:
   scripts/quality_gate.sh [--mode pre-commit|pre-push] [--heartbeat-seconds N] [--mutation-min-score N] [--profile NAME ...] [--profile-only] \
-    [--changed-backend true|false|auto] [--changed-web true|false|auto] [--changed-deps true|false|auto] [--changed-migrations true|false|auto] [--ci-dedupe 0|1]
+    [--changed-backend true|false|auto] [--changed-web true|false|auto] [--changed-deps true|false|auto] [--changed-migrations true|false|auto] [--ci-dedupe 0|1] [--skip-mutation 0|1]
   scripts/quality_gate.sh --final-check [--skip-prepush] [--heartbeat-seconds N] [--mutation-min-score N]
 
 Modes:
@@ -47,6 +48,7 @@ Flags:
   --changed-deps true|false|auto       Dependency change hint (default: auto).
   --changed-migrations true|false|auto Migration change hint (default: auto).
   --ci-dedupe 0|1  Pre-push only: when 1, skip checks covered by standalone CI jobs.
+  --skip-mutation 0|1  Pre-push only: when 1, skip local mutation gate (CI remains source of truth).
   --final-check    Shortcut to run scripts/env/final_governance_check.sh.
   --skip-prepush   Used with --final-check to skip final pre-push phase.
 
@@ -102,6 +104,10 @@ while (($# > 0)); do
       CI_DEDUPE="${2:-}"
       shift 2
       ;;
+    --skip-mutation)
+      SKIP_MUTATION="${2:-}"
+      shift 2
+      ;;
     --final-check)
       FINAL_CHECK="1"
       shift
@@ -155,6 +161,11 @@ done
 
 if [[ "$CI_DEDUPE" != "0" && "$CI_DEDUPE" != "1" ]]; then
   echo "[quality-gate] invalid --ci-dedupe: $CI_DEDUPE (expected 0|1)" >&2
+  exit 2
+fi
+
+if [[ "$SKIP_MUTATION" != "0" && "$SKIP_MUTATION" != "1" ]]; then
+  echo "[quality-gate] invalid --skip-mutation: $SKIP_MUTATION (expected 0|1)" >&2
   exit 2
 fi
 
@@ -1258,7 +1269,9 @@ run_pre_push_mode() {
     exit 1
   fi
 
-  if is_true "$EFFECTIVE_BACKEND_CHANGED"; then
+  if [[ "$SKIP_MUTATION" == "1" ]]; then
+    echo "[quality-gate] skip: mutation gate (--skip-mutation=1)"
+  elif is_true "$EFFECTIVE_BACKEND_CHANGED"; then
     echo "[quality-gate] phase=mutation-gate (heartbeat=${HEARTBEAT_SECONDS}s)"
     if ! run_sync_gate_with_heartbeat "mutation_gate" "mutation gate" "run_mutation_gate"; then
       echo "[quality-gate] pre-push failed in mutation-gate phase" >&2

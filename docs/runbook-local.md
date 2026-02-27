@@ -76,7 +76,8 @@ pre-commit install --hook-type pre-commit --hook-type commit-msg --hook-type pre
 
 - `quality_gate.sh` 支持 `--changed-backend|web|deps|migrations` 与 `--ci-dedupe`。
 - pre-commit 的 `auto` 使用 staged diff；pre-push 的 `auto` 优先使用 upstream merge-base diff，失败回退 `HEAD~1..HEAD`，无法可靠识别时保守回退为全量检查。
-- 在 CI 的 dedupe 模式中，`quality-gate-pre-push` 主要承担治理类门禁与 mutation（后端变更命中时），lint/unit/coverage 由独立 CI job 负责。
+- 本地 pre-push 默认使用 `--skip-mutation 1` 做轻量化分层治理；mutation 保留给远端 CI 执行。
+- 在 CI 的 dedupe 模式中，`quality-gate-pre-push` 作为远端最重门禁执行（后端变更命中时含 mutation），lint/unit/coverage 由独立 CI job 并行交叉验证。
 - 本地 pre-push 会额外执行 `api cors preflight smoke (OPTIONS DELETE)` 与 `contract diff local gate (base vs head)`，用于在推送前发现跨端 CORS 与接口契约回归。
 - 成本治理约束：重跑远程 CI 前，必须先本地通过 pre-push；若远程失败，先本地复现修复再重跑，禁止连续重跑碰运气。
 
