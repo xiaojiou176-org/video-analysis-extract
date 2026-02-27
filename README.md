@@ -40,7 +40,7 @@
 
 - `bootstrap_full_stack.sh` 默认会拉起 core services（Postgres/Redis/Temporal）和 reader stack（Miniflux/Nextflux）。
 - `smoke_full_stack.sh` 默认会校验 reader stack，并执行一次 `AI Feed -> Miniflux` 回写检查。
-- 若你临时不想检查 reader：`FULL_STACK_REQUIRE_READER=0 ./scripts/smoke_full_stack.sh`
+- 若你临时不想检查 reader：`./scripts/smoke_full_stack.sh --require-reader 0`
 
 ## IaC 与标准环境（AI 必须）
 
@@ -281,7 +281,7 @@ pre-commit run --all-files
   触发表达式与 CI 一致：`pull_request && same-repo-pr && GEMINI_API_KEY != ''`。
 - 若要复用外部 Web 实例，可用：`WEB_BASE_URL='http://127.0.0.1:3000' uv run --with pytest --with playwright pytest apps/web/tests/e2e -q`。
 - PR 不强制 `live-smoke`；`main` push 与 nightly schedule 强制 `live-smoke=success`。
-- `live-smoke` 为真实 LLM/provider 链路，CI 需要：`GEMINI_API_KEY`、`RESEND_API_KEY`、`RESEND_FROM_EMAIL`、`YOUTUBE_API_KEY`、`LIVE_SMOKE_API_BASE_URL`。
+- `live-smoke` 为真实 LLM/provider 链路，CI 需要：`GEMINI_API_KEY`、`RESEND_API_KEY`、`RESEND_FROM_EMAIL`、`YOUTUBE_API_KEY`，并通过 `--api-base-url` 传入目标 API 地址。
 - `scripts/smoke_full_stack.sh` 是本地联调用 smoke，不等同于 CI 强制 `live-smoke` 门禁。
 - 两类真实 smoke 的本地复现命令见 `docs/testing.md` 的“本地复现两类真实 Smoke（CI 同口径）”。
 
@@ -393,15 +393,15 @@ pre-commit run --all-files
 常用参数：
 
 ```bash
-OPS_DAILY_LOCAL_HOUR=9 \
-OPS_DAILY_TIMEZONE=Asia/Shanghai \
-OPS_NOTIFICATION_INTERVAL_MINUTES=5 \
-OPS_NOTIFICATION_RETRY_BATCH_LIMIT=100 \
-OPS_CANARY_INTERVAL_HOURS=1 \
-OPS_CANARY_TIMEOUT_SECONDS=8 \
-OPS_CLEANUP_INTERVAL_HOURS=6 \
-OPS_CLEANUP_OLDER_THAN_HOURS=24 \
-./scripts/start_ops_workflows.sh
+./scripts/start_ops_workflows.sh \
+  --daily-local-hour 9 \
+  --daily-timezone Asia/Shanghai \
+  --notification-interval-minutes 5 \
+  --notification-retry-batch-limit 100 \
+  --canary-interval-hours 1 \
+  --canary-timeout-seconds 8 \
+  --cleanup-interval-hours 6 \
+  --cleanup-older-than-hours 24
 ```
 
 完整参数说明见 `docs/runbook-local.md`。

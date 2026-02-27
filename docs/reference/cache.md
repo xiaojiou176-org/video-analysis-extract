@@ -86,23 +86,16 @@
 通过常驻 ops 启动脚本接入 cleanup（推荐）：
 
 ```bash
-OPS_CLEANUP_INTERVAL_HOURS=6 \
-OPS_CLEANUP_OLDER_THAN_HOURS=24 \
-./scripts/start_ops_workflows.sh
+./scripts/start_ops_workflows.sh \
+  --cleanup-interval-hours 6 \
+  --cleanup-older-than-hours 24
 ```
 
-Batch A 口径更新：
+可选缓存保留参数（CLI）：
 
-- `start_ops_workflows.sh` 的 workflow-id / run-once / show-hints / dry-run /
-  timezone-offset 控制项已从环境变量迁移为 CLI flags。
-- 清理策略相关的运行参数（例如 `OPS_CLEANUP_INTERVAL_HOURS`、
-  `OPS_CLEANUP_OLDER_THAN_HOURS`、`OPS_CLEANUP_CACHE_*`）仍保留环境变量覆盖能力。
-
-可选缓存保留参数：
-
-- `OPS_CLEANUP_CACHE_OLDER_THAN_HOURS`：按文件年龄清理 cache。
-- `OPS_CLEANUP_CACHE_MAX_SIZE_MB`：清理后按大小阈值继续淘汰最旧文件。
-- `OPS_CLEANUP_WORKSPACE_DIR` / `OPS_CLEANUP_CACHE_DIR`：覆盖默认目录。
+- `--cleanup-cache-older-than-hours`：按文件年龄清理 cache。
+- `--cleanup-cache-max-size-mb`：清理后按大小阈值继续淘汰最旧文件。
+- `--cleanup-workspace-dir` / `--cleanup-cache-dir`：覆盖默认目录。
 
 ## Operational Notes
 

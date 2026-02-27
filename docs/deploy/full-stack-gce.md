@@ -161,8 +161,6 @@ export DATABASE_URL='postgresql+psycopg://postgres:YOUR_DB_PASS@127.0.0.1:5432/v
 # 时间节点
 export TEMPORAL_TARGET_HOST='127.0.0.1:7233'
 
-# Web 端口（不与 reader stack 冲突）
-export WEB_PORT='3001'
 export NEXT_PUBLIC_API_BASE_URL='https://YOUR_DOMAIN'
 
 # Gemini

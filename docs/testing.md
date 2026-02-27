@@ -17,7 +17,7 @@
 - 测试配置采用 `core + profile overlay`：
   - core：`.env`
   - overlay：`env/profiles/reader.env`（reader profile 模板，仅 reader 相关 smoke）
-  - profile：`PROFILE=local|gce`
+  - profile：通过脚本参数 `--profile local|gce` 选择运行画像
 - 密钥只允许来自 `.env` 或进程环境注入（CI secrets / 当前 shell export）。
 - 禁止把 shell 登录配置作为测试密钥来源。
 - 默认最小变量集沿用 `ENVIRONMENT.md` 的 Shared Core；涉及真实 provider 链路时，再追加对应 secrets。
@@ -33,7 +33,7 @@
 - `aggregate-gate`：汇总 `preflight + 12` 个核心作业（`profile-governance` / `quality-gate-pre-push` / `db-migration-smoke` / `python-tests` / `api-real-smoke` / `pr-llm-real-smoke` / `backend-lint` / `frontend-lint` / `web-test-build` / `web-e2e` / `external-playwright-smoke` / `dependency-vuln-scan`）；`pr-llm-real-smoke` 始终允许 `success/skipped`，且 `profile-governance` / `quality-gate-pre-push` / `external-playwright-smoke` 在 PR 上允许 `skipped`，在 `push(main)` / nightly `schedule` 必须为 `success`。
 - `autofix-dry-run`：依赖 `python-tests` + `web-e2e`，仅在两者任一失败时运行（读取 `.runtime-cache` 诊断工件）。
 - `nightly-flaky-python` + `nightly-flaky-web-e2e`：仅 nightly schedule 触发，执行重复运行策略用于发现 flaky。
-- `live-smoke`：依赖 `aggregate-gate`，在 `main` push / nightly schedule 必跑；执行真实 LLM + 真实外部视频 URL（YouTube/Bilibili）链路。Batch B 后建议通过 CLI 传参（如 `--api-base-url`）；若未传则按脚本默认回落到 `http://127.0.0.1:${API_PORT:-8000}`。缺少任一必需 secret 会直接失败（不再跳过放行）。
+- `live-smoke`：依赖 `aggregate-gate`，在 `main` push / nightly schedule 必跑；执行真实 LLM + 真实外部视频 URL（YouTube/Bilibili）链路。运行参数统一使用 CLI 传参（如 `--api-base-url`）；未传时默认值回落到 `http://127.0.0.1:8000`。缺少任一必需 secret 会直接失败（不再跳过放行）。
 - `ci-final-gate`：最终门禁；始终检查 `aggregate-gate`，并在 nightly 强制 `nightly-flaky-*` 成功，在 `main` push / nightly schedule 强制 `live-smoke` 成功且不得为 `skipped`。
 
 ## 第二批提速（PR 按改动范围执行 + CI 去重）
@@ -110,10 +110,10 @@ Live 诊断与执行策略（本地/CI 一致）：
 - `YOUTUBE_API_KEY` 失效修复：`e2e_live_smoke.sh` 会按 `.env` → 当前 shell 环境变量自动探测可用 key，并在修复成功后回写 `.env`（日志仅展示脱敏 key 片段）。
 - 若所有来源都无效：脚本直接失败，并输出“需要用户提供有效key”。
 - 失败分类：诊断 JSON 必须携带 `failure_kind`，取值为 `code_logic_error` 或 `network_or_environment_timeout`。
-- `OFFLINE_FALLBACK` 口径（去除假通过）：
-  - `scripts/smoke_full_stack.sh` 的脚本内默认值为 `OFFLINE_FALLBACK=1`（仅当环境未提供该变量时生效）。
-  - 仓库提供的 `local` / `ci` / `live-smoke` profile 会覆盖为 `OFFLINE_FALLBACK=0`，因此按标准 profile 执行时是 fail-fast（核心服务或 reader 栈异常立即失败）。
-  - 当最终生效值为 `OFFLINE_FALLBACK=1` 且命中 `.runtime-cache/full-stack/offline-fallback.flag` 时，`smoke_full_stack.sh` 会跳过 reader checks 并输出 degraded 信息。
+- `--offline-fallback` 口径（去除假通过）：
+  - `scripts/smoke_full_stack.sh` 默认 `--offline-fallback 1`。
+  - 标准 `local` / `ci` / `live-smoke` profile 的执行建议显式传 `--offline-fallback 0`，保持 fail-fast（核心服务或 reader 栈异常立即失败）。
+  - 当显式启用 `--offline-fallback 1` 且命中 `.runtime-cache/full-stack/offline-fallback.flag` 时，`smoke_full_stack.sh` 会跳过 reader checks 并输出 degraded 信息。
   - 降级路径不改变 `e2e_live_smoke` 的失败分类枚举；`failure_kind` 仍仅使用上述两类值。
 - 长任务可观测：live 脚本输出 heartbeat 与 phase 进度日志（`phase=short_tests` / `phase=long_tests`）。
 - 顺序规则：先 short tests 再 long tests，再执行 `phase=teardown`（仅做安全清理，不做破坏性操作）。

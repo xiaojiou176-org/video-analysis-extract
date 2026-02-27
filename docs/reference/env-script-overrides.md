@@ -1,136 +1,227 @@
-# Script Env Overrides Reference
+# Script Runtime Overrides (CLI-First)
 
-本页收纳脚本层环境变量全集（从历史 `.env.example` 脚本区块迁移而来）。
+本页是脚本运行参数的唯一参考口径。
 
-使用原则：
+原则：
 
-- 新手启动优先使用 `.env.example` 最小模板。
-- 仅在需要覆盖脚本默认行为时，再设置本文变量。
-- 推荐临时按命令注入（`VAR=value ./scripts/xxx.sh`），避免长期污染 `.env`。
+- 运行参数优先使用 CLI flags。
+- `.env` 仅保留核心运行配置与密钥，不承载脚本行为开关。
+- 如需覆盖默认值，优先在命令行一次性传参。
 
-## Daily Digest Script (`scripts/run_daily_digest.sh`)
+## Daily Digest (`scripts/run_daily_digest.sh`)
 
-This script no longer consumes `DIGEST_*` env vars.
-Use CLI flags instead (`--date`, `--channel`, `--dry-run`, `--force`, `--to-email`, `--fallback-enabled`, `--api-base-url`).
+使用 CLI flags：
 
-## Live Smoke Script (`scripts/e2e_live_smoke.sh`)
+- `--date`
+- `--channel`
+- `--dry-run`
+- `--force`
+- `--to-email`
+- `--fallback-enabled`
+- `--api-base-url`
 
-- `LIVE_SMOKE_REQUIRE_API` (default: `1`)
-- `LIVE_SMOKE_REQUIRE_SECRETS` (default: `0`)
-- `LIVE_SMOKE_COMPUTER_USE_STRICT` (default: `1`)
-- `LIVE_SMOKE_COMPUTER_USE_SKIP` (default: `0`)
-- `LIVE_SMOKE_COMPUTER_USE_SKIP_REASON` (required when skip=1)
-- `YOUTUBE_SMOKE_URL` (default: `https://www.youtube.com/watch?v=dQw4w9WgXcQ`)
+迁移示例：
 
-Batch B 口径：以下参数已切换为 CLI 优先（legacy env 仅兼容，不建议继续配置）：
+```bash
+# 旧：通过环境变量覆盖
+# 新：直接传 flag
+./scripts/run_daily_digest.sh --date 2026-02-27 --to-email you@example.com --api-base-url http://127.0.0.1:8000
+```
 
-- `LIVE_SMOKE_API_BASE_URL` -> `--api-base-url`
-- `LIVE_SMOKE_TIMEOUT_SECONDS` -> `--timeout-seconds`
-- `LIVE_SMOKE_POLL_INTERVAL_SECONDS` -> `--poll-interval-seconds`
-- `LIVE_SMOKE_HEARTBEAT_SECONDS` -> `--heartbeat-seconds`
-- `LIVE_SMOKE_HEALTH_PATH` -> `--health-path`
-- `LIVE_SMOKE_EXTERNAL_PROBE_TIMEOUT_SECONDS` -> `--external-probe-timeout-seconds`
-- `LIVE_SMOKE_MAX_RETRIES` -> `--max-retries`
-- `LIVE_SMOKE_DIAGNOSTICS_JSON` -> `--diagnostics-json`
-- `LIVE_SMOKE_COMPUTER_USE_CMD` -> `--computer-use-cmd`
-- `BILIBILI_SMOKE_URL` -> `--bilibili-url`
+## Failure Alerts (`scripts/run_failure_alerts.sh`)
 
-## PR Real LLM Smoke (`scripts/smoke_llm_real_local.sh`)
+使用 CLI flags：
 
-- `PR_LLM_REAL_SMOKE_API_BASE_URL` (default: `http://127.0.0.1:8000`)
+- `--channel`
+- `--lookback-hours`
+- `--limit`
+- `--dry-run`
+- `--force`
+- `--to-email`
+- `--fallback-enabled`
+- `--api-base-url`
 
-Batch B 口径：以下参数已切换为 CLI 优先（legacy env 仅兼容，不建议继续配置）：
+迁移示例：
 
-- `PR_LLM_REAL_SMOKE_API_BASE_URL` -> `--api-base-url`
-- `PR_LLM_REAL_SMOKE_DIAGNOSTICS_JSON` -> `--diagnostics-json`
-- `PR_LLM_REAL_SMOKE_HEARTBEAT_SECONDS` -> `--heartbeat-seconds`
-- `PR_LLM_REAL_SMOKE_MAX_RETRIES` -> `--max-retries`
+```bash
+./scripts/run_failure_alerts.sh --lookback-hours 6 --limit 10 --to-email you@example.com --api-base-url http://127.0.0.1:8000
+```
 
-## External Playwright Smoke (`scripts/external_playwright_smoke.sh`)
+## Live Smoke (`scripts/e2e_live_smoke.sh`)
 
-This script no longer consumes `EXTERNAL_SMOKE_*` env vars.
-Use CLI flags instead (`--url`, `--browser`, `--timeout-ms`, `--expect-text`, `--output-dir`, `--retries`, `--diagnostics-json`, `--heartbeat-seconds`).
+使用 CLI flags：
 
-## Failure Alerts Script (`scripts/run_failure_alerts.sh`)
+- `--api-base-url`
+- `--timeout-seconds`
+- `--poll-interval-seconds`
+- `--heartbeat-seconds`
+- `--health-path`
+- `--external-probe-timeout-seconds`
+- `--max-retries`
+- `--diagnostics-json`
+- `--computer-use-cmd`
+- `--youtube-url`
+- `--bilibili-url`
+- `--require-api`
+- `--require-secrets`
+- `--computer-use-strict`
+- `--computer-use-skip`
+- `--computer-use-skip-reason`
 
-This script no longer consumes `FAILURE_*` env vars.
-Use CLI flags instead (`--channel`, `--lookback-hours`, `--limit`, `--dry-run`, `--force`, `--to-email`, `--fallback-enabled`, `--api-base-url`).
+迁移示例：
 
-## Script Entry Overrides (`scripts/dev_*.sh`, `scripts/init_env_example.sh`)
+```bash
+./scripts/e2e_live_smoke.sh \
+  --api-base-url http://127.0.0.1:8000 \
+  --timeout-seconds 240 \
+  --heartbeat-seconds 20 \
+  --diagnostics-json .runtime-cache/e2e-live-smoke-result.json
+```
 
-- `API_HOST` (default: `127.0.0.1`)
-- `API_PORT` (default: `8000`)
-- `API_HEALTH_URL` (default: `http://127.0.0.1:8000/healthz`)
+## PR LLM Smoke (`scripts/smoke_llm_real_local.sh`)
 
-Batch C 口径：以下脚本入口参数已迁移为 CLI/内置默认，不再通过 env 合同暴露：
+使用 CLI flags：
 
-- `scripts/dev_api.sh`
-  - `--app` (default: `apps.api.app.main:app`)
-  - `--reload` / `--no-reload` (default: reload on)
-- `scripts/dev_worker.sh`
-  - `--worker-dir` (default: `<repo>/apps/worker`)
-  - `--entry` (default: `worker.main`)
-  - `--command` (default: `run-worker`)
-  - `--show-hints` / `--no-show-hints` (default: show)
-- `scripts/dev_mcp.sh`
-  - `--entry` (default: `apps.mcp.server`)
-  - `--mcp-dir` (default: `<repo>/apps/mcp`)
-- `scripts/init_env_example.sh`
-  - `--output` (default: `<repo>/.env.generated.example`)
-  - `--force` (default: disabled)
+- `--api-base-url`
+- `--diagnostics-json`
+- `--heartbeat-seconds`
+- `--max-retries`
 
-## Ops Workflow Bootstrap (`scripts/start_ops_workflows.sh`)
+迁移示例：
 
-- `OPS_DAILY_LOCAL_HOUR` (default: `9`)
-- `OPS_DAILY_TIMEZONE` (default: `system-local`)
-- `OPS_NOTIFICATION_INTERVAL_MINUTES` (default: `10`)
-- `OPS_NOTIFICATION_RETRY_BATCH_LIMIT` (default: `50`)
-- `OPS_CANARY_INTERVAL_HOURS` (default: `1`)
-- `OPS_CANARY_TIMEOUT_SECONDS` (default: `8`)
-- `OPS_CLEANUP_INTERVAL_HOURS` (default: `6`)
-- `OPS_CLEANUP_OLDER_THAN_HOURS` (default: `24`)
-- `OPS_CLEANUP_CACHE_OLDER_THAN_HOURS` (optional)
-- `OPS_CLEANUP_CACHE_MAX_SIZE_MB` (optional)
-- `OPS_CLEANUP_WORKSPACE_DIR` (optional)
-- `OPS_CLEANUP_CACHE_DIR` (optional)
+```bash
+./scripts/smoke_llm_real_local.sh --api-base-url http://127.0.0.1:18081 --heartbeat-seconds 20
+```
 
-`scripts/start_ops_workflows.sh` CLI flags (replace Batch A env controls):
+## Script Entrypoints
 
-- `--daily-workflow-id` (default: `daily-digest-workflow`)
-- `--daily-run-once` (default: disabled)
-- `--daily-timezone-offset-minutes` (optional)
-- `--notification-workflow-id` (default: `notification-retry-workflow`)
-- `--notification-run-once` (default: disabled)
-- `--canary-workflow-id` (default: `provider-canary-workflow`)
-- `--canary-run-once` (default: disabled)
-- `--cleanup-workflow-id` (default: `cleanup-workspace-workflow`)
-- `--cleanup-run-once` (default: disabled)
-- `--show-hints` / `--no-show-hints` (default: show)
-- `--dry-run` (default: disabled)
+### `scripts/dev_api.sh`
 
-Batch A legacy env controls have been removed from env contracts and are deprecated:
+- `--app` (default: `apps.api.app.main:app`)
+- `--reload` / `--no-reload`
 
-- `OPS_DAILY_WORKFLOW_ID` -> `--daily-workflow-id`
-- `OPS_DAILY_RUN_ONCE` -> `--daily-run-once`
-- `OPS_DAILY_TIMEZONE_OFFSET_MINUTES` -> `--daily-timezone-offset-minutes`
-- `OPS_NOTIFICATION_WORKFLOW_ID` -> `--notification-workflow-id`
-- `OPS_NOTIFICATION_RUN_ONCE` -> `--notification-run-once`
-- `OPS_CANARY_WORKFLOW_ID` -> `--canary-workflow-id`
-- `OPS_CANARY_RUN_ONCE` -> `--canary-run-once`
-- `OPS_CLEANUP_WORKFLOW_ID` -> `--cleanup-workflow-id`
-- `OPS_CLEANUP_RUN_ONCE` -> `--cleanup-run-once`
-- `OPS_SHOW_HINTS` -> `--show-hints` / `--no-show-hints`
-- `OPS_DRY_RUN` -> `--dry-run`
+### `scripts/dev_worker.sh`
 
-## Full Stack Helper Scripts (`scripts/bootstrap_full_stack.sh`, `scripts/full_stack.sh`, `scripts/smoke_full_stack.sh`)
+- `--worker-dir`
+- `--entry`
+- `--command`
+- `--show-hints` / `--no-show-hints`
 
-- `PROFILE` (default: `local`)
-- `WITH_CORE_SERVICES` (default: `1`)
-- `WITH_READER_STACK` (default: `1`)
-- `OFFLINE_FALLBACK` (default: `1`)
-- `FULL_STACK_REQUIRE_READER` (default: `1`)
+### `scripts/dev_mcp.sh`
+
+- `--entry`
+- `--mcp-dir`
+
+### `scripts/init_env_example.sh`
+
+- `--output`
+- `--force`
+
+## Ops Workflows (`scripts/start_ops_workflows.sh`)
+
+基础频率和调度参数：
+
+- `--daily-local-hour`
+- `--daily-timezone`
+- `--notification-interval-minutes`
+- `--notification-retry-batch-limit`
+- `--canary-interval-hours`
+- `--canary-timeout-seconds`
+- `--cleanup-interval-hours`
+- `--cleanup-older-than-hours`
+- `--cleanup-cache-older-than-hours`
+- `--cleanup-cache-max-size-mb`
+- `--cleanup-workspace-dir`
+- `--cleanup-cache-dir`
+
+workflow 管理参数：
+
+- `--daily-workflow-id`
+- `--notification-workflow-id`
+- `--canary-workflow-id`
+- `--cleanup-workflow-id`
+- `--daily-run-once`
+- `--notification-run-once`
+- `--canary-run-once`
+- `--cleanup-run-once`
+- `--daily-timezone-offset-minutes`
+- `--show-hints` / `--no-show-hints`
+- `--dry-run`
+
+迁移示例：
+
+```bash
+./scripts/start_ops_workflows.sh \
+  --daily-local-hour 9 \
+  --daily-timezone Asia/Shanghai \
+  --notification-interval-minutes 5 \
+  --notification-retry-batch-limit 100 \
+  --canary-interval-hours 1 \
+  --canary-timeout-seconds 8 \
+  --cleanup-interval-hours 6 \
+  --cleanup-older-than-hours 24 \
+  --show-hints
+```
+
+## Full-Stack Helpers
+
+### `scripts/bootstrap_full_stack.sh`
+
+- `--profile`
+- `--api-port`
+- `--web-port`
+- `--install-deps`
+- `--with-core-services`
+- `--with-reader-stack`
+- `--reader-env-file`
+- `--offline-fallback`
+
+### `scripts/full_stack.sh`
+
+- `--profile`
+- `--api-port`
+- `--web-port`
+- `--api-health-url`
+
+### `scripts/smoke_full_stack.sh`
+
+- `--profile`
+- `--api-base-url`
+- `--web-base-url`
+- `--require-reader`
+- `--offline-fallback`
+- `--reader-env-file`
+- `--heartbeat-seconds`
+- `--live-smoke-api-base-url`
+- `--live-smoke-require-api`
+- `--live-smoke-require-secrets`
+- `--live-smoke-computer-use-strict`
+- `--live-smoke-computer-use-skip`
+- `--live-smoke-computer-use-skip-reason`
+- `--youtube-smoke-url`
+- `--live-diagnostics-json`
+
+迁移示例：
+
+```bash
+./scripts/smoke_full_stack.sh \
+  --profile local \
+  --require-reader 1 \
+  --offline-fallback 0 \
+  --live-smoke-api-base-url http://127.0.0.1:8000
+```
 
 ## Recreate GCE Instance (`scripts/recreate_gce_instance.sh`)
 
-This script no longer consumes env vars for GCE recreate options.
-Use CLI flags instead (`--project`, `--zone`, `--instance`, `--machine`, `--disk-size`, `--image-family`, `--image-project`, `--repo`, `--force-delete-instance`, `--force-replace-app-dir`).
+使用 CLI flags：
+
+- `--project`
+- `--zone`
+- `--instance`
+- `--machine`
+- `--disk-size`
+- `--image-family`
+- `--image-project`
+- `--repo`
+- `--force-delete-instance`
+- `--force-replace-app-dir`
