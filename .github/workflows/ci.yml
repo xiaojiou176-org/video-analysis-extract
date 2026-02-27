@@ -281,7 +281,7 @@ jobs:
               --mode pre-push \
               --profile ci \
               --profile live-smoke \
-              --ci-dedupe 1 \
+              --ci-dedupe 0 \
               --changed-backend "${{ needs.changes.outputs.backend_changed }}" \
               --changed-web "${{ needs.changes.outputs.web_changed }}" \
               --changed-deps "${{ needs.changes.outputs.deps_changed }}" \
@@ -831,7 +831,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        browser: ${{ github.event_name == 'pull_request' && fromJSON('["chromium","firefox"]') || fromJSON('["chromium","firefox","webkit"]') }}
+        browser: ${{ fromJSON('["chromium","firefox","webkit"]') }}
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4

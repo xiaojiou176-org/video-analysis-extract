@@ -24,20 +24,20 @@
 
 ## CI Topology (GitHub Actions)
 
-以下口径按已拍板 D1~D5 执行，旧规则（PR 可跳过 `live-smoke` / E2E 默认 mock API）全部废止。
+以下口径按已拍板 D1~D5 执行，旧规则（E2E 默认 mock API）已废止。
 
 - `preflight-fast` + `preflight-heavy`：预检门禁（env contract、schema parity、provider residual、worker line limits、structured log guard）。
 - `db-migration-smoke` + `python-tests` + `api-real-smoke` + `backend-lint` + `frontend-lint` + `web-test-build` + `web-e2e`：并行执行的主链路测试集合。
 - `web-e2e`：CI 主路径使用真实 API（real API）执行完整端到端验证；`mock` 仅允许本地调试，不允许进入 CI gate。
 - `web-e2e` real 链路包含 Temporal + API + worker 后台进程，`ingest/poll` 成功路径要求经过 worker 消费。
 - `web-e2e` 作业结束会执行 worker 进程清理，并在 `always()` 分支上传 worker 日志 artifact 供排障。
-- `live-smoke`：所有 PR 强制 live-smoke；`main` / `release` / nightly 同样必跑，且不得 `skip` / `skipped`。
-- `aggregate-gate`：汇总主链路结果，禁止对集成 smoke 与 live-smoke 放行 `skipped`。
-- `ci-final-gate`：最终门禁；PR/main/release/nightly 均要求 `live-smoke=success`。
+- `live-smoke`：仅 `main` / `release` / nightly 强制执行，且不得 `skip` / `skipped`；PR 由 `pr-llm-real-smoke` 承担真实 LLM 烟测。
+- `aggregate-gate`：汇总主链路结果；`api-real-smoke` / `web-e2e` 不允许 `skipped`，`live-smoke` 由 `ci-final-gate` 按触发源做强制校验。
+- `ci-final-gate`：最终门禁；`main` / `release` / nightly 要求 `live-smoke=success`，PR 允许 `live-smoke=skipped`。
 
 ## D1~D5 决议与执行命令
 
-- D1 所有 PR 强制 live-smoke（不得 skip）：
+- D1 `main` / `release` / nightly 强制 live-smoke（不得 skip）：
 
 ```bash
 scripts/e2e_live_smoke.sh \
@@ -71,7 +71,7 @@ python3 scripts/check_web_coverage_threshold.py \
   --core-threshold 95
 ```
 
-- D4 集成 smoke（`api-real-smoke` / `web-e2e` / `live-smoke`）在 PR/main/release 禁止 skip。
+- D4 集成 smoke 禁止 skip：PR 为 `api-real-smoke` / `web-e2e`，main/release/nightly 额外包含 `live-smoke`。
 - D5 E2E CI 主路径必须全量 real API；`mock API` 仅用于本地 debug，不参与 CI 判定。
 
 ## 测试类型与依赖边界（避免误解）
@@ -84,7 +84,7 @@ python3 scripts/check_web_coverage_threshold.py \
 | `web-e2e` | Playwright UI 行为验证 + real API | 是（按 CI 主路径执行） | 视目标 API 而定 |
 | `web-e2e` + `--web-e2e-base-url` | Playwright 复用外部 Web 实例 | 取决于目标实例 | 通常否 |
 | `external-playwright-smoke` | Playwright 直连外部公共站点（`https://example.com`） | 是（真实外网） | 否（默认值由 job 参数提供，可按脚本参数覆盖） |
-| `live-smoke` | 真实 `/api/v1/videos/process` + 真实 provider 链路 | 是（YouTube/Bilibili + Gemini/Resend） | 是（PR/main/release 必需） |
+| `live-smoke` | 真实 `/api/v1/videos/process` + 真实 provider 链路 | 是（YouTube/Bilibili + Gemini/Resend） | 是（仅 main/release/nightly 必需） |
 
 `pr-llm-real-smoke` 触发条件（PR 真实 LLM）：
 
@@ -92,7 +92,7 @@ python3 scripts/check_web_coverage_threshold.py \
 - 仅同仓 PR（`head.repo.full_name == github.repository`），fork PR 不触发。
 - 且仓库配置了 `GEMINI_API_KEY` secret；缺失即失败，不允许通过 `skipped` 放行。
 
-CI `live-smoke` 必需 secrets（PR/main/release/nightly）：
+CI `live-smoke` 必需 secrets（main/release/nightly）：
 
 - `GEMINI_API_KEY`
 - `RESEND_API_KEY`
@@ -186,7 +186,7 @@ scripts/smoke_llm_real_local.sh --api-base-url "http://127.0.0.1:18081"
 
 | 触发源 | 必跑项 | 可跳过项 | 强制门禁 |
 |---|---|---|---|
-| `pull_request` | `preflight-*`、`db-migration-smoke`、`python-tests`、`api-real-smoke`、`backend-lint`、`frontend-lint`、`web-test-build`、`web-e2e(real API)`、`live-smoke`、`aggregate-gate`、`ci-final-gate` | 无 | 集成 smoke 与 live-smoke 禁止 `skip` / `skipped`，全部必须 `success` |
+| `pull_request` | `preflight-*`、`db-migration-smoke`、`python-tests`、`api-real-smoke`、`pr-llm-real-smoke`、`backend-lint`、`frontend-lint`、`web-test-build`、`web-e2e(real API)`、`aggregate-gate`、`ci-final-gate` | `live-smoke`（仅 main/release/nightly） | 集成 smoke（`api-real-smoke` / `web-e2e`）禁止 `skip` / `skipped`，必须 `success` |
 | `push` 到 `main`/`release` | `pull_request` 全部必跑项 + `profile-governance` + `quality-gate-pre-push` + `external-playwright-smoke` | 无 | `aggregate-gate` 与 `ci-final-gate` 全链路强制 `success` |
 | `schedule` nightly | `main/release` 全部必跑项 + `nightly-flaky-*` | 无 | `live-smoke`、`nightly-flaky-*`、集成 smoke 全部必须 `success` |
 
@@ -231,7 +231,7 @@ bash scripts/env/final_governance_check.sh --skip-prepush
 - 文档漂移门禁强制执行（staged/push）。
 - 覆盖率阈值：总覆盖率 `>=85%`，核心模块覆盖率 `>=95%`（worker pipeline + api 核心 router/service）。
 - Web 覆盖率硬门禁：`global >=85%` 且 `core >=95%`（默认读取 `apps/web/coverage/coverage-summary.json`）。
-- 变异测试门禁强制执行（Python 核心模块）：mutation score `>=0.60`（默认执行口径，可通过 `--mutation-min-score` 覆盖）。
+- 变异测试门禁强制执行（Python 核心模块）：CI/Hook 执行口径为 mutation score `>=0.60`；`quality_gate.sh` 裸跑默认阈值为 `0.85`，可通过 `--mutation-min-score` 覆盖。
 - `pre-push` 采用 fail-fast：先短检查，再长测试；长测试并行执行并输出 heartbeat。
 - `pre-push` 后端链路新增硬门禁：`api cors preflight smoke (OPTIONS DELETE)` 与 `contract diff local gate (base vs head)`。
 - `pre-push` 与远端 CI `preflight-fast`/`web-test-build` 关键阻断项对齐：`check_ci_docs_parity`、`docs env canonical guard`、`provider residual guard`、`worker line limits guard`、`schema parity gate`、`web design token guard`、`web build`、`web button coverage`。
@@ -244,8 +244,8 @@ bash scripts/env/final_governance_check.sh --skip-prepush
 npm --prefix apps/web run test -- --coverage
 python3 scripts/check_web_coverage_threshold.py \
   --summary-path apps/web/coverage/coverage-summary.json \
-  --global-threshold 80 \
-  --core-threshold 90
+  --global-threshold 85 \
+  --core-threshold 95
 ```
 
 可选参数：
@@ -342,7 +342,7 @@ echo "feat(api): add ingest health guard" > /tmp/commit-msg-ok.txt
   - `python3 scripts/check_web_button_coverage.py --threshold 1.0`
   - `DATABASE_URL='sqlite+pysqlite:///:memory:' uv run --extra dev --with mutmut mutmut run`
   - `uv run --extra dev --with mutmut mutmut export-cicd-stats`
-  - `python3 -c '...读取 mutants/mutmut-cicd-stats.json 并校验 score>=阈值...'`（默认执行阈值 `0.60`）
+  - `python3 -c '...读取 mutants/mutmut-cicd-stats.json 并校验 score>=阈值...'`（CI/Hook 常用阈值 `0.60`；脚本裸跑默认 `0.85`）
 
 变异测试工具不可用策略（阻断）：
 

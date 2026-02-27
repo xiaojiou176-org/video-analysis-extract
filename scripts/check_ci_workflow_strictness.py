@@ -40,8 +40,8 @@ def main() -> int:
             failures.append("quality-gate-pre-push: should not narrow execution with job-level if")
         if "--mode pre-push" not in qg_block:
             failures.append("quality-gate-pre-push: missing pre-push quality gate command")
-        if "--ci-dedupe 1" not in qg_block:
-            failures.append("quality-gate-pre-push: missing --ci-dedupe 1 strict config")
+        if "--ci-dedupe 0" not in qg_block:
+            failures.append("quality-gate-pre-push: must set --ci-dedupe 0 to avoid skipping strict pre-push gates")
 
     # 3) Real smoke jobs must not bypass write auth.
     for job_name in ("api-real-smoke", "pr-llm-real-smoke"):
