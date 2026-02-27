@@ -31,7 +31,7 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
 			<p
 				className={status === "error" ? "alert error" : "alert success"}
 				role={status === "error" ? "alert" : "status"}
-				aria-live="polite"
+				aria-live={status === "error" ? "assertive" : "polite"}
 			>
 				{getFlashMessage(code)}
 			</p>

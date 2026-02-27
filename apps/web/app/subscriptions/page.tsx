@@ -18,9 +18,14 @@ function renderAlert(status: string, code: string) {
 	if (!status || !code) {
 		return null;
 	}
+	const isError = status === "error";
 	const className = status === "error" ? "alert error" : "alert success";
 	return (
-		<p className={className} role={status === "error" ? "alert" : "status"} aria-live="polite">
+		<p
+			className={className}
+			role={isError ? "alert" : "status"}
+			aria-live={isError ? "assertive" : "polite"}
+		>
 			{getFlashMessage(code)}
 		</p>
 	);

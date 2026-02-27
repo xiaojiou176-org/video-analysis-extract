@@ -66,7 +66,7 @@ export default async function JobsPage({ searchParams }: JobsPageProps) {
 				<>
 					<section className="card stack">
 						<h2>任务概览</h2>
-						<div className="grid grid-cols-1 sm:grid-cols-2">
+						<div className="grid grid-cols-2">
 							<div>
 								<div className="small">任务 ID</div>
 								<div>{job.id}</div>
@@ -144,7 +144,7 @@ export default async function JobsPage({ searchParams }: JobsPageProps) {
 						)}
 					</section>
 
-					<section className="grid grid-cols-1 lg:grid-cols-2">
+					<section className="grid grid-cols-2">
 						<div className="card stack">
 							<h3>降级记录</h3>
 							{job.degradations.length === 0 ? (

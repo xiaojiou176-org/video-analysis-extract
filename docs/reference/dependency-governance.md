@@ -22,6 +22,7 @@
   - migration smoke
   - python tests
   - web lint/build/e2e
+  - web a11y smoke（`npm --prefix apps/web run test:a11y`）
 - `env-governance.yml`：
   - `python scripts/check_env_contract.py --strict`
   - `gitleaks detect --source . --verbose --redact`
@@ -48,6 +49,8 @@
 ```bash
 npm --prefix apps/web ci
 npm --prefix apps/web run lint
+npm --prefix apps/web run test
+npm --prefix apps/web run test:a11y
 npm --prefix apps/web run build
 ```
 

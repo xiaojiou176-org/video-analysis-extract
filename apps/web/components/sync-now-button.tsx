@@ -1,26 +1,42 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { apiClient } from "@/lib/api/client";
 
 export function SyncNowButton() {
 	const [state, setState] = useState<"idle" | "loading" | "done" | "error">("idle");
 	const router = useRouter();
+	const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+	function clearTimer() {
+		if (!timerRef.current) {
+			return;
+		}
+		clearTimeout(timerRef.current);
+		timerRef.current = null;
+	}
+
+	useEffect(() => {
+		return () => {
+			clearTimer();
+		};
+	}, []);
 
 	async function handleSync() {
 		setState("loading");
+		clearTimer();
 		try {
 			await apiClient.pollIngest({});
 			setState("done");
-			setTimeout(() => {
+			timerRef.current = setTimeout(() => {
 				setState("idle");
 				router.refresh();
 			}, 1500);
 		} catch {
 			setState("error");
-			setTimeout(() => setState("idle"), 3000);
+			timerRef.current = setTimeout(() => setState("idle"), 3000);
 		}
 	}
 
