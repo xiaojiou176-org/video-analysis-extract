@@ -1096,6 +1096,8 @@ run_pre_commit_mode() {
 
   run_async_gate "doc_drift_staged" "documentation drift gate (staged)" \
     "bash scripts/ci_or_local_gate_doc_drift.sh --scope staged"
+  run_async_gate "env_contract" "env contract" \
+    "python3 scripts/check_env_contract.py --strict"
   run_async_gate "placebo" "placebo assertion guard" \
     "python3 scripts/check_test_assertions.py --path ."
   run_async_gate "secrets_scan" "secrets leak scan" \
@@ -1116,6 +1118,10 @@ run_pre_commit_mode() {
     "python3 scripts/check_structured_logs.py"
   run_async_gate "iac_entrypoint_guard" "iac entrypoint guard" \
     "bash scripts/check_iac_entrypoint.sh ."
+  run_async_gate "ci_docs_parity_gate" "ci docs parity gate" \
+    "run_ci_docs_parity_gate"
+  run_async_gate "schema_parity_gate" "schema parity gate (apps/mcp vs shared-contracts)" \
+    "run_schema_parity_gate"
   run_async_gate "env_budget_guard" "env budget guard" \
     "python3 scripts/check_env_budget.py"
   run_async_gate "env_governance_report" "env governance report (non-blocking)" \

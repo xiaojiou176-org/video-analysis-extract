@@ -315,10 +315,13 @@ echo "feat(api): add ingest health guard" > /tmp/commit-msg-ok.txt
   - 规则基于 Conventional Commits（例如 `feat: ...`、`fix(scope): ...`）。
   - 仓库根目录无 `package.json` 时，使用 `npx --yes` 临时拉取 `commitlint` + hook 内置最小规则配置，无需新增根依赖即可运行。
 - `pre-commit`：
+  - `python3 scripts/check_env_contract.py --strict`
   - `python3 scripts/check_env_budget.py`
   - `python3 scripts/check_test_assertions.py --path .`
   - secrets 泄漏扫描（阻断）
   - `bash scripts/ci_or_local_gate_doc_drift.sh --scope staged`
+  - `python3 scripts/check_ci_docs_parity.py`
+  - `schema parity gate`（`apps/mcp/schemas/tools.json` vs `packages/shared-contracts/jsonschema/mcp-tools.schema.json`）
   - `npm --prefix apps/web run lint`
   - `uv run --with ruff ruff check apps scripts`
 - `pre-push`：
