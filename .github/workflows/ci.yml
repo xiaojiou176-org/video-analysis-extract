@@ -150,6 +150,9 @@ jobs:
       - name: Test focus/todo marker guard
         run: python3 scripts/check_test_focus_markers.py
 
+      - name: CI workflow strictness guard
+        run: python3 scripts/check_ci_workflow_strictness.py
+
       - name: Schema parity check (apps/mcp vs shared-contracts)
         run: |
           python - <<'PY'

@@ -351,6 +351,10 @@ run_test_focus_marker_guard() {
   python3 scripts/check_test_focus_markers.py
 }
 
+run_ci_workflow_strictness_guard() {
+  python3 scripts/check_ci_workflow_strictness.py
+}
+
 run_env_governance_report_non_blocking() {
   local mode_tag="$1"
   local out_dir="$ROOT_DIR/.runtime-cache"
@@ -1100,6 +1104,8 @@ run_pre_commit_mode() {
     "run_hollow_log_guard"
   run_async_gate "test_focus_marker_guard" "test focus/todo marker guard" \
     "run_test_focus_marker_guard"
+  run_async_gate "ci_workflow_strictness_guard" "ci workflow strictness guard" \
+    "run_ci_workflow_strictness_guard"
   run_async_gate "structured_log_guard" "structured log critical-path guard" \
     "python3 scripts/check_structured_logs.py"
   run_async_gate "iac_entrypoint_guard" "iac entrypoint guard" \
@@ -1161,6 +1167,8 @@ run_pre_push_mode() {
     "run_hollow_log_guard"
   run_async_gate "test_focus_marker_guard" "test focus/todo marker guard" \
     "run_test_focus_marker_guard"
+  run_async_gate "ci_workflow_strictness_guard" "ci workflow strictness guard" \
+    "run_ci_workflow_strictness_guard"
   run_async_gate "structured_log_guard" "structured log critical-path guard" \
     "python3 scripts/check_structured_logs.py"
   run_async_gate "iac_entrypoint_guard" "iac entrypoint guard" \
