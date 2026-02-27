@@ -65,13 +65,22 @@ npm --prefix apps/web run build
 
 - 突变测试范围以核心业务路径为主，不追求全仓库蛮力扫描，优先覆盖“缺陷逃逸高风险”模块：
   - `apps/worker/worker/pipeline/*`（编排/策略/执行）
+  - `apps/worker/worker/state/sqlite_store.py`（并发锁与状态持久化）
   - `apps/api/app/services/*`（服务层核心逻辑）
   - `apps/api/app/routers/*`（接口分发与契约路径）
+- `paths_to_mutate` 当前最小治理要求：
+  - 核心必含 `orchestrator/policies/runner/types/step_executor/sqlite_store`
+  - API 必含 `ingest/jobs/subscriptions/videos` 的 `service + router`
+  - 总目标数不得低于 `16`
 - `also_copy` 必须同时包含被测代码与对应测试目录，确保 mutmut 在隔离沙箱内可复现实测路径：
   - `apps/worker/worker` + `apps/worker/tests`
   - `apps/api/app` + `apps/api/tests`
 - 测试选择清单（`pytest_add_cli_args_test_selection`）必须与突变范围同步演进：
   - 新增核心模块时，同步补充目标测试文件，避免“有突变、无断言杀伤”。
+- 强制守卫：
+  - `python3 scripts/check_mutation_scope.py` 会在 pre-commit/pre-push/CI preflight 运行，防止范围缩水。
+  - `python3 scripts/check_mutation_test_selection.py` 会在 pre-commit/pre-push/CI preflight 运行，防止测试选择清单缩水。
+  - `quality_gate.sh` 对 mutmut 结果执行三维门禁：`score>=0.62`、`effective_ratio>=0.25`、`no_tests_ratio<=0.75`（CI 参数可显式覆盖）。
 
 ## Doc-Drift Enforcement
 

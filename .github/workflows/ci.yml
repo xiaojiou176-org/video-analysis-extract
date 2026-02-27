@@ -153,6 +153,12 @@ jobs:
       - name: E2E strictness guard
         run: python3 scripts/check_e2e_strictness.py
 
+      - name: Mutation scope guard
+        run: python3 scripts/check_mutation_scope.py
+
+      - name: Mutation test selection guard
+        run: python3 scripts/check_mutation_test_selection.py
+
       - name: CI workflow strictness guard
         run: python3 scripts/check_ci_workflow_strictness.py
 
@@ -246,7 +252,7 @@ jobs:
               --profile live-smoke \
               --profile-only \
               --heartbeat-seconds 20 \
-              --mutation-min-score 0.60
+              --mutation-min-score 0.62
           fi
 
   quality-gate-pre-push:
@@ -290,7 +296,9 @@ jobs:
               --changed-deps "${{ needs.changes.outputs.deps_changed }}" \
               --changed-migrations "${{ needs.changes.outputs.migrations_changed }}" \
               --heartbeat-seconds 25 \
-              --mutation-min-score 0.60
+              --mutation-min-score 0.62 \
+              --mutation-min-effective-ratio 0.25 \
+              --mutation-max-no-tests-ratio 0.75
 
   db-migration-smoke:
     runs-on: ubuntu-latest

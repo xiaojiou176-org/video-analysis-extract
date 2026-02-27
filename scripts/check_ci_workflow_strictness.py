@@ -42,6 +42,12 @@ def main() -> int:
             failures.append("quality-gate-pre-push: missing pre-push quality gate command")
         if "--ci-dedupe 0" not in qg_block:
             failures.append("quality-gate-pre-push: must set --ci-dedupe 0 to avoid skipping strict pre-push gates")
+        if "--mutation-min-score 0.62" not in qg_block:
+            failures.append("quality-gate-pre-push: mutation threshold must be at least 0.62")
+        if "--mutation-min-effective-ratio 0.25" not in qg_block:
+            failures.append("quality-gate-pre-push: missing mutation effective ratio floor")
+        if "--mutation-max-no-tests-ratio 0.75" not in qg_block:
+            failures.append("quality-gate-pre-push: missing mutation no-tests ratio ceiling")
 
     # 3) Real smoke jobs must not bypass write auth.
     for job_name in ("api-real-smoke", "pr-llm-real-smoke"):
@@ -64,6 +70,10 @@ def main() -> int:
         failures.append("preflight-fast: missing test focus/todo marker guard step")
     if "E2E strictness guard" not in preflight_fast:
         failures.append("preflight-fast: missing e2e strictness guard step")
+    if "Mutation scope guard" not in preflight_fast:
+        failures.append("preflight-fast: missing mutation scope guard step")
+    if "Mutation test selection guard" not in preflight_fast:
+        failures.append("preflight-fast: missing mutation test selection guard step")
 
     if failures:
         print("ci workflow strictness gate failed:")

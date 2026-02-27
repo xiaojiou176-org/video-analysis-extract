@@ -26,7 +26,7 @@
 
 以下口径按已拍板 D1~D5 执行，旧规则（E2E 默认 mock API）已废止。
 
-- `preflight-fast` + `preflight-heavy`：预检门禁（env contract、schema parity、provider residual、worker line limits、structured log guard、e2e strictness guard）。
+- `preflight-fast` + `preflight-heavy`：预检门禁（env contract、schema parity、provider residual、worker line limits、structured log guard、e2e strictness guard、mutation scope guard、mutation test selection guard）。
 - `db-migration-smoke` + `python-tests` + `api-real-smoke` + `backend-lint` + `frontend-lint` + `web-test-build` + `web-e2e`：并行执行的主链路测试集合。
 - `web-e2e`：CI 主路径使用真实 API（real API）执行完整端到端验证；`mock` 仅允许本地调试，不允许进入 CI gate。
 - `web-e2e` real 链路包含 Temporal + API + worker 后台进程，`ingest/poll` 成功路径要求经过 worker 消费。
@@ -50,7 +50,7 @@ scripts/e2e_live_smoke.sh \
   --diagnostics-json ".runtime-cache/e2e-live-smoke-result.json"
 ```
 
-- D2 mutation 硬门禁阈值 `0.60`（与仓库主规范一致）：
+- D2 mutation 硬门禁阈值 `0.62`（并新增结构质量约束）：
 
 ```bash
   ./scripts/quality_gate.sh \
@@ -58,7 +58,9 @@ scripts/e2e_live_smoke.sh \
   --profile ci \
   --profile live-smoke \
   --heartbeat-seconds 25 \
-  --mutation-min-score 0.60
+  --mutation-min-score 0.62 \
+  --mutation-min-effective-ratio 0.25 \
+  --mutation-max-no-tests-ratio 0.75
 ```
 
 - D3 Web 覆盖硬门禁 `global >=85` 且 `core >=95`：
@@ -227,12 +229,14 @@ bash scripts/env/final_governance_check.sh --skip-prepush
 - 全仓 Lint 错误必须为 0（`npm --prefix apps/web run lint` + `uv run --with ruff ruff check apps scripts`）。
 - 禁止安慰剂断言（`python3 scripts/check_test_assertions.py --path .`）。
 - E2E 严格性守卫必须通过（`python3 scripts/check_e2e_strictness.py`，拦截硬等待与成功/失败混合断言模式）。
+- 变异目标范围守卫必须通过（`python3 scripts/check_mutation_scope.py`，防止 `paths_to_mutate` 缩水或丢失核心模块）。
+- 变异测试选择守卫必须通过（`python3 scripts/check_mutation_test_selection.py`，防止 `pytest_add_cli_args_test_selection` 缩水导致大量 `no_tests`）。
 - Secrets 泄漏扫描必须通过（`sk-*` / `ghp_*` / `AKIA*` / 私钥头模式）。
 - 空洞日志文案扫描必须通过（禁止 `Something went wrong` / `unexpected error` / `error occurred` / `unknown error`）。
 - 文档漂移门禁强制执行（staged/push）。
 - 覆盖率阈值：总覆盖率 `>=85%`，核心模块覆盖率 `>=95%`（worker pipeline + api 核心 router/service）。
 - Web 覆盖率硬门禁：`global >=85%` 且 `core >=95%`（默认读取 `apps/web/coverage/coverage-summary.json`）。
-- 变异测试门禁强制执行（Python 核心模块）：CI/Hook 执行口径为 mutation score `>=0.60`；`quality_gate.sh` 裸跑默认阈值为 `0.85`，可通过 `--mutation-min-score` 覆盖。
+- 变异测试门禁强制执行（Python 核心模块）：CI/Hook 执行口径为 mutation score `>=0.62`，并要求 `effective_ratio>=0.25`、`no_tests_ratio<=0.75`；`quality_gate.sh` 裸跑默认阈值为 `0.85`，可通过参数覆盖。
 - `pre-push` 采用 fail-fast：先短检查，再长测试；长测试并行执行并输出 heartbeat。
 - `pre-push` 后端链路新增硬门禁：`api cors preflight smoke (OPTIONS DELETE)` 与 `contract diff local gate (base vs head)`。
 - `pre-push` 与远端 CI `preflight-fast`/`web-test-build` 关键阻断项对齐：`check_ci_docs_parity`、`docs env canonical guard`、`provider residual guard`、`worker line limits guard`、`schema parity gate`、`web design token guard`、`web build`、`web button coverage`。
@@ -322,6 +326,8 @@ echo "feat(api): add ingest health guard" > /tmp/commit-msg-ok.txt
   - `bash scripts/ci_or_local_gate_doc_drift.sh --scope staged`
   - `python3 scripts/check_ci_docs_parity.py`
   - `schema parity gate`（`apps/mcp/schemas/tools.json` vs `packages/shared-contracts/jsonschema/mcp-tools.schema.json`）
+  - `python3 scripts/check_mutation_scope.py`
+  - `python3 scripts/check_mutation_test_selection.py`
   - `npm --prefix apps/web run lint`
   - `uv run --with ruff ruff check apps scripts`
 - `pre-push`：
@@ -346,7 +352,7 @@ echo "feat(api): add ingest health guard" > /tmp/commit-msg-ok.txt
   - `python3 scripts/check_web_button_coverage.py --threshold 1.0`
   - `DATABASE_URL='sqlite+pysqlite:///:memory:' uv run --extra dev --with mutmut mutmut run`
   - `uv run --extra dev --with mutmut mutmut export-cicd-stats`
-  - `python3 -c '...读取 mutants/mutmut-cicd-stats.json 并校验 score>=阈值...'`（CI/Hook 常用阈值 `0.60`；脚本裸跑默认 `0.85`）
+  - `python3 -c '...读取 mutants/mutmut-cicd-stats.json 并校验 score/effective_ratio/no_tests_ratio 阈值...'`（CI/Hook 常用阈值 `score>=0.62`；脚本裸跑默认 `0.85`）
 
 变异测试工具不可用策略（阻断）：
 

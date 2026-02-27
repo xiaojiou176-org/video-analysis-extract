@@ -5,6 +5,8 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 MODE="pre-push"
 HEARTBEAT_SECONDS="25"
 MUTATION_MIN_SCORE="0.85"
+MUTATION_MIN_EFFECTIVE_RATIO="0.25"
+MUTATION_MAX_NO_TESTS_RATIO="0.75"
 PROFILE_ONLY="0"
 FINAL_CHECK="0"
 FINAL_SKIP_PREPUSH="0"
@@ -29,7 +31,8 @@ usage() {
   cat <<'USAGE'
 Usage:
   scripts/quality_gate.sh [--mode pre-commit|pre-push] [--heartbeat-seconds N] [--mutation-min-score N] [--profile NAME ...] [--profile-only] \
-    [--changed-backend true|false|auto] [--changed-web true|false|auto] [--changed-deps true|false|auto] [--changed-migrations true|false|auto] [--ci-dedupe 0|1] [--skip-mutation 0|1]
+    [--changed-backend true|false|auto] [--changed-web true|false|auto] [--changed-deps true|false|auto] [--changed-migrations true|false|auto] [--ci-dedupe 0|1] [--skip-mutation 0|1] \
+    [--mutation-min-effective-ratio N] [--mutation-max-no-tests-ratio N]
   scripts/quality_gate.sh --final-check [--skip-prepush] [--heartbeat-seconds N] [--mutation-min-score N]
 
 Modes:
@@ -42,6 +45,8 @@ Profiles:
 Flags:
   --profile NAME   Append explicit profile checks (repeatable).
   --mutation-min-score N  Mutation score threshold (default: 0.85).
+  --mutation-min-effective-ratio N  Mutation effective ratio threshold (default: 0.25).
+  --mutation-max-no-tests-ratio N  Mutation no-tests ratio upper bound (default: 0.75).
   --profile-only   Run profile checks only, skip other quality gates.
   --changed-backend true|false|auto    Backend change hint (default: auto).
   --changed-web true|false|auto        Frontend change hint (default: auto).
@@ -74,6 +79,14 @@ while (($# > 0)); do
       ;;
     --mutation-min-score)
       MUTATION_MIN_SCORE="${2:-}"
+      shift 2
+      ;;
+    --mutation-min-effective-ratio)
+      MUTATION_MIN_EFFECTIVE_RATIO="${2:-}"
+      shift 2
+      ;;
+    --mutation-max-no-tests-ratio)
+      MUTATION_MAX_NO_TESTS_RATIO="${2:-}"
       shift 2
       ;;
     --profile)
@@ -140,6 +153,16 @@ fi
 
 if ! [[ "$MUTATION_MIN_SCORE" =~ ^0(\.[0-9]+)?$|^1(\.0+)?$ ]]; then
   echo "[quality-gate] invalid --mutation-min-score: $MUTATION_MIN_SCORE (expected 0.0..1.0)" >&2
+  exit 2
+fi
+
+if ! [[ "$MUTATION_MIN_EFFECTIVE_RATIO" =~ ^0(\.[0-9]+)?$|^1(\.0+)?$ ]]; then
+  echo "[quality-gate] invalid --mutation-min-effective-ratio: $MUTATION_MIN_EFFECTIVE_RATIO (expected 0.0..1.0)" >&2
+  exit 2
+fi
+
+if ! [[ "$MUTATION_MAX_NO_TESTS_RATIO" =~ ^0(\.[0-9]+)?$|^1(\.0+)?$ ]]; then
+  echo "[quality-gate] invalid --mutation-max-no-tests-ratio: $MUTATION_MAX_NO_TESTS_RATIO (expected 0.0..1.0)" >&2
   exit 2
 fi
 
@@ -355,6 +378,14 @@ run_e2e_strictness_guard() {
   python3 scripts/check_e2e_strictness.py
 }
 
+run_mutation_scope_guard() {
+  python3 scripts/check_mutation_scope.py
+}
+
+run_mutation_test_selection_guard() {
+  python3 scripts/check_mutation_test_selection.py
+}
+
 run_ci_workflow_strictness_guard() {
   python3 scripts/check_ci_workflow_strictness.py
 }
@@ -420,7 +451,7 @@ PY
 
 run_mutation_gate() {
   local stats_file="mutants/mutmut-cicd-stats.json"
-  echo "[quality-gate] mutation gate threshold=${MUTATION_MIN_SCORE}"
+  echo "[quality-gate] mutation gate threshold=${MUTATION_MIN_SCORE} effective_ratio>=${MUTATION_MIN_EFFECTIVE_RATIO} no_tests_ratio<=${MUTATION_MAX_NO_TESTS_RATIO}"
   if ! print_mutation_target_set; then
     echo "[quality-gate] mutation gate failed: unable to load target set from pyproject.toml." >&2
     return 1
@@ -453,17 +484,20 @@ run_mutation_gate() {
     return 1
   fi
 
-  if ! python3 - "$stats_file" "$MUTATION_MIN_SCORE" <<'PY'
+  if ! python3 - "$stats_file" "$MUTATION_MIN_SCORE" "$MUTATION_MIN_EFFECTIVE_RATIO" "$MUTATION_MAX_NO_TESTS_RATIO" <<'PY'
 import json
 import sys
 from pathlib import Path
 
 stats_path = Path(sys.argv[1])
 threshold = float(sys.argv[2])
+min_effective_ratio = float(sys.argv[3])
+max_no_tests_ratio = float(sys.argv[4])
 stats = json.loads(stats_path.read_text(encoding="utf-8"))
 killed = int(stats.get("killed", 0))
 survived = int(stats.get("survived", 0))
 total = int(stats.get("total", killed + survived))
+no_tests = int(stats.get("no_tests", 0))
 effective = killed + survived
 if effective <= 0:
     print(
@@ -472,13 +506,30 @@ if effective <= 0:
     )
     raise SystemExit(1)
 score = killed / effective
+effective_ratio = effective / total if total > 0 else 0.0
+no_tests_ratio = no_tests / total if total > 0 else 1.0
 print(
     f"[quality-gate] mutation stats: killed={killed}, survived={survived}, "
-    f"effective={effective}, total={total}, score={score:.4f}, threshold={threshold:.4f}"
+    f"effective={effective}, total={total}, no_tests={no_tests}, "
+    f"score={score:.4f}, threshold={threshold:.4f}, "
+    f"effective_ratio={effective_ratio:.4f}, min_effective_ratio={min_effective_ratio:.4f}, "
+    f"no_tests_ratio={no_tests_ratio:.4f}, max_no_tests_ratio={max_no_tests_ratio:.4f}"
 )
 if score < threshold:
     print(
         f"[quality-gate] mutation gate failed: score {score:.4f} < threshold {threshold:.4f}.",
+        file=sys.stderr,
+    )
+    raise SystemExit(1)
+if effective_ratio < min_effective_ratio:
+    print(
+        f"[quality-gate] mutation gate failed: effective_ratio {effective_ratio:.4f} < min_effective_ratio {min_effective_ratio:.4f}.",
+        file=sys.stderr,
+    )
+    raise SystemExit(1)
+if no_tests_ratio > max_no_tests_ratio:
+    print(
+        f"[quality-gate] mutation gate failed: no_tests_ratio {no_tests_ratio:.4f} > max_no_tests_ratio {max_no_tests_ratio:.4f}.",
         file=sys.stderr,
     )
     raise SystemExit(1)
@@ -1112,6 +1163,10 @@ run_pre_commit_mode() {
     "run_test_focus_marker_guard"
   run_async_gate "e2e_strictness_guard" "e2e strictness guard" \
     "run_e2e_strictness_guard"
+  run_async_gate "mutation_scope_guard" "mutation scope guard" \
+    "run_mutation_scope_guard"
+  run_async_gate "mutation_test_selection_guard" "mutation test selection guard" \
+    "run_mutation_test_selection_guard"
   run_async_gate "ci_workflow_strictness_guard" "ci workflow strictness guard" \
     "run_ci_workflow_strictness_guard"
   run_async_gate "structured_log_guard" "structured log critical-path guard" \
@@ -1181,6 +1236,10 @@ run_pre_push_mode() {
     "run_test_focus_marker_guard"
   run_async_gate "e2e_strictness_guard" "e2e strictness guard" \
     "run_e2e_strictness_guard"
+  run_async_gate "mutation_scope_guard" "mutation scope guard" \
+    "run_mutation_scope_guard"
+  run_async_gate "mutation_test_selection_guard" "mutation test selection guard" \
+    "run_mutation_test_selection_guard"
   run_async_gate "ci_workflow_strictness_guard" "ci workflow strictness guard" \
     "run_ci_workflow_strictness_guard"
   run_async_gate "structured_log_guard" "structured log critical-path guard" \
