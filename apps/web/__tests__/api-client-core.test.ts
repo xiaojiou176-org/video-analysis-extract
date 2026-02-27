@@ -162,4 +162,61 @@ describe("apiClient core behavior", () => {
 		expect(String(feedUrl)).toContain("source=youtube");
 		expect(String(feedUrl)).toContain("limit=20");
 	});
+
+	it("covers subscription endpoints and artifact markdown error path", async () => {
+		const fetchSpy = vi
+			.spyOn(globalThis, "fetch")
+			.mockResolvedValueOnce(
+				new Response(
+					JSON.stringify([
+						{
+							id: "sub-1",
+							platform: "youtube",
+							source_type: "url",
+							source_value: "https://www.youtube.com/@x",
+							adapter_type: "rsshub_route",
+							source_url: null,
+							rsshub_route: "/youtube/channel/abc",
+							category: "tech",
+							tags: [],
+							priority: 50,
+							enabled: true,
+							created_at: "2026-02-01T00:00:00Z",
+							updated_at: "2026-02-01T00:00:00Z",
+						},
+					]),
+					{ status: 200 },
+				),
+			)
+			.mockResolvedValueOnce(
+				new Response(JSON.stringify({ ok: true, subscription_id: "sub-1", action: "created" }), {
+					status: 200,
+				}),
+			)
+			.mockResolvedValueOnce(new Response(JSON.stringify({ updated: 1 }), { status: 200 }))
+			.mockResolvedValueOnce(new Response(null, { status: 204 }))
+			.mockResolvedValueOnce(new Response("server down", { status: 503 }));
+
+		await apiClient.listSubscriptions({ platform: "youtube", enabled_only: true });
+		await apiClient.upsertSubscription({
+			platform: "youtube",
+			source_type: "url",
+			source_value: "https://www.youtube.com/@x",
+			adapter_type: "rsshub_route",
+			category: "tech",
+		});
+		await apiClient.batchUpdateSubscriptionCategory({ ids: ["sub-1"], category: "creator" });
+		await apiClient.deleteSubscription("sub-1");
+		await expect(apiClient.getArtifactMarkdown({ job_id: "job-2" })).rejects.toThrow(
+			"ERR_REQUEST_FAILED",
+		);
+
+		expect(fetchSpy).toHaveBeenCalledTimes(5);
+		expect(String(fetchSpy.mock.calls[0][0])).toContain("/api/v1/subscriptions");
+		expect(String(fetchSpy.mock.calls[0][0])).toContain("platform=youtube");
+		expect(String(fetchSpy.mock.calls[0][0])).toContain("enabled_only=true");
+		expect(fetchSpy.mock.calls[1][1]).toMatchObject({ method: "POST" });
+		expect(String(fetchSpy.mock.calls[3][0])).toContain("/api/v1/subscriptions/sub-1");
+		expect(fetchSpy.mock.calls[3][1]).toMatchObject({ method: "DELETE" });
+	});
 });

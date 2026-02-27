@@ -16,6 +16,7 @@ CHANGED_DEPS_INPUT="auto"
 CHANGED_MIGRATIONS_INPUT="auto"
 CI_DEDUPE="0"
 SKIP_MUTATION="0"
+STRICT_FULL_RUN="0"
 CHANGED_BACKEND="true"
 CHANGED_WEB="true"
 CHANGED_DEPS="true"
@@ -31,7 +32,7 @@ usage() {
   cat <<'USAGE'
 Usage:
   scripts/quality_gate.sh [--mode pre-commit|pre-push] [--heartbeat-seconds N] [--mutation-min-score N] [--profile NAME ...] [--profile-only] \
-    [--changed-backend true|false|auto] [--changed-web true|false|auto] [--changed-deps true|false|auto] [--changed-migrations true|false|auto] [--ci-dedupe 0|1] [--skip-mutation 0|1] \
+    [--changed-backend true|false|auto] [--changed-web true|false|auto] [--changed-deps true|false|auto] [--changed-migrations true|false|auto] [--ci-dedupe 0|1] [--skip-mutation 0|1] [--strict-full-run 0|1] \
     [--mutation-min-effective-ratio N] [--mutation-max-no-tests-ratio N]
   scripts/quality_gate.sh --final-check [--skip-prepush] [--heartbeat-seconds N] [--mutation-min-score N]
 
@@ -54,6 +55,7 @@ Flags:
   --changed-migrations true|false|auto Migration change hint (default: auto).
   --ci-dedupe 0|1  Pre-push only: when 1, skip checks covered by standalone CI jobs.
   --skip-mutation 0|1  Pre-push only: when 1, skip local mutation gate (CI remains source of truth).
+  --strict-full-run 0|1  Force full pre-push gates regardless of change detection and disallow mutation skip.
   --final-check    Shortcut to run scripts/env/final_governance_check.sh.
   --skip-prepush   Used with --final-check to skip final pre-push phase.
 
@@ -119,6 +121,10 @@ while (($# > 0)); do
       ;;
     --skip-mutation)
       SKIP_MUTATION="${2:-}"
+      shift 2
+      ;;
+    --strict-full-run)
+      STRICT_FULL_RUN="${2:-}"
       shift 2
       ;;
     --final-check)
@@ -189,6 +195,11 @@ fi
 
 if [[ "$SKIP_MUTATION" != "0" && "$SKIP_MUTATION" != "1" ]]; then
   echo "[quality-gate] invalid --skip-mutation: $SKIP_MUTATION (expected 0|1)" >&2
+  exit 2
+fi
+
+if [[ "$STRICT_FULL_RUN" != "0" && "$STRICT_FULL_RUN" != "1" ]]; then
+  echo "[quality-gate] invalid --strict-full-run: $STRICT_FULL_RUN (expected 0|1)" >&2
   exit 2
 fi
 
@@ -954,6 +965,18 @@ resolve_changed_flags() {
 
   detect_changed_files
 
+  if [[ "$STRICT_FULL_RUN" == "1" ]]; then
+    CHANGED_BACKEND="true"
+    CHANGED_WEB="true"
+    CHANGED_DEPS="true"
+    CHANGED_MIGRATIONS="true"
+    EFFECTIVE_BACKEND_CHANGED="true"
+    EFFECTIVE_WEB_CHANGED="true"
+    CHANGED_DETECTION_SOURCE="strict-full-run-override"
+    CHANGED_DETECTION_RELIABLE="1"
+    return
+  fi
+
   if [[ "$CHANGED_DETECTION_RELIABLE" != "1" ]]; then
     auto_fallback="true"
     echo "[quality-gate] changed detection unavailable; conservative fallback=true for auto flags" >&2
@@ -1377,6 +1400,9 @@ if [[ "$MODE" == "pre-commit" ]]; then
   resolve_changed_flags
   run_pre_commit_mode
 else
+  if [[ "$STRICT_FULL_RUN" == "1" ]]; then
+    SKIP_MUTATION="0"
+  fi
   resolve_changed_flags
   run_pre_push_mode
 fi

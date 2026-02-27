@@ -35,8 +35,8 @@ pythonpath = [
   ".",
   "apps/worker",
 ]
-reruns = 2
-reruns_delay = 1
+reruns = 0
+reruns_delay = 0
 
 [tool.ruff]
 target-version = "py311"

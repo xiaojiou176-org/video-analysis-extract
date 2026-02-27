@@ -7,6 +7,7 @@
 - 清单：`pyproject.toml`
 - 锁文件：`uv.lock`
 - 安装命令：`uv sync --frozen --extra dev --extra e2e`
+- 测试重试基线：默认 `pytest reruns=0`（仅在专门 flaky/nightly 任务中显式开启重试）
 
 ### Web (Node)
 
