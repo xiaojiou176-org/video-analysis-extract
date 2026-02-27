@@ -279,7 +279,7 @@ pre-commit run --all-files
   默认参数：`browser=chromium`、`expect_text="Example Domain"`、`timeout_ms=45000`、`retries=2`。
 - `pr-llm-real-smoke` 只在 PR 场景按条件运行：同仓 PR 且配置了 `GEMINI_API_KEY`；否则允许 `skipped` 不阻塞 aggregate gate。
   触发表达式与 CI 一致：`pull_request && same-repo-pr && GEMINI_API_KEY != ''`。
-- 若要复用外部 Web 实例，可用：`WEB_BASE_URL='http://127.0.0.1:3000' uv run --with pytest --with playwright pytest apps/web/tests/e2e -q`。
+- 若要复用外部 Web 实例，可用：`uv run --with pytest --with playwright pytest apps/web/tests/e2e -q --web-e2e-base-url 'http://127.0.0.1:3000'`。
 - PR 不强制 `live-smoke`；`main` push 与 nightly schedule 强制 `live-smoke=success`。
 - `live-smoke` 为真实 LLM/provider 链路，CI 需要：`GEMINI_API_KEY`、`RESEND_API_KEY`、`RESEND_FROM_EMAIL`、`YOUTUBE_API_KEY`，并通过 `--api-base-url` 传入目标 API 地址。
 - `scripts/smoke_full_stack.sh` 是本地联调用 smoke，不等同于 CI 强制 `live-smoke` 门禁。

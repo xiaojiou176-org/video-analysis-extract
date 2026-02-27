@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import importlib
-import os
 import sys
 import types
 import uuid
@@ -35,10 +34,7 @@ def _purge_api_modules() -> None:
 def integration_api(
     monkeypatch: pytest.MonkeyPatch, tmp_path: pytest.TempPathFactory
 ) -> Iterator[IntegrationHarness]:
-    base_url = os.getenv(
-        "API_INTEGRATION_DATABASE_URL",
-        "postgresql+psycopg://postgres:postgres@127.0.0.1:5432/postgres",
-    )
+    base_url = "postgresql+psycopg://postgres:postgres@127.0.0.1:5432/postgres"
     parsed_base = make_url(base_url)
     if parsed_base.drivername != "postgresql+psycopg":
         pytest.skip(f"integration smoke requires postgresql+psycopg, got: {parsed_base.drivername}")

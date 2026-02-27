@@ -15,7 +15,7 @@ from support.mock_api import (
     stop_mock_api_server,
 )
 from support.runtime_utils import (
-    external_web_base_url_from_env,
+    parse_external_web_base_url,
     slugify_nodeid,
     wait_http_ok,
     with_free_port_retry,
@@ -37,6 +37,12 @@ class _PortInUseStartupError(RuntimeError):
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:
+    parser.addoption(
+        "--web-e2e-base-url",
+        action="store",
+        default="",
+        help="Optional absolute http(s) base URL for reusing an existing web instance",
+    )
     parser.addoption(
         "--web-e2e-browser",
         action="store",
@@ -101,7 +107,9 @@ def mock_api_server() -> MockApiServer:
 
 @pytest.fixture(scope="session")
 def web_base_url(mock_api_server: MockApiServer, pytestconfig: pytest.Config) -> str:
-    external_base_url = external_web_base_url_from_env()
+    external_base_url = parse_external_web_base_url(
+        str(pytestconfig.getoption("--web-e2e-base-url"))
+    )
     if external_base_url is not None:
         wait_http_ok(f"{external_base_url}/")
         yield external_base_url
@@ -111,9 +119,6 @@ def web_base_url(mock_api_server: MockApiServer, pytestconfig: pytest.Config) ->
         raise RuntimeError("npm is required for web E2E. Install Node.js/npm in CI before running tests.")
     if not (WEB_DIR / "node_modules").exists():
         raise RuntimeError("apps/web/node_modules is missing. Run `npm ci` in apps/web before E2E.")
-
-    worker_id = str(pytestconfig.getoption("--web-e2e-worker-id"))
-    worker_slug = "".join(ch if ch.isalnum() else "-" for ch in worker_id.lower())
 
     process: subprocess.Popen[str] | None = None
     output_thread: threading.Thread | None = None
@@ -125,7 +130,6 @@ def web_base_url(mock_api_server: MockApiServer, pytestconfig: pytest.Config) ->
         base_url = f"http://127.0.0.1:{web_port}"
         env = os.environ.copy()
         env["NEXT_PUBLIC_API_BASE_URL"] = mock_api_server.base_url
-        env["NEXT_DIST_DIR"] = f".next-e2e-{worker_slug}"
         env["PORT"] = str(web_port)
         env["HOSTNAME"] = "127.0.0.1"
         env["CI"] = "1"

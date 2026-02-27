@@ -189,9 +189,7 @@ Exception detail sanitization contract:
 - `scripts/external_playwright_smoke.sh` now uses CLI flags only (no `EXTERNAL_SMOKE_*` env contract vars)
 - Script entry controls for `dev_api/dev_worker/dev_mcp/init_env_example` are CLI-only after Batch C (see `docs/reference/env-script-overrides.md`)
 - `scripts/recreate_gce_instance.sh` now uses CLI flags only (no GCE recreate env contract vars)
-- `WEB_BASE_URL` (web e2e target override)
-- `NEXT_DIST_DIR` (optional Next.js dist directory override for parallel web e2e workers)
-- `CORE_POSTGRES_PORT`, `CORE_POSTGRES_DB`, `CORE_POSTGRES_USER`, `CORE_POSTGRES_PASSWORD`, `CORE_REDIS_PORT`, `CORE_TEMPORAL_PORT` (docker compose core-services overrides)
+- `CORE_POSTGRES_PORT`, `CORE_POSTGRES_PASSWORD` (docker compose core-services overrides)
 
 Live smoke includes strict computer-use controls via CLI flags in `scripts/e2e_live_smoke.sh`.
 - `scripts/smoke_computer_use_local.sh` uses CLI flags (`--retries`, `--heartbeat-seconds`) with internal defaults.
@@ -227,7 +225,7 @@ Live smoke includes strict computer-use controls via CLI flags in `scripts/e2e_l
 - `--heartbeat-seconds=30` (CLI)
 - `--max-retries=2` (CLI)
 
-`WEB_BASE_URL` controls web e2e target mode:
+`--web-e2e-base-url` controls web e2e target mode:
 
 - unset/empty: pytest starts local Next.js (`npm run dev`) and injects mock API base URL.
 - set to absolute `http(s)://...`: pytest reuses the external web instance and skips local web boot.

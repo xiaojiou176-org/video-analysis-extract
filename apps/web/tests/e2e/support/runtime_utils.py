@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import errno
-import os
 import re
 import socket
 import time
@@ -79,8 +78,7 @@ def wait_http_ok(url: str, timeout_sec: float = 90.0) -> None:
     raise RuntimeError(f"Timeout waiting for server readiness: {url}. Last error: {last_error}")
 
 
-def external_web_base_url_from_env() -> str | None:
-    raw_value = os.getenv("WEB_BASE_URL")
+def parse_external_web_base_url(raw_value: str | None) -> str | None:
     if raw_value is None:
         return None
     candidate = raw_value.strip().rstrip("/")
@@ -88,5 +86,7 @@ def external_web_base_url_from_env() -> str | None:
         return None
     parsed = urlparse(candidate)
     if parsed.scheme not in {"http", "https"} or not parsed.netloc:
-        raise RuntimeError(f"WEB_BASE_URL must be an absolute http(s) URL, got: {raw_value!r}")
+        raise RuntimeError(
+            f"--web-e2e-base-url must be an absolute http(s) URL, got: {raw_value!r}"
+        )
     return candidate

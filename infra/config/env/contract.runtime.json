@@ -464,18 +464,6 @@
       "description": "Miniflux base URL."
     },
     {
-      "name": "NEXT_DIST_DIR",
-      "scope": "test",
-      "required": false,
-      "secret": false,
-      "default": null,
-      "consumer": [
-        "apps/web/next.config.mjs",
-        "apps/web/tests/e2e/conftest.py"
-      ],
-      "description": "Next.js build output directory override used by parallel web E2E workers."
-    },
-    {
       "name": "NEXT_PUBLIC_API_BASE_URL",
       "scope": "web",
       "required": false,
@@ -990,17 +978,6 @@
         "apps/web/app/action-security.ts"
       ],
       "description": "Optional shared secret that enforces action session token validation for server actions."
-    },
-    {
-      "name": "WEB_BASE_URL",
-      "scope": "test",
-      "required": false,
-      "secret": false,
-      "default": null,
-      "consumer": [
-        "apps/web/tests/e2e/support/runtime_utils.py"
-      ],
-      "description": "Target URL for web E2E smoke tests."
     },
     {
       "name": "WEB_E2E_BROWSER",

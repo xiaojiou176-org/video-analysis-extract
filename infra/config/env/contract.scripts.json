@@ -3,17 +3,6 @@
   "name": "scripts",
   "variables": [
     {
-      "name": "CORE_POSTGRES_DB",
-      "scope": "scripts",
-      "required": false,
-      "secret": false,
-      "default": "video_analysis",
-      "consumer": [
-        "infra/compose/core-services.compose.yml"
-      ],
-      "description": "Core services PostgreSQL database name override."
-    },
-    {
       "name": "CORE_POSTGRES_PASSWORD",
       "scope": "scripts",
       "required": false,
@@ -34,39 +23,6 @@
         "infra/compose/core-services.compose.yml"
       ],
       "description": "Core services PostgreSQL exposed host port."
-    },
-    {
-      "name": "CORE_POSTGRES_USER",
-      "scope": "scripts",
-      "required": false,
-      "secret": false,
-      "default": "postgres",
-      "consumer": [
-        "infra/compose/core-services.compose.yml"
-      ],
-      "description": "Core services PostgreSQL username override."
-    },
-    {
-      "name": "CORE_REDIS_PORT",
-      "scope": "scripts",
-      "required": false,
-      "secret": false,
-      "default": "6379",
-      "consumer": [
-        "infra/compose/core-services.compose.yml"
-      ],
-      "description": "Core services Redis exposed host port."
-    },
-    {
-      "name": "CORE_TEMPORAL_PORT",
-      "scope": "scripts",
-      "required": false,
-      "secret": false,
-      "default": "7233",
-      "consumer": [
-        "infra/compose/core-services.compose.yml"
-      ],
-      "description": "Core services Temporal frontend exposed host port."
     },
     {
       "name": "MINIFLUX_ADMIN_PASSWORD",
@@ -104,17 +60,6 @@
       "description": "Miniflux API token for AI sync."
     },
     {
-      "name": "MINIFLUX_DB_NAME",
-      "scope": "scripts",
-      "required": false,
-      "secret": false,
-      "default": "miniflux",
-      "consumer": [
-        "infra/compose/miniflux-nextflux.compose.yml"
-      ],
-      "description": "PostgreSQL database name for Miniflux container."
-    },
-    {
       "name": "MINIFLUX_DB_PASSWORD",
       "scope": "scripts",
       "required": false,
@@ -124,28 +69,6 @@
         "infra/compose/miniflux-nextflux.compose.yml"
       ],
       "description": "PostgreSQL password for Miniflux container."
-    },
-    {
-      "name": "MINIFLUX_DB_USER",
-      "scope": "scripts",
-      "required": false,
-      "secret": false,
-      "default": "miniflux",
-      "consumer": [
-        "infra/compose/miniflux-nextflux.compose.yml"
-      ],
-      "description": "PostgreSQL username for Miniflux container."
-    },
-    {
-      "name": "MINIFLUX_PORT",
-      "scope": "scripts",
-      "required": false,
-      "secret": false,
-      "default": "8080",
-      "consumer": [
-        "infra/compose/miniflux-nextflux.compose.yml"
-      ],
-      "description": "Miniflux host port exposed by docker compose."
     },
     {
       "name": "NEXTFLUX_PORT",

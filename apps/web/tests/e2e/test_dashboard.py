@@ -6,19 +6,21 @@ import pytest
 from playwright.sync_api import Page, expect
 from support.assertions import wait_for_call_count, wait_for_http_call
 from support.mock_api import MockApiState
-from support.runtime_utils import external_web_base_url_from_env
+from support.runtime_utils import parse_external_web_base_url
 
 
-def test_external_web_base_url_env_parsing(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("WEB_BASE_URL", raising=False)
-    assert external_web_base_url_from_env() is None
+def test_external_web_base_url_option_parsing() -> None:
+    assert parse_external_web_base_url(None) is None
+    assert parse_external_web_base_url("") is None
+    assert parse_external_web_base_url("  http://127.0.0.1:3300/  ") == "http://127.0.0.1:3300"
 
-    monkeypatch.setenv("WEB_BASE_URL", "  http://127.0.0.1:3300/  ")
-    assert external_web_base_url_from_env() == "http://127.0.0.1:3300"
-
-    monkeypatch.setenv("WEB_BASE_URL", "not-a-url")
     with pytest.raises(RuntimeError, match="absolute http\\(s\\) URL"):
-        external_web_base_url_from_env()
+        parse_external_web_base_url("not-a-url")
+
+
+def test_external_web_base_url_option_validation_message() -> None:
+    with pytest.raises(RuntimeError, match="absolute http\\(s\\) URL"):
+        parse_external_web_base_url("ftp://127.0.0.1:3300")
 
 
 def test_dashboard_trigger_ingest_poll_button(page: Page, mock_api_state: MockApiState) -> None:

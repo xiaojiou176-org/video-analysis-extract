@@ -275,6 +275,7 @@ bash -n scripts/start_ops_workflows.sh
 - `bootstrap_full_stack.sh`：依赖安装、环境校验、数据库迁移、可选 reader stack。
 - `full_stack.sh`：统一起停 API/Worker/MCP/Web；`up` 会等待 API health(`GET /healthz`) 与 Web 端口就绪，失败时输出关键服务日志片段。
 - `smoke_full_stack.sh`：执行端到端 smoke（含 feed/web 检查，可选 reader 检查）。
+- compose 固定默认（不再通过 env 覆盖）：core Postgres `DB/User`、Redis 端口、Temporal 端口；Miniflux `DB/User/DB_NAME` 与 Miniflux 端口。
 
 `full_stack.sh` 运行约束（稳定性修复）：
 

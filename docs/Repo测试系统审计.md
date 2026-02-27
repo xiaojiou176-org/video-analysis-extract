@@ -246,7 +246,7 @@
 
 7. 环境契约与临时目录治理（已完成）
    - `check_env_contract.py` 忽略 `.next*` 目录，避免 e2e 临时目录污染扫描。
-   - 新增 `API_INTEGRATION_DATABASE_URL` 到 env contract 与 `.env.example`。
+   - 增加 API integration smoke 的专用数据库配置项并完成契约联动。
    - 文件：
      - `scripts/check_env_contract.py`
      - `infra/config/env.contract.json`

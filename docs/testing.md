@@ -72,7 +72,7 @@ CI 去重行为口径：
 | `api-real-smoke` | 真实 FastAPI + 真实 Postgres + 真实 migration | 否（不打外部 provider） | 否 |
 | `pr-llm-real-smoke` | PR 条件触发的真实 LLM 接口烟测（`/api/v1/computer-use/run`） | 是（调用真实 Gemini） | 是（仅 `GEMINI_API_KEY`） |
 | `web-e2e` | Playwright UI 行为验证 + mock API | 否（默认不打外网） | 否 |
-| `web-e2e` + `WEB_BASE_URL` | Playwright 复用外部 Web 实例 | 取决于目标实例 | 通常否 |
+| `web-e2e` + `--web-e2e-base-url` | Playwright 复用外部 Web 实例 | 取决于目标实例 | 通常否 |
 | `external-playwright-smoke` | Playwright 直连外部公共站点（`https://example.com`） | 是（真实外网） | 否（默认值由 job 参数提供，可按脚本参数覆盖） |
 | `live-smoke` | 真实 `/api/v1/videos/process` + 真实 provider 链路 | 是（YouTube/Bilibili + Gemini/Resend） | 是（CI 主干必需） |
 
@@ -376,13 +376,13 @@ uv run --with pytest --with playwright pytest apps/web/tests/e2e -q
 外部 Base URL 模式（复用已有 Web 实例，不启动本地 Next.js）：
 
 ```bash
-WEB_BASE_URL='http://127.0.0.1:3000' \
-uv run --with pytest --with playwright pytest apps/web/tests/e2e -q
+uv run --with pytest --with playwright pytest apps/web/tests/e2e -q \
+  --web-e2e-base-url 'http://127.0.0.1:3000'
 ```
 
 说明：
 
-- `WEB_BASE_URL` 必须是绝对 `http(s)` URL。
+- `--web-e2e-base-url` 必须是绝对 `http(s)` URL。
 - 使用外部模式时，请确保目标 Web 已启动且其 API 指向与测试预期一致。
 
 ### 3) Web 静态检查
