@@ -231,6 +231,7 @@ uv run --with pytest --with playwright pytest apps/web/tests/e2e -q
 - CI 预检拆分为 `preflight-fast` + `preflight-heavy`，多数 job 先依赖 fast 以减少起跑阻塞，最终由 aggregate gate 同时约束两者成功。
 - `quality-gate-pre-push` 在 `main/schedule` 采用 `--ci-dedupe 1` 并透传 `--changed-*` 标记，避免与独立 lint/unit/coverage 作业重复执行。
 - 本地 `pre-push` 新增硬门禁：`api cors preflight smoke (OPTIONS DELETE)` 与 `contract diff local gate (base vs head)`，先于远程 CI 拦截跨端链路与契约回归。
+- 本地 `pre-push` 进一步对齐远端 `preflight-fast` + `web-test-build`：`check_ci_docs_parity`、`docs env canonical guard`、`provider residual guard`、`worker line limits`、`schema parity`、`web design token guard`、`web build`、`web button coverage`。
 - Web E2E 默认轻量化：trace 默认 `off`、video 默认 `retain-on-failure`，并仅在失败时上传重工件。
 - 测试分层主责明确：API 负责字段级契约断言，Web E2E 聚焦用户旅程，MCP 聚焦工具语义与路由动作。
 

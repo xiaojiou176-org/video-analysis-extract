@@ -550,6 +550,153 @@ run_contract_diff_local_gate() {
   echo "[quality-gate] contract diff local gate passed"
 }
 
+run_ci_docs_parity_gate() {
+  python3 scripts/check_ci_docs_parity.py
+  echo "[quality-gate] ci docs parity gate passed"
+}
+
+run_docs_env_canonical_guard() {
+  if rg -n 'cp \.env\.local\.example \.env\.local|source \.env\.local|自动加载 `?\.env\.local' README.md docs/runbook-local.md; then
+    echo "[quality-gate] docs env canonical guard failed" >&2
+    return 1
+  fi
+  echo "[quality-gate] docs env canonical guard passed"
+}
+
+run_provider_residual_guard() {
+  bash scripts/guard_provider_residuals.sh .
+  echo "[quality-gate] provider residual guard passed"
+}
+
+run_worker_line_limits_guard() {
+  python3 scripts/check_worker_line_limits.py
+  echo "[quality-gate] worker line limits guard passed"
+}
+
+run_schema_parity_gate() {
+  python3 - <<'PY'
+import difflib
+import json
+from pathlib import Path
+
+source_path = Path("apps/mcp/schemas/tools.json")
+shared_path = Path("packages/shared-contracts/jsonschema/mcp-tools.schema.json")
+
+source = json.loads(source_path.read_text(encoding="utf-8"))
+shared = json.loads(shared_path.read_text(encoding="utf-8"))
+
+if source != shared:
+    source_pretty = json.dumps(source, ensure_ascii=False, indent=2, sort_keys=True).splitlines()
+    shared_pretty = json.dumps(shared, ensure_ascii=False, indent=2, sort_keys=True).splitlines()
+    print("Schema parity check failed:")
+    for line in difflib.unified_diff(
+        source_pretty,
+        shared_pretty,
+        fromfile=str(source_path),
+        tofile=str(shared_path),
+        lineterm="",
+    ):
+        print(line)
+    raise SystemExit(1)
+print("Schema parity check passed.")
+PY
+  echo "[quality-gate] schema parity gate passed"
+}
+
+run_iac_compose_config_validation() {
+  if ! command -v docker >/dev/null 2>&1; then
+    echo "[quality-gate] iac compose config validation failed: docker is required" >&2
+    return 1
+  fi
+  docker compose -f infra/compose/core-services.compose.yml config -q
+  if [[ -f infra/compose/miniflux-nextflux.compose.yml ]]; then
+    docker compose -f infra/compose/miniflux-nextflux.compose.yml config -q
+  fi
+  echo "[quality-gate] iac compose config validation passed"
+}
+
+run_web_design_token_guard_local() {
+  local merge_base=""
+
+  if git rev-parse --verify HEAD >/dev/null 2>&1; then
+    if git rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' >/dev/null 2>&1; then
+      merge_base="$(git merge-base HEAD '@{upstream}' 2>/dev/null || true)"
+    elif git rev-parse --verify HEAD~1 >/dev/null 2>&1; then
+      merge_base="$(git rev-parse HEAD~1 2>/dev/null || true)"
+    fi
+  fi
+
+  if [[ -n "$merge_base" ]]; then
+    python3 scripts/check_design_tokens.py \
+      --from-ref "$merge_base" \
+      --to-ref HEAD \
+      apps/web
+  else
+    python3 scripts/check_design_tokens.py --all-lines apps/web
+  fi
+  echo "[quality-gate] web design token guard passed"
+}
+
+run_python_tests_with_coverage_and_skip_guard() {
+  mkdir -p .runtime-cache
+  PYTHONPATH="$PWD:$PWD/apps/worker" \
+  DATABASE_URL='sqlite+pysqlite:///:memory:' \
+    uv run pytest apps/worker/tests apps/api/tests apps/mcp/tests -q -rA \
+      --cov=apps/worker/worker \
+      --cov=apps/api \
+      --cov=apps/mcp \
+      --cov-report=term-missing:skip-covered \
+      --cov-fail-under=80 \
+      --junitxml=.runtime-cache/python-tests-junit-local.xml
+
+  python3 - <<'PY'
+import xml.etree.ElementTree as ET
+from pathlib import Path
+
+report = Path(".runtime-cache/python-tests-junit-local.xml")
+if not report.is_file():
+    raise SystemExit("python skip guard failed: junit report missing")
+
+root = ET.parse(report).getroot()
+suites = [root] if root.tag == "testsuite" else root.findall("testsuite")
+tests = sum(int(suite.attrib.get("tests", "0")) for suite in suites)
+skipped = sum(int(suite.attrib.get("skipped", "0")) for suite in suites)
+
+if tests == 0:
+    raise SystemExit("python skip guard failed: collected 0 tests")
+if skipped > 0:
+    raise SystemExit(f"python skip guard failed: skipped={skipped} (no silent skip allowed)")
+print(f"python skip guard passed: tests={tests}, skipped={skipped}")
+PY
+}
+
+run_web_dependency_policy_gate() {
+  node - <<'JS'
+const fs = require("fs");
+const path = "apps/web/package.json";
+const pkg = JSON.parse(fs.readFileSync(path, "utf8"));
+const sections = ["dependencies", "devDependencies", "peerDependencies", "optionalDependencies"];
+const violations = [];
+
+for (const section of sections) {
+  const deps = pkg[section] || {};
+  for (const [name, version] of Object.entries(deps)) {
+    const v = String(version).trim();
+    if (v === "latest" || v === "*" || /^https?:/i.test(v) || /^git\+/i.test(v)) {
+      violations.push(`${section}.${name}=${v}`);
+    }
+  }
+}
+
+if (violations.length) {
+  console.error("Floating dependency versions are not allowed:");
+  for (const item of violations) console.error(`- ${item}`);
+  process.exit(1);
+}
+console.log("Web dependency policy gate passed");
+JS
+}
+
 report_gate_failure() {
   local gate_name="$1"
   local gate_log="$2"
@@ -999,6 +1146,18 @@ run_pre_push_mode() {
     "python3 scripts/check_structured_logs.py"
   run_async_gate "iac_entrypoint_guard" "iac entrypoint guard" \
     "bash scripts/check_iac_entrypoint.sh ."
+  run_async_gate "iac_compose_config_validation" "iac compose config validation" \
+    "run_iac_compose_config_validation"
+  run_async_gate "ci_docs_parity_gate" "ci docs parity gate" \
+    "run_ci_docs_parity_gate"
+  run_async_gate "docs_env_canonical_guard" "docs env canonical guard" \
+    "run_docs_env_canonical_guard"
+  run_async_gate "provider_residual_guard" "provider residual guard" \
+    "run_provider_residual_guard"
+  run_async_gate "worker_line_limits_guard" "worker line limits guard" \
+    "run_worker_line_limits_guard"
+  run_async_gate "schema_parity_gate" "schema parity gate (apps/mcp vs shared-contracts)" \
+    "run_schema_parity_gate"
   if [[ "$CI_DEDUPE" == "1" ]]; then
     echo "[quality-gate] skip: frontend lint (--ci-dedupe=1)"
   elif is_true "$EFFECTIVE_WEB_CHANGED"; then
@@ -1039,6 +1198,12 @@ run_pre_push_mode() {
   elif is_true "$EFFECTIVE_WEB_CHANGED"; then
     run_async_gate "web_coverage_threshold" "web coverage threshold gate (global>=80, core>=90)" \
       "python3 scripts/check_web_coverage_threshold.py --summary-path apps/web/coverage/coverage-summary.json --global-threshold 80 --core-threshold 90"
+    run_async_gate "web_design_token_guard" "web design token guard (local diff)" \
+      "run_web_design_token_guard_local"
+    run_async_gate "web_build" "web build" \
+      "npm --prefix apps/web run build"
+    run_async_gate "web_button_coverage" "web button coverage gate (threshold=1.0)" \
+      "python3 scripts/check_web_button_coverage.py --threshold 1.0"
   else
     echo "[quality-gate] skip: web coverage threshold gate (effective_web_changed=false)"
   fi
@@ -1046,13 +1211,23 @@ run_pre_push_mode() {
     echo "[quality-gate] skip: python tests + total coverage (--ci-dedupe=1)"
   elif is_true "$EFFECTIVE_BACKEND_CHANGED"; then
     run_async_gate "python_tests_with_coverage" "python tests + total coverage gate (>=80%)" \
-      "PYTHONPATH=\"$PWD:$PWD/apps/worker\" DATABASE_URL='sqlite+pysqlite:///:memory:' uv run pytest apps/worker/tests apps/api/tests apps/mcp/tests -q -rA --cov=apps/worker/worker --cov=apps/api --cov=apps/mcp --cov-report=term-missing:skip-covered --cov-fail-under=80"
+      "run_python_tests_with_coverage_and_skip_guard"
     run_async_gate "api_cors_preflight_smoke" "api cors preflight smoke (OPTIONS DELETE)" \
       "run_api_cors_preflight_smoke"
     run_async_gate "contract_diff_local_gate" "contract diff local gate (base vs head)" \
       "run_contract_diff_local_gate"
   else
     echo "[quality-gate] skip: python tests + total coverage (effective_backend_changed=false)"
+  fi
+  if is_true "$CHANGED_DEPS"; then
+    run_async_gate "python_dependency_audit" "python dependency audit (pip-audit)" \
+      "uv run --with pip-audit pip-audit --progress-spinner off"
+    run_async_gate "web_dependency_policy_gate" "web dependency policy gate (no floating versions)" \
+      "run_web_dependency_policy_gate"
+    run_async_gate "web_runtime_dependency_audit" "web runtime dependency audit (npm audit high+)" \
+      "npm --prefix apps/web audit --omit=dev --audit-level=high"
+  else
+    echo "[quality-gate] skip: dependency vulnerability scan (changed_deps=false)"
   fi
 
   ensure_parallel_batch "pre-push/long-tests"

@@ -234,6 +234,7 @@ bash scripts/env/final_governance_check.sh --skip-prepush
 - 变异测试门禁强制执行（Python 核心模块）：mutation score `>=0.85`（默认，可通过 `--mutation-min-score` 覆盖）。
 - `pre-push` 采用 fail-fast：先短检查，再长测试；长测试并行执行并输出 heartbeat。
 - `pre-push` 后端链路新增硬门禁：`api cors preflight smoke (OPTIONS DELETE)` 与 `contract diff local gate (base vs head)`。
+- `pre-push` 与远端 CI `preflight-fast`/`web-test-build` 关键阻断项对齐：`check_ci_docs_parity`、`docs env canonical guard`、`provider residual guard`、`worker line limits guard`、`schema parity gate`、`web design token guard`、`web build`、`web button coverage`。
 - Env 预算门禁强制执行（防反弹）：`core<=20`、`runtime<=100`、`scripts<=120`、`universe<=216`（`python3 scripts/check_env_budget.py`）。
 - 远程 CI 成本治理：任何远程重跑前必须先本地 pre-push 全绿；远程失败后先本地复现修复再重跑。
 
@@ -330,7 +331,15 @@ echo "feat(api): add ingest health guard" > /tmp/commit-msg-ok.txt
   - `npm --prefix apps/web run test -- --coverage`
   - `python3 scripts/check_web_coverage_threshold.py --summary-path apps/web/coverage/coverage-summary.json --global-threshold 80 --core-threshold 90`
   - `uv run pytest ... --cov-fail-under=80`
+  - `python skip guard`（junit `tests>0` 且 `skipped=0`）
   - `uv run coverage report ... --fail-under=95`（worker core / api core）
+  - `python3 scripts/check_ci_docs_parity.py`
+  - `bash scripts/guard_provider_residuals.sh .`
+  - `python3 scripts/check_worker_line_limits.py`
+  - `schema parity gate`（`apps/mcp/schemas/tools.json` vs `packages/shared-contracts/jsonschema/mcp-tools.schema.json`）
+  - `python3 scripts/check_design_tokens.py --from-ref <merge_base> --to-ref HEAD apps/web`（回退 `--all-lines`）
+  - `npm --prefix apps/web run build`
+  - `python3 scripts/check_web_button_coverage.py --threshold 1.0`
   - `DATABASE_URL='sqlite+pysqlite:///:memory:' uv run --extra dev --with mutmut mutmut run`
   - `uv run --extra dev --with mutmut mutmut export-cicd-stats`
   - `python3 -c '...读取 mutants/mutmut-cicd-stats.json 并校验 score>=阈值...'`（默认阈值 `0.85`）
