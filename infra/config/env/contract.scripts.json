@@ -3,17 +3,6 @@
   "name": "scripts",
   "variables": [
     {
-      "name": "API_APP",
-      "scope": "scripts",
-      "required": false,
-      "secret": false,
-      "default": "apps.api.app.main:app",
-      "consumer": [
-        "scripts/dev_api.sh"
-      ],
-      "description": "Uvicorn app import path."
-    },
-    {
       "name": "API_HOST",
       "scope": "scripts",
       "required": false,
@@ -113,29 +102,6 @@
       "description": "Core services Temporal frontend exposed host port."
     },
     {
-      "name": "DEV_API_RELOAD",
-      "scope": "scripts",
-      "required": false,
-      "secret": false,
-      "default": "1",
-      "consumer": [
-        "scripts/dev_api.sh",
-        "scripts/full_stack.sh"
-      ],
-      "description": "Enable uvicorn --reload in dev_api; full_stack up forces this to 0 for stable background mode."
-    },
-    {
-      "name": "DEV_WORKER_SHOW_HINTS",
-      "scope": "scripts",
-      "required": false,
-      "secret": false,
-      "default": "1",
-      "consumer": [
-        "scripts/dev_worker.sh"
-      ],
-      "description": "Print environment hints before worker startup."
-    },
-    {
       "name": "FULL_STACK_REQUIRE_READER",
       "scope": "scripts",
       "required": false,
@@ -156,17 +122,6 @@
         "scripts/smoke_full_stack.sh"
       ],
       "description": "Heartbeat interval seconds for full-stack smoke long-running stages."
-    },
-    {
-      "name": "INIT_ENV_FORCE",
-      "scope": "scripts",
-      "required": false,
-      "secret": false,
-      "default": "0",
-      "consumer": [
-        "scripts/init_env_example.sh"
-      ],
-      "description": "Overwrite generated template when set to truthy."
     },
     {
       "name": "INSTALL_DEPS",
@@ -244,28 +199,6 @@
         "scripts/e2e_live_smoke.sh"
       ],
       "description": "When true, fail live smoke if required external provider secrets are missing; otherwise skip."
-    },
-    {
-      "name": "MCP_DIR",
-      "scope": "scripts",
-      "required": false,
-      "secret": false,
-      "default": "apps/mcp",
-      "consumer": [
-        "scripts/dev_mcp.sh"
-      ],
-      "description": "MCP server root directory."
-    },
-    {
-      "name": "MCP_ENTRY",
-      "scope": "scripts",
-      "required": false,
-      "secret": false,
-      "default": "apps.mcp.server",
-      "consumer": [
-        "scripts/dev_mcp.sh"
-      ],
-      "description": "MCP Python entry module."
     },
     {
       "name": "MINIFLUX_ADMIN_PASSWORD",
@@ -503,17 +436,6 @@
       "description": "Maximum retry batch size for notification retry workflow."
     },
     {
-      "name": "OUTPUT_PATH",
-      "scope": "scripts",
-      "required": false,
-      "secret": false,
-      "default": ".env.generated.example",
-      "consumer": [
-        "scripts/init_env_example.sh"
-      ],
-      "description": "Generated local env template path."
-    },
-    {
       "name": "PROFILE",
       "scope": "scripts",
       "required": false,
@@ -581,39 +503,6 @@
         "scripts/bootstrap_full_stack.sh"
       ],
       "description": "Whether bootstrap starts Miniflux+Nextflux reader stack."
-    },
-    {
-      "name": "WORKER_COMMAND",
-      "scope": "scripts",
-      "required": false,
-      "secret": false,
-      "default": "run-worker",
-      "consumer": [
-        "scripts/dev_worker.sh"
-      ],
-      "description": "Worker command for the entry module."
-    },
-    {
-      "name": "WORKER_DIR",
-      "scope": "scripts",
-      "required": false,
-      "secret": false,
-      "default": "apps/worker",
-      "consumer": [
-        "scripts/dev_worker.sh"
-      ],
-      "description": "Worker module root."
-    },
-    {
-      "name": "WORKER_ENTRY",
-      "scope": "scripts",
-      "required": false,
-      "secret": false,
-      "default": "worker.main",
-      "consumer": [
-        "scripts/dev_worker.sh"
-      ],
-      "description": "Worker Python entry module."
     },
     {
       "name": "YOUTUBE_SMOKE_URL",

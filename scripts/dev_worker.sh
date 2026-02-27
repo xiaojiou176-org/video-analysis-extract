@@ -6,14 +6,76 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$ROOT_DIR/scripts/lib/load_env.sh"
 load_repo_env "$ROOT_DIR" "dev_worker"
 
-WORKER_DIR="${WORKER_DIR:-$ROOT_DIR/apps/worker}"
-WORKER_ENTRY="${WORKER_ENTRY:-worker.main}"
-WORKER_COMMAND="${WORKER_COMMAND:-run-worker}"
-SHOW_HINTS="${DEV_WORKER_SHOW_HINTS:-1}"
+WORKER_DIR="$ROOT_DIR/apps/worker"
+WORKER_ENTRY="worker.main"
+WORKER_COMMAND="run-worker"
+SHOW_HINTS=1
+
+usage() {
+  cat <<'EOF'
+Usage: ./scripts/dev_worker.sh [options] [-- <command args...>]
+
+Options:
+  --worker-dir <path>  Worker project directory (default: <repo>/apps/worker)
+  --entry <module>     Python module entry (default: worker.main)
+  --command <name>     Worker subcommand (default: run-worker)
+  --show-hints         Show startup env hints (default)
+  --no-show-hints      Hide startup env hints
+  -h, --help           Show this help
+EOF
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --worker-dir)
+      if [[ $# -lt 2 || -z "${2:-}" || "${2:-}" == --* ]]; then
+        echo "[dev_worker] --worker-dir requires a non-empty value" >&2
+        exit 2
+      fi
+      WORKER_DIR="$2"
+      shift 2
+      ;;
+    --entry)
+      if [[ $# -lt 2 || -z "${2:-}" || "${2:-}" == --* ]]; then
+        echo "[dev_worker] --entry requires a non-empty value" >&2
+        exit 2
+      fi
+      WORKER_ENTRY="$2"
+      shift 2
+      ;;
+    --command)
+      if [[ $# -lt 2 || -z "${2:-}" || "${2:-}" == --* ]]; then
+        echo "[dev_worker] --command requires a non-empty value" >&2
+        exit 2
+      fi
+      WORKER_COMMAND="$2"
+      shift 2
+      ;;
+    --show-hints)
+      SHOW_HINTS=1
+      shift
+      ;;
+    --no-show-hints)
+      SHOW_HINTS=0
+      shift
+      ;;
+    --)
+      shift
+      break
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      break
+      ;;
+  esac
+done
 
 if [[ ! -d "$WORKER_DIR" ]]; then
   echo "[dev_worker] Worker directory not found: $WORKER_DIR" >&2
-  echo "[dev_worker] Set WORKER_DIR to your worker service path." >&2
+  echo "[dev_worker] Use --worker-dir to point to your worker service path." >&2
   exit 1
 fi
 
@@ -49,7 +111,7 @@ if [[ "$SHOW_HINTS" == "1" ]]; then
 [dev_worker]   GEMINI_CONTEXT_CACHE_MIN_CHARS=${GEMINI_CONTEXT_CACHE_MIN_CHARS:-4096}
 [dev_worker]   DIGEST_LOCAL_TIMEZONE=${DIGEST_LOCAL_TIMEZONE:-system-local}
 [dev_worker]   DIGEST_DAILY_LOCAL_HOUR=${DIGEST_DAILY_LOCAL_HOUR:-9}
-[dev_worker] Set DEV_WORKER_SHOW_HINTS=0 to hide this block.
+[dev_worker] Set --no-show-hints to hide this block.
 EOF
 fi
 

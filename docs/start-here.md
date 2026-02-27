@@ -161,7 +161,7 @@ curl -sS -X POST http://127.0.0.1:8000/api/v1/ingest/poll -H 'Content-Type: appl
 默认行为：
 
 - `bootstrap_full_stack.sh` 会拉起 core services + Miniflux + Nextflux。
-- `full_stack.sh up` 会等待 API health(`GET /healthz`) 与 Web 端口可用；后台模式会关闭 API reload（`DEV_API_RELOAD=0`）以避免 PID 漂移误判。
+- `full_stack.sh up` 会等待 API health(`GET /healthz`) 与 Web 端口可用；后台模式会调用 `./scripts/dev_api.sh --no-reload` 以避免 PID 漂移误判。
 - `smoke_full_stack.sh` 会执行本地联调烟测并覆盖 reader 栈检查。
 
 边界说明：

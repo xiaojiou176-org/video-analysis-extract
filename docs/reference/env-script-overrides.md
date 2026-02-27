@@ -58,19 +58,26 @@ Use CLI flags instead (`--channel`, `--lookback-hours`, `--limit`, `--dry-run`, 
 
 ## Script Entry Overrides (`scripts/dev_*.sh`, `scripts/init_env_example.sh`)
 
-- `API_APP` (default: `apps.api.app.main:app`)
 - `API_HOST` (default: `127.0.0.1`)
 - `API_PORT` (default: `8000`)
 - `API_HEALTH_URL` (default: `http://127.0.0.1:8000/healthz`)
-- `DEV_API_RELOAD` (default: `1`)
-- `WORKER_DIR` (default: `$PWD/apps/worker`)
-- `WORKER_ENTRY` (default: `worker.main`)
-- `WORKER_COMMAND` (default: `run-worker`)
-- `DEV_WORKER_SHOW_HINTS` (default: `1`)
-- `MCP_DIR` (default: `$PWD/apps/mcp`)
-- `MCP_ENTRY` (default: `apps.mcp.server`)
-- `OUTPUT_PATH` (default: `$PWD/.env.output.example`)
-- `INIT_ENV_FORCE` (default: `0`)
+
+Batch C 口径：以下脚本入口参数已迁移为 CLI/内置默认，不再通过 env 合同暴露：
+
+- `scripts/dev_api.sh`
+  - `--app` (default: `apps.api.app.main:app`)
+  - `--reload` / `--no-reload` (default: reload on)
+- `scripts/dev_worker.sh`
+  - `--worker-dir` (default: `<repo>/apps/worker`)
+  - `--entry` (default: `worker.main`)
+  - `--command` (default: `run-worker`)
+  - `--show-hints` / `--no-show-hints` (default: show)
+- `scripts/dev_mcp.sh`
+  - `--entry` (default: `apps.mcp.server`)
+  - `--mcp-dir` (default: `<repo>/apps/mcp`)
+- `scripts/init_env_example.sh`
+  - `--output` (default: `<repo>/.env.generated.example`)
+  - `--force` (default: disabled)
 
 ## Ops Workflow Bootstrap (`scripts/start_ops_workflows.sh`)
 

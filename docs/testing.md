@@ -170,7 +170,7 @@ scripts/smoke_llm_real_local.sh --api-base-url "http://127.0.0.1:18081"
 说明：
 
 - `up` 会等待 API health 与 Web 端口就绪，失败时输出 `logs/full-stack/*.log` 关键片段，便于快速定位。
-- 后台 `up` 场景默认关闭 API reload（`DEV_API_RELOAD=0`），避免 `status` 因 reload 父子进程变化误判 `stopped`。
+- 后台 `up` 场景调用 `./scripts/dev_api.sh --no-reload`，避免 `status` 因 reload 父子进程变化误判 `stopped`。
 
 ## 触发差异（PR vs main vs nightly）
 

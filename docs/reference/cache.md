@@ -74,13 +74,13 @@
 执行一次清理：
 
 ```bash
-WORKER_COMMAND=start-cleanup-workflow ./scripts/dev_worker.sh --run-once --older-than-hours 24
+./scripts/dev_worker.sh --command start-cleanup-workflow --run-once --older-than-hours 24
 ```
 
 执行周期清理（每 6 小时）：
 
 ```bash
-WORKER_COMMAND=start-cleanup-workflow ./scripts/dev_worker.sh --interval-hours 6 --older-than-hours 24
+./scripts/dev_worker.sh --command start-cleanup-workflow --interval-hours 6 --older-than-hours 24
 ```
 
 通过常驻 ops 启动脚本接入 cleanup（推荐）：

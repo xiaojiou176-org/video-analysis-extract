@@ -37,6 +37,12 @@ touch logs/daily_digest.log logs/failure_alerts.log logs/ops/workflows.log
 ./scripts/start_ops_workflows.sh >> ./logs/ops/workflows.log 2>&1
 ```
 
+脚本入口参数（Batch C）：
+
+- `./scripts/dev_api.sh --app ... --reload|--no-reload`
+- `./scripts/dev_worker.sh --worker-dir ... --entry ... --command ... --show-hints|--no-show-hints`
+- `./scripts/dev_mcp.sh --entry ... --mcp-dir ...`
+
 ## Sensitive Data Rules
 
 `run_daily_digest.sh` 与 `run_failure_alerts.sh` 内置 `safe_body_preview`，会对以下模式脱敏：

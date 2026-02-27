@@ -262,7 +262,7 @@ status_one() {
 cmd="${1:-up}"
 case "$cmd" in
   up)
-    start_one api env DEV_API_RELOAD=0 "$ROOT_DIR/scripts/dev_api.sh"
+    start_one api "$ROOT_DIR/scripts/dev_api.sh" --no-reload
     start_one mcp "$ROOT_DIR/scripts/dev_mcp.sh"
     start_one web npm --prefix "$ROOT_DIR/apps/web" run dev -- --port "$WEB_PORT"
     temporal_host="${TEMPORAL_TARGET_HOST:-127.0.0.1:7233}"

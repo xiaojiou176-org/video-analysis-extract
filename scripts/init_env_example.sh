@@ -4,8 +4,8 @@ set -euo pipefail
 SCRIPT_NAME="init_env_example"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-OUTPUT_PATH="${OUTPUT_PATH:-$ROOT_DIR/.env.generated.example}"
-INIT_ENV_FORCE="${INIT_ENV_FORCE:-0}"
+OUTPUT_PATH="$ROOT_DIR/.env.generated.example"
+INIT_ENV_FORCE=0
 SOURCE_ENV_TEMPLATE="$ROOT_DIR/.env.example"
 
 log() {
@@ -28,7 +28,7 @@ is_truthy() {
 
 write_example_env() {
   if [[ -e "$OUTPUT_PATH" ]] && ! is_truthy "$INIT_ENV_FORCE"; then
-    fail "output exists: $OUTPUT_PATH (set INIT_ENV_FORCE=1 to overwrite)"
+    fail "output exists: $OUTPUT_PATH (use --force to overwrite)"
   fi
   if [[ ! -f "$SOURCE_ENV_TEMPLATE" ]]; then
     fail "source env template not found: $SOURCE_ENV_TEMPLATE"
@@ -51,6 +51,36 @@ EOF
 }
 
 main() {
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --output)
+        if [[ $# -lt 2 || -z "${2:-}" || "${2:-}" == --* ]]; then
+          fail "--output requires a non-empty path"
+        fi
+        OUTPUT_PATH="$2"
+        shift 2
+        ;;
+      --force)
+        INIT_ENV_FORCE=1
+        shift
+        ;;
+      -h|--help)
+        cat <<EOF
+Usage: ./scripts/init_env_example.sh [--output <path>] [--force]
+
+Options:
+  --output <path>  Output file path (default: $ROOT_DIR/.env.generated.example)
+  --force          Overwrite existing output file
+  -h, --help       Show this help
+EOF
+        exit 0
+        ;;
+      *)
+        fail "unknown argument: $1"
+        ;;
+    esac
+  done
+
   write_example_env
   print_next_steps
 }

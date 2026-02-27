@@ -6,10 +6,52 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$ROOT_DIR/scripts/lib/load_env.sh"
 load_repo_env "$ROOT_DIR" "dev_api"
 
-API_APP="${API_APP:-apps.api.app.main:app}"
+API_APP="apps.api.app.main:app"
 API_HOST="${API_HOST:-127.0.0.1}"
 API_PORT="${API_PORT:-8000}"
-DEV_API_RELOAD="${DEV_API_RELOAD:-1}"
+ENABLE_RELOAD=1
+
+usage() {
+  cat <<'EOF'
+Usage: ./scripts/dev_api.sh [--app <module:app>] [--reload|--no-reload]
+
+Options:
+  --app <module:app>  Uvicorn ASGI app target (default: apps.api.app.main:app)
+  --reload            Enable auto-reload (default)
+  --no-reload         Disable auto-reload
+  -h, --help          Show this help
+EOF
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --app)
+      if [[ $# -lt 2 || -z "${2:-}" || "${2:-}" == --* ]]; then
+        echo "[dev_api] --app requires a non-empty value" >&2
+        exit 2
+      fi
+      API_APP="$2"
+      shift 2
+      ;;
+    --reload)
+      ENABLE_RELOAD=1
+      shift
+      ;;
+    --no-reload)
+      ENABLE_RELOAD=0
+      shift
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "[dev_api] unknown argument: $1" >&2
+      usage >&2
+      exit 2
+      ;;
+  esac
+done
 
 if [[ ! -d "$ROOT_DIR/apps/api" ]]; then
   echo "[dev_api] API directory not found: $ROOT_DIR/apps/api" >&2
@@ -20,7 +62,7 @@ export PYTHONPATH="$ROOT_DIR:${PYTHONPATH:-}"
 cd "$ROOT_DIR"
 
 uvicorn_args=("$API_APP" "--host" "$API_HOST" "--port" "$API_PORT")
-if [[ "$DEV_API_RELOAD" == "1" ]]; then
+if [[ "$ENABLE_RELOAD" == "1" ]]; then
   uvicorn_args+=("--reload")
 fi
 

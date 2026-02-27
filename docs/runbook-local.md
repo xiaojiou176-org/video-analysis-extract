@@ -176,7 +176,7 @@ curl -sS http://127.0.0.1:8000/api/v1/jobs/<job_id>
 ### 清理 workflow（媒体与缓存）
 
 ```bash
-WORKER_COMMAND=start-cleanup-workflow ./scripts/dev_worker.sh --run-once --older-than-hours 24
+./scripts/dev_worker.sh --command start-cleanup-workflow --run-once --older-than-hours 24
 ```
 
 缓存策略细节见 `docs/reference/cache.md`。
@@ -240,7 +240,7 @@ OPS_CLEANUP_OLDER_THAN_HOURS=24 \
 - `OPS_CLEANUP_CACHE_OLDER_THAN_HOURS`：可选，cache 文件按年龄清理阈值。
 - `OPS_CLEANUP_CACHE_MAX_SIZE_MB`：可选，cache 清理后体积上限。
 - `OPS_CLEANUP_WORKSPACE_DIR` / `OPS_CLEANUP_CACHE_DIR`：可选，覆盖默认目录。安全限制：仅允许落在 `${REPO_ROOT}/.runtime-cache`、`${REPO_ROOT}/cache`、`${REPO_ROOT}/.cache`、`/tmp/video-digestor*`、`/tmp/video-analysis*` 前缀下，超出白名单会直接失败。
-- `DEV_WORKER_SHOW_HINTS=0`：关闭 `dev_worker.sh` 的大段提示，适合 cron/守护进程日志。
+- `./scripts/dev_worker.sh --no-show-hints`：关闭 worker 启动时的大段提示，适合 cron/守护进程日志。
 
 4. 常用 CLI 参数（Batch A 去 env 后）
 
@@ -301,7 +301,7 @@ bash -n scripts/start_ops_workflows.sh
 
 `full_stack.sh` 运行约束（稳定性修复）：
 
-- `up` 后台拉起 API 时会强制 `DEV_API_RELOAD=0`，避免 `uvicorn --reload` 父子进程漂移导致 `status`/`down` 误判。
+- `up` 后台拉起 API 时会调用 `./scripts/dev_api.sh --no-reload`，避免 `uvicorn --reload` 父子进程漂移导致 `status`/`down` 误判。
 - `status` 会在 PID 文件失真时回退按进程特征探测并自愈 PID 文件。
 
 Live smoke 执行约束（2026-02 更新）：

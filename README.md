@@ -182,6 +182,13 @@ sqlite3 "$SQLITE_PATH" < infra/sql/sqlite_state_init.sql
 ./scripts/dev_mcp.sh
 ```
 
+脚本入口参数（Batch C）：
+
+- `./scripts/dev_api.sh --app apps.api.app.main:app --no-reload`
+- `./scripts/dev_worker.sh --worker-dir "$PWD/apps/worker" --entry worker.main --command run-worker --no-show-hints`
+- `./scripts/dev_mcp.sh --entry apps.mcp.server --mcp-dir "$PWD/apps/mcp"`
+- `./scripts/init_env_example.sh --output "$PWD/.env.generated.example" --force`
+
 ### 6) 最小验收
 
 ```bash

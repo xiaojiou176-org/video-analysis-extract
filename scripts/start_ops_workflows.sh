@@ -16,7 +16,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 #   OPS_CLEANUP_CACHE_MAX_SIZE_MB=
 #   OPS_CLEANUP_WORKSPACE_DIR=
 #   OPS_CLEANUP_CACHE_DIR=
-#   DEV_WORKER_SHOW_HINTS=0
+#   (worker hints now controlled via --show-hints / --no-show-hints in this script)
 
 OPS_DAILY_LOCAL_HOUR="${OPS_DAILY_LOCAL_HOUR:-9}"
 OPS_DAILY_TIMEZONE="${OPS_DAILY_TIMEZONE:-system-local}"
@@ -44,7 +44,6 @@ OPS_CLEANUP_WORKFLOW_ID="cleanup-workspace-workflow"
 OPS_CLEANUP_RUN_ONCE="0"
 
 OPS_SHOW_HINTS="1"
-DEV_WORKER_SHOW_HINTS="${DEV_WORKER_SHOW_HINTS:-0}"
 OPS_DRY_RUN="0"
 
 validate_cleanup_dir() {
@@ -257,8 +256,7 @@ run_worker_command() {
     printf '\n'
     return 0
   fi
-  DEV_WORKER_SHOW_HINTS="$DEV_WORKER_SHOW_HINTS" \
-    WORKER_COMMAND="$worker_command" "$ROOT_DIR/scripts/dev_worker.sh" "$@"
+  "$ROOT_DIR/scripts/dev_worker.sh" --no-show-hints --command "$worker_command" "$@"
 }
 
 start_daily() {
