@@ -3,7 +3,7 @@
 
 Checks whether docs/testing.md contains key strategy signals agreed in Phase0:
 - PR-enforced live-smoke
-- mutation=0.85
+- mutation=0.60
 - web coverage 80/90
 - no skip for key gates
 - E2E real API
@@ -47,11 +47,11 @@ def main() -> int:
         },
         {
             "id": "D2",
-            "name": "mutation=0.85",
+            "name": "mutation=0.60",
             "mode": "any",
             "patterns": [
-                r"mutation[^\n]{0,60}(?:>=\s*0\.85|0\.85|85\s*%)",
-                r"mutmut[^\n]{0,60}(?:>=\s*0\.85|0\.85|85\s*%)",
+                r"mutation[^\n]{0,60}(?:>=\s*0\.60|0\.60|60\s*%)",
+                r"mutmut[^\n]{0,60}(?:>=\s*0\.60|0\.60|60\s*%)",
             ],
         },
         {

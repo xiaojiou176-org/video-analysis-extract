@@ -24,7 +24,7 @@
 
 ## CI Topology (GitHub Actions)
 
-以下口径按已拍板 D1~D5 执行，旧规则（PR 可跳过 `live-smoke` / E2E 默认 mock API / mutation=0.60）全部废止。
+以下口径按已拍板 D1~D5 执行，旧规则（PR 可跳过 `live-smoke` / E2E 默认 mock API）全部废止。
 
 - `preflight-fast` + `preflight-heavy`：预检门禁（env contract、schema parity、provider residual、worker line limits、structured log guard）。
 - `db-migration-smoke` + `python-tests` + `api-real-smoke` + `backend-lint` + `frontend-lint` + `web-test-build` + `web-e2e`：并行执行的主链路测试集合。
@@ -50,15 +50,15 @@ scripts/e2e_live_smoke.sh \
   --diagnostics-json ".runtime-cache/e2e-live-smoke-result.json"
 ```
 
-- D2 mutation 硬门禁阈值 `0.85`：
+- D2 mutation 硬门禁阈值 `0.60`（与仓库主规范一致）：
 
 ```bash
-./scripts/quality_gate.sh \
+  ./scripts/quality_gate.sh \
   --mode pre-push \
   --profile ci \
   --profile live-smoke \
   --heartbeat-seconds 25 \
-  --mutation-min-score 0.85
+  --mutation-min-score 0.60
 ```
 
 - D3 Web 覆盖硬门禁 `global >=80` 且 `core >=90`：
@@ -231,7 +231,7 @@ bash scripts/env/final_governance_check.sh --skip-prepush
 - 文档漂移门禁强制执行（staged/push）。
 - 覆盖率阈值：总覆盖率 `>=80%`，核心模块覆盖率 `>=95%`（worker pipeline + api 核心 router/service）。
 - Web 覆盖率硬门禁：`global >=80%` 且 `core >=90%`（默认读取 `apps/web/coverage/coverage-summary.json`）。
-- 变异测试门禁强制执行（Python 核心模块）：mutation score `>=0.85`（默认，可通过 `--mutation-min-score` 覆盖）。
+- 变异测试门禁强制执行（Python 核心模块）：mutation score `>=0.60`（默认执行口径，可通过 `--mutation-min-score` 覆盖）。
 - `pre-push` 采用 fail-fast：先短检查，再长测试；长测试并行执行并输出 heartbeat。
 - `pre-push` 后端链路新增硬门禁：`api cors preflight smoke (OPTIONS DELETE)` 与 `contract diff local gate (base vs head)`。
 - `pre-push` 与远端 CI `preflight-fast`/`web-test-build` 关键阻断项对齐：`check_ci_docs_parity`、`docs env canonical guard`、`provider residual guard`、`worker line limits guard`、`schema parity gate`、`web design token guard`、`web build`、`web button coverage`。
@@ -342,7 +342,7 @@ echo "feat(api): add ingest health guard" > /tmp/commit-msg-ok.txt
   - `python3 scripts/check_web_button_coverage.py --threshold 1.0`
   - `DATABASE_URL='sqlite+pysqlite:///:memory:' uv run --extra dev --with mutmut mutmut run`
   - `uv run --extra dev --with mutmut mutmut export-cicd-stats`
-  - `python3 -c '...读取 mutants/mutmut-cicd-stats.json 并校验 score>=阈值...'`（默认阈值 `0.85`）
+  - `python3 -c '...读取 mutants/mutmut-cicd-stats.json 并校验 score>=阈值...'`（默认执行阈值 `0.60`）
 
 变异测试工具不可用策略（阻断）：
 

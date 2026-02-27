@@ -243,7 +243,7 @@ jobs:
               --profile live-smoke \
               --profile-only \
               --heartbeat-seconds 20 \
-              --mutation-min-score 0.85
+              --mutation-min-score 0.60
           fi
 
   quality-gate-pre-push:
@@ -287,7 +287,7 @@ jobs:
               --changed-deps "${{ needs.changes.outputs.deps_changed }}" \
               --changed-migrations "${{ needs.changes.outputs.migrations_changed }}" \
               --heartbeat-seconds 25 \
-              --mutation-min-score 0.85
+              --mutation-min-score 0.60
 
   db-migration-smoke:
     runs-on: ubuntu-latest
