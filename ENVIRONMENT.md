@@ -192,6 +192,7 @@ Exception detail sanitization contract:
 - `CORE_POSTGRES_PORT`, `CORE_POSTGRES_PASSWORD` (docker compose core-services overrides)
 
 Live smoke includes strict computer-use controls via CLI flags in `scripts/e2e_live_smoke.sh`.
+
 - `scripts/smoke_computer_use_local.sh` uses CLI flags (`--retries`, `--heartbeat-seconds`) with internal defaults.
 - `YOUTUBE_API_KEY` resolution for live smoke: current environment / `.env`; no `.env.local` / `.env.bak` / shell login fallback probing.
 - Batch B CLI controls in `scripts/e2e_live_smoke.sh` (not env contract vars):
