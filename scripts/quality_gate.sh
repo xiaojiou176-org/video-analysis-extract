@@ -467,6 +467,89 @@ PY
   echo "[quality-gate] mutation gate passed"
 }
 
+run_api_cors_preflight_smoke() {
+  DATABASE_URL='sqlite+pysqlite:///:memory:' \
+  TEMPORAL_TARGET_HOST='127.0.0.1:7233' \
+  TEMPORAL_NAMESPACE='default' \
+  TEMPORAL_TASK_QUEUE='video-analysis' \
+  SQLITE_STATE_PATH="$TMP_DIR/api-cors-preflight.sqlite3" \
+  NOTIFICATION_ENABLED='0' \
+  PYTHONPATH="$ROOT_DIR:$ROOT_DIR/apps/worker" \
+    uv run python - <<'PY'
+from fastapi.testclient import TestClient
+
+from apps.api.app.main import app
+
+client = TestClient(app)
+response = client.options(
+    "/api/v1/subscriptions/123e4567-e89b-12d3-a456-426614174000",
+    headers={
+        "Origin": "http://127.0.0.1:3000",
+        "Access-Control-Request-Method": "DELETE",
+        "Access-Control-Request-Headers": "content-type",
+    },
+)
+if response.status_code not in (200, 204):
+    raise SystemExit(
+        f"api cors preflight smoke failed: status={response.status_code}, body={response.text}"
+    )
+print("api cors preflight smoke passed")
+PY
+}
+
+run_contract_diff_local_gate() {
+  local base_sha=""
+  local merge_base=""
+  local upstream_ref=""
+  local contract_dir="$ROOT_DIR/.runtime-cache/temp/contract-diff-local"
+  local base_tree="$contract_dir/base-tree"
+  local base_json="$contract_dir/contract-base.json"
+  local head_json="$contract_dir/contract-head.json"
+  local report_md="$contract_dir/contract-diff.md"
+  local report_json="$contract_dir/contract-diff.json"
+
+  mkdir -p "$contract_dir"
+  rm -rf "$base_tree"
+
+  if upstream_ref="$(git rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' 2>/dev/null)"; then
+    merge_base="$(git merge-base HEAD '@{upstream}' 2>/dev/null || true)"
+  fi
+
+  if [[ -n "$merge_base" ]]; then
+    base_sha="$merge_base"
+  else
+    git fetch origin main --quiet || true
+    base_sha="$(git rev-parse origin/main 2>/dev/null || true)"
+  fi
+
+  if [[ -z "$base_sha" ]]; then
+    echo "[quality-gate] contract diff local gate failed: unable to determine base sha" >&2
+    return 1
+  fi
+
+  git worktree add --detach "$base_tree" "$base_sha" >/dev/null
+
+  if ! uv run python scripts/export_api_contract.py --repo-root "$ROOT_DIR" --output "$head_json"; then
+    git worktree remove --force "$base_tree" >/dev/null 2>&1 || true
+    return 1
+  fi
+  if ! uv run python scripts/export_api_contract.py --repo-root "$base_tree" --output "$base_json"; then
+    git worktree remove --force "$base_tree" >/dev/null 2>&1 || true
+    return 1
+  fi
+  if ! uv run python scripts/check_contract_diff.py \
+    --base "$base_json" \
+    --head "$head_json" \
+    --report "$report_md" \
+    --json-report "$report_json"; then
+    git worktree remove --force "$base_tree" >/dev/null 2>&1 || true
+    return 1
+  fi
+
+  git worktree remove --force "$base_tree" >/dev/null 2>&1 || true
+  echo "[quality-gate] contract diff local gate passed"
+}
+
 report_gate_failure() {
   local gate_name="$1"
   local gate_log="$2"
@@ -964,6 +1047,10 @@ run_pre_push_mode() {
   elif is_true "$EFFECTIVE_BACKEND_CHANGED"; then
     run_async_gate "python_tests_with_coverage" "python tests + total coverage gate (>=80%)" \
       "PYTHONPATH=\"$PWD:$PWD/apps/worker\" DATABASE_URL='sqlite+pysqlite:///:memory:' uv run pytest apps/worker/tests apps/api/tests apps/mcp/tests -q -rA --cov=apps/worker/worker --cov=apps/api --cov=apps/mcp --cov-report=term-missing:skip-covered --cov-fail-under=80"
+    run_async_gate "api_cors_preflight_smoke" "api cors preflight smoke (OPTIONS DELETE)" \
+      "run_api_cors_preflight_smoke"
+    run_async_gate "contract_diff_local_gate" "contract diff local gate (base vs head)" \
+      "run_contract_diff_local_gate"
   else
     echo "[quality-gate] skip: python tests + total coverage (effective_backend_changed=false)"
   fi
