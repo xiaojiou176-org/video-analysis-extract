@@ -153,7 +153,9 @@ def test_run_temporal_worker_registers_workflows_and_activities(monkeypatch) -> 
     monkeypatch.setitem(sys.modules, "worker.temporal.workflows", workflows_mod)
     monkeypatch.setitem(sys.modules, "worker.temporal.activities", activities_mod)
     monkeypatch.setitem(sys.modules, "temporalio.worker", worker_mod)
-    monkeypatch.setattr(worker_main, "_connect_temporal", lambda _settings: asyncio.sleep(0, result=object()))
+    monkeypatch.setattr(
+        worker_main, "_connect_temporal", lambda _settings: asyncio.sleep(0, result=object())
+    )
 
     asyncio.run(worker_main.run_temporal_worker(_fake_settings()))
 
@@ -187,7 +189,9 @@ def test_poll_and_process_workflow_start_paths(monkeypatch) -> None:
     common_mod.WorkflowIDConflictPolicy = _Conflict
     monkeypatch.setitem(sys.modules, "worker.temporal.workflows", workflows_mod)
     monkeypatch.setitem(sys.modules, "temporalio.common", common_mod)
-    monkeypatch.setattr(worker_main, "_connect_temporal", lambda _settings: asyncio.sleep(0, result=_Client()))
+    monkeypatch.setattr(
+        worker_main, "_connect_temporal", lambda _settings: asyncio.sleep(0, result=_Client())
+    )
 
     poll = asyncio.run(worker_main.start_poll_workflow(_fake_settings(), platform="youtube"))
     process = asyncio.run(worker_main.start_process_workflow(_fake_settings(), "job-1"))
@@ -216,9 +220,15 @@ def test_retry_and_canary_workflow_already_started_paths(monkeypatch) -> None:
     workflows_mod.ProviderCanaryWorkflow = _Workflow
     monkeypatch.setitem(sys.modules, "temporalio.exceptions", exceptions_mod)
     monkeypatch.setitem(sys.modules, "worker.temporal.workflows", workflows_mod)
-    monkeypatch.setattr(worker_main, "_connect_temporal", lambda _settings: asyncio.sleep(0, result=_Client()))
+    monkeypatch.setattr(
+        worker_main, "_connect_temporal", lambda _settings: asyncio.sleep(0, result=_Client())
+    )
 
-    retry = asyncio.run(worker_main.start_notification_retry_workflow(_fake_settings(), run_once=False))
-    canary = asyncio.run(worker_main.start_provider_canary_workflow(_fake_settings(), run_once=False))
+    retry = asyncio.run(
+        worker_main.start_notification_retry_workflow(_fake_settings(), run_once=False)
+    )
+    canary = asyncio.run(
+        worker_main.start_provider_canary_workflow(_fake_settings(), run_once=False)
+    )
     assert retry["status"] == "already_running"
     assert canary["status"] == "already_running"

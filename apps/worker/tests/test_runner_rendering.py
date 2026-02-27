@@ -102,7 +102,9 @@ def test_comments_prompt_context_renders_top_comments_and_reply_lines() -> None:
 
 
 def test_code_block_collection_and_rendering() -> None:
-    outline = {"chapters": [{"code_snippets": [{"title": "C1", "language": "py", "snippet": "print(1)"}]}]}
+    outline = {
+        "chapters": [{"code_snippets": [{"title": "C1", "language": "py", "snippet": "print(1)"}]}]
+    }
     digest = {"code_blocks": [{"title": "D1", "language": "ts", "snippet": "console.log(1)"}]}
     rendered = build_code_blocks_markdown(outline, digest, "https://youtu.be/x")
     assert "D1" in rendered
@@ -141,5 +143,7 @@ def test_materialize_frames_for_artifacts_and_fallback_notes(tmp_path: Path) -> 
 
     notes = build_fallback_notes_markdown({"fallback_notes": ["a", "b"]}, [])
     assert notes == "- a\n- b"
-    degraded = build_fallback_notes_markdown({}, [{"step": "llm", "status": "degraded", "reason": "timeout"}])
+    degraded = build_fallback_notes_markdown(
+        {}, [{"step": "llm", "status": "degraded", "reason": "timeout"}]
+    )
     assert "llm: degraded (timeout)" in degraded

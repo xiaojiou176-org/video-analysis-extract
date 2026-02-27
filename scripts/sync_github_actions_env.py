@@ -153,7 +153,9 @@ def main() -> int:
 
     mode = "APPLY" if args.apply else "DRY-RUN"
     print(f"[sync-gh-actions-env] mode={mode} repo={args.repo}")
-    print(f"[sync-gh-actions-env] discovered secrets={len(discovered_secrets)} vars={len(discovered_vars)}")
+    print(
+        f"[sync-gh-actions-env] discovered secrets={len(discovered_secrets)} vars={len(discovered_vars)}"
+    )
     print(
         "[sync-gh-actions-env] "
         f"ready secrets={len(secret_ready)} missing(local)={len(secret_missing_local)} "
@@ -166,15 +168,21 @@ def main() -> int:
     )
 
     if secret_missing_local:
-        print("[sync-gh-actions-env] missing secrets (not found in local env/.env and not present remotely):")
+        print(
+            "[sync-gh-actions-env] missing secrets (not found in local env/.env and not present remotely):"
+        )
         for name in secret_missing_local:
             print(f"  - {name}")
     if secret_missing_but_remote:
-        print("[sync-gh-actions-env] secrets absent in local source but already configured remotely:")
+        print(
+            "[sync-gh-actions-env] secrets absent in local source but already configured remotely:"
+        )
         for name in secret_missing_but_remote:
             print(f"  - {name}")
     if var_missing_local:
-        print("[sync-gh-actions-env] missing vars (not found in local env/.env and not present remotely):")
+        print(
+            "[sync-gh-actions-env] missing vars (not found in local env/.env and not present remotely):"
+        )
         for name in var_missing_local:
             print(f"  - {name}")
     if var_missing_but_remote:

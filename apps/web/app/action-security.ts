@@ -2,8 +2,8 @@ import crypto from "node:crypto";
 
 import { cookies } from "next/headers";
 import { z } from "zod";
-
 import { sanitizeExternalUrl } from "@/lib/api/url";
+import { getWebActionSessionToken } from "@/lib/env";
 
 const MAX_TEXT_LENGTH = 512;
 const SESSION_COOKIE_NAME = "vd_web_session";
@@ -25,7 +25,7 @@ const httpUrlSchema = z
 	});
 
 function getSessionSecret(): string {
-	return (process.env.WEB_ACTION_SESSION_TOKEN ?? "").trim();
+	return getWebActionSessionToken();
 }
 
 function constantTimeEquals(left: string, right: string): boolean {

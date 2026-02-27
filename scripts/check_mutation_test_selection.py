@@ -35,12 +35,12 @@ def main() -> int:
 
     data = tomllib.loads(PYPROJECT_PATH.read_text(encoding="utf-8"))
     test_selection = (
-        data.get("tool", {})
-        .get("mutmut", {})
-        .get("pytest_add_cli_args_test_selection", [])
+        data.get("tool", {}).get("mutmut", {}).get("pytest_add_cli_args_test_selection", [])
     )
 
-    if not isinstance(test_selection, list) or not all(isinstance(item, str) for item in test_selection):
+    if not isinstance(test_selection, list) or not all(
+        isinstance(item, str) for item in test_selection
+    ):
         print(
             "mutation test selection guard failed: "
             "[tool.mutmut].pytest_add_cli_args_test_selection must be a string list"

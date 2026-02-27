@@ -110,7 +110,9 @@ def main() -> int:
         try:
             tree = ast.parse(text, filename=str(file_path))
         except SyntaxError as exc:
-            violations.append(f"{file_path}:{exc.lineno or 1}: unable to parse file for strictness checks: {exc.msg}")
+            violations.append(
+                f"{file_path}:{exc.lineno or 1}: unable to parse file for strictness checks: {exc.msg}"
+            )
             continue
         violations.extend(_check_test_names(file_path, tree))
         violations.extend(_check_permissive_regex_assertions(file_path, tree))

@@ -42,7 +42,9 @@ def main() -> int:
                 continue
             for label, pattern in PATTERNS:
                 if pattern.search(line):
-                    violations.append(f"{path.relative_to(ROOT)}:{lineno}: forbidden marker `{label}`")
+                    violations.append(
+                        f"{path.relative_to(ROOT)}:{lineno}: forbidden marker `{label}`"
+                    )
 
     if violations:
         print("test focus/todo marker gate failed:")

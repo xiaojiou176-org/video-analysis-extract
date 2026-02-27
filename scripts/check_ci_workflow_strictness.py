@@ -41,7 +41,9 @@ def main() -> int:
         if "--mode pre-push" not in qg_block:
             failures.append("quality-gate-pre-push: missing pre-push quality gate command")
         if "--ci-dedupe 0" not in qg_block:
-            failures.append("quality-gate-pre-push: must set --ci-dedupe 0 to avoid skipping strict pre-push gates")
+            failures.append(
+                "quality-gate-pre-push: must set --ci-dedupe 0 to avoid skipping strict pre-push gates"
+            )
         if "--mutation-min-score 0.62" not in qg_block:
             failures.append("quality-gate-pre-push: mutation threshold must be at least 0.62")
         if "--mutation-min-effective-ratio 0.25" not in qg_block:

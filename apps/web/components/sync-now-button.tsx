@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { apiClient } from "@/lib/api/client";
 
@@ -10,19 +10,19 @@ export function SyncNowButton() {
 	const router = useRouter();
 	const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-	function clearTimer() {
+	const clearTimer = useCallback(() => {
 		if (!timerRef.current) {
 			return;
 		}
 		clearTimeout(timerRef.current);
 		timerRef.current = null;
-	}
+	}, []);
 
 	useEffect(() => {
 		return () => {
 			clearTimer();
 		};
-	}, []);
+	}, [clearTimer]);
 
 	async function handleSync() {
 		setState("loading");

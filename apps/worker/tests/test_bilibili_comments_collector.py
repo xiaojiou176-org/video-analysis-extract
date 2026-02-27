@@ -34,8 +34,16 @@ def test_extract_aid_from_url_and_uid_resolution_paths() -> None:
     assert collector._extract_aid_from_url("https://example.com/video/av1") is None
 
     async def _run() -> None:
-        assert await collector._resolve_aid(client=SimpleNamespace(), source_url=None, video_uid="123") == 123
-        assert await collector._resolve_aid(client=SimpleNamespace(), source_url=None, video_uid="av456") == 456
+        assert (
+            await collector._resolve_aid(client=SimpleNamespace(), source_url=None, video_uid="123")
+            == 123
+        )
+        assert (
+            await collector._resolve_aid(
+                client=SimpleNamespace(), source_url=None, video_uid="av456"
+            )
+            == 456
+        )
         assert (
             await collector._resolve_aid(
                 client=SimpleNamespace(),
@@ -71,16 +79,46 @@ def test_top_comments_and_replies_are_sorted_and_limited() -> None:
                 assert params["ps"] == 2
                 return {
                     "replies": [
-                        {"rpid": 1, "member": {"uname": "a", "mid": "1"}, "content": {"message": "m1"}, "like": 2, "ctime": 100},
-                        {"rpid": 2, "member": {"uname": "b", "mid": "2"}, "content": {"message": "m2"}, "like": 9, "ctime": 101},
-                        {"rpid": 3, "member": {"uname": "c", "mid": "3"}, "content": {"message": "m3"}, "like": 1, "ctime": 102},
+                        {
+                            "rpid": 1,
+                            "member": {"uname": "a", "mid": "1"},
+                            "content": {"message": "m1"},
+                            "like": 2,
+                            "ctime": 100,
+                        },
+                        {
+                            "rpid": 2,
+                            "member": {"uname": "b", "mid": "2"},
+                            "content": {"message": "m2"},
+                            "like": 9,
+                            "ctime": 101,
+                        },
+                        {
+                            "rpid": 3,
+                            "member": {"uname": "c", "mid": "3"},
+                            "content": {"message": "m3"},
+                            "like": 1,
+                            "ctime": 102,
+                        },
                     ]
                 }
             assert path.endswith("/reply")
             return {
                 "replies": [
-                    {"rpid": 11, "member": {"uname": "x", "mid": "9"}, "content": {"message": "rx"}, "like": 3, "ctime": 200},
-                    {"rpid": 12, "member": {"uname": "y", "mid": "8"}, "content": {"message": "ry"}, "like": 7, "ctime": 201},
+                    {
+                        "rpid": 11,
+                        "member": {"uname": "x", "mid": "9"},
+                        "content": {"message": "rx"},
+                        "like": 3,
+                        "ctime": 200,
+                    },
+                    {
+                        "rpid": 12,
+                        "member": {"uname": "y", "mid": "8"},
+                        "content": {"message": "ry"},
+                        "like": 7,
+                        "ctime": 201,
+                    },
                 ]
             }
 
@@ -121,4 +159,3 @@ def test_request_json_retries_then_succeeds() -> None:
         assert client.calls == 2
 
     asyncio.run(_run())
-

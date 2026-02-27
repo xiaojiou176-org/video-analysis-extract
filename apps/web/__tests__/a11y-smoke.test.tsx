@@ -1,9 +1,8 @@
 import { render } from "@testing-library/react";
 import { axe } from "jest-axe";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-
-import DashboardPage from "@/app/page";
 import JobsPage from "@/app/jobs/page";
+import DashboardPage from "@/app/page";
 import SettingsPage from "@/app/settings/page";
 import SubscriptionsPage from "@/app/subscriptions/page";
 
@@ -67,9 +66,7 @@ describe("a11y smoke", () => {
 		});
 	});
 
-	it(
-		"dashboard/subscriptions/settings/jobs pages have no critical accessibility violations",
-		async () => {
+	it("dashboard/subscriptions/settings/jobs pages have no critical accessibility violations", async () => {
 		const dashboard = render(await DashboardPage({ searchParams: {} }));
 		const dashboardResults = await axe(dashboard.container);
 		expect(dashboardResults.violations).toHaveLength(0);
@@ -85,7 +82,5 @@ describe("a11y smoke", () => {
 		const jobs = render(await JobsPage({ searchParams: { job_id: "job-1" } }));
 		const jobsResults = await axe(jobs.container);
 		expect(jobsResults.violations).toHaveLength(0);
-		},
-		20000,
-	);
+	}, 20000);
 });
