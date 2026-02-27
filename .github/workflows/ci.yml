@@ -78,29 +78,36 @@ jobs:
       - name: Env contract strict check
         run: python3 scripts/check_env_contract.py --strict --env-file .env.example
 
-      - name: computer_use smoke contract check
+      - name: computer_use smoke CLI contract check
         run: |
           python3 - <<'PY'
-          import json
+          import re
           from pathlib import Path
 
-          contract = json.loads(Path("infra/config/env.contract.json").read_text(encoding="utf-8"))
-          variables = {item["name"]: item for item in contract.get("variables", [])}
-          required = {
-              "GEMINI_COMPUTER_USE_ENABLED",
-              "GEMINI_COMPUTER_USE_REQUIRE_CONFIRMATION",
-              "GEMINI_COMPUTER_USE_MAX_STEPS",
-              "GEMINI_COMPUTER_USE_TIMEOUT_SECONDS",
-              "LIVE_SMOKE_COMPUTER_USE_STRICT",
-              "LIVE_SMOKE_COMPUTER_USE_SKIP",
-              "LIVE_SMOKE_COMPUTER_USE_SKIP_REASON",
-          }
-          missing = sorted(name for name in required if name not in variables)
+          script = Path("scripts/e2e_live_smoke.sh").read_text(encoding="utf-8")
+          required = [
+              "--api-base-url <url>",
+              "--require-api <0|1>",
+              "--require-secrets <0|1>",
+              "--computer-use-strict <0|1>",
+              "--computer-use-skip <0|1>",
+              "--computer-use-skip-reason <text>",
+          ]
+          missing = sorted(item for item in required if item not in script)
           if missing:
-              raise SystemExit(f"missing computer_use smoke env contract vars: {', '.join(missing)}")
-          if str(variables["LIVE_SMOKE_COMPUTER_USE_STRICT"].get("default")) != "1":
-              raise SystemExit("LIVE_SMOKE_COMPUTER_USE_STRICT default must be '1'")
-          print("computer_use smoke contract check passed")
+              raise SystemExit(f"missing computer_use smoke CLI options: {', '.join(missing)}")
+
+          defaults = {
+              "LIVE_SMOKE_REQUIRE_API": "1",
+              "LIVE_SMOKE_COMPUTER_USE_STRICT": "1",
+              "LIVE_SMOKE_COMPUTER_USE_SKIP": "0",
+              "LIVE_SMOKE_MAX_RETRIES": "2",
+          }
+          for name, expected in defaults.items():
+              pattern = rf'^{name}="{re.escape(expected)}"$'
+              if not re.search(pattern, script, re.MULTILINE):
+                  raise SystemExit(f"{name} default must be '{expected}'")
+          print("computer_use smoke CLI contract check passed")
           PY
 
       - name: CI smoke drift check
@@ -1230,11 +1237,6 @@ jobs:
       RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
       RESEND_FROM_EMAIL: ${{ secrets.RESEND_FROM_EMAIL }}
       YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
-      LIVE_SMOKE_API_BASE_URL: ${{ secrets.LIVE_SMOKE_API_BASE_URL }}
-      LIVE_SMOKE_REQUIRE_API: "1"
-      LIVE_SMOKE_REQUIRE_SECRETS: "1"
-      LIVE_SMOKE_COMPUTER_USE_STRICT: "1"
-      LIVE_SMOKE_COMPUTER_USE_SKIP: "0"
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -1259,7 +1261,15 @@ jobs:
           fi
 
       - name: Run live smoke
-        run: scripts/e2e_live_smoke.sh --diagnostics-json ".runtime-cache/e2e-live-smoke-result.json" --heartbeat-seconds "30"
+        run: |
+          scripts/e2e_live_smoke.sh \
+            --api-base-url "${{ secrets.LIVE_SMOKE_API_BASE_URL }}" \
+            --require-api "1" \
+            --require-secrets "1" \
+            --computer-use-strict "1" \
+            --computer-use-skip "0" \
+            --heartbeat-seconds "30" \
+            --diagnostics-json ".runtime-cache/e2e-live-smoke-result.json"
 
       - name: Upload live smoke diagnostics
         if: always()

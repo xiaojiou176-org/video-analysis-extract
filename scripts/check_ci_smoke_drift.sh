@@ -22,6 +22,22 @@ required_patterns=(
   "--expect-text \"\${{ vars.EXTERNAL_SMOKE_EXPECT_TEXT || 'Example Domain' }}\""
   "--timeout-ms \"\${{ vars.EXTERNAL_SMOKE_TIMEOUT_MS || '45000' }}\""
   "--retries \"\${{ vars.EXTERNAL_SMOKE_RETRIES || '2' }}\""
+  "live-smoke:"
+  "scripts/e2e_live_smoke.sh"
+  "--api-base-url \"\${{ secrets.LIVE_SMOKE_API_BASE_URL }}\""
+  "--require-api \"1\""
+  "--require-secrets \"1\""
+  "--computer-use-strict \"1\""
+  "--computer-use-skip \"0\""
+  "--diagnostics-json \".runtime-cache/e2e-live-smoke-result.json\""
+  "--heartbeat-seconds \"30\""
+)
+
+forbidden_patterns=(
+  "LIVE_SMOKE_REQUIRE_API: \"1\""
+  "LIVE_SMOKE_REQUIRE_SECRETS: \"1\""
+  "LIVE_SMOKE_COMPUTER_USE_STRICT: \"1\""
+  "LIVE_SMOKE_COMPUTER_USE_SKIP: \"0\""
 )
 
 missing=()
@@ -35,6 +51,23 @@ if [[ ${#missing[@]} -gt 0 ]]; then
   {
     echo "[check_ci_smoke_drift] missing required CI smoke fields:"
     for item in "${missing[@]}"; do
+      echo "  - $item"
+    done
+  } >&2
+  exit 1
+fi
+
+unexpected=()
+for pattern in "${forbidden_patterns[@]}"; do
+  if rg -n --fixed-strings -- "$pattern" "$workflow_file" >/dev/null; then
+    unexpected+=("$pattern")
+  fi
+done
+
+if [[ ${#unexpected[@]} -gt 0 ]]; then
+  {
+    echo "[check_ci_smoke_drift] unexpected legacy env wiring found:"
+    for item in "${unexpected[@]}"; do
       echo "  - $item"
     done
   } >&2

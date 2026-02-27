@@ -660,24 +660,19 @@ run_profile_gate() {
   case "$profile_name" in
     local)
       python3 - <<'PY'
-import json
 import re
 from pathlib import Path
 
-contract = json.loads(Path("infra/config/env.contract.json").read_text(encoding="utf-8"))
-variables = {item["name"]: item for item in contract.get("variables", [])}
-profile = variables.get("PROFILE")
-if profile is None:
-    raise SystemExit("local profile gate failed: PROFILE missing in env.contract")
-if profile.get("default") != "local":
-    raise SystemExit("local profile gate failed: PROFILE default must be 'local'")
+script = Path("scripts/e2e_live_smoke.sh").read_text(encoding="utf-8")
 
-env_example = Path(".env.example").read_text(encoding="utf-8")
-match = re.search(r"^\s*export\s+PROFILE\s*=\s*['\"]?([^'\"\n]+)['\"]?\s*$", env_example, re.MULTILINE)
-if not match:
-    raise SystemExit("local profile gate failed: PROFILE missing in .env.example")
-if match.group(1).strip() != "local":
-    raise SystemExit("local profile gate failed: .env.example PROFILE must be local")
+required = [
+    "--profile, --env-profile <name>",
+    'ENV_PROFILE="${ENV_PROFILE:-local}"',
+    'load_repo_env "$ROOT_DIR" "$SCRIPT_NAME" "$ENV_PROFILE"',
+]
+missing = sorted(item for item in required if item not in script)
+if missing:
+    raise SystemExit("local profile gate failed: missing CLI profile bindings: " + ", ".join(missing))
 print("local profile gate passed")
 PY
       ;;
@@ -709,30 +704,38 @@ PY
       ;;
     live-smoke)
       python3 - <<'PY'
-import json
+import re
 from pathlib import Path
 
-contract = json.loads(Path("infra/config/env.contract.json").read_text(encoding="utf-8"))
-variables = {item["name"]: item for item in contract.get("variables", [])}
-required = {
-    "LIVE_SMOKE_API_BASE_URL",
-    "LIVE_SMOKE_REQUIRE_API",
-    "LIVE_SMOKE_REQUIRE_SECRETS",
-    "LIVE_SMOKE_COMPUTER_USE_STRICT",
-    "LIVE_SMOKE_COMPUTER_USE_SKIP",
-    "LIVE_SMOKE_COMPUTER_USE_SKIP_REASON",
-    "GEMINI_API_KEY",
-    "RESEND_API_KEY",
-    "RESEND_FROM_EMAIL",
-    "YOUTUBE_API_KEY",
-}
-missing = sorted(name for name in required if name not in variables)
+script = Path("scripts/e2e_live_smoke.sh").read_text(encoding="utf-8")
+
+required = [
+    "--api-base-url <url>",
+    "--require-api <0|1>",
+    "--require-secrets <0|1>",
+    "--computer-use-strict <0|1>",
+    "--computer-use-skip <0|1>",
+    "--computer-use-skip-reason <text>",
+    "--max-retries <n>",
+]
+missing = sorted(item for item in required if item not in script)
 if missing:
-    raise SystemExit("live-smoke profile gate failed: missing env contract vars: " + ", ".join(missing))
-if str(variables["LIVE_SMOKE_COMPUTER_USE_STRICT"].get("default")) != "1":
-    raise SystemExit("live-smoke profile gate failed: LIVE_SMOKE_COMPUTER_USE_STRICT default must be '1'")
+    raise SystemExit("live-smoke profile gate failed: missing CLI options: " + ", ".join(missing))
+
+defaults = {
+    "LIVE_SMOKE_REQUIRE_API": "1",
+    "LIVE_SMOKE_REQUIRE_SECRETS": "0",
+    "LIVE_SMOKE_COMPUTER_USE_STRICT": "1",
+    "LIVE_SMOKE_COMPUTER_USE_SKIP": "0",
+    "LIVE_SMOKE_MAX_RETRIES": "2",
+}
+for name, expected in defaults.items():
+    pattern = rf'^{name}="{re.escape(expected)}"$'
+    if not re.search(pattern, script, re.MULTILINE):
+        raise SystemExit(f"live-smoke profile gate failed: {name} default must be '{expected}'")
 print("live-smoke profile gate passed")
 PY
+      bash scripts/check_ci_smoke_drift.sh
       ;;
   esac
 
