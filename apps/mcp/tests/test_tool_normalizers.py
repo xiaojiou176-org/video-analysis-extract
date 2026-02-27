@@ -220,7 +220,9 @@ def test_notifications_manage_supports_get_set_send_daily_and_category_send() ->
 
     register_notification_tools(mcp, fake_api_call)
     assert mcp.tools["vd.notifications.manage"](action="get_config")["enabled"] is True
-    assert mcp.tools["vd.notifications.manage"](action="set_config", enabled=True)["enabled"] is True
+    assert (
+        mcp.tools["vd.notifications.manage"](action="set_config", enabled=True)["enabled"] is True
+    )
     assert mcp.tools["vd.notifications.manage"](action="send_test")["status"] == "sent"
     assert mcp.tools["vd.notifications.manage"](action="daily_send")["sent"] is True
     assert (

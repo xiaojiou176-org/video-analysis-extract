@@ -95,6 +95,7 @@ export function FormValidationController(): null {
 	const pathname = usePathname();
 
 	useEffect(() => {
+		void pathname;
 		const onInput = (event: Event) => {
 			const target = event.target;
 			if (!(target instanceof Element)) {

@@ -34,7 +34,9 @@ def _file_contains_name(path: Path, name: str) -> bool:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Audit env contract usage against declared consumers")
+    parser = argparse.ArgumentParser(
+        description="Audit env contract usage against declared consumers"
+    )
     parser.add_argument(
         "--contract",
         default="infra/config/env.contract.json",
@@ -87,4 +89,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

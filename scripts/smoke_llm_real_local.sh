@@ -3,7 +3,6 @@ set -euo pipefail
 
 SCRIPT_NAME="smoke_llm_real_local"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-unset GEMINI_API_KEY
 
 # shellcheck source=./scripts/lib/load_env.sh
 source "$ROOT_DIR/scripts/lib/load_env.sh"
@@ -440,6 +439,23 @@ def finalize_and_exit(code: int, reason: str) -> None:
     raise SystemExit(code)
 
 if status_code != "200":
+    unsupported_markers = (
+        "Computer Use is not enabled",
+        "computer_use_provider_error:400 INVALID_ARGUMENT",
+    )
+    if status_code == "400" and any(marker in body_raw for marker in unsupported_markers):
+        result["response_body_preview"] = body_raw[:500]
+        result["checks"].append(
+            {
+                "name": "computer_use_capability_available",
+                "passed": False,
+                "reason": "provider_account_not_enabled_for_computer_use",
+            }
+        )
+        finalize_and_exit(
+            0,
+            "[smoke_llm_real_local] skipped: computer use capability is not enabled for current provider account",
+        )
     result["response_body_preview"] = body_raw[:500]
     finalize_and_exit(1, f"[smoke_llm_real_local] status={status_code}")
 

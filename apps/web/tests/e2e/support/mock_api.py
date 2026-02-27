@@ -79,7 +79,10 @@ class MockApiState:
             }
             self.health_status = int(HTTPStatus.OK)
             self.health_delay_seconds = 0.0
-            self.artifact_frame_files = ["screenshots/frame_0001.png", "screenshots/frame_0002.webp"]
+            self.artifact_frame_files = [
+                "screenshots/frame_0001.png",
+                "screenshots/frame_0002.webp",
+            ]
             self.condition.notify_all()
 
     def record(self, key: str, payload: dict[str, Any]) -> None:
@@ -176,7 +179,9 @@ def _mock_handler(state: MockApiState) -> type[BaseHTTPRequestHandler]:
             self.end_headers()
             self.wfile.write(body)
 
-        def _send_text(self, status: int, body: str, content_type: str = "text/plain; charset=utf-8") -> None:
+        def _send_text(
+            self, status: int, body: str, content_type: str = "text/plain; charset=utf-8"
+        ) -> None:
             raw = body.encode("utf-8")
             self.send_response(status)
             self.send_header("Content-Type", content_type)
@@ -292,7 +297,9 @@ def _mock_handler(state: MockApiState) -> type[BaseHTTPRequestHandler]:
                         query=parsed.query,
                         status=int(HTTPStatus.UNPROCESSABLE_ENTITY),
                     )
-                    self._send_json(HTTPStatus.UNPROCESSABLE_ENTITY, {"detail": "job_id must be a valid UUID"})
+                    self._send_json(
+                        HTTPStatus.UNPROCESSABLE_ENTITY, {"detail": "job_id must be a valid UUID"}
+                    )
                     return
                 state.record("get_job", {"job_id": requested_job_id})
                 if requested_job_id != state.job_id:
@@ -323,7 +330,9 @@ def _mock_handler(state: MockApiState) -> type[BaseHTTPRequestHandler]:
                         query=parsed.query,
                         status=int(HTTPStatus.BAD_REQUEST),
                     )
-                    self._send_json(HTTPStatus.BAD_REQUEST, {"detail": "either job_id or video_url is required"})
+                    self._send_json(
+                        HTTPStatus.BAD_REQUEST, {"detail": "either job_id or video_url is required"}
+                    )
                     return
                 if job_id and not _is_valid_uuid(job_id):
                     self._record_http(
@@ -332,7 +341,9 @@ def _mock_handler(state: MockApiState) -> type[BaseHTTPRequestHandler]:
                         query=parsed.query,
                         status=int(HTTPStatus.UNPROCESSABLE_ENTITY),
                     )
-                    self._send_json(HTTPStatus.UNPROCESSABLE_ENTITY, {"detail": "job_id must be a valid UUID"})
+                    self._send_json(
+                        HTTPStatus.UNPROCESSABLE_ENTITY, {"detail": "job_id must be a valid UUID"}
+                    )
                     return
                 state.record(
                     "get_artifact_markdown",
@@ -372,7 +383,9 @@ def _mock_handler(state: MockApiState) -> type[BaseHTTPRequestHandler]:
                         query=parsed.query,
                         status=int(HTTPStatus.UNPROCESSABLE_ENTITY),
                     )
-                    self._send_json(HTTPStatus.UNPROCESSABLE_ENTITY, {"detail": "job_id and path are required"})
+                    self._send_json(
+                        HTTPStatus.UNPROCESSABLE_ENTITY, {"detail": "job_id and path are required"}
+                    )
                     return
                 if not _is_valid_uuid(job_id):
                     self._record_http(
@@ -381,7 +394,9 @@ def _mock_handler(state: MockApiState) -> type[BaseHTTPRequestHandler]:
                         query=parsed.query,
                         status=int(HTTPStatus.UNPROCESSABLE_ENTITY),
                     )
-                    self._send_json(HTTPStatus.UNPROCESSABLE_ENTITY, {"detail": "job_id must be a valid UUID"})
+                    self._send_json(
+                        HTTPStatus.UNPROCESSABLE_ENTITY, {"detail": "job_id must be a valid UUID"}
+                    )
                     return
                 if job_id != state.job_id:
                     self._record_http(
@@ -491,7 +506,8 @@ def _mock_handler(state: MockApiState) -> type[BaseHTTPRequestHandler]:
                         "platform": payload.get("platform", "youtube"),
                         "source_type": payload.get("source_type", "url"),
                         "source_value": payload.get("source_value", ""),
-                        "source_name": payload.get("source_name") or payload.get("source_value", ""),
+                        "source_name": payload.get("source_name")
+                        or payload.get("source_value", ""),
                         "adapter_type": payload.get("adapter_type") or "rsshub_route",
                         "source_url": payload.get("source_url"),
                         "rsshub_route": payload.get("rsshub_route") or "",
@@ -599,12 +615,17 @@ def _mock_handler(state: MockApiState) -> type[BaseHTTPRequestHandler]:
                         query=parsed.query,
                         status=int(HTTPStatus.UNPROCESSABLE_ENTITY),
                     )
-                    self._send_json(HTTPStatus.UNPROCESSABLE_ENTITY, {"detail": "subscription id must be a valid UUID"})
+                    self._send_json(
+                        HTTPStatus.UNPROCESSABLE_ENTITY,
+                        {"detail": "subscription id must be a valid UUID"},
+                    )
                     return
                 state.record("delete_subscription", {"id": subscription_id})
                 with state.lock:
                     before = len(state.subscriptions)
-                    state.subscriptions = [item for item in state.subscriptions if item["id"] != subscription_id]
+                    state.subscriptions = [
+                        item for item in state.subscriptions if item["id"] != subscription_id
+                    ]
                     deleted = len(state.subscriptions) != before
                 if not deleted:
                     self._record_http(
@@ -643,7 +664,9 @@ def start_mock_api_server() -> RunningMockServer:
     thread.start()
     base_url = f"http://127.0.0.1:{port}"
     wait_http_ok(f"{base_url}/api/v1/subscriptions")
-    return RunningMockServer(server=server, thread=thread, api_server=MockApiServer(base_url=base_url, state=state))
+    return RunningMockServer(
+        server=server, thread=thread, api_server=MockApiServer(base_url=base_url, state=state)
+    )
 
 
 def stop_mock_api_server(running: RunningMockServer) -> None:

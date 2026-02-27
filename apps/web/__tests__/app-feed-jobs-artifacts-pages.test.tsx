@@ -97,6 +97,7 @@ describe("feed/jobs/artifacts pages", () => {
 			"href",
 			"/feed?source=youtube&category=tech&limit=50&cursor=cursor-2",
 		);
+		expect(screen.getByRole("button", { name: "筛选" })).toBeInTheDocument();
 	});
 
 	it("renders feed empty state and clear filter entry", async () => {

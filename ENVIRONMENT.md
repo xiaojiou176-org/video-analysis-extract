@@ -192,6 +192,7 @@ Exception detail sanitization contract:
 - `CORE_POSTGRES_PORT`, `CORE_POSTGRES_PASSWORD` (docker compose core-services overrides)
 
 Live smoke includes strict computer-use controls via CLI flags in `scripts/e2e_live_smoke.sh`.
+
 - `scripts/smoke_computer_use_local.sh` uses CLI flags (`--retries`, `--heartbeat-seconds`) with internal defaults.
 - `YOUTUBE_API_KEY` resolution for live smoke: current environment / `.env`; no `.env.local` / `.env.bak` / shell login fallback probing.
 - Batch B CLI controls in `scripts/e2e_live_smoke.sh` (not env contract vars):
@@ -206,6 +207,10 @@ Live smoke includes strict computer-use controls via CLI flags in `scripts/e2e_l
   - `--bilibili-url` (default `https://www.bilibili.com/video/BV1xx411c7mD`)
 - Full-stack bootstrap/smoke fallback behavior is controlled by CLI flags in the scripts above.
 - Failure-kind contract alignment: `e2e_live_smoke` diagnostics keep `failure_kind` in `{code_logic_error, network_or_environment_timeout}`; enabling offline fallback does not add new `failure_kind` enum values.
+- CI/Test behavior flags are contract-registered:
+  - `CI` / `GITHUB_ACTIONS`: CI context detection flags (hosted CI normally injects these automatically).
+  - `API_INTEGRATION_SMOKE_STRICT`: local strictness override for `apps/api/tests/test_api_integration_smoke.py`.
+  - `WEB_E2E_USE_MOCK_API`: local-only debug toggle for web E2E mock API wiring; CI/mainline must keep real API path.
 
 `scripts/external_playwright_smoke.sh` defaults (override via CLI flags):
 

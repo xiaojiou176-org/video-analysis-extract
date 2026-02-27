@@ -746,7 +746,11 @@ button.destructive {
 
 button.destructive:hover:not(:disabled) {
 	box-shadow: var(--shadow-destructive-lg);
-	background: linear-gradient(135deg, var(--color-destructive-bright) 0%, var(--color-destructive) 100%);
+	background: linear-gradient(
+		135deg,
+		var(--color-destructive-bright) 0%,
+		var(--color-destructive) 100%
+	);
 }
 
 /* Ghost danger button — outline only until confirmed */

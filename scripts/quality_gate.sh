@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 MODE="pre-push"
 HEARTBEAT_SECONDS="25"
-MUTATION_MIN_SCORE="0.60"
+MUTATION_MIN_SCORE="0.85"
 PROFILE_ONLY="0"
 FINAL_CHECK="0"
 FINAL_SKIP_PREPUSH="0"
@@ -40,6 +40,7 @@ Profiles:
   live-smoke  Validate live-smoke profile governance.
 Flags:
   --profile NAME   Append explicit profile checks (repeatable).
+  --mutation-min-score N  Mutation score threshold (default: 0.85).
   --profile-only   Run profile checks only, skip other quality gates.
   --changed-backend true|false|auto    Backend change hint (default: auto).
   --changed-web true|false|auto        Frontend change hint (default: auto).
@@ -55,7 +56,7 @@ Quality policy (blocking):
   - Documentation drift gate is mandatory.
   - Secrets leak scan is mandatory.
   - Coverage thresholds: total >= 80%, core modules >= 95%.
-  - Mutation testing (Python core): mutation score >= configured threshold.
+  - Mutation testing (Python core): mutation score >= configured threshold (default: 0.85).
 USAGE
 }
 
@@ -351,9 +352,56 @@ run_env_governance_report_non_blocking() {
   fi
 }
 
+print_mutation_target_set() {
+  local pyproject_file="$ROOT_DIR/pyproject.toml"
+
+  if [[ ! -f "$pyproject_file" ]]; then
+    echo "[quality-gate] mutation target set unavailable: pyproject.toml not found" >&2
+    return 1
+  fi
+
+  python3 - "$pyproject_file" <<'PY'
+import sys
+import tomllib
+from collections import defaultdict
+from pathlib import Path
+
+pyproject_path = Path(sys.argv[1])
+data = tomllib.loads(pyproject_path.read_text(encoding="utf-8"))
+paths = data.get("tool", {}).get("mutmut", {}).get("paths_to_mutate", [])
+if not paths:
+    print("[quality-gate] mutation target set is empty")
+    raise SystemExit(1)
+
+grouped = defaultdict(list)
+for path in paths:
+    if "/worker/pipeline/" in path:
+        grouped["worker-pipeline"].append(path)
+    elif "/api/app/services/" in path:
+        grouped["api-services"].append(path)
+    elif "/api/app/routers/" in path:
+        grouped["api-routes"].append(path)
+    else:
+        grouped["other"].append(path)
+
+print(f"[quality-gate] mutation target set count={len(paths)}")
+for key in ("worker-pipeline", "api-services", "api-routes", "other"):
+    values = grouped.get(key, [])
+    if not values:
+        continue
+    print(f"[quality-gate] mutation target group={key} count={len(values)}")
+    for item in values:
+        print(f"[quality-gate]   - {item}")
+PY
+}
+
 run_mutation_gate() {
   local stats_file="mutants/mutmut-cicd-stats.json"
-  echo "[quality-gate] mutation gate target=apps/worker/worker/pipeline/steps/llm_step_gates.py threshold=${MUTATION_MIN_SCORE}"
+  echo "[quality-gate] mutation gate threshold=${MUTATION_MIN_SCORE}"
+  if ! print_mutation_target_set; then
+    echo "[quality-gate] mutation gate failed: unable to load target set from pyproject.toml." >&2
+    return 1
+  fi
 
   if ! command -v uv >/dev/null 2>&1; then
     echo "[quality-gate] mutation gate failed: uv is required to auto-install/run mutmut." >&2
@@ -417,6 +465,236 @@ PY
   fi
 
   echo "[quality-gate] mutation gate passed"
+}
+
+run_api_cors_preflight_smoke() {
+  DATABASE_URL='sqlite+pysqlite:///:memory:' \
+  TEMPORAL_TARGET_HOST='127.0.0.1:7233' \
+  TEMPORAL_NAMESPACE='default' \
+  TEMPORAL_TASK_QUEUE='video-analysis' \
+  SQLITE_STATE_PATH="$TMP_DIR/api-cors-preflight.sqlite3" \
+  NOTIFICATION_ENABLED='0' \
+  PYTHONPATH="$ROOT_DIR:$ROOT_DIR/apps/worker" \
+    uv run python - <<'PY'
+from fastapi.testclient import TestClient
+
+from apps.api.app.main import app
+
+client = TestClient(app)
+response = client.options(
+    "/api/v1/subscriptions/123e4567-e89b-12d3-a456-426614174000",
+    headers={
+        "Origin": "http://127.0.0.1:3000",
+        "Access-Control-Request-Method": "DELETE",
+        "Access-Control-Request-Headers": "content-type",
+    },
+)
+if response.status_code not in (200, 204):
+    raise SystemExit(
+        f"api cors preflight smoke failed: status={response.status_code}, body={response.text}"
+    )
+print("api cors preflight smoke passed")
+PY
+}
+
+run_contract_diff_local_gate() {
+  local base_sha=""
+  local merge_base=""
+  local upstream_ref=""
+  local contract_dir="$ROOT_DIR/.runtime-cache/temp/contract-diff-local"
+  local base_tree="$contract_dir/base-tree"
+  local base_json="$contract_dir/contract-base.json"
+  local head_json="$contract_dir/contract-head.json"
+  local report_md="$contract_dir/contract-diff.md"
+  local report_json="$contract_dir/contract-diff.json"
+
+  mkdir -p "$contract_dir"
+  rm -rf "$base_tree"
+
+  if upstream_ref="$(git rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' 2>/dev/null)"; then
+    merge_base="$(git merge-base HEAD '@{upstream}' 2>/dev/null || true)"
+  fi
+
+  if [[ -n "$merge_base" ]]; then
+    base_sha="$merge_base"
+  else
+    git fetch origin main --quiet || true
+    base_sha="$(git rev-parse origin/main 2>/dev/null || true)"
+  fi
+
+  if [[ -z "$base_sha" ]]; then
+    echo "[quality-gate] contract diff local gate failed: unable to determine base sha" >&2
+    return 1
+  fi
+
+  git worktree add --detach "$base_tree" "$base_sha" >/dev/null
+
+  if ! uv run python scripts/export_api_contract.py --repo-root "$ROOT_DIR" --output "$head_json"; then
+    git worktree remove --force "$base_tree" >/dev/null 2>&1 || true
+    return 1
+  fi
+  if ! uv run python scripts/export_api_contract.py --repo-root "$base_tree" --output "$base_json"; then
+    git worktree remove --force "$base_tree" >/dev/null 2>&1 || true
+    return 1
+  fi
+  if ! uv run python scripts/check_contract_diff.py \
+    --base "$base_json" \
+    --head "$head_json" \
+    --report "$report_md" \
+    --json-report "$report_json"; then
+    git worktree remove --force "$base_tree" >/dev/null 2>&1 || true
+    return 1
+  fi
+
+  git worktree remove --force "$base_tree" >/dev/null 2>&1 || true
+  echo "[quality-gate] contract diff local gate passed"
+}
+
+run_ci_docs_parity_gate() {
+  python3 scripts/check_ci_docs_parity.py
+  echo "[quality-gate] ci docs parity gate passed"
+}
+
+run_docs_env_canonical_guard() {
+  if rg -n 'cp \.env\.local\.example \.env\.local|source \.env\.local|自动加载 `?\.env\.local' README.md docs/runbook-local.md; then
+    echo "[quality-gate] docs env canonical guard failed" >&2
+    return 1
+  fi
+  echo "[quality-gate] docs env canonical guard passed"
+}
+
+run_provider_residual_guard() {
+  bash scripts/guard_provider_residuals.sh .
+  echo "[quality-gate] provider residual guard passed"
+}
+
+run_worker_line_limits_guard() {
+  python3 scripts/check_worker_line_limits.py
+  echo "[quality-gate] worker line limits guard passed"
+}
+
+run_schema_parity_gate() {
+  python3 - <<'PY'
+import difflib
+import json
+from pathlib import Path
+
+source_path = Path("apps/mcp/schemas/tools.json")
+shared_path = Path("packages/shared-contracts/jsonschema/mcp-tools.schema.json")
+
+source = json.loads(source_path.read_text(encoding="utf-8"))
+shared = json.loads(shared_path.read_text(encoding="utf-8"))
+
+if source != shared:
+    source_pretty = json.dumps(source, ensure_ascii=False, indent=2, sort_keys=True).splitlines()
+    shared_pretty = json.dumps(shared, ensure_ascii=False, indent=2, sort_keys=True).splitlines()
+    print("Schema parity check failed:")
+    for line in difflib.unified_diff(
+        source_pretty,
+        shared_pretty,
+        fromfile=str(source_path),
+        tofile=str(shared_path),
+        lineterm="",
+    ):
+        print(line)
+    raise SystemExit(1)
+print("Schema parity check passed.")
+PY
+  echo "[quality-gate] schema parity gate passed"
+}
+
+run_iac_compose_config_validation() {
+  if ! command -v docker >/dev/null 2>&1; then
+    echo "[quality-gate] iac compose config validation failed: docker is required" >&2
+    return 1
+  fi
+  docker compose -f infra/compose/core-services.compose.yml config -q
+  if [[ -f infra/compose/miniflux-nextflux.compose.yml ]]; then
+    docker compose -f infra/compose/miniflux-nextflux.compose.yml config -q
+  fi
+  echo "[quality-gate] iac compose config validation passed"
+}
+
+run_web_design_token_guard_local() {
+  local merge_base=""
+
+  if git rev-parse --verify HEAD >/dev/null 2>&1; then
+    if git rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' >/dev/null 2>&1; then
+      merge_base="$(git merge-base HEAD '@{upstream}' 2>/dev/null || true)"
+    elif git rev-parse --verify HEAD~1 >/dev/null 2>&1; then
+      merge_base="$(git rev-parse HEAD~1 2>/dev/null || true)"
+    fi
+  fi
+
+  if [[ -n "$merge_base" ]]; then
+    python3 scripts/check_design_tokens.py \
+      --from-ref "$merge_base" \
+      --to-ref HEAD \
+      apps/web
+  else
+    python3 scripts/check_design_tokens.py --all-lines apps/web
+  fi
+  echo "[quality-gate] web design token guard passed"
+}
+
+run_python_tests_with_coverage_and_skip_guard() {
+  mkdir -p .runtime-cache
+  PYTHONPATH="$PWD:$PWD/apps/worker" \
+  DATABASE_URL='sqlite+pysqlite:///:memory:' \
+    uv run pytest apps/worker/tests apps/api/tests apps/mcp/tests -q -rA \
+      --cov=apps/worker/worker \
+      --cov=apps/api \
+      --cov=apps/mcp \
+      --cov-report=term-missing:skip-covered \
+      --cov-fail-under=80 \
+      --junitxml=.runtime-cache/python-tests-junit-local.xml
+
+  python3 - <<'PY'
+import xml.etree.ElementTree as ET
+from pathlib import Path
+
+report = Path(".runtime-cache/python-tests-junit-local.xml")
+if not report.is_file():
+    raise SystemExit("python skip guard failed: junit report missing")
+
+root = ET.parse(report).getroot()
+suites = [root] if root.tag == "testsuite" else root.findall("testsuite")
+tests = sum(int(suite.attrib.get("tests", "0")) for suite in suites)
+skipped = sum(int(suite.attrib.get("skipped", "0")) for suite in suites)
+
+if tests == 0:
+    raise SystemExit("python skip guard failed: collected 0 tests")
+if skipped > 0:
+    raise SystemExit(f"python skip guard failed: skipped={skipped} (no silent skip allowed)")
+print(f"python skip guard passed: tests={tests}, skipped={skipped}")
+PY
+}
+
+run_web_dependency_policy_gate() {
+  node - <<'JS'
+const fs = require("fs");
+const path = "apps/web/package.json";
+const pkg = JSON.parse(fs.readFileSync(path, "utf8"));
+const sections = ["dependencies", "devDependencies", "peerDependencies", "optionalDependencies"];
+const violations = [];
+
+for (const section of sections) {
+  const deps = pkg[section] || {};
+  for (const [name, version] of Object.entries(deps)) {
+    const v = String(version).trim();
+    if (v === "latest" || v === "*" || /^https?:/i.test(v) || /^git\+/i.test(v)) {
+      violations.push(`${section}.${name}=${v}`);
+    }
+  }
+}
+
+if (violations.length) {
+  console.error("Floating dependency versions are not allowed:");
+  for (const item of violations) console.error(`- ${item}`);
+  process.exit(1);
+}
+console.log("Web dependency policy gate passed");
+JS
 }
 
 report_gate_failure() {
@@ -868,6 +1146,18 @@ run_pre_push_mode() {
     "python3 scripts/check_structured_logs.py"
   run_async_gate "iac_entrypoint_guard" "iac entrypoint guard" \
     "bash scripts/check_iac_entrypoint.sh ."
+  run_async_gate "iac_compose_config_validation" "iac compose config validation" \
+    "run_iac_compose_config_validation"
+  run_async_gate "ci_docs_parity_gate" "ci docs parity gate" \
+    "run_ci_docs_parity_gate"
+  run_async_gate "docs_env_canonical_guard" "docs env canonical guard" \
+    "run_docs_env_canonical_guard"
+  run_async_gate "provider_residual_guard" "provider residual guard" \
+    "run_provider_residual_guard"
+  run_async_gate "worker_line_limits_guard" "worker line limits guard" \
+    "run_worker_line_limits_guard"
+  run_async_gate "schema_parity_gate" "schema parity gate (apps/mcp vs shared-contracts)" \
+    "run_schema_parity_gate"
   if [[ "$CI_DEDUPE" == "1" ]]; then
     echo "[quality-gate] skip: frontend lint (--ci-dedupe=1)"
   elif is_true "$EFFECTIVE_WEB_CHANGED"; then
@@ -904,12 +1194,40 @@ run_pre_push_mode() {
     echo "[quality-gate] skip: web unit tests (effective_web_changed=false)"
   fi
   if [[ "$CI_DEDUPE" == "1" ]]; then
+    echo "[quality-gate] skip: web coverage threshold gate (--ci-dedupe=1, covered by CI web-test-build)"
+  elif is_true "$EFFECTIVE_WEB_CHANGED"; then
+    run_async_gate "web_coverage_threshold" "web coverage threshold gate (global>=80, core>=90)" \
+      "python3 scripts/check_web_coverage_threshold.py --summary-path apps/web/coverage/coverage-summary.json --global-threshold 80 --core-threshold 90"
+    run_async_gate "web_design_token_guard" "web design token guard (local diff)" \
+      "run_web_design_token_guard_local"
+    run_async_gate "web_build" "web build" \
+      "npm --prefix apps/web run build"
+    run_async_gate "web_button_coverage" "web button coverage gate (threshold=1.0)" \
+      "python3 scripts/check_web_button_coverage.py --threshold 1.0"
+  else
+    echo "[quality-gate] skip: web coverage threshold gate (effective_web_changed=false)"
+  fi
+  if [[ "$CI_DEDUPE" == "1" ]]; then
     echo "[quality-gate] skip: python tests + total coverage (--ci-dedupe=1)"
   elif is_true "$EFFECTIVE_BACKEND_CHANGED"; then
     run_async_gate "python_tests_with_coverage" "python tests + total coverage gate (>=80%)" \
-      "PYTHONPATH=\"$PWD:$PWD/apps/worker\" DATABASE_URL='sqlite+pysqlite:///:memory:' uv run pytest apps/worker/tests apps/api/tests apps/mcp/tests -q -rA --cov=apps/worker/worker --cov=apps/api --cov=apps/mcp --cov-report=term-missing:skip-covered --cov-fail-under=80"
+      "run_python_tests_with_coverage_and_skip_guard"
+    run_async_gate "api_cors_preflight_smoke" "api cors preflight smoke (OPTIONS DELETE)" \
+      "run_api_cors_preflight_smoke"
+    run_async_gate "contract_diff_local_gate" "contract diff local gate (base vs head)" \
+      "run_contract_diff_local_gate"
   else
     echo "[quality-gate] skip: python tests + total coverage (effective_backend_changed=false)"
+  fi
+  if is_true "$CHANGED_DEPS"; then
+    run_async_gate "python_dependency_audit" "python dependency audit (pip-audit)" \
+      "uv run --with pip-audit pip-audit --progress-spinner off"
+    run_async_gate "web_dependency_policy_gate" "web dependency policy gate (no floating versions)" \
+      "run_web_dependency_policy_gate"
+    run_async_gate "web_runtime_dependency_audit" "web runtime dependency audit (npm audit high+)" \
+      "npm --prefix apps/web audit --omit=dev --audit-level=high"
+  else
+    echo "[quality-gate] skip: dependency vulnerability scan (changed_deps=false)"
   fi
 
   ensure_parallel_batch "pre-push/long-tests"

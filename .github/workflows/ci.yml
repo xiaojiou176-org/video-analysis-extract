@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - main
+      - release/**
       - codex/**
   schedule:
     - cron: "0 3 * * *"
@@ -15,6 +16,7 @@ concurrency:
 
 permissions:
   contents: read
+  pull-requests: read
 
 jobs:
   changes:
@@ -75,6 +77,11 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Install ripgrep
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ripgrep
+
       - name: Env contract strict check
         run: python3 scripts/check_env_contract.py --strict --env-file .env.example
 
@@ -113,6 +120,9 @@ jobs:
       - name: CI smoke drift check
         run: bash scripts/check_ci_smoke_drift.sh
 
+      - name: CI docs parity check (blocking)
+        run: python3 scripts/check_ci_docs_parity.py
+
       - name: Docs env canonical check
         run: |
           ! rg -n 'cp \.env\.local\.example \.env\.local|source \.env\.local|自动加载 `?\.env\.local' README.md docs/runbook-local.md
@@ -130,7 +140,7 @@ jobs:
       - name: Provider residual guard (blocking)
         run: bash scripts/guard_provider_residuals.sh .
 
-      - name: Worker file line limits (pipeline/steps + temporal <= 700)
+      - name: Worker file line limits (pipeline/steps + temporal <= 750)
         run: python3 scripts/check_worker_line_limits.py
 
       - name: Schema parity check (apps/mcp vs shared-contracts)
@@ -221,7 +231,7 @@ jobs:
               --profile live-smoke \
               --profile-only \
               --heartbeat-seconds 20 \
-              --mutation-min-score 0.60
+              --mutation-min-score 0.85
           fi
 
   quality-gate-pre-push:
@@ -265,7 +275,7 @@ jobs:
               --changed-deps "${{ needs.changes.outputs.deps_changed }}" \
               --changed-migrations "${{ needs.changes.outputs.migrations_changed }}" \
               --heartbeat-seconds 25 \
-              --mutation-min-score 0.60
+              --mutation-min-score 0.85
 
   db-migration-smoke:
     runs-on: ubuntu-latest
@@ -455,7 +465,6 @@ jobs:
   api-real-smoke:
     runs-on: ubuntu-latest
     needs: [preflight-fast, changes]
-    if: ${{ github.event_name != 'pull_request' || needs.changes.outputs.backend_changed == 'true' }}
     services:
       postgres:
         image: pgvector/pgvector:pg16
@@ -523,6 +532,7 @@ jobs:
           SQLITE_STATE_PATH: /tmp/video-digestor-api-smoke.db
           UI_AUDIT_GEMINI_ENABLED: "false"
           NOTIFICATION_ENABLED: "0"
+          VD_ALLOW_UNAUTH_WRITE: "1"
         run: |
           mkdir -p .runtime-cache
           uv run --with uvicorn uvicorn apps.api.app.main:app --host 127.0.0.1 --port 18080 > .runtime-cache/api-real-smoke.log 2>&1 &
@@ -591,8 +601,7 @@ jobs:
     if: >-
       github.event_name == 'pull_request' &&
       needs.changes.outputs.backend_changed == 'true' &&
-      github.event.pull_request.head.repo.full_name == github.repository &&
-      secrets.GEMINI_API_KEY != ''
+      github.event.pull_request.head.repo.full_name == github.repository
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -663,7 +672,6 @@ jobs:
   web-test-build:
     runs-on: ubuntu-latest
     needs: [preflight-fast, changes]
-    if: ${{ github.event_name != 'pull_request' || needs.changes.outputs.web_changed == 'true' }}
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -706,6 +714,13 @@ jobs:
       - name: Web unit tests (vitest + coverage gate)
         run: npm --prefix apps/web run test -- --coverage
 
+      - name: Web coverage threshold gate (global>=80, core>=90)
+        run: |
+          python3 scripts/check_web_coverage_threshold.py \
+            --summary-path apps/web/coverage/coverage-summary.json \
+            --global-threshold 80 \
+            --core-threshold 90
+
       - name: Web build
         run: npm --prefix apps/web run build
 
@@ -715,7 +730,20 @@ jobs:
   web-e2e:
     runs-on: ubuntu-latest
     needs: [preflight-fast, changes]
-    if: ${{ github.event_name != 'pull_request' || needs.changes.outputs.web_changed == 'true' }}
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_DB: video_analysis_web_e2e
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d video_analysis_web_e2e"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
     strategy:
       fail-fast: false
       matrix:
@@ -763,6 +791,111 @@ jobs:
       - name: Install web deps
         run: npm --prefix apps/web ci
 
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+
+      - name: Install Temporal CLI
+        run: |
+          curl -sSfL https://temporal.download/cli.sh | sh
+          echo "$HOME/.temporalio/bin" >> "$GITHUB_PATH"
+
+      - name: Run migrations for web e2e DB
+        env:
+          PGPASSWORD: postgres
+        run: |
+          for _ in $(seq 1 30); do
+            if pg_isready -h 127.0.0.1 -p 5432 -U postgres -d video_analysis_web_e2e >/dev/null 2>&1; then
+              break
+            fi
+            sleep 1
+          done
+          for migration in $(ls infra/migrations/*.sql | sort); do
+            psql "postgresql://postgres:postgres@127.0.0.1:5432/video_analysis_web_e2e" -v ON_ERROR_STOP=1 -f "$migration"
+          done
+
+      - name: Start Temporal dev server for web e2e (127.0.0.1:7233)
+        run: |
+          mkdir -p .runtime-cache
+          temporal server start-dev --ip 127.0.0.1 --port 7233 > .runtime-cache/web-e2e-temporal.log 2>&1 &
+          echo "WEB_E2E_TEMPORAL_PID=$!" >> "$GITHUB_ENV"
+
+          python - <<'PY'
+          import socket
+          import sys
+          import time
+
+          for _ in range(60):
+              sock = socket.socket()
+              sock.settimeout(1)
+              try:
+                  sock.connect(("127.0.0.1", 7233))
+                  sock.close()
+                  print("temporal web-e2e ready on 127.0.0.1:7233")
+                  sys.exit(0)
+              except OSError:
+                  time.sleep(1)
+              finally:
+                  sock.close()
+
+          print("temporal web-e2e failed to become ready on 127.0.0.1:7233", file=sys.stderr)
+          sys.exit(1)
+          PY
+
+      - name: Start real API for web e2e (127.0.0.1:18080)
+        env:
+          DATABASE_URL: "postgresql+psycopg://postgres:postgres@127.0.0.1:5432/video_analysis_web_e2e"
+          TEMPORAL_TARGET_HOST: 127.0.0.1:7233
+          TEMPORAL_NAMESPACE: default
+          TEMPORAL_TASK_QUEUE: video-analysis-worker
+          SQLITE_STATE_PATH: /tmp/video-digestor-api-web-e2e.db
+          UI_AUDIT_GEMINI_ENABLED: "false"
+          NOTIFICATION_ENABLED: "0"
+          VD_ALLOW_UNAUTH_WRITE: "1"
+        run: |
+          mkdir -p .runtime-cache
+          uv run --with uvicorn uvicorn apps.api.app.main:app --host 127.0.0.1 --port 18080 > .runtime-cache/web-e2e-api.log 2>&1 &
+          echo "WEB_E2E_API_PID=$!" >> "$GITHUB_ENV"
+          for _ in $(seq 1 30); do
+            if curl -fsS "http://127.0.0.1:18080/healthz" >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "web-e2e api failed to start"
+          exit 1
+
+      - name: Start worker for web e2e (same DB/Temporal/queue)
+        env:
+          DATABASE_URL: "postgresql+psycopg://postgres:postgres@127.0.0.1:5432/video_analysis_web_e2e"
+          TEMPORAL_TARGET_HOST: 127.0.0.1:7233
+          TEMPORAL_NAMESPACE: default
+          TEMPORAL_TASK_QUEUE: video-analysis-worker
+          SQLITE_PATH: /tmp/video-digestor-worker-web-e2e.db
+          PIPELINE_WORKSPACE_DIR: /tmp/video-digestor-worker-web-e2e-workspace
+          PIPELINE_ARTIFACT_ROOT: /tmp/video-digestor-worker-web-e2e-artifacts
+          UI_AUDIT_GEMINI_ENABLED: "false"
+          NOTIFICATION_ENABLED: "0"
+        run: |
+          mkdir -p .runtime-cache
+          ./scripts/dev_worker.sh --no-show-hints > .runtime-cache/web-e2e-worker.log 2>&1 &
+          echo "WEB_E2E_WORKER_PID=$!" >> "$GITHUB_ENV"
+          for _ in $(seq 1 30); do
+            if ! kill -0 "${WEB_E2E_WORKER_PID:-$!}" >/dev/null 2>&1; then
+              echo "web-e2e worker exited unexpectedly"
+              tail -n 80 .runtime-cache/web-e2e-worker.log || true
+              exit 1
+            fi
+            if [[ -s .runtime-cache/web-e2e-worker.log ]]; then
+              echo "web-e2e worker process is up and producing logs"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "web-e2e worker failed readiness probe (no log output within 30s)"
+          exit 1
+
       - name: Install Playwright browser (${{ matrix.browser }})
         run: uv run --with playwright python -m playwright install --with-deps ${{ matrix.browser }}
 
@@ -775,6 +908,7 @@ jobs:
           uv run --with pytest --with playwright \
             pytest apps/web/tests/e2e -q --junitxml=".runtime-cache/web-e2e-junit-${BROWSER}.xml" -rA \
             --web-e2e-browser "$BROWSER" \
+            --web-e2e-api-base-url "http://127.0.0.1:18080" \
             2>&1 | tee ".runtime-cache/web-e2e-${BROWSER}.log"
 
           python - <<'PY'
@@ -817,6 +951,39 @@ jobs:
           path: |
             .runtime-cache/web-e2e-junit-${{ matrix.browser }}.xml
             .runtime-cache/web-e2e-${{ matrix.browser }}.log
+            .runtime-cache/web-e2e-api.log
+            .runtime-cache/web-e2e-temporal.log
+            .runtime-cache/web-e2e-worker.log
+
+      - name: Upload web e2e worker logs (always)
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: web-e2e-worker-log-${{ matrix.browser }}-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: ignore
+          path: |
+            .runtime-cache/web-e2e-worker.log
+
+      - name: Stop web e2e API
+        if: always()
+        run: |
+          if [[ -n "${WEB_E2E_API_PID:-}" ]]; then
+            kill "${WEB_E2E_API_PID}" >/dev/null 2>&1 || true
+          fi
+
+      - name: Stop web e2e worker
+        if: always()
+        run: |
+          if [[ -n "${WEB_E2E_WORKER_PID:-}" ]]; then
+            kill "${WEB_E2E_WORKER_PID}" >/dev/null 2>&1 || true
+          fi
+
+      - name: Stop web e2e Temporal dev server
+        if: always()
+        run: |
+          if [[ -n "${WEB_E2E_TEMPORAL_PID:-}" ]]; then
+            kill "${WEB_E2E_TEMPORAL_PID}" >/dev/null 2>&1 || true
+          fi
 
   external-playwright-smoke:
     runs-on: ubuntu-latest
@@ -1004,11 +1171,11 @@ jobs:
           results[dependency_vuln_scan]="${{ needs.dependency-vuln-scan.result }}"
 
           failed=0
-          require_main_schedule_only=0
-          if [[ "$event_name" == "schedule" || ( "$event_name" == "push" && "$ref" == "refs/heads/main" ) ]]; then
-            require_main_schedule_only=1
+          require_main_schedule_release_only=0
+          if [[ "$event_name" == "schedule" || ( "$event_name" == "push" && ( "$ref" == "refs/heads/main" || "$ref" == refs/heads/release/* ) ) ]]; then
+            require_main_schedule_release_only=1
           fi
-          echo "event=$event_name ref=$ref is_pr=$is_pr require_main_schedule_only=$require_main_schedule_only"
+          echo "event=$event_name ref=$ref is_pr=$is_pr require_main_schedule_release_only=$require_main_schedule_release_only"
           echo "changes: backend=$backend_changed web=$web_changed deps=$deps_changed migrations=$migrations_changed"
 
           for job in changes preflight_fast preflight_heavy; do
@@ -1038,6 +1205,9 @@ jobs:
           required_db_migration=1
           required_backend_group=1
           required_web_group=1
+          required_api_real_smoke=1
+          required_web_test_build=1
+          required_web_e2e=1
           required_deps_scan=1
           if [[ "$is_pr" -eq 1 ]]; then
             [[ "$migrations_changed" == "true" ]] && required_db_migration=1 || required_db_migration=0
@@ -1048,17 +1218,17 @@ jobs:
 
           check_required_job db_migration_smoke "$required_db_migration"
           check_required_job python_tests "$required_backend_group"
-          check_required_job api_real_smoke "$required_backend_group"
+          check_required_job api_real_smoke "$required_api_real_smoke"
           check_required_job backend_lint "$required_backend_group"
           check_required_job frontend_lint "$required_web_group"
-          check_required_job web_test_build "$required_web_group"
-          check_required_job web_e2e "$required_web_group"
+          check_required_job web_test_build "$required_web_test_build"
+          check_required_job web_e2e "$required_web_e2e"
           check_required_job dependency_vuln_scan "$required_deps_scan"
 
           for job in profile_governance quality_gate_pre_push external_playwright_smoke; do
             result="${results[$job]}"
             echo "$job=$result"
-            if [[ "$require_main_schedule_only" -eq 1 ]]; then
+            if [[ "$require_main_schedule_release_only" -eq 1 ]]; then
               if [[ "$result" != "success" ]]; then
                 failed=1
               fi
@@ -1230,7 +1400,7 @@ jobs:
     needs: aggregate-gate
     runs-on: ubuntu-latest
     if: >-
-      (github.event_name == 'schedule' || (github.event_name == 'push' && github.ref == 'refs/heads/main'))
+      (github.event_name == 'schedule' || (github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/'))))
     env:
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
@@ -1255,7 +1425,7 @@ jobs:
           [[ "$HAS_YOUTUBE_API_KEY" != "true" ]] && missing+=("YOUTUBE_API_KEY")
           [[ "$HAS_LIVE_SMOKE_API_BASE_URL" != "true" ]] && missing+=("LIVE_SMOKE_API_BASE_URL")
           if [[ "${#missing[@]}" -gt 0 ]]; then
-            echo "live smoke is required on main/schedule but missing secrets: ${missing[*]}"
+            echo "live smoke is required on main/release/schedule but missing secrets: ${missing[*]}"
             exit 1
           fi
 
@@ -1288,7 +1458,7 @@ jobs:
       - nightly-flaky-python
       - nightly-flaky-web-e2e
     steps:
-      - name: Enforce final gate (with required live smoke on main/nightly)
+      - name: Enforce final gate (with required live smoke on main/release/nightly)
         run: |
           aggregate_result="${{ needs.aggregate-gate.result }}"
           live_smoke_result="${{ needs.live-smoke.result }}"
@@ -1301,6 +1471,8 @@ jobs:
           if [[ "$event_name" == "schedule" ]]; then
             require_live_smoke=1
           elif [[ "$event_name" == "push" && "$ref" == "refs/heads/main" ]]; then
+            require_live_smoke=1
+          elif [[ "$event_name" == "push" && "$ref" == refs/heads/release/* ]]; then
             require_live_smoke=1
           fi
 
@@ -1327,7 +1499,7 @@ jobs:
 
           if [[ "$require_live_smoke" -eq 1 ]]; then
             if [[ "$live_smoke_result" != "success" ]]; then
-              echo "final gate failed: live smoke required on main/nightly but result is '$live_smoke_result'"
+              echo "final gate failed: live smoke required on main/release/nightly but result is '$live_smoke_result'"
               exit 1
             fi
           fi

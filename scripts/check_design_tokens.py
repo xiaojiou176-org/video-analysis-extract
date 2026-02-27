@@ -20,6 +20,18 @@ ALLOW_PATTERNS = (
 )
 ALLOW_FILE_HINTS = ("token", "theme", "palette")
 VALID_SUFFIXES = {".css", ".scss", ".tsx", ".jsx"}
+SKIP_PATH_HINTS = (
+    "/node_modules/",
+    "\\node_modules\\",
+    "/.next",
+    "\\.next",
+    "/.next/",
+    "\\.next\\",
+    "/dist/",
+    "\\dist\\",
+    "/build/",
+    "\\build\\",
+)
 
 
 def _is_allowed_line(line: str) -> bool:
@@ -31,6 +43,8 @@ def _is_allowed_line(line: str) -> bool:
 
 def _should_skip_file(path: Path) -> bool:
     lower = str(path).lower()
+    if any(hint in lower for hint in SKIP_PATH_HINTS):
+        return True
     return any(hint in lower for hint in ALLOW_FILE_HINTS)
 
 
@@ -86,7 +100,9 @@ def _parse_added_lines(diff_text: str) -> set[int]:
     return added
 
 
-def _git_added_lines(path: Path, *, staged_only: bool, from_ref: str | None, to_ref: str | None) -> set[int] | None:
+def _git_added_lines(
+    path: Path, *, staged_only: bool, from_ref: str | None, to_ref: str | None
+) -> set[int] | None:
     rel = path.as_posix()
     if staged_only:
         cmd = ["git", "diff", "--cached", "--unified=0", "--", rel]
@@ -103,19 +119,27 @@ def _git_added_lines(path: Path, *, staged_only: bool, from_ref: str | None, to_
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Block hardcoded color literals outside token-based styling.")
+    parser = argparse.ArgumentParser(
+        description="Block hardcoded color literals outside token-based styling."
+    )
     parser.add_argument("paths", nargs="*", help="Files or directories to scan")
-    parser.add_argument("--staged-only", action="store_true", help="Check only added lines in staged diff")
+    parser.add_argument(
+        "--staged-only", action="store_true", help="Check only added lines in staged diff"
+    )
     parser.add_argument("--from-ref", help="Git base ref for diff scanning")
     parser.add_argument("--to-ref", help="Git head ref for diff scanning")
     parser.add_argument("--all-lines", action="store_true", help="Force full-file scan")
     args = parser.parse_args()
 
     if args.all_lines and (args.staged_only or args.from_ref or args.to_ref):
-        print("design-token-guard: --all-lines cannot be combined with diff options", file=sys.stderr)
+        print(
+            "design-token-guard: --all-lines cannot be combined with diff options", file=sys.stderr
+        )
         return 2
     if (args.from_ref and not args.to_ref) or (args.to_ref and not args.from_ref):
-        print("design-token-guard: --from-ref and --to-ref must be provided together", file=sys.stderr)
+        print(
+            "design-token-guard: --from-ref and --to-ref must be provided together", file=sys.stderr
+        )
         return 2
 
     scan_paths = _collect_paths(args.paths or ["apps/web"])
@@ -124,11 +148,15 @@ def main() -> int:
     for path in scan_paths:
         if _should_skip_file(path):
             continue
-        target_lines = None if args.all_lines else _git_added_lines(
-            path,
-            staged_only=args.staged_only,
-            from_ref=args.from_ref,
-            to_ref=args.to_ref,
+        target_lines = (
+            None
+            if args.all_lines
+            else _git_added_lines(
+                path,
+                staged_only=args.staged_only,
+                from_ref=args.from_ref,
+                to_ref=args.to_ref,
+            )
         )
         try:
             content = path.read_text(encoding="utf-8")

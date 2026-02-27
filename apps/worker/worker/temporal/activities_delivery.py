@@ -8,6 +8,18 @@ from sqlalchemy import text
 
 from worker.config import Settings
 from worker.state.postgres_store import PostgresBusinessStore
+from worker.temporal.activities_delivery_payload import (
+    build_retry_failure_payload as _build_retry_failure_payload_impl,
+)
+from worker.temporal.activities_delivery_payload import (
+    extract_daily_digest_date as _extract_daily_digest_date_impl,
+)
+from worker.temporal.activities_delivery_payload import (
+    extract_timezone_name as _extract_timezone_name_impl,
+)
+from worker.temporal.activities_delivery_payload import (
+    extract_timezone_offset_minutes as _extract_timezone_offset_minutes_impl,
+)
 from worker.temporal.activities_delivery_retry import retry_failed_deliveries_activity_impl
 from worker.temporal.activities_delivery_send import (
     send_daily_digest_activity_impl,
@@ -621,30 +633,15 @@ def _load_due_failed_deliveries(
 
 
 def _extract_daily_digest_date(payload_json: Any) -> date | None:
-    if not isinstance(payload_json, dict):
-        return None
-    raw = payload_json.get("digest_date")
-    if not isinstance(raw, str) or not raw.strip():
-        return None
-    try:
-        return date.fromisoformat(raw.strip())
-    except ValueError:
-        return None
+    return _extract_daily_digest_date_impl(payload_json)
 
 
 def _extract_timezone_name(payload_json: Any) -> str | None:
-    if not isinstance(payload_json, dict):
-        return None
-    raw = payload_json.get("timezone_name")
-    if isinstance(raw, str) and raw.strip():
-        return raw.strip()
-    return None
+    return _extract_timezone_name_impl(payload_json)
 
 
 def _extract_timezone_offset_minutes(payload_json: Any) -> int:
-    if not isinstance(payload_json, dict):
-        return 0
-    return _coerce_int(payload_json.get("timezone_offset_minutes"), fallback=0)
+    return _extract_timezone_offset_minutes_impl(payload_json, coerce_int=_coerce_int)
 
 
 def _build_retry_failure_payload(
@@ -652,12 +649,12 @@ def _build_retry_failure_payload(
     error_message: str,
     attempt_count: int,
 ) -> tuple[str, datetime | None]:
-    error_kind = _classify_delivery_error(error_message)
-    next_retry_at = _resolve_next_retry_at(
+    return _build_retry_failure_payload_impl(
+        error_message=error_message,
         attempt_count=attempt_count,
-        error_kind=error_kind,
+        classify_delivery_error=_classify_delivery_error,
+        resolve_next_retry_at=_resolve_next_retry_at,
     )
-    return error_kind, next_retry_at
 
 
 @activity.defn(name="retry_failed_deliveries_activity")

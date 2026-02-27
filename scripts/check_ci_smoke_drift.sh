@@ -41,8 +41,17 @@ forbidden_patterns=(
 )
 
 missing=()
+has_pattern() {
+  local pattern="$1"
+  if command -v rg >/dev/null 2>&1; then
+    rg -n --fixed-strings -- "$pattern" "$workflow_file" >/dev/null
+  else
+    grep -nF -- "$pattern" "$workflow_file" >/dev/null
+  fi
+}
+
 for pattern in "${required_patterns[@]}"; do
-  if ! rg -n --fixed-strings -- "$pattern" "$workflow_file" >/dev/null; then
+  if ! has_pattern "$pattern"; then
     missing+=("$pattern")
   fi
 done
@@ -59,7 +68,7 @@ fi
 
 unexpected=()
 for pattern in "${forbidden_patterns[@]}"; do
-  if rg -n --fixed-strings -- "$pattern" "$workflow_file" >/dev/null; then
+  if has_pattern "$pattern"; then
     unexpected+=("$pattern")
   fi
 done

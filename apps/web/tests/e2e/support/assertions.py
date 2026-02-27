@@ -29,7 +29,9 @@ def wait_for_call_count(
     qualifier = "==" if exact else ">="
     _wait_for_state(
         state,
-        lambda: (len(state.calls[key]) == expected) if exact else (len(state.calls[key]) >= expected),
+        lambda: (
+            (len(state.calls[key]) == expected) if exact else (len(state.calls[key]) >= expected)
+        ),
         timeout_sec,
         f"Timed out waiting for `{key}` calls: expected {qualifier} {expected}, actual={state.call_count(key)}",
     )
@@ -53,7 +55,8 @@ def wait_for_http_query_fragment(
     _wait_for_state(
         state,
         lambda: any(
-            item.get("path") == path and query_fragment in item.get("query", "") for item in state.calls["http"]
+            item.get("path") == path and query_fragment in item.get("query", "")
+            for item in state.calls["http"]
         ),
         timeout_sec,
         f"Timed out waiting for HTTP query fragment: {path}?...{query_fragment}",
@@ -106,16 +109,18 @@ def wait_for_http_call(
 
     with state.condition:
         matched = state.condition.wait_for(
-            lambda: _find_http_call(
-                state.calls["http"],
-                method_upper=method_upper,
-                path=path,
-                status=status,
-                query_fragment=query_fragment,
-                payload_contains=payload_contains,
-                payload_check=payload_check,
-            )
-            is not None,
+            lambda: (
+                _find_http_call(
+                    state.calls["http"],
+                    method_upper=method_upper,
+                    path=path,
+                    status=status,
+                    query_fragment=query_fragment,
+                    payload_contains=payload_contains,
+                    payload_check=payload_check,
+                )
+                is not None
+            ),
             timeout=timeout_sec,
         )
         if matched:

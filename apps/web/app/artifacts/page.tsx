@@ -166,7 +166,7 @@ export default async function ArtifactsPage({ searchParams }: ArtifactsPageProps
 														maxHeight: "320px",
 														borderRadius: "8px",
 														border: "1px solid var(--color-border)",
-														background: "#f8fafc",
+														background: "var(--color-surface-hover)",
 													}}
 												>
 													<p className="small">

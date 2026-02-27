@@ -45,7 +45,9 @@ PY_ENV_GET_RE = re.compile(r'os\.environ\.get\(\s*["\']([A-Z][A-Z0-9_]*)["\']')
 TS_PROCESS_ENV_RE = re.compile(r"process\.env\.([A-Z][A-Z0-9_]*)")
 SH_DEFAULT_ENV_RE = re.compile(r"\$\{([A-Z][A-Z0-9_]*)[:-][^}]*\}")
 ENV_FILE_LINE_RE = re.compile(r"^\s*(?:export\s+)?([A-Z][A-Z0-9_]*)\s*=\s*(.*)\s*$")
-ENV_EXAMPLE_EXPORT_RE = re.compile(r"^\s*(?:#\s*)?(?:export\s+)?([A-Z][A-Z0-9_]*)\s*=", re.MULTILINE)
+ENV_EXAMPLE_EXPORT_RE = re.compile(
+    r"^\s*(?:#\s*)?(?:export\s+)?([A-Z][A-Z0-9_]*)\s*=", re.MULTILINE
+)
 DOC_ASSIGN_RE = re.compile(r"^\s*(?:export\s+)?([A-Z][A-Z0-9_]*[A-Z0-9])\s*=\s*", re.MULTILINE)
 DOC_BACKTICK_RE = re.compile(r"`([A-Z][A-Z0-9_]*[A-Z0-9])`")
 
@@ -176,7 +178,9 @@ def _iter_files(root: Path, include_paths: list[str] | None = None) -> list[Path
     return files
 
 
-def _collect_code_references(root: Path, include_paths: list[str] | None = None) -> dict[str, set[str]]:
+def _collect_code_references(
+    root: Path, include_paths: list[str] | None = None
+) -> dict[str, set[str]]:
     refs: dict[str, set[str]] = {}
     for file_path in _iter_files(root, include_paths=include_paths):
         content = file_path.read_text(encoding="utf-8", errors="ignore")
@@ -270,7 +274,9 @@ def _collect_doc_drift(
 
     for path in docs:
         if not path.is_file():
-            missing_docs.append(str(path.relative_to(root)) if path.is_relative_to(root) else str(path))
+            missing_docs.append(
+                str(path.relative_to(root)) if path.is_relative_to(root) else str(path)
+            )
             continue
         refs = sorted(_collect_doc_refs(path))
         all_doc_refs.update(refs)
@@ -278,7 +284,9 @@ def _collect_doc_drift(
             rel_path = str(path.relative_to(root)) if path.is_relative_to(root) else str(path)
             doc_refs_by_file.append({"file": rel_path, "names": refs})
 
-    missing_required_in_env_example = sorted(name for name in required_vars if name not in env_example_vars)
+    missing_required_in_env_example = sorted(
+        name for name in required_vars if name not in env_example_vars
+    )
     missing_required_in_docs = sorted(name for name in required_vars if name not in all_doc_refs)
     stale_doc_refs = sorted(name for name in all_doc_refs if name not in contract_names)
 
@@ -326,20 +334,24 @@ def _render_markdown(report: dict[str, Any]) -> str:
         for row in delete_candidates:
             lines.append(f"- `{row['name']}` ({row['scope']})")
             lines.append(f"  - reason: {row['reason']}")
-            lines.append(f"  - consumers: {', '.join(row['consumers']) if row['consumers'] else '-'}")
+            lines.append(
+                f"  - consumers: {', '.join(row['consumers']) if row['consumers'] else '-'}"
+            )
     lines.append("")
 
     lines.append("## Residual Refs")
     lines.append("")
-    if not residual_refs["unregistered_code_refs"] and not residual_refs["unregistered_env_file_keys"]:
+    if (
+        not residual_refs["unregistered_code_refs"]
+        and not residual_refs["unregistered_env_file_keys"]
+    ):
         lines.append("- none")
     else:
         for row in residual_refs["unregistered_code_refs"]:
             lines.append(f"- `{row['file']}`: {', '.join(row['names'])}")
         if residual_refs["unregistered_env_file_keys"]:
             lines.append(
-                "- env file keys: "
-                + ", ".join(residual_refs["unregistered_env_file_keys"])
+                "- env file keys: " + ", ".join(residual_refs["unregistered_env_file_keys"])
             )
     lines.append("")
 
@@ -350,12 +362,11 @@ def _render_markdown(report: dict[str, Any]) -> str:
     else:
         if doc_drift["missing_required_in_env_example"]:
             lines.append(
-                "- missing in .env.example: " + ", ".join(doc_drift["missing_required_in_env_example"])
+                "- missing in .env.example: "
+                + ", ".join(doc_drift["missing_required_in_env_example"])
             )
         if doc_drift["missing_required_in_docs"]:
-            lines.append(
-                "- missing in docs: " + ", ".join(doc_drift["missing_required_in_docs"])
-            )
+            lines.append("- missing in docs: " + ", ".join(doc_drift["missing_required_in_docs"]))
         if doc_drift["stale_doc_refs"]:
             lines.append("- stale doc refs: " + ", ".join(doc_drift["stale_doc_refs"]))
 
@@ -400,11 +411,16 @@ def _build_report(
 
     fail_reasons = sorted(name for name in fail_on if hits[name])
     summary = {
-        "contract": str(contract_path.relative_to(root)) if contract_path.is_relative_to(root) else str(contract_path),
+        "contract": str(contract_path.relative_to(root))
+        if contract_path.is_relative_to(root)
+        else str(contract_path),
         "fail_on": sorted(fail_on),
         "delete_candidate_count": len(delete_candidates),
-        "residual_ref_count": len(residual_refs["unregistered_code_refs"]) + len(residual_refs["unregistered_env_file_keys"]),
-        "doc_drift_count": len(doc_drift["missing_required_in_env_example"]) + len(doc_drift["missing_required_in_docs"]) + len(doc_drift["stale_doc_refs"]),
+        "residual_ref_count": len(residual_refs["unregistered_code_refs"])
+        + len(residual_refs["unregistered_env_file_keys"]),
+        "doc_drift_count": len(doc_drift["missing_required_in_env_example"])
+        + len(doc_drift["missing_required_in_docs"])
+        + len(doc_drift["stale_doc_refs"]),
         "should_fail": bool(fail_reasons),
         "fail_reasons": fail_reasons,
     }
@@ -470,7 +486,9 @@ def run(argv: list[str] | None = None) -> int:
         if args.json_out.strip():
             json_out_path = _resolve_path(root, args.json_out)
             json_out_path.parent.mkdir(parents=True, exist_ok=True)
-            json_out_path.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+            json_out_path.write_text(
+                json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+            )
 
         if args.md_out.strip():
             md_out_path = _resolve_path(root, args.md_out)

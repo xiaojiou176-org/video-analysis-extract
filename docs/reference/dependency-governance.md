@@ -25,6 +25,10 @@
 - `env-governance.yml`：
   - `python scripts/check_env_contract.py --strict`
   - `gitleaks detect --source . --verbose --redact`
+- `mutation-weekly.yml`：
+  - 使用 `pyproject.toml` 的 `[tool.mutmut]` 作为唯一配置源
+  - 默认阈值 `--mutation-min-score 0.85`
+  - 周期审计要求 `survived=0`（无存活突变体）
 
 ## Upgrade Workflow
 
@@ -51,10 +55,23 @@ npm --prefix apps/web run build
 
 - 禁止提交与清单不一致的锁文件。
 - 禁止绕过 `--frozen` 流程在 CI 中安装 Python 依赖。
+- 禁止在 CI 中使用“临时 mutmut 参数”覆盖 `pyproject.toml` 的核心范围配置。
 - 依赖升级若影响运行命令或环境变量，必须同步更新：
   - `README.md`
   - `docs/runbook-local.md`
   - `ENVIRONMENT.md`（如涉及 env）
+
+## Mutation Scope Governance
+
+- 突变测试范围以核心业务路径为主，不追求全仓库蛮力扫描，优先覆盖“缺陷逃逸高风险”模块：
+  - `apps/worker/worker/pipeline/*`（编排/策略/执行）
+  - `apps/api/app/services/*`（服务层核心逻辑）
+  - `apps/api/app/routers/*`（接口分发与契约路径）
+- `also_copy` 必须同时包含被测代码与对应测试目录，确保 mutmut 在隔离沙箱内可复现实测路径：
+  - `apps/worker/worker` + `apps/worker/tests`
+  - `apps/api/app` + `apps/api/tests`
+- 测试选择清单（`pytest_add_cli_args_test_selection`）必须与突变范围同步演进：
+  - 新增核心模块时，同步补充目标测试文件，避免“有突变、无断言杀伤”。
 
 ## Doc-Drift Enforcement
 

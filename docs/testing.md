@@ -24,45 +24,55 @@
 
 ## CI Topology (GitHub Actions)
 
-- `changes`：仅 PR 使用的改动范围判定作业，输出 `backend` / `web` / `deps` / `migrations` 四个布尔字段，供后续 job 条件化执行。
-- `preflight`：预检门禁（env contract、provider residual guard、schema parity、worker file line limits）。
-- `db-migration-smoke` / `python-tests` / `api-real-smoke` / `pr-llm-real-smoke` / `backend-lint` / `frontend-lint` / `web-test-build` / `web-e2e`：依赖 `preflight` 并行执行（其中 `pr-llm-real-smoke` 为条件触发）。
-- `profile-governance` / `quality-gate-pre-push` / `external-playwright-smoke`：默认不在 PR 执行；在 `push(main)` 与 nightly `schedule` 必跑。`quality-gate-pre-push` 在 CI 中使用 `--ci-dedupe 1 + --changed-*` 去重参数，主职责收敛为治理类门禁，mutation 依据 `backend` 改动标志决定是否执行（当前 `main/schedule` 由 `changes` 默认输出 `backend=true`，因此仍会执行 mutation）。
-- `api-real-smoke`：PR 可运行的真实 API 轻量烟测（启动 FastAPI + Postgres，覆盖 `/healthz` 与 subscriptions 写读链路），不依赖外部 provider secrets。
-- `web-e2e`：增量浏览器策略。PR 仅跑 core（chromium/firefox）；`main` push 与 nightly schedule 跑 full（含 webkit）。默认使用本地 mock API，不访问真实外部网站。
-- `aggregate-gate`：汇总 `preflight + 12` 个核心作业（`profile-governance` / `quality-gate-pre-push` / `db-migration-smoke` / `python-tests` / `api-real-smoke` / `pr-llm-real-smoke` / `backend-lint` / `frontend-lint` / `web-test-build` / `web-e2e` / `external-playwright-smoke` / `dependency-vuln-scan`）；`pr-llm-real-smoke` 始终允许 `success/skipped`，且 `profile-governance` / `quality-gate-pre-push` / `external-playwright-smoke` 在 PR 上允许 `skipped`，在 `push(main)` / nightly `schedule` 必须为 `success`。
-- `autofix-dry-run`：依赖 `python-tests` + `web-e2e`，仅在两者任一失败时运行（读取 `.runtime-cache` 诊断工件）。
-- `nightly-flaky-python` + `nightly-flaky-web-e2e`：仅 nightly schedule 触发，执行重复运行策略用于发现 flaky。
-- `live-smoke`：依赖 `aggregate-gate`，在 `main` push / nightly schedule 必跑；执行真实 LLM + 真实外部视频 URL（YouTube/Bilibili）链路。运行参数统一使用 CLI 传参（如 `--api-base-url`）；未传时默认值回落到 `http://127.0.0.1:8000`。缺少任一必需 secret 会直接失败（不再跳过放行）。
-- `ci-final-gate`：最终门禁；始终检查 `aggregate-gate`，并在 nightly 强制 `nightly-flaky-*` 成功，在 `main` push / nightly schedule 强制 `live-smoke` 成功且不得为 `skipped`。
+以下口径按已拍板 D1~D5 执行，旧规则（PR 可跳过 `live-smoke` / E2E 默认 mock API / mutation=0.60）全部废止。
 
-## 第二批提速（PR 按改动范围执行 + CI 去重）
+- `preflight-fast` + `preflight-heavy`：预检门禁（env contract、schema parity、provider residual、worker line limits、structured log guard）。
+- `db-migration-smoke` + `python-tests` + `api-real-smoke` + `backend-lint` + `frontend-lint` + `web-test-build` + `web-e2e`：并行执行的主链路测试集合。
+- `web-e2e`：CI 主路径使用真实 API（real API）执行完整端到端验证；`mock` 仅允许本地调试，不允许进入 CI gate。
+- `web-e2e` real 链路包含 Temporal + API + worker 后台进程，`ingest/poll` 成功路径要求经过 worker 消费。
+- `web-e2e` 作业结束会执行 worker 进程清理，并在 `always()` 分支上传 worker 日志 artifact 供排障。
+- `live-smoke`：所有 PR 强制 live-smoke；`main` / `release` / nightly 同样必跑，且不得 `skip` / `skipped`。
+- `aggregate-gate`：汇总主链路结果，禁止对集成 smoke 与 live-smoke 放行 `skipped`。
+- `ci-final-gate`：最终门禁；PR/main/release/nightly 均要求 `live-smoke=success`。
 
-`changes` 作业（PR 场景）输出字段：
+## D1~D5 决议与执行命令
 
-- `backend`：后端相关改动（`apps/api` / `apps/worker` / `apps/mcp` / `scripts` / `infra` 等）命中时为 `true`。
-- `web`：前端相关改动（`apps/web`）命中时为 `true`。
-- `deps`：依赖相关改动（如 `uv.lock`、`apps/web/package-lock.json`、依赖定义文件）命中时为 `true`。
-- `migrations`：数据库迁移改动（`infra/migrations/*.sql`）命中时为 `true`。
+- D1 所有 PR 强制 live-smoke（不得 skip）：
 
-PR 条件化执行边界（由 `changes` 输出控制）：
+```bash
+scripts/e2e_live_smoke.sh \
+  --api-base-url "${LIVE_SMOKE_API_BASE_URL}" \
+  --require-api "1" \
+  --require-secrets "1" \
+  --computer-use-strict "1" \
+  --computer-use-skip "0" \
+  --heartbeat-seconds "30" \
+  --diagnostics-json ".runtime-cache/e2e-live-smoke-result.json"
+```
 
-- 后端链路作业：`python-tests` / `api-real-smoke` / `backend-lint` 在 `backend=true` 时执行，否则可 `skipped`；`db-migration-smoke` 在 `migrations=true` 时执行，否则可 `skipped`。
-- 前端链路作业（如 `frontend-lint` / `web-test-build` / `web-e2e`）在 `web=true` 时执行，否则可 `skipped`。
-- `preflight`、`aggregate-gate`、`ci-final-gate` 仍执行；其中 `aggregate-gate` 在 PR 下允许由 `changes` 判定导致的 `skipped`。
+- D2 mutation 硬门禁阈值 `0.85`：
 
-`quality-gate-pre-push`（`push(main)` / nightly `schedule`）会透传以下参数到 `quality_gate.sh`：
+```bash
+./scripts/quality_gate.sh \
+  --mode pre-push \
+  --profile ci \
+  --profile live-smoke \
+  --heartbeat-seconds 25 \
+  --mutation-min-score 0.85
+```
 
-- `--ci-dedupe 1`
-- `--changed-backend "${{ needs.changes.outputs.backend_changed }}"`
-- `--changed-web "${{ needs.changes.outputs.web_changed }}"`
-- `--changed-deps "${{ needs.changes.outputs.deps_changed }}"`
-- `--changed-migrations "${{ needs.changes.outputs.migrations_changed }}"`
+- D3 Web 覆盖硬门禁 `global >=80` 且 `core >=90`：
 
-CI 去重行为口径：
+```bash
+npm --prefix apps/web run test -- --coverage
+python3 scripts/check_web_coverage_threshold.py \
+  --summary-path apps/web/coverage/coverage-summary.json \
+  --global-threshold 80 \
+  --core-threshold 90
+```
 
-- 治理类检查（profile/env/doc-drift/secrets/structured-log/iac 等）在 `quality-gate-pre-push` 中持续执行；`lint` 与单元/覆盖检查由独立 CI jobs 承担，以避免重复执行。
-- mutation 按 `changed-backend` 触发；仅后端改动命中时执行，避免与独立后端作业重复消耗。
+- D4 集成 smoke（`api-real-smoke` / `web-e2e` / `live-smoke`）在 PR/main/release 禁止 skip。
+- D5 E2E CI 主路径必须全量 real API；`mock API` 仅用于本地 debug，不参与 CI 判定。
 
 ## 测试类型与依赖边界（避免误解）
 
@@ -70,19 +80,19 @@ CI 去重行为口径：
 |---|---|---|---|
 | `python-tests` | 以单测/组件测试为主（含 monkeypatch） | 否 | 否 |
 | `api-real-smoke` | 真实 FastAPI + 真实 Postgres + 真实 migration | 否（不打外部 provider） | 否 |
-| `pr-llm-real-smoke` | PR 条件触发的真实 LLM 接口烟测（`/api/v1/computer-use/run`） | 是（调用真实 Gemini） | 是（仅 `GEMINI_API_KEY`） |
-| `web-e2e` | Playwright UI 行为验证 + mock API | 否（默认不打外网） | 否 |
+| `pr-llm-real-smoke` | PR 真实 LLM 接口烟测（`/api/v1/computer-use/run`） | 是（调用真实 Gemini） | 是（仅 `GEMINI_API_KEY`） |
+| `web-e2e` | Playwright UI 行为验证 + real API | 是（按 CI 主路径执行） | 视目标 API 而定 |
 | `web-e2e` + `--web-e2e-base-url` | Playwright 复用外部 Web 实例 | 取决于目标实例 | 通常否 |
 | `external-playwright-smoke` | Playwright 直连外部公共站点（`https://example.com`） | 是（真实外网） | 否（默认值由 job 参数提供，可按脚本参数覆盖） |
-| `live-smoke` | 真实 `/api/v1/videos/process` + 真实 provider 链路 | 是（YouTube/Bilibili + Gemini/Resend） | 是（CI 主干必需） |
+| `live-smoke` | 真实 `/api/v1/videos/process` + 真实 provider 链路 | 是（YouTube/Bilibili + Gemini/Resend） | 是（PR/main/release 必需） |
 
-`pr-llm-real-smoke` 触发条件（PR 可选真实 LLM）：
+`pr-llm-real-smoke` 触发条件（PR 真实 LLM）：
 
 - 仅 `pull_request` 事件。
 - 仅同仓 PR（`head.repo.full_name == github.repository`），fork PR 不触发。
-- 且仓库配置了 `GEMINI_API_KEY` secret；否则该 job 为 `skipped`，不阻塞 aggregate gate。
+- 且仓库配置了 `GEMINI_API_KEY` secret；缺失即失败，不允许通过 `skipped` 放行。
 
-CI `live-smoke` 必需 secrets（`main` push / nightly schedule）：
+CI `live-smoke` 必需 secrets（PR/main/release/nightly）：
 
 - `GEMINI_API_KEY`
 - `RESEND_API_KEY`
@@ -95,7 +105,7 @@ CI `live-smoke` 必需 secrets（`main` push / nightly schedule）：
   - `github.event_name == 'pull_request'`
   - `github.event.pull_request.head.repo.full_name == github.repository`（同仓 PR，fork PR 不触发）
   - `secrets.GEMINI_API_KEY != ''`
-- `external-playwright-smoke` 仅在 `push(main)` 与 nightly `schedule` 执行（PR 默认 `skipped`）；默认参数：
+- `external-playwright-smoke` 仅在 `push(main)` 与 nightly `schedule` 执行；默认参数：
   - `--url https://example.com`
   - `--browser chromium`
   - `--expect-text "Example Domain"`
@@ -172,13 +182,13 @@ scripts/smoke_llm_real_local.sh --api-base-url "http://127.0.0.1:18081"
 - `up` 会等待 API health 与 Web 端口就绪，失败时输出 `logs/full-stack/*.log` 关键片段，便于快速定位。
 - 后台 `up` 场景调用 `./scripts/dev_api.sh --no-reload`，避免 `status` 因 reload 父子进程变化误判 `stopped`。
 
-## 触发差异（PR vs main vs nightly）
+## 触发差异（PR vs main/release vs nightly）
 
 | 触发源 | 必跑项 | 可跳过项 | 强制门禁 |
 |---|---|---|---|
-| `pull_request` | `changes`、`preflight`、`aggregate-gate` 依赖链（按改动范围执行） | `profile-governance`、`quality-gate-pre-push`、`external-playwright-smoke`、`live-smoke`（默认跳过）；以及由 `changes` 判定未命中的 backend/web 链路作业 | `aggregate-gate` 允许 optional 作业与 `changes` 判定产生的 `skipped`；`ci-final-gate` 允许 `live-smoke=skipped` 且 `pr-llm-real-smoke=skipped` |
-| `push` 到 `main` | `preflight`、`aggregate-gate` 依赖链、`profile-governance`、`quality-gate-pre-push`、`web-e2e(full)`、`api-real-smoke`、`external-playwright-smoke`、`live-smoke` | `pr-llm-real-smoke`、nightly flaky 子集 | `aggregate-gate` 强制 optional 作业为 `success`；`ci-final-gate` 强制 `live-smoke=success` |
-| `schedule` nightly | `preflight`、`aggregate-gate` 依赖链、`profile-governance`、`quality-gate-pre-push`、`web-e2e(full)`、`api-real-smoke`、`external-playwright-smoke`、`live-smoke`、`nightly-flaky-*` | `pr-llm-real-smoke` | `aggregate-gate` 强制 optional 作业为 `success`；`ci-final-gate` 强制 `live-smoke=success` 且 `nightly-flaky-*` 全部成功 |
+| `pull_request` | `preflight-*`、`db-migration-smoke`、`python-tests`、`api-real-smoke`、`backend-lint`、`frontend-lint`、`web-test-build`、`web-e2e(real API)`、`live-smoke`、`aggregate-gate`、`ci-final-gate` | 无 | 集成 smoke 与 live-smoke 禁止 `skip` / `skipped`，全部必须 `success` |
+| `push` 到 `main`/`release` | `pull_request` 全部必跑项 + `profile-governance` + `quality-gate-pre-push` + `external-playwright-smoke` | 无 | `aggregate-gate` 与 `ci-final-gate` 全链路强制 `success` |
+| `schedule` nightly | `main/release` 全部必跑项 + `nightly-flaky-*` | 无 | `live-smoke`、`nightly-flaky-*`、集成 smoke 全部必须 `success` |
 
 ## Run Commands
 
@@ -220,9 +230,34 @@ bash scripts/env/final_governance_check.sh --skip-prepush
 - 空洞日志文案扫描必须通过（禁止 `Something went wrong` / `unexpected error` / `error occurred` / `unknown error`）。
 - 文档漂移门禁强制执行（staged/push）。
 - 覆盖率阈值：总覆盖率 `>=80%`，核心模块覆盖率 `>=95%`（worker pipeline + api 核心 router/service）。
-- 变异测试门禁强制执行（Python 核心模块）：mutation score `>=0.60`（默认，可通过 `--mutation-min-score` 覆盖）。
+- Web 覆盖率硬门禁：`global >=80%` 且 `core >=90%`（默认读取 `apps/web/coverage/coverage-summary.json`）。
+- 变异测试门禁强制执行（Python 核心模块）：mutation score `>=0.85`（默认，可通过 `--mutation-min-score` 覆盖）。
 - `pre-push` 采用 fail-fast：先短检查，再长测试；长测试并行执行并输出 heartbeat。
+- `pre-push` 后端链路新增硬门禁：`api cors preflight smoke (OPTIONS DELETE)` 与 `contract diff local gate (base vs head)`。
+- `pre-push` 与远端 CI `preflight-fast`/`web-test-build` 关键阻断项对齐：`check_ci_docs_parity`、`docs env canonical guard`、`provider residual guard`、`worker line limits guard`、`schema parity gate`、`web design token guard`、`web build`、`web button coverage`。
 - Env 预算门禁强制执行（防反弹）：`core<=20`、`runtime<=100`、`scripts<=120`、`universe<=216`（`python3 scripts/check_env_budget.py`）。
+- 远程 CI 成本治理：任何远程重跑前必须先本地 pre-push 全绿；远程失败后先本地复现修复再重跑。
+
+### 0.1.2) Web 覆盖率硬门禁（Vitest json-summary）
+
+```bash
+npm --prefix apps/web run test -- --coverage
+python3 scripts/check_web_coverage_threshold.py \
+  --summary-path apps/web/coverage/coverage-summary.json \
+  --global-threshold 80 \
+  --core-threshold 90
+```
+
+可选参数：
+
+- `--metric lines|statements|functions|branches`（默认 `lines`）。
+- `--core-pattern '<glob>'`（可重复传入；默认 core 口径覆盖 `apps/web/lib` 与 `apps/web/components` 的直接文件和递归子目录文件）。
+- `--dry-run`（仅打印配置与路径，不读取 coverage 文件）。
+
+artifact 口径：
+
+- 输入：`apps/web/coverage/coverage-summary.json`（Vitest `json-summary` 输出）。
+- 输出：stdout 打印 gate 结果与失败原因；失败时返回码 `1`（硬阻断）。
 
 ### 0.2) Git Hook 强制门禁（commit-msg / pre-commit / pre-push）
 
@@ -294,11 +329,20 @@ echo "feat(api): add ingest health guard" > /tmp/commit-msg-ok.txt
   - `npm --prefix apps/web run lint`
   - `uv run --with ruff ruff check apps scripts`
   - `npm --prefix apps/web run test -- --coverage`
+  - `python3 scripts/check_web_coverage_threshold.py --summary-path apps/web/coverage/coverage-summary.json --global-threshold 80 --core-threshold 90`
   - `uv run pytest ... --cov-fail-under=80`
+  - `python skip guard`（junit `tests>0` 且 `skipped=0`）
   - `uv run coverage report ... --fail-under=95`（worker core / api core）
+  - `python3 scripts/check_ci_docs_parity.py`
+  - `bash scripts/guard_provider_residuals.sh .`
+  - `python3 scripts/check_worker_line_limits.py`
+  - `schema parity gate`（`apps/mcp/schemas/tools.json` vs `packages/shared-contracts/jsonschema/mcp-tools.schema.json`）
+  - `python3 scripts/check_design_tokens.py --from-ref <merge_base> --to-ref HEAD apps/web`（回退 `--all-lines`）
+  - `npm --prefix apps/web run build`
+  - `python3 scripts/check_web_button_coverage.py --threshold 1.0`
   - `DATABASE_URL='sqlite+pysqlite:///:memory:' uv run --extra dev --with mutmut mutmut run`
   - `uv run --extra dev --with mutmut mutmut export-cicd-stats`
-  - `python3 -c '...读取 mutants/mutmut-cicd-stats.json 并校验 score>=阈值...'`（默认阈值 `0.60`）
+  - `python3 -c '...读取 mutants/mutmut-cicd-stats.json 并校验 score>=阈值...'`（默认阈值 `0.85`）
 
 变异测试工具不可用策略（阻断）：
 
@@ -370,8 +414,39 @@ uv run --with pytest --with playwright pytest apps/web/tests/e2e -q
 
 说明：
 
-- E2E 用例会自动启动本地 Next.js Web（`apps/web`）并注入本地 mock API，不依赖真实后端或外部 API。
+- E2E CI 主路径必须连接 real API（真实 API），覆盖端到端关键旅程，不允许使用 mock API 作为 CI 默认路径。
+- mock API 仅允许本地调试（developer debug）使用，且不得作为 PR/main/release 门禁证据。
 - 运行前需确保 `apps/web/node_modules` 已安装（例如先执行 `cd apps/web && npm ci`）。
+
+CI 中 `web-e2e` 的 real API 启动口径（Postgres + migrations + uvicorn）：
+
+```bash
+export DATABASE_URL='postgresql://postgres:postgres@127.0.0.1:5432/video_analysis'
+createdb video_analysis 2>/dev/null || true
+for migration in $(ls infra/migrations/*.sql | sort); do
+  psql "${DATABASE_URL}" -v ON_ERROR_STOP=1 -f "${migration}"
+done
+curl -sSfL https://temporal.download/cli.sh | sh
+export PATH="$HOME/.temporalio/bin:$PATH"
+temporal server start-dev --ip 127.0.0.1 --port 7233 > .runtime-cache/web-e2e-temporal.log 2>&1 &
+uv run --with uvicorn uvicorn apps.api.app.main:app --host 127.0.0.1 --port 18081 \
+  > .runtime-cache/web-e2e-real-api.log 2>&1 &
+```
+
+顺序必须是先启动并确认 Temporal（`127.0.0.1:7233`）可用，再启动 `uvicorn`，避免 real API 在 Temporal 未就绪时失败。
+
+`conftest` 参数 `--web-e2e-api-base-url` 用法（将 Web E2E 指向 real API）：
+
+```bash
+uv run --with pytest --with playwright pytest apps/web/tests/e2e -q \
+  --web-e2e-base-url 'http://127.0.0.1:3000' \
+  --web-e2e-api-base-url 'http://127.0.0.1:18081'
+```
+
+说明：
+
+- `--web-e2e-api-base-url` 由 `apps/web/tests/e2e/conftest.py` 读取，用于覆盖 E2E 运行时的 API 基地址（默认不应指向 mock）。
+- CI 证据必须来自 real API 路径（含 Postgres + migrations + uvicorn）；mock 仅本地调试使用，不能作为 CI 通过依据。
 
 外部 Base URL 模式（复用已有 Web 实例，不启动本地 Next.js）：
 

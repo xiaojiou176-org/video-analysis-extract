@@ -5,6 +5,7 @@ import shutil
 import subprocess
 import threading
 from pathlib import Path
+from urllib.parse import urlparse
 
 import pytest
 from playwright.sync_api import Browser, Page, sync_playwright
@@ -34,6 +35,42 @@ for artifact_dir in (WEB_E2E_VIDEO_DIR, WEB_E2E_TRACE_DIR, WEB_E2E_SCREENSHOT_DI
 
 class _PortInUseStartupError(RuntimeError):
     pass
+
+
+def _is_truthy(value: str | None) -> bool:
+    if value is None:
+        return False
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _read_use_mock_api(config: pytest.Config) -> bool:
+    option_value = config.getoption("--web-e2e-use-mock-api")
+    env_value = os.environ.get("WEB_E2E_USE_MOCK_API")
+    option_enabled = _is_truthy(None if option_value is None else str(option_value))
+    env_enabled = _is_truthy(env_value)
+    return option_enabled or env_enabled
+
+
+def _mock_api_disabled_message() -> str:
+    return (
+        "Mock API fixtures are disabled by default for real API E2E coverage. "
+        "Enable local debug mode with --web-e2e-use-mock-api=1 "
+        "(or WEB_E2E_USE_MOCK_API=1). "
+        "CI/mainline E2E should run against the real API. "
+        "If a test still requests mock_api_server/mock_api_state, migrate it to real API assertions."
+    )
+
+
+def _read_real_api_base_url(config: pytest.Config) -> str:
+    raw_value = str(config.getoption("--web-e2e-api-base-url")).strip().rstrip("/")
+    if not raw_value:
+        raise RuntimeError("--web-e2e-api-base-url cannot be empty")
+    parsed = urlparse(raw_value)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise RuntimeError(
+            f"--web-e2e-api-base-url must be an absolute http(s) URL, got: {raw_value!r}"
+        )
+    return raw_value
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:
@@ -67,6 +104,18 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         default="gw0",
         help="Worker id suffix for isolated Next.js dist dir",
     )
+    parser.addoption(
+        "--web-e2e-api-base-url",
+        action="store",
+        default="http://127.0.0.1:18080",
+        help="Real API base URL injected into NEXT_PUBLIC_API_BASE_URL when conftest starts Next.js.",
+    )
+    parser.addoption(
+        "--web-e2e-use-mock-api",
+        action="store",
+        default="",
+        help="Enable mock API wiring for local debug only (1/true/yes/on); CI defaults to real API.",
+    )
 
 
 def _read_trace_mode(config: pytest.Config) -> str:
@@ -97,7 +146,9 @@ def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo[object]):
 
 
 @pytest.fixture(scope="session")
-def mock_api_server() -> MockApiServer:
+def mock_api_server(pytestconfig: pytest.Config) -> MockApiServer:
+    if not _read_use_mock_api(pytestconfig):
+        raise RuntimeError(_mock_api_disabled_message())
     running = start_mock_api_server()
     try:
         yield running.api_server
@@ -106,30 +157,48 @@ def mock_api_server() -> MockApiServer:
 
 
 @pytest.fixture(scope="session")
-def web_base_url(mock_api_server: MockApiServer, pytestconfig: pytest.Config) -> str:
+def web_base_url(pytestconfig: pytest.Config, request: pytest.FixtureRequest) -> str:
+    use_mock_api = _read_use_mock_api(pytestconfig)
+    real_api_base_url = _read_real_api_base_url(pytestconfig)
     external_base_url = parse_external_web_base_url(
         str(pytestconfig.getoption("--web-e2e-base-url"))
     )
     if external_base_url is not None:
+        if use_mock_api:
+            raise RuntimeError(
+                "--web-e2e-use-mock-api cannot be combined with --web-e2e-base-url. "
+                "Mock API wiring only works when conftest starts the local Next.js server."
+            )
         wait_http_ok(f"{external_base_url}/")
         yield external_base_url
         return
 
     if shutil.which("npm") is None:
-        raise RuntimeError("npm is required for web E2E. Install Node.js/npm in CI before running tests.")
+        raise RuntimeError(
+            "npm is required for web E2E. Install Node.js/npm in CI before running tests."
+        )
     if not (WEB_DIR / "node_modules").exists():
         raise RuntimeError("apps/web/node_modules is missing. Run `npm ci` in apps/web before E2E.")
 
     process: subprocess.Popen[str] | None = None
     output_thread: threading.Thread | None = None
     output_lines: list[str] = []
+    mock_api_server: MockApiServer | None = None
 
-    def _start_web_server_on_port(web_port: int) -> tuple[subprocess.Popen[str], threading.Thread, list[str]]:
+    if use_mock_api:
+        mock_api_server = request.getfixturevalue("mock_api_server")
+
+    def _start_web_server_on_port(
+        web_port: int,
+    ) -> tuple[subprocess.Popen[str], threading.Thread, list[str]]:
         nonlocal output_lines
         output_lines = []
         base_url = f"http://127.0.0.1:{web_port}"
         env = os.environ.copy()
-        env["NEXT_PUBLIC_API_BASE_URL"] = mock_api_server.base_url
+        if mock_api_server is not None:
+            env["NEXT_PUBLIC_API_BASE_URL"] = mock_api_server.base_url
+        else:
+            env["NEXT_PUBLIC_API_BASE_URL"] = real_api_base_url
         env["PORT"] = str(web_port)
         env["HOSTNAME"] = "127.0.0.1"
         env["CI"] = "1"
@@ -188,7 +257,9 @@ def web_base_url(mock_api_server: MockApiServer, pytestconfig: pytest.Config) ->
 
 
 @pytest.fixture
-def mock_api_state(mock_api_server: MockApiServer) -> MockApiState:
+def mock_api_state(mock_api_server: MockApiServer, pytestconfig: pytest.Config) -> MockApiState:
+    if not _read_use_mock_api(pytestconfig):
+        raise RuntimeError(_mock_api_disabled_message())
     mock_api_server.state.reset()
     return mock_api_server.state
 

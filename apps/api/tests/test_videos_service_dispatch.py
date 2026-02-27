@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import re
 import sys
 import types
 import uuid
@@ -9,7 +10,13 @@ from typing import Any
 
 import pytest
 
-from apps.api.app.services.videos import VideosService, _validate_video_source_url
+from apps.api.app.services.videos import (
+    VideosService,
+    _build_process_idempotency_key,
+    _extract_video_uid,
+    _url_hash,
+    _validate_video_source_url,
+)
 
 
 @dataclass
@@ -39,6 +46,8 @@ class _RepoStub:
 
     def create_or_reuse(self, **kwargs: Any) -> tuple[_JobRow, bool]:
         self.created_calls.append(dict(kwargs))
+        self.job.idempotency_key = str(kwargs["idempotency_key"])
+        self.job.mode = str(kwargs["mode"])
         return self.job, self.should_dispatch
 
     def mark_dispatch_failed(
@@ -58,8 +67,10 @@ class _RepoStub:
 class _VideoRepoStub:
     def __init__(self) -> None:
         self.video = _VideoRow(id=uuid.uuid4())
+        self.upsert_calls: list[dict[str, Any]] = []
 
-    def upsert_for_processing(self, **_: Any) -> _VideoRow:
+    def upsert_for_processing(self, **kwargs: Any) -> _VideoRow:
+        self.upsert_calls.append(dict(kwargs))
         return self.video
 
 
@@ -178,6 +189,112 @@ def test_process_video_reuses_existing_job_without_dispatch(
     assert result["workflow_id"] is None
     assert result["reused"] is True
     assert fake_client.calls == []
+
+
+@pytest.mark.parametrize(
+    ("platform", "url", "expected"),
+    [
+        ("youtube", "https://www.youtube.com/watch?v=abc123", "abc123"),
+        ("youtube", "https://youtu.be/short123/extra", "short123"),
+        (
+            "youtube",
+            "https://www.youtube.com/watch?list=abc",
+            _url_hash("https://www.youtube.com/watch?list=abc"),
+        ),
+        ("bilibili", "https://www.bilibili.com/video/BV1xx411c7mD", "BV1xx411c7mD"),
+        (
+            "bilibili",
+            "https://www.bilibili.com/video/av123456",
+            _url_hash("https://www.bilibili.com/video/av123456"),
+        ),
+        ("other", "https://example.com/watch?v=abc", _url_hash("https://example.com/watch?v=abc")),
+    ],
+)
+def test_extract_video_uid_branch_coverage(platform: str, url: str, expected: str) -> None:
+    assert _extract_video_uid(platform=platform, url=url) == expected
+
+
+def test_process_video_passes_expected_repo_params_with_explicit_video_id(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo = _RepoStub(should_dispatch=False)
+    video_repo = _VideoRepoStub()
+    service = VideosService(db=object())
+    service.video_repo = video_repo  # type: ignore[assignment]
+    service.jobs_repo = repo  # type: ignore[assignment]
+
+    _install_temporal_modules(monkeypatch, client=_FakeClient())
+    result = asyncio.run(
+        service.process_video(
+            platform="youtube",
+            url=" https://www.youtube.com/watch?v=from-url ",
+            video_id=" manual-video-id ",
+            mode="text-only",
+            overrides={"lang": "en", "limit": 5},
+            force=False,
+        )
+    )
+
+    assert result["video_uid"] == "manual-video-id"
+    assert result["mode"] == "text_only"
+    assert len(video_repo.upsert_calls) == 1
+    assert video_repo.upsert_calls[0] == {
+        "platform": "youtube",
+        "video_uid": "manual-video-id",
+        "source_url": "https://www.youtube.com/watch?v=from-url",
+    }
+
+    assert len(repo.created_calls) == 1
+    created = repo.created_calls[0]
+    expected_idempotency = _build_process_idempotency_key(
+        platform="youtube",
+        video_uid="manual-video-id",
+        mode="text_only",
+        overrides={"lang": "en", "limit": 5},
+    )
+    assert created["video_id"] == video_repo.video.id
+    assert created["kind"] == "video_digest_v1"
+    assert created["mode"] == "text_only"
+    assert created["overrides_json"] == {"lang": "en", "limit": 5}
+    assert created["idempotency_key"] == expected_idempotency
+    assert created["force"] is False
+
+
+def test_process_video_builds_force_idempotency_key_with_suffix(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo = _RepoStub(should_dispatch=False)
+    service = VideosService(db=object())
+    service.video_repo = _VideoRepoStub()  # type: ignore[assignment]
+    service.jobs_repo = repo  # type: ignore[assignment]
+
+    _install_temporal_modules(monkeypatch, client=_FakeClient())
+
+    result = asyncio.run(
+        service.process_video(
+            platform="youtube",
+            url="https://youtu.be/force-video",
+            video_id=None,
+            mode="full",
+            overrides={"x": 1},
+            force=True,
+        )
+    )
+
+    expected_base_key = _build_process_idempotency_key(
+        platform="youtube",
+        video_uid="force-video",
+        mode="full",
+        overrides={"x": 1},
+    )
+    created = repo.created_calls[0]
+    assert created["idempotency_key"].startswith(f"{expected_base_key}:force:")
+    assert re.fullmatch(
+        rf"{re.escape(expected_base_key)}:force:[0-9a-f]{{32}}",
+        created["idempotency_key"],
+    )
+    assert created["force"] is True
+    assert result["idempotency_key"] == created["idempotency_key"]
 
 
 @pytest.mark.parametrize(

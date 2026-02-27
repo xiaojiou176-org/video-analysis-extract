@@ -34,7 +34,44 @@ jobs:
             ${{ runner.os }}-pre-commit-${{ steps.setup-python.outputs.python-version }}-
             ${{ runner.os }}-pre-commit-
 
-      - name: Run pre-commit
-        uses: pre-commit/action@v3.0.1
-        with:
-          extra_args: --all-files --show-diff-on-failure
+      - name: Install pre-commit
+        run: python -m pip install pre-commit
+
+      - name: Install gitleaks CLI
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="8.30.0"
+          archive="gitleaks_${version}_linux_x64.tar.gz"
+          url="https://github.com/gitleaks/gitleaks/releases/download/v${version}/${archive}"
+
+          curl -fsSL "$url" -o "$archive"
+          tar -xzf "$archive" gitleaks
+          sudo install -m 0755 gitleaks /usr/local/bin/gitleaks
+          rm -f "$archive" gitleaks
+
+          gitleaks version
+
+      - name: Run pre-commit (retry for flaky network installs)
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          max_attempts=3
+          attempt=1
+          while true; do
+            echo "[pre-commit-ci] attempt ${attempt}/${max_attempts}"
+            if pre-commit run --all-files --show-diff-on-failure; then
+              break
+            fi
+
+            if [[ "$attempt" -ge "$max_attempts" ]]; then
+              echo "[pre-commit-ci] exhausted retries"
+              exit 1
+            fi
+
+            sleep_seconds=$((attempt * 15))
+            echo "[pre-commit-ci] retry in ${sleep_seconds}s"
+            sleep "$sleep_seconds"
+            attempt=$((attempt + 1))
+          done
