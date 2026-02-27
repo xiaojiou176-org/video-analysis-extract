@@ -63,12 +63,14 @@ def _status_sort_key(status: str) -> tuple[int, str]:
     return 999, status
 
 
-def _get_first_schema_fingerprint(content: Any) -> str:
+def _get_schema_fingerprints_by_content_type(content: Any) -> dict[str, str]:
     if not isinstance(content, dict) or not content:
-        return "none"
-    first_content_type = sorted(content.keys())[0]
-    schema = content[first_content_type]
-    return json.dumps(schema, ensure_ascii=False, sort_keys=True)
+        return {}
+
+    fingerprints: dict[str, str] = {}
+    for content_type, schema in content.items():
+        fingerprints[str(content_type)] = json.dumps(schema, ensure_ascii=False, sort_keys=True)
+    return fingerprints
 
 
 def _is_success_status(status: str) -> bool:
@@ -96,10 +98,15 @@ def _compare_operation(
     if (not base_req_required) and head_req_required:
         breaking.append(f"{title}: request body became required")
 
-    base_req_fp = _get_first_schema_fingerprint(base_req_content)
-    head_req_fp = _get_first_schema_fingerprint(head_req_content)
-    if base_req_fp != head_req_fp and base_req_fp != "none" and head_req_fp != "none":
-        breaking.append(f"{title}: request schema changed")
+    base_req_by_ct = _get_schema_fingerprints_by_content_type(base_req_content)
+    head_req_by_ct = _get_schema_fingerprints_by_content_type(head_req_content)
+    for content_type, base_fp in sorted(base_req_by_ct.items()):
+        head_fp = head_req_by_ct.get(content_type)
+        if head_fp is None:
+            breaking.append(f"{title}: request content type removed ({content_type})")
+            continue
+        if base_fp != head_fp:
+            breaking.append(f"{title}: request schema changed for content type {content_type}")
 
     base_responses = base_op.get("responses", {}) if isinstance(base_op.get("responses"), dict) else {}
     head_responses = head_op.get("responses", {}) if isinstance(head_op.get("responses"), dict) else {}
@@ -110,10 +117,19 @@ def _compare_operation(
             continue
         base_content = base_responses.get(status, {}).get("content")
         head_content = head_responses.get(status, {}).get("content")
-        base_fp = _get_first_schema_fingerprint(base_content)
-        head_fp = _get_first_schema_fingerprint(head_content)
-        if base_fp != head_fp and base_fp != "none" and head_fp != "none":
-            breaking.append(f"{title}: response schema changed for status {status}")
+        base_by_ct = _get_schema_fingerprints_by_content_type(base_content)
+        head_by_ct = _get_schema_fingerprints_by_content_type(head_content)
+        for content_type, base_fp in sorted(base_by_ct.items()):
+            head_fp = head_by_ct.get(content_type)
+            if head_fp is None:
+                breaking.append(
+                    f"{title}: response content type removed for status {status} ({content_type})"
+                )
+                continue
+            if base_fp != head_fp:
+                breaking.append(
+                    f"{title}: response schema changed for status {status} ({content_type})"
+                )
 
     base_success = {s for s in base_responses if _is_success_status(s)}
     head_success = {s for s in head_responses if _is_success_status(s)}
