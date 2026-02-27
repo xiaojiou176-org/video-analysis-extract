@@ -5,8 +5,9 @@ import { SubscriptionBatchPanel } from "@/components/subscription-batch-panel";
 import type { Subscription } from "@/lib/api/types";
 
 const mockRefresh = vi.fn();
+const mockReplace = vi.fn();
 vi.mock("next/navigation", () => ({
-	useRouter: () => ({ refresh: mockRefresh }),
+	useRouter: () => ({ refresh: mockRefresh, replace: mockReplace }),
 }));
 
 const mockBatchUpdate = vi.fn();
@@ -149,6 +150,9 @@ describe("SubscriptionBatchPanel", () => {
 			expect(mockDelete).toHaveBeenCalledTimes(1);
 			expect(mockDelete).toHaveBeenCalledWith("sub-1");
 		});
+		expect(mockReplace).toHaveBeenCalledWith(
+			"/subscriptions?status=success&code=SUBSCRIPTION_DELETED",
+		);
 		expect(mockRefresh).toHaveBeenCalledTimes(1);
 	});
 
