@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sqlite3
+import threading
 from datetime import UTC, datetime, timedelta
 from typing import Any, Self
 
@@ -23,6 +24,34 @@ def test_sqlite_lock_conflict_then_recovery_after_expiry(tmp_path) -> None:
         )
 
     assert store.acquire_lock("phase2.poll_feeds", "worker-B", 60) is True
+
+
+def test_sqlite_acquire_lock_allows_only_one_winner_under_real_concurrency(tmp_path) -> None:
+    db_path = tmp_path / "state.db"
+    store = SQLiteStateStore(str(db_path))
+    lock_key = "phase2.poll_feeds.concurrent"
+    started = threading.Barrier(8)
+    success_count = 0
+    counter_lock = threading.Lock()
+
+    def _attempt(owner: str) -> None:
+        nonlocal success_count
+        started.wait()
+        acquired = store.acquire_lock(lock_key, owner, 60)
+        if acquired:
+            with counter_lock:
+                success_count += 1
+
+    threads = [
+        threading.Thread(target=_attempt, args=(f"worker-{index}",), daemon=True)
+        for index in range(8)
+    ]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=5)
+
+    assert success_count == 1
 
 
 def test_sqlite_release_lock_enforces_owner_match(tmp_path) -> None:
