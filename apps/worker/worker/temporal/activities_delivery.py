@@ -8,6 +8,18 @@ from sqlalchemy import text
 
 from worker.config import Settings
 from worker.state.postgres_store import PostgresBusinessStore
+from worker.temporal.activities_delivery_payload import (
+    build_retry_failure_payload as _build_retry_failure_payload_impl,
+)
+from worker.temporal.activities_delivery_payload import (
+    extract_daily_digest_date as _extract_daily_digest_date_impl,
+)
+from worker.temporal.activities_delivery_payload import (
+    extract_timezone_name as _extract_timezone_name_impl,
+)
+from worker.temporal.activities_delivery_payload import (
+    extract_timezone_offset_minutes as _extract_timezone_offset_minutes_impl,
+)
 from worker.temporal.activities_delivery_retry import retry_failed_deliveries_activity_impl
 from worker.temporal.activities_delivery_send import (
     send_daily_digest_activity_impl,
@@ -620,46 +632,6 @@ def _load_due_failed_deliveries(
     return _claim_due_failed_deliveries(conn, limit=limit)
 
 
-def _extract_daily_digest_date(payload_json: Any) -> date | None:
-    if not isinstance(payload_json, dict):
-        return None
-    raw = payload_json.get("digest_date")
-    if not isinstance(raw, str) or not raw.strip():
-        return None
-    try:
-        return date.fromisoformat(raw.strip())
-    except ValueError:
-        return None
-
-
-def _extract_timezone_name(payload_json: Any) -> str | None:
-    if not isinstance(payload_json, dict):
-        return None
-    raw = payload_json.get("timezone_name")
-    if isinstance(raw, str) and raw.strip():
-        return raw.strip()
-    return None
-
-
-def _extract_timezone_offset_minutes(payload_json: Any) -> int:
-    if not isinstance(payload_json, dict):
-        return 0
-    return _coerce_int(payload_json.get("timezone_offset_minutes"), fallback=0)
-
-
-def _build_retry_failure_payload(
-    *,
-    error_message: str,
-    attempt_count: int,
-) -> tuple[str, datetime | None]:
-    error_kind = _classify_delivery_error(error_message)
-    next_retry_at = _resolve_next_retry_at(
-        attempt_count=attempt_count,
-        error_kind=error_kind,
-    )
-    return error_kind, next_retry_at
-
-
 @activity.defn(name="retry_failed_deliveries_activity")
 async def retry_failed_deliveries_activity(payload: dict[str, Any] | None = None) -> dict[str, Any]:
     settings = Settings.from_env()
@@ -671,14 +643,22 @@ async def retry_failed_deliveries_activity(payload: dict[str, Any] | None = None
         coerce_int=_coerce_int,
         claim_due_failed_deliveries=_claim_due_failed_deliveries,
         normalize_email=_normalize_email,
-        build_retry_failure_payload=_build_retry_failure_payload,
+        build_retry_failure_payload=lambda *, error_message, attempt_count: _build_retry_failure_payload_impl(
+            error_message=error_message,
+            attempt_count=attempt_count,
+            classify_delivery_error=_classify_delivery_error,
+            resolve_next_retry_at=_resolve_next_retry_at,
+        ),
         mark_delivery_state=_mark_delivery_state,
         fetch_job_digest_record=_fetch_job_digest_record,
         safe_read_text=_safe_read_text,
         build_video_digest_markdown=_build_video_digest_markdown,
-        extract_daily_digest_date=_extract_daily_digest_date,
-        extract_timezone_name=_extract_timezone_name,
-        extract_timezone_offset_minutes=_extract_timezone_offset_minutes,
+        extract_daily_digest_date=_extract_daily_digest_date_impl,
+        extract_timezone_name=_extract_timezone_name_impl,
+        extract_timezone_offset_minutes=lambda payload_json: _extract_timezone_offset_minutes_impl(
+            payload_json,
+            coerce_int=_coerce_int,
+        ),
         resolve_local_digest_date=_resolve_local_digest_date,
         load_daily_digest_jobs=_load_daily_digest_jobs,
         build_daily_digest_markdown=_build_daily_digest_markdown,

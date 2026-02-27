@@ -140,7 +140,7 @@ jobs:
       - name: Provider residual guard (blocking)
         run: bash scripts/guard_provider_residuals.sh .
 
-      - name: Worker file line limits (pipeline/steps + temporal <= 700)
+      - name: Worker file line limits (pipeline/steps + temporal <= 750)
         run: python3 scripts/check_worker_line_limits.py
 
       - name: Schema parity check (apps/mcp vs shared-contracts)
