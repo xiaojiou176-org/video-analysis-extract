@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib
+import os
 import sys
 import types
 import uuid
@@ -30,6 +31,34 @@ def _purge_api_modules() -> None:
             del sys.modules[module_name]
 
 
+def _is_truthy_env(value: str | None) -> bool:
+    if value is None:
+        return False
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _is_ci_environment() -> bool:
+    return _is_truthy_env(os.getenv("CI")) or _is_truthy_env(os.getenv("GITHUB_ACTIONS"))
+
+
+def _integration_smoke_strict_mode() -> bool:
+    strict_override = os.getenv("API_INTEGRATION_SMOKE_STRICT")
+    if strict_override is not None:
+        return _is_truthy_env(strict_override)
+    return _is_ci_environment()
+
+
+def _fail_or_skip_for_env(requirement: str, detail: str) -> None:
+    header = f"integration smoke requirement not met: {requirement}"
+    guidance = (
+        "set API_INTEGRATION_SMOKE_STRICT=1 to enforce locally, or keep it unset/0 to allow local skip."
+    )
+    message = f"{header}. {detail}. {guidance}"
+    if _integration_smoke_strict_mode():
+        pytest.fail(message, pytrace=False)
+    pytest.skip(message)
+
+
 @pytest.fixture
 def integration_api(
     monkeypatch: pytest.MonkeyPatch, tmp_path: pytest.TempPathFactory
@@ -37,7 +66,10 @@ def integration_api(
     base_url = "postgresql+psycopg://postgres:postgres@127.0.0.1:5432/postgres"
     parsed_base = make_url(base_url)
     if parsed_base.drivername != "postgresql+psycopg":
-        pytest.skip(f"integration smoke requires postgresql+psycopg, got: {parsed_base.drivername}")
+        _fail_or_skip_for_env(
+            "postgresql+psycopg driver",
+            f"expected driver 'postgresql+psycopg' but got '{parsed_base.drivername}'",
+        )
 
     database_name = f"video_api_it_{uuid.uuid4().hex[:12]}"
     admin_database = parsed_base.database or "postgres"
@@ -54,7 +86,10 @@ def integration_api(
             conn.execute(text(f'CREATE DATABASE "{database_name}"'))
     except Exception as exc:  # pragma: no cover
         admin_engine.dispose()
-        pytest.skip(f"unable to create integration database: {exc}")
+        _fail_or_skip_for_env(
+            "ephemeral postgres database creation",
+            f"unable to create integration database '{database_name}': {exc!r}",
+        )
 
     try:
         monkeypatch.setenv("DATABASE_URL", app_database_url)

@@ -94,13 +94,38 @@ indent-style = "space"
 [tool.mutmut]
 debug = false
 paths_to_mutate = [
+  "apps/worker/worker/pipeline/orchestrator.py",
+  "apps/worker/worker/pipeline/policies.py",
+  "apps/worker/worker/pipeline/runner.py",
+  "apps/worker/worker/pipeline/runner_policies.py",
+  "apps/worker/worker/pipeline/step_executor.py",
   "apps/worker/worker/pipeline/steps/llm_step_gates.py",
+  "apps/api/app/services/ingest.py",
+  "apps/api/app/services/jobs.py",
+  "apps/api/app/services/subscriptions.py",
+  "apps/api/app/services/videos.py",
+  "apps/api/app/routers/ingest.py",
+  "apps/api/app/routers/jobs.py",
+  "apps/api/app/routers/subscriptions.py",
+  "apps/api/app/routers/videos.py",
 ]
 also_copy = [
   "apps/worker/worker",
+  "apps/api/app",
   "apps/worker/tests",
+  "apps/api/tests",
 ]
 max_stack_depth = 32
 pytest_add_cli_args_test_selection = [
   "apps/worker/tests/test_llm_step_gates.py",
+  "apps/worker/tests/test_coverage_b_policies_and_runner.py",
+  "apps/worker/tests/test_runner_modes.py",
+  "apps/worker/tests/test_step_executor_cancellation.py",
+  "apps/worker/tests/test_runner_fallbacks.py",
+  "apps/api/tests/test_ingest_service.py",
+  "apps/api/tests/test_jobs_service.py",
+  "apps/api/tests/test_subscriptions_service_coverage.py",
+  "apps/api/tests/test_videos_service_dispatch.py",
+  "apps/api/tests/test_api_routes.py",
+  "apps/api/tests/test_videos_and_subscriptions_router_coverage.py",
 ]

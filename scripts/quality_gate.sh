@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 MODE="pre-push"
 HEARTBEAT_SECONDS="25"
-MUTATION_MIN_SCORE="0.60"
+MUTATION_MIN_SCORE="0.85"
 PROFILE_ONLY="0"
 FINAL_CHECK="0"
 FINAL_SKIP_PREPUSH="0"
@@ -40,6 +40,7 @@ Profiles:
   live-smoke  Validate live-smoke profile governance.
 Flags:
   --profile NAME   Append explicit profile checks (repeatable).
+  --mutation-min-score N  Mutation score threshold (default: 0.85).
   --profile-only   Run profile checks only, skip other quality gates.
   --changed-backend true|false|auto    Backend change hint (default: auto).
   --changed-web true|false|auto        Frontend change hint (default: auto).
@@ -55,7 +56,7 @@ Quality policy (blocking):
   - Documentation drift gate is mandatory.
   - Secrets leak scan is mandatory.
   - Coverage thresholds: total >= 80%, core modules >= 95%.
-  - Mutation testing (Python core): mutation score >= configured threshold.
+  - Mutation testing (Python core): mutation score >= configured threshold (default: 0.85).
 USAGE
 }
 
@@ -351,9 +352,56 @@ run_env_governance_report_non_blocking() {
   fi
 }
 
+print_mutation_target_set() {
+  local pyproject_file="$ROOT_DIR/pyproject.toml"
+
+  if [[ ! -f "$pyproject_file" ]]; then
+    echo "[quality-gate] mutation target set unavailable: pyproject.toml not found" >&2
+    return 1
+  fi
+
+  python3 - "$pyproject_file" <<'PY'
+import sys
+import tomllib
+from collections import defaultdict
+from pathlib import Path
+
+pyproject_path = Path(sys.argv[1])
+data = tomllib.loads(pyproject_path.read_text(encoding="utf-8"))
+paths = data.get("tool", {}).get("mutmut", {}).get("paths_to_mutate", [])
+if not paths:
+    print("[quality-gate] mutation target set is empty")
+    raise SystemExit(1)
+
+grouped = defaultdict(list)
+for path in paths:
+    if "/worker/pipeline/" in path:
+        grouped["worker-pipeline"].append(path)
+    elif "/api/app/services/" in path:
+        grouped["api-services"].append(path)
+    elif "/api/app/routers/" in path:
+        grouped["api-routes"].append(path)
+    else:
+        grouped["other"].append(path)
+
+print(f"[quality-gate] mutation target set count={len(paths)}")
+for key in ("worker-pipeline", "api-services", "api-routes", "other"):
+    values = grouped.get(key, [])
+    if not values:
+        continue
+    print(f"[quality-gate] mutation target group={key} count={len(values)}")
+    for item in values:
+        print(f"[quality-gate]   - {item}")
+PY
+}
+
 run_mutation_gate() {
   local stats_file="mutants/mutmut-cicd-stats.json"
-  echo "[quality-gate] mutation gate target=apps/worker/worker/pipeline/steps/llm_step_gates.py threshold=${MUTATION_MIN_SCORE}"
+  echo "[quality-gate] mutation gate threshold=${MUTATION_MIN_SCORE}"
+  if ! print_mutation_target_set; then
+    echo "[quality-gate] mutation gate failed: unable to load target set from pyproject.toml." >&2
+    return 1
+  fi
 
   if ! command -v uv >/dev/null 2>&1; then
     echo "[quality-gate] mutation gate failed: uv is required to auto-install/run mutmut." >&2
@@ -902,6 +950,14 @@ run_pre_push_mode() {
       "npm --prefix apps/web run test -- --coverage"
   else
     echo "[quality-gate] skip: web unit tests (effective_web_changed=false)"
+  fi
+  if [[ "$CI_DEDUPE" == "1" ]]; then
+    echo "[quality-gate] skip: web coverage threshold gate (--ci-dedupe=1, covered by CI web-test-build)"
+  elif is_true "$EFFECTIVE_WEB_CHANGED"; then
+    run_async_gate "web_coverage_threshold" "web coverage threshold gate (global>=80, core>=90)" \
+      "python3 scripts/check_web_coverage_threshold.py --summary-path apps/web/coverage/coverage-summary.json --global-threshold 80 --core-threshold 90"
+  else
+    echo "[quality-gate] skip: web coverage threshold gate (effective_web_changed=false)"
   fi
   if [[ "$CI_DEDUPE" == "1" ]]; then
     echo "[quality-gate] skip: python tests + total coverage (--ci-dedupe=1)"

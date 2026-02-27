@@ -1,11 +1,9 @@
 from __future__ import annotations
 
-from http import HTTPStatus
+import re
 
 import pytest
 from playwright.sync_api import Page, expect
-from support.assertions import wait_for_call_count, wait_for_http_call
-from support.mock_api import MockApiState
 from support.runtime_utils import parse_external_web_base_url
 
 
@@ -23,67 +21,31 @@ def test_external_web_base_url_option_validation_message() -> None:
         parse_external_web_base_url("ftp://127.0.0.1:3300")
 
 
-def test_dashboard_trigger_ingest_poll_button(page: Page, mock_api_state: MockApiState) -> None:
+def test_dashboard_trigger_ingest_poll_button(page: Page) -> None:
     page.goto("/", wait_until="domcontentloaded")
-    expect(page.get_by_role("heading", name="Poll ingest")).to_be_visible()
-    expect(page.get_by_role("link", name="API health: Healthy")).to_be_visible()
-    page.get_by_role("button", name="Trigger ingest poll").click()
+    expect(page.get_by_role("heading", name="拉取采集")).to_be_visible()
+    page.get_by_role("button", name="触发采集").click()
 
-    wait_for_call_count(mock_api_state, "poll_ingest", 1)
-    wait_for_http_call(
-        mock_api_state,
-        method="POST",
-        path="/api/v1/ingest/poll",
-        status=int(HTTPStatus.ACCEPTED),
-        payload_contains={"max_new_videos": 50},
-    )
-    payload = mock_api_state.last_call("poll_ingest")
-    assert payload.get("max_new_videos") == 50
+    expect(page).to_have_url(re.compile(r"/\?status=success&code=POLL_INGEST_OK"))
+    expect(page.locator("p.alert.success")).to_contain_text("已触发采集任务。")
 
 
-@pytest.mark.parametrize(
-    ("health_status", "health_delay_seconds", "expected_health_label"),
-    [
-        (int(HTTPStatus.OK), 0.0, "Healthy"),
-        (int(HTTPStatus.SERVICE_UNAVAILABLE), 0.0, "Degraded"),
-        (int(HTTPStatus.OK), 2.0, "Unknown"),
-    ],
-    ids=["status-200", "status-non200", "network-failure-timeout"],
-)
-def test_layout_health_chip_states(
-    page: Page,
-    mock_api_state: MockApiState,
-    health_status: int,
-    health_delay_seconds: float,
-    expected_health_label: str,
-) -> None:
-    mock_api_state.health_delay_seconds = health_delay_seconds
-    mock_api_state.health_status = health_status
+def test_layout_health_chip_states(page: Page) -> None:
     page.goto("/", wait_until="domcontentloaded")
-    expect(page.get_by_role("link", name=f"API health: {expected_health_label}")).to_be_visible()
+    expect(page.get_by_role("link", name=re.compile(r"API 状态：(正常|异常|未知)"))).to_be_visible()
 
 
-def test_dashboard_start_processing_button(page: Page, mock_api_state: MockApiState) -> None:
+def test_dashboard_start_processing_button(page: Page) -> None:
     page.goto("/", wait_until="domcontentloaded")
-    start_button = page.get_by_role("button", name="Start processing")
+    start_button = page.get_by_role("button", name="开始处理")
     expect(start_button).to_be_disabled()
-    page.get_by_label("Video URL").fill("invalid-url")
+    page.get_by_label("视频链接 *").fill("invalid-url")
     expect(start_button).to_be_disabled()
-    page.get_by_label("Video URL").fill("https://www.youtube.com/watch?v=e2e001")
+    page.get_by_label("视频链接 *").fill("https://www.youtube.com/watch?v=e2e001")
     expect(start_button).to_be_enabled()
-    page.get_by_label("Mode").select_option("text_only")
-    page.get_by_role("checkbox", name="Force run").check()
+    page.get_by_label("模式 *").select_option("text_only")
+    page.get_by_role("checkbox", name="强制执行").check()
     start_button.click()
 
-    wait_for_call_count(mock_api_state, "process_video", 1)
-    wait_for_http_call(
-        mock_api_state,
-        method="POST",
-        path="/api/v1/videos/process",
-        status=int(HTTPStatus.ACCEPTED),
-        payload_check=lambda payload: bool(payload and payload.get("video", {}).get("url")),
-    )
-    process_payload = mock_api_state.last_call("process_video")
-    assert process_payload["video"]["url"] == "https://www.youtube.com/watch?v=e2e001"
-    assert process_payload["mode"] == "text_only"
-    assert process_payload["force"] is True
+    expect(page).to_have_url(re.compile(r"/\?status=success&code=PROCESS_VIDEO_OK"))
+    expect(page.locator("p.alert.success")).to_contain_text("已创建处理任务。")

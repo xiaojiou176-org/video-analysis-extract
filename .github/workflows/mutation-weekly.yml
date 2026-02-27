@@ -41,6 +41,43 @@ jobs:
       - name: Sync Python deps (locked)
         run: uv sync --frozen --extra dev --extra e2e
 
+      - name: Print mutation target set by module
+        run: |
+          mkdir -p mutants
+          python3 - <<'PY'
+          import tomllib
+          from collections import defaultdict
+          from pathlib import Path
+
+          pyproject = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))
+          targets = pyproject.get("tool", {}).get("mutmut", {}).get("paths_to_mutate", [])
+          if not targets:
+              raise SystemExit("mutation-weekly failed: paths_to_mutate is empty")
+
+          groups = defaultdict(list)
+          for item in targets:
+              if "/worker/pipeline/" in item:
+                  groups["worker-pipeline"].append(item)
+              elif "/api/app/services/" in item:
+                  groups["api-services"].append(item)
+              elif "/api/app/routers/" in item:
+                  groups["api-routes"].append(item)
+              else:
+                  groups["other"].append(item)
+
+          lines = [f"mutation target set count={len(targets)}"]
+          for key in ("worker-pipeline", "api-services", "api-routes", "other"):
+              values = groups.get(key, [])
+              if not values:
+                  continue
+              lines.append(f"[{key}] count={len(values)}")
+              lines.extend(f"  - {value}" for value in values)
+
+          text = "\n".join(lines)
+          print(text)
+          Path("mutants/mutation-targets.txt").write_text(text + "\n", encoding="utf-8")
+          PY
+
       - name: Run mutmut and export stats
         env:
           DATABASE_URL: "sqlite+pysqlite:///:memory:"
@@ -51,9 +88,12 @@ jobs:
           uv run --extra dev --with mutmut mutmut export-cicd-stats
 
       - name: Fail if surviving mutants exist
+        env:
+          MUTATION_MIN_SCORE: "0.85"
         run: |
           python3 - <<'PY'
           import json
+          import os
           from pathlib import Path
 
           stats_path = Path('mutants/mutmut-cicd-stats.json')
@@ -65,13 +105,24 @@ jobs:
           survived = int(stats.get('survived', 0))
           total = int(stats.get('total', killed + survived))
           effective = killed + survived
+          threshold = float(os.environ.get('MUTATION_MIN_SCORE', '0.85'))
+          score = killed / effective if effective > 0 else 0.0
 
-          print(f'mutation stats: killed={killed}, survived={survived}, effective={effective}, total={total}')
+          print(
+              f'mutation stats: killed={killed}, survived={survived}, '
+              f'effective={effective}, total={total}, score={score:.4f}, threshold={threshold:.4f}'
+          )
 
           if effective <= 0:
               raise SystemExit('mutation-weekly failed: no effective mutants (killed+survived=0)')
+          if score < threshold:
+              raise SystemExit(
+                  f'mutation-weekly failed: score {score:.4f} < threshold {threshold:.4f}'
+              )
           if survived > 0:
-              raise SystemExit(f'mutation-weekly failed: survived mutants must be 0, got {survived}')
+              raise SystemExit(
+                  f'mutation-weekly failed: survived mutants must be 0 (stricter than threshold), got {survived}'
+              )
           PY
 
       - name: Upload mutation stats artifact
@@ -79,5 +130,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: mutmut-cicd-stats
-          path: mutants/mutmut-cicd-stats.json
+          path: |
+            mutants/mutmut-cicd-stats.json
+            mutants/mutation-targets.txt
           if-no-files-found: warn

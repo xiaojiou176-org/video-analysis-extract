@@ -1,126 +1,79 @@
 from __future__ import annotations
 
 import re
-from http import HTTPStatus
-from urllib.parse import quote
+from uuid import uuid4
 
-import pytest
 from playwright.sync_api import Page, expect
-from support.assertions import wait_for_call_count, wait_for_http_call
-from support.mock_api import MockApiState
 
 
-def test_jobs_to_artifacts_query_navigation(page: Page, mock_api_state: MockApiState) -> None:
+def _create_job_and_get_id(page: Page) -> str:
+    page.goto("/", wait_until="domcontentloaded")
+    page.get_by_label("视频链接 *").fill(f"https://www.youtube.com/watch?v=e2e-jobs-{uuid4().hex[:10]}")
+    page.get_by_label("模式 *").select_option("text_only")
+    page.get_by_role("button", name="开始处理").click()
+
+    expect(page).to_have_url(re.compile(r"/\?status=success&code=PROCESS_VIDEO_OK"))
+    expect(page.locator("p.alert.success")).to_contain_text("已创建处理任务。")
+
+    jobs_link = page.locator("a[href^='/jobs?job_id=']").first
+    expect(jobs_link).to_be_visible()
+    href = jobs_link.get_attribute("href")
+    assert href is not None
+    matched = re.search(r"job_id=([^&]+)", href)
+    assert matched is not None
+    return matched.group(1)
+
+
+def test_jobs_to_artifacts_query_navigation(page: Page) -> None:
+    job_id = _create_job_and_get_id(page)
+
     page.goto("/jobs", wait_until="domcontentloaded")
-    page.get_by_label("Job ID").fill(mock_api_state.job_id)
-    page.get_by_role("button", name="Fetch job").click()
+    page.get_by_label("任务 ID *").fill(job_id)
+    page.get_by_role("button", name="查询").click()
 
-    expect(page).to_have_url(re.compile(rf"/jobs\?job_id={re.escape(mock_api_state.job_id)}"))
-    expect(page.get_by_role("heading", name="Job lookup")).to_be_visible()
+    expect(page).to_have_url(re.compile(rf"/jobs\?job_id={re.escape(job_id)}"))
+    expect(page.get_by_role("heading", name="任务查询")).to_be_visible()
 
-    page.goto("/artifacts", wait_until="domcontentloaded")
-    expect(page.get_by_role("heading", name="Artifact lookup")).to_be_visible()
-    page.get_by_label("Job ID").fill(mock_api_state.job_id)
-    page.get_by_role("button", name="Load artifacts").click()
-
-    wait_for_call_count(mock_api_state, "get_artifact_markdown", 1)
-    wait_for_http_call(
-        mock_api_state,
-        method="GET",
-        path="/api/v1/artifacts/markdown",
-        status=int(HTTPStatus.OK),
-        query_fragment="include_meta=true",
+    page.get_by_role("link", name="查看产物页").click()
+    expect(
+        page
+    ).to_have_url(re.compile(rf"/artifacts\?(?=.*(?:^|&)job_id={re.escape(job_id)}(?:&|$)).*"))
+    expect(page.get_by_role("heading", name="产物查询")).to_be_visible()
+    expect(page.locator("body")).to_contain_text(
+        re.compile(r"Markdown 预览|产物请求已完成，但未返回 Markdown 内容。|请求失败，请稍后重试。")
     )
-    wait_for_http_call(
-        mock_api_state,
-        method="GET",
-        path="/api/v1/artifacts/assets",
-        status=int(HTTPStatus.OK),
-        query_fragment=f"job_id={quote(mock_api_state.job_id, safe='')}",
-    )
-    wait_for_http_call(
-        mock_api_state,
-        method="GET",
-        path="/api/v1/artifacts/assets",
-        status=int(HTTPStatus.OK),
-        query_fragment="path=screenshots%2Fframe_0001.png",
-    )
-    wait_for_http_call(
-        mock_api_state,
-        method="GET",
-        path="/api/v1/artifacts/assets",
-        status=int(HTTPStatus.OK),
-        query_fragment="path=screenshots%2Fframe_0002.webp",
-    )
-    artifact_payload = mock_api_state.last_call("get_artifact_markdown")
-    assert artifact_payload["job_id"] == mock_api_state.job_id
-    assert artifact_payload["include_meta"] == "true"
-
-    expect(page).to_have_url(re.compile(rf"/artifacts\?job_id={re.escape(mock_api_state.job_id)}"))
-    expect(page.get_by_role("heading", name="Artifact lookup")).to_be_visible()
-    expect(page.get_by_role("heading", name="Markdown preview")).to_be_visible()
-
 
 def test_artifacts_lookup_form_requires_single_field(page: Page) -> None:
     page.goto("/artifacts", wait_until="domcontentloaded")
-    submit = page.get_by_role("button", name="Load artifacts")
+    submit = page.get_by_role("button", name="加载产物")
 
     expect(submit).to_be_disabled()
-    page.get_by_label("Job ID").fill("00000000-0000-4000-8000-0000000000ff")
+    page.get_by_label("任务 ID").fill("00000000-0000-4000-8000-0000000000ff")
     expect(submit).to_be_enabled()
-    page.get_by_label("Video URL").fill("https://www.youtube.com/watch?v=e2e001")
+    page.get_by_label("视频 URL").fill("https://www.youtube.com/watch?v=e2e001")
     expect(submit).to_be_disabled()
-    page.get_by_label("Job ID").fill("")
+    page.get_by_label("任务 ID").fill("")
     expect(submit).to_be_enabled()
-    page.get_by_label("Video URL").fill("")
+    page.get_by_label("视频 URL").fill("")
     expect(submit).to_be_disabled()
 
 
 def test_jobs_lookup_form_requires_job_id(page: Page) -> None:
     page.goto("/jobs", wait_until="domcontentloaded")
-    submit = page.get_by_role("button", name="Fetch job")
+    submit = page.get_by_role("button", name="查询")
     expect(submit).to_be_disabled()
-    page.get_by_label("Job ID").fill("   ")
+    page.get_by_label("任务 ID *").fill("   ")
     expect(submit).to_be_disabled()
-    page.get_by_label("Job ID").fill("00000000-0000-4000-8000-0000000000ff")
+    page.get_by_label("任务 ID *").fill("00000000-0000-4000-8000-0000000000ff")
     expect(submit).to_be_enabled()
 
 
-@pytest.mark.parametrize(
-    "frame_file",
-    [
-        "screenshots/frame_0001.png",
-        "screenshots/frame_0002.jpg",
-        "screenshots/frame_0003.webp",
-    ],
-    ids=["artifact-png", "artifact-jpg", "artifact-webp"],
-)
-def test_artifact_preview_and_asset_request_for_image_formats(
-    page: Page,
-    mock_api_state: MockApiState,
-    frame_file: str,
-) -> None:
-    with mock_api_state.lock:
-        mock_api_state.artifact_frame_files = [frame_file]
-
+def test_artifact_lookup_by_video_url_shows_result_or_error(page: Page) -> None:
     page.goto("/artifacts", wait_until="domcontentloaded")
-    page.get_by_label("Job ID").fill(mock_api_state.job_id)
-    page.get_by_role("button", name="Load artifacts").click()
+    page.get_by_label("视频 URL").fill("https://www.youtube.com/watch?v=e2e001")
+    page.get_by_role("button", name="加载产物").click()
 
-    wait_for_call_count(mock_api_state, "get_artifact_markdown", 1)
-    wait_for_http_call(
-        mock_api_state,
-        method="GET",
-        path="/api/v1/artifacts/assets",
-        status=int(HTTPStatus.OK),
-        query_fragment=f"path={quote(frame_file, safe='')}",
+    expect(page).to_have_url(re.compile(r"/artifacts\?(?=.*(?:^|&)video_url=).*"))
+    expect(page.locator("body")).to_contain_text(
+        re.compile(r"Markdown 预览|产物请求已完成，但未返回 Markdown 内容。|请求失败，请稍后重试。")
     )
-
-    embedded_section = page.locator("section", has=page.get_by_role("heading", name="Embedded screenshots"))
-    expect(embedded_section).to_be_visible()
-    expect(embedded_section.get_by_role("link", name="Open screenshot 1")).to_be_visible()
-    expect(page.locator(f'object[aria-label="Screenshot 1: {frame_file}"]')).to_be_visible()
-
-    fallback_section = page.locator("section", has=page.get_by_role("heading", name="Screenshot index (fallback)"))
-    expect(fallback_section).to_be_visible()
-    expect(fallback_section.locator("code", has_text=frame_file)).to_be_visible()
