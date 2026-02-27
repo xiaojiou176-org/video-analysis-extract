@@ -38,5 +38,5 @@ def test_subscriptions_delete_button(page: Page) -> None:
     row.get_by_role("button", name="删除").click()
     row.get_by_role("button", name="确认删除").click()
 
-    expect(page.locator("p.alert.success")).to_contain_text("订阅已删除。")
+    expect(page).to_have_url(re.compile(r"/subscriptions\?status=success&code=SUBSCRIPTION_DELETED"))
     expect(page.locator("tbody tr", has_text=source_value)).to_have_count(0)
