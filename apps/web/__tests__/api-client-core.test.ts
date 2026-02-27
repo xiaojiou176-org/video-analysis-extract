@@ -96,4 +96,70 @@ describe("apiClient core behavior", () => {
 		expect(String(url)).toContain("/api/v1/artifacts/markdown");
 		expect(String(url)).toContain("job_id=job-1");
 	});
+
+	it("covers additional client endpoints with query/body wiring", async () => {
+		const fetchSpy = vi
+			.spyOn(globalThis, "fetch")
+			.mockResolvedValueOnce(
+				new Response(
+					JSON.stringify({
+						job_id: "job-2",
+						video_db_id: "video-2",
+						video_uid: "uid-2",
+						status: "queued",
+						idempotency_key: "idem-2",
+						mode: "full",
+						overrides: {},
+						force: false,
+						reused: false,
+						workflow_id: null,
+					}),
+					{ status: 200 },
+				),
+			)
+			.mockResolvedValueOnce(
+				new Response(
+					JSON.stringify({
+						enabled: true,
+						to_email: "a@example.com",
+						daily_digest_enabled: false,
+						daily_digest_hour_utc: null,
+						failure_alert_enabled: true,
+						category_rules: {},
+						created_at: "2026-02-26T00:00:00Z",
+						updated_at: "2026-02-26T00:00:00Z",
+					}),
+					{ status: 200 },
+				),
+			)
+			.mockResolvedValueOnce(
+				new Response(JSON.stringify({ items: [], has_more: false, next_cursor: null }), {
+					status: 200,
+				}),
+			);
+
+		await apiClient.processVideo({
+			video: { platform: "youtube", url: "https://example.com/v/1" },
+			force: false,
+		});
+		await apiClient.updateNotificationConfig({
+			enabled: true,
+			to_email: "a@example.com",
+			daily_digest_enabled: false,
+			daily_digest_hour_utc: null,
+			failure_alert_enabled: true,
+			category_rules: {},
+		});
+		await apiClient.getDigestFeed({ source: "youtube", limit: 20 });
+
+		expect(fetchSpy).toHaveBeenCalledTimes(3);
+		const [processUrl, processOpts] = fetchSpy.mock.calls[0];
+		expect(String(processUrl)).toContain("/api/v1/videos/process");
+		expect(processOpts).toMatchObject({ method: "POST" });
+
+		const [feedUrl] = fetchSpy.mock.calls[2];
+		expect(String(feedUrl)).toContain("/api/v1/feed/digests");
+		expect(String(feedUrl)).toContain("source=youtube");
+		expect(String(feedUrl)).toContain("limit=20");
+	});
 });
