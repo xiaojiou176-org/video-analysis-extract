@@ -347,6 +347,10 @@ run_hollow_log_guard() {
   echo "[quality-gate] hollow log message guard passed"
 }
 
+run_test_focus_marker_guard() {
+  python3 scripts/check_test_focus_markers.py
+}
+
 run_env_governance_report_non_blocking() {
   local mode_tag="$1"
   local out_dir="$ROOT_DIR/.runtime-cache"
@@ -1094,6 +1098,8 @@ run_pre_commit_mode() {
     "run_gitleaks_fast_scan"
   run_async_gate "hollow_log_guard" "hollow log message guard" \
     "run_hollow_log_guard"
+  run_async_gate "test_focus_marker_guard" "test focus/todo marker guard" \
+    "run_test_focus_marker_guard"
   run_async_gate "structured_log_guard" "structured log critical-path guard" \
     "python3 scripts/check_structured_logs.py"
   run_async_gate "iac_entrypoint_guard" "iac entrypoint guard" \
@@ -1153,6 +1159,8 @@ run_pre_push_mode() {
     "run_secrets_scan"
   run_async_gate "hollow_log_guard" "hollow log message guard" \
     "run_hollow_log_guard"
+  run_async_gate "test_focus_marker_guard" "test focus/todo marker guard" \
+    "run_test_focus_marker_guard"
   run_async_gate "structured_log_guard" "structured log critical-path guard" \
     "python3 scripts/check_structured_logs.py"
   run_async_gate "iac_entrypoint_guard" "iac entrypoint guard" \

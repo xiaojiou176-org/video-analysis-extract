@@ -147,6 +147,9 @@ jobs:
       - name: Worker file line limits (pipeline/steps + temporal <= 750)
         run: python3 scripts/check_worker_line_limits.py
 
+      - name: Test focus/todo marker guard
+        run: python3 scripts/check_test_focus_markers.py
+
       - name: Schema parity check (apps/mcp vs shared-contracts)
         run: |
           python - <<'PY'
@@ -541,7 +544,7 @@ jobs:
           SQLITE_STATE_PATH: /tmp/video-digestor-api-smoke.db
           UI_AUDIT_GEMINI_ENABLED: "false"
           NOTIFICATION_ENABLED: "0"
-          VD_ALLOW_UNAUTH_WRITE: "1"
+          VD_API_KEY: "ci-smoke-write-token"
         run: |
           mkdir -p .runtime-cache
           uv run --with uvicorn uvicorn apps.api.app.main:app --host 127.0.0.1 --port 18080 > .runtime-cache/api-real-smoke.log 2>&1 &
@@ -557,42 +560,108 @@ jobs:
 
           python - <<'PY'
           import json
+          import urllib.error
           import urllib.request
 
           base = "http://127.0.0.1:18080"
+          valid_headers = {
+              "Authorization": "Bearer ci-smoke-write-token",
+              "X-API-Key": "ci-smoke-write-token",
+          }
+          wrong_headers = {
+              "Authorization": "Bearer wrong-token",
+              "X-API-Key": "wrong-token",
+          }
 
-          def request_json(path: str, method: str = "GET", payload: dict | None = None):
+          def request_json(
+              path: str,
+              method: str = "GET",
+              payload: dict | None = None,
+              extra_headers: dict[str, str] | None = None,
+          ):
               data = None
               headers = {"Content-Type": "application/json"}
+              if extra_headers:
+                  headers.update(extra_headers)
               if payload is not None:
                   data = json.dumps(payload).encode("utf-8")
               req = urllib.request.Request(f"{base}{path}", data=data, method=method, headers=headers)
               with urllib.request.urlopen(req, timeout=20) as resp:
                   body = resp.read().decode("utf-8")
-                  return json.loads(body)
+                  if body:
+                      return json.loads(body)
+                  return None
+
+          def assert_http_error(path: str, code: int, payload: dict | None = None):
+              try:
+                  request_json(path, method="POST", payload=payload)
+                  raise AssertionError(f"{path} expected HTTP {code} but request succeeded")
+              except urllib.error.HTTPError as exc:
+                  assert exc.code == code, f"{path} expected HTTP {code}, got {exc.code}"
 
           health = request_json("/healthz")
           assert health.get("status") == "ok", f"healthz unexpected payload: {health}"
 
           source_value = "ci-smoke-channel"
+          payload = {
+              "platform": "youtube",
+              "source_type": "youtube_channel_id",
+              "source_value": source_value,
+              "enabled": True,
+          }
+          assert_http_error("/api/v1/subscriptions", 401, payload=payload)
+
+          try:
+              request_json(
+                  "/api/v1/subscriptions",
+                  method="POST",
+                  payload=payload,
+                  extra_headers=wrong_headers,
+              )
+              raise AssertionError("expected HTTP 403 with wrong token")
+          except urllib.error.HTTPError as exc:
+              assert exc.code == 403, f"expected 403 with wrong token, got {exc.code}"
+
           created = request_json(
               "/api/v1/subscriptions",
               method="POST",
-              payload={
-                  "platform": "youtube",
-                  "source_type": "youtube_channel_id",
-                  "source_value": source_value,
-                  "enabled": True,
-              },
+              payload=payload,
+              extra_headers=valid_headers,
           )
           assert created.get("created") is True, f"subscription create failed: {created}"
-          assert created["subscription"]["source_value"] == source_value
+          created_id = created["subscription"]["id"]
 
-          rows = request_json("/api/v1/subscriptions?platform=youtube&enabled_only=true")
+          rows = request_json(
+              "/api/v1/subscriptions?platform=youtube&enabled_only=true",
+              extra_headers=valid_headers,
+          )
           assert isinstance(rows, list) and rows, f"subscription list is empty: {rows}"
           assert any(row.get("source_value") == source_value for row in rows), rows
 
-          print("api-real-smoke passed: healthz + subscriptions write/read")
+          assert_http_error("/api/v1/ingest/poll", 401, payload={"platform": "youtube", "max_new_videos": 1})
+          try:
+              request_json(
+                  "/api/v1/ingest/poll",
+                  method="POST",
+                  payload={"platform": "youtube", "max_new_videos": 1},
+                  extra_headers=wrong_headers,
+              )
+              raise AssertionError("expected HTTP 403 on ingest with wrong token")
+          except urllib.error.HTTPError as exc:
+              assert exc.code == 403, f"expected 403 on ingest with wrong token, got {exc.code}"
+
+          request_json(
+              f"/api/v1/subscriptions/{created_id}",
+              method="DELETE",
+              extra_headers=valid_headers,
+          )
+          rows_after_delete = request_json(
+              "/api/v1/subscriptions?platform=youtube&enabled_only=true",
+              extra_headers=valid_headers,
+          )
+          assert all(row.get("id") != created_id for row in rows_after_delete), rows_after_delete
+
+          print("api-real-smoke passed: auth + subscriptions CRUD + ingest auth contract")
           PY
 
       - name: Upload CI failure diagnostics (api-real-smoke)
@@ -647,7 +716,7 @@ jobs:
           SQLITE_STATE_PATH: /tmp/video-digestor-pr-llm-real-state.db
           NOTIFICATION_ENABLED: "0"
           UI_AUDIT_GEMINI_ENABLED: "false"
-          VD_ALLOW_UNAUTH_WRITE: "1"
+          VD_API_KEY: "ci-pr-llm-write-token"
           COMPUTER_USE_MODEL_TIMEOUT_SECONDS: "30"
           COMPUTER_USE_MODEL_MAX_RETRIES: "2"
         run: |
