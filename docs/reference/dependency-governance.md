@@ -13,6 +13,7 @@
 - 清单：`apps/web/package.json`
 - 锁文件：`apps/web/package-lock.json`
 - 安装命令：`npm --prefix apps/web ci`
+- 覆盖率运行依赖：`@vitest/coverage-v8`（`vitest run --coverage` 必需）
 
 ## CI Gates
 
