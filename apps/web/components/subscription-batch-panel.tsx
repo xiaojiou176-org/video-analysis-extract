@@ -91,7 +91,8 @@ export function SubscriptionBatchPanel({ subscriptions }: Props) {
 		}
 	}
 
-	const allSelected = visibleSubscriptions.length > 0 && selected.size === visibleSubscriptions.length;
+	const allSelected =
+		visibleSubscriptions.length > 0 && selected.size === visibleSubscriptions.length;
 
 	return (
 		<div className="stack">

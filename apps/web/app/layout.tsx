@@ -62,11 +62,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
 							<h1 className="site-title">控制台</h1>
 						</div>
 						<div className="header-links">
-							<Link
-								href={healthUrl}
-								target="_blank"
-								rel="noreferrer"
-							>
+							<Link href={healthUrl} target="_blank" rel="noreferrer">
 								<span className="api-health-chip" aria-live="polite">
 									<span
 										className={`api-health-dot api-health-dot-${healthState}`}
