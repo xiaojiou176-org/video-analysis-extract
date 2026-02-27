@@ -632,6 +632,31 @@ def _load_due_failed_deliveries(
     return _claim_due_failed_deliveries(conn, limit=limit)
 
 
+def _extract_daily_digest_date(payload_json: Any) -> date | None:
+    return _extract_daily_digest_date_impl(payload_json)
+
+
+def _extract_timezone_name(payload_json: Any) -> str | None:
+    return _extract_timezone_name_impl(payload_json)
+
+
+def _extract_timezone_offset_minutes(payload_json: Any) -> int:
+    return _extract_timezone_offset_minutes_impl(payload_json, coerce_int=_coerce_int)
+
+
+def _build_retry_failure_payload(
+    *,
+    error_message: str,
+    attempt_count: int,
+) -> tuple[str, datetime | None]:
+    return _build_retry_failure_payload_impl(
+        error_message=error_message,
+        attempt_count=attempt_count,
+        classify_delivery_error=_classify_delivery_error,
+        resolve_next_retry_at=_resolve_next_retry_at,
+    )
+
+
 @activity.defn(name="retry_failed_deliveries_activity")
 async def retry_failed_deliveries_activity(payload: dict[str, Any] | None = None) -> dict[str, Any]:
     settings = Settings.from_env()
@@ -643,22 +668,14 @@ async def retry_failed_deliveries_activity(payload: dict[str, Any] | None = None
         coerce_int=_coerce_int,
         claim_due_failed_deliveries=_claim_due_failed_deliveries,
         normalize_email=_normalize_email,
-        build_retry_failure_payload=lambda *, error_message, attempt_count: _build_retry_failure_payload_impl(
-            error_message=error_message,
-            attempt_count=attempt_count,
-            classify_delivery_error=_classify_delivery_error,
-            resolve_next_retry_at=_resolve_next_retry_at,
-        ),
+        build_retry_failure_payload=_build_retry_failure_payload,
         mark_delivery_state=_mark_delivery_state,
         fetch_job_digest_record=_fetch_job_digest_record,
         safe_read_text=_safe_read_text,
         build_video_digest_markdown=_build_video_digest_markdown,
-        extract_daily_digest_date=_extract_daily_digest_date_impl,
-        extract_timezone_name=_extract_timezone_name_impl,
-        extract_timezone_offset_minutes=lambda payload_json: _extract_timezone_offset_minutes_impl(
-            payload_json,
-            coerce_int=_coerce_int,
-        ),
+        extract_daily_digest_date=_extract_daily_digest_date,
+        extract_timezone_name=_extract_timezone_name,
+        extract_timezone_offset_minutes=_extract_timezone_offset_minutes,
         resolve_local_digest_date=_resolve_local_digest_date,
         load_daily_digest_jobs=_load_daily_digest_jobs,
         build_daily_digest_markdown=_build_daily_digest_markdown,
