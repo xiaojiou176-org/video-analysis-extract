@@ -70,7 +70,7 @@ def test_jobs_lookup_form_requires_job_id(page: Page) -> None:
     expect(submit).to_be_enabled()
 
 
-def test_artifact_lookup_by_video_url_shows_result_or_error(page: Page) -> None:
+def test_artifact_lookup_by_video_url_shows_markdown_result(page: Page) -> None:
     page.goto("/artifacts", wait_until="domcontentloaded")
     page.get_by_label("视频 URL").fill("https://www.youtube.com/watch?v=e2e001")
     page.get_by_role("button", name="加载产物").click()

@@ -26,7 +26,7 @@
 
 以下口径按已拍板 D1~D5 执行，旧规则（E2E 默认 mock API）已废止。
 
-- `preflight-fast` + `preflight-heavy`：预检门禁（env contract、schema parity、provider residual、worker line limits、structured log guard）。
+- `preflight-fast` + `preflight-heavy`：预检门禁（env contract、schema parity、provider residual、worker line limits、structured log guard、e2e strictness guard）。
 - `db-migration-smoke` + `python-tests` + `api-real-smoke` + `backend-lint` + `frontend-lint` + `web-test-build` + `web-e2e`：并行执行的主链路测试集合。
 - `web-e2e`：CI 主路径使用真实 API（real API）执行完整端到端验证；`mock` 仅允许本地调试，不允许进入 CI gate。
 - `web-e2e` real 链路包含 Temporal + API + worker 后台进程，`ingest/poll` 成功路径要求经过 worker 消费。
@@ -226,6 +226,7 @@ bash scripts/env/final_governance_check.sh --skip-prepush
 
 - 全仓 Lint 错误必须为 0（`npm --prefix apps/web run lint` + `uv run --with ruff ruff check apps scripts`）。
 - 禁止安慰剂断言（`python3 scripts/check_test_assertions.py --path .`）。
+- E2E 严格性守卫必须通过（`python3 scripts/check_e2e_strictness.py`，拦截硬等待与成功/失败混合断言模式）。
 - Secrets 泄漏扫描必须通过（`sk-*` / `ghp_*` / `AKIA*` / 私钥头模式）。
 - 空洞日志文案扫描必须通过（禁止 `Something went wrong` / `unexpected error` / `error occurred` / `unknown error`）。
 - 文档漂移门禁强制执行（staged/push）。
