@@ -532,6 +532,7 @@ jobs:
           SQLITE_STATE_PATH: /tmp/video-digestor-api-smoke.db
           UI_AUDIT_GEMINI_ENABLED: "false"
           NOTIFICATION_ENABLED: "0"
+          VD_ALLOW_UNAUTH_WRITE: "1"
         run: |
           mkdir -p .runtime-cache
           uv run --with uvicorn uvicorn apps.api.app.main:app --host 127.0.0.1 --port 18080 > .runtime-cache/api-real-smoke.log 2>&1 &

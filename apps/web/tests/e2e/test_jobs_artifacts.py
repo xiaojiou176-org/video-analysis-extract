@@ -37,7 +37,7 @@ def test_jobs_to_artifacts_query_navigation(page: Page) -> None:
     page.get_by_role("link", name="查看产物页").click()
     expect(
         page
-    ).to_have_url(re.compile(rf"/artifacts\?(?=.*(?:^|&)job_id={re.escape(job_id)}(?:&|$)).*"))
+    ).to_have_url(re.compile(rf"/artifacts\?job_id={re.escape(job_id)}(?:&.*)?$"))
     expect(page.get_by_role("heading", name="产物查询")).to_be_visible()
     expect(page.locator("body")).to_contain_text(
         re.compile(r"Markdown 预览|产物请求已完成，但未返回 Markdown 内容。|请求失败，请稍后重试。")

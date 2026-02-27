@@ -20,6 +20,18 @@ ALLOW_PATTERNS = (
 )
 ALLOW_FILE_HINTS = ("token", "theme", "palette")
 VALID_SUFFIXES = {".css", ".scss", ".tsx", ".jsx"}
+SKIP_PATH_HINTS = (
+    "/node_modules/",
+    "\\node_modules\\",
+    "/.next",
+    "\\.next",
+    "/.next/",
+    "\\.next\\",
+    "/dist/",
+    "\\dist\\",
+    "/build/",
+    "\\build\\",
+)
 
 
 def _is_allowed_line(line: str) -> bool:
@@ -31,6 +43,8 @@ def _is_allowed_line(line: str) -> bool:
 
 def _should_skip_file(path: Path) -> bool:
     lower = str(path).lower()
+    if any(hint in lower for hint in SKIP_PATH_HINTS):
+        return True
     return any(hint in lower for hint in ALLOW_FILE_HINTS)
 
 

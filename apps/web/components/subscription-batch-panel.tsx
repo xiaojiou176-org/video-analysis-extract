@@ -54,6 +54,8 @@ export function SubscriptionBatchPanel({ subscriptions }: Props) {
 				next.delete(id);
 				return next;
 			});
+			setApplyResult("订阅已删除。");
+			router.replace("/subscriptions?status=success&code=SUBSCRIPTION_DELETED");
 			router.refresh();
 		} catch (err) {
 			setApplyResult(`删除失败：${getFlashMessage(toErrorCode(err))}`);

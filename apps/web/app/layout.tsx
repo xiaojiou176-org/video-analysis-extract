@@ -66,7 +66,6 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
 								href={healthUrl}
 								target="_blank"
 								rel="noreferrer"
-								aria-label="打开 API 健康检查（在新标签页打开）"
 							>
 								<span className="api-health-chip" aria-live="polite">
 									<span

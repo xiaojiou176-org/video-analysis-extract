@@ -3,7 +3,6 @@ set -euo pipefail
 
 SCRIPT_NAME="smoke_llm_real_local"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-unset GEMINI_API_KEY
 
 # shellcheck source=./scripts/lib/load_env.sh
 source "$ROOT_DIR/scripts/lib/load_env.sh"
