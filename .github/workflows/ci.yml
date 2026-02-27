@@ -150,6 +150,9 @@ jobs:
       - name: Test focus/todo marker guard
         run: python3 scripts/check_test_focus_markers.py
 
+      - name: E2E strictness guard
+        run: python3 scripts/check_e2e_strictness.py
+
       - name: CI workflow strictness guard
         run: python3 scripts/check_ci_workflow_strictness.py
 

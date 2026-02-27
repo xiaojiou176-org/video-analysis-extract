@@ -351,6 +351,10 @@ run_test_focus_marker_guard() {
   python3 scripts/check_test_focus_markers.py
 }
 
+run_e2e_strictness_guard() {
+  python3 scripts/check_e2e_strictness.py
+}
+
 run_ci_workflow_strictness_guard() {
   python3 scripts/check_ci_workflow_strictness.py
 }
@@ -1104,6 +1108,8 @@ run_pre_commit_mode() {
     "run_hollow_log_guard"
   run_async_gate "test_focus_marker_guard" "test focus/todo marker guard" \
     "run_test_focus_marker_guard"
+  run_async_gate "e2e_strictness_guard" "e2e strictness guard" \
+    "run_e2e_strictness_guard"
   run_async_gate "ci_workflow_strictness_guard" "ci workflow strictness guard" \
     "run_ci_workflow_strictness_guard"
   run_async_gate "structured_log_guard" "structured log critical-path guard" \
@@ -1167,6 +1173,8 @@ run_pre_push_mode() {
     "run_hollow_log_guard"
   run_async_gate "test_focus_marker_guard" "test focus/todo marker guard" \
     "run_test_focus_marker_guard"
+  run_async_gate "e2e_strictness_guard" "e2e strictness guard" \
+    "run_e2e_strictness_guard"
   run_async_gate "ci_workflow_strictness_guard" "ci workflow strictness guard" \
     "run_ci_workflow_strictness_guard"
   run_async_gate "structured_log_guard" "structured log critical-path guard" \

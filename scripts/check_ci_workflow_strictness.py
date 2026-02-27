@@ -62,6 +62,8 @@ def main() -> int:
     preflight_fast = blocks.get("preflight-fast", "")
     if "Test focus/todo marker guard" not in preflight_fast:
         failures.append("preflight-fast: missing test focus/todo marker guard step")
+    if "E2E strictness guard" not in preflight_fast:
+        failures.append("preflight-fast: missing e2e strictness guard step")
 
     if failures:
         print("ci workflow strictness gate failed:")
