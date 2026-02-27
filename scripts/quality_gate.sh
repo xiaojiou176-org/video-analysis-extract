@@ -335,6 +335,22 @@ run_hollow_log_guard() {
   echo "[quality-gate] hollow log message guard passed"
 }
 
+run_env_governance_report_non_blocking() {
+  local mode_tag="$1"
+  local out_dir="$ROOT_DIR/.runtime-cache"
+  local json_out="$out_dir/env-governance-${mode_tag}.json"
+  local md_out="$out_dir/env-governance-${mode_tag}.md"
+  mkdir -p "$out_dir"
+
+  if ! python3 scripts/report_env_governance.py \
+    --json-out "$json_out" \
+    --md-out "$md_out"; then
+    echo "[quality-gate] env governance report detected issues (non-blocking): ${json_out}" >&2
+  else
+    echo "[quality-gate] env governance report generated: ${json_out}"
+  fi
+}
+
 run_mutation_gate() {
   local stats_file="mutants/mutmut-cicd-stats.json"
   echo "[quality-gate] mutation gate target=apps/worker/worker/pipeline/steps/llm_step_gates.py threshold=${MUTATION_MIN_SCORE}"
@@ -795,6 +811,8 @@ run_pre_commit_mode() {
     "bash scripts/check_iac_entrypoint.sh ."
   run_async_gate "env_budget_guard" "env budget guard" \
     "python3 scripts/check_env_budget.py"
+  run_async_gate "env_governance_report" "env governance report (non-blocking)" \
+    "run_env_governance_report_non_blocking pre-commit"
   if is_true "$EFFECTIVE_WEB_CHANGED"; then
     run_async_gate "web_lint" "frontend lint" \
       "npm --prefix apps/web run lint"
@@ -836,6 +854,8 @@ run_pre_push_mode() {
     "python3 scripts/check_env_contract.py --strict"
   run_async_gate "env_budget_guard" "env budget guard" \
     "python3 scripts/check_env_budget.py"
+  run_async_gate "env_governance_report" "env governance report (non-blocking)" \
+    "run_env_governance_report_non_blocking pre-push"
   run_async_gate "doc_drift_push" "documentation drift gate (push range)" \
     "bash scripts/ci_or_local_gate_doc_drift.sh --scope push"
   run_async_gate "placebo" "placebo assertion guard" \

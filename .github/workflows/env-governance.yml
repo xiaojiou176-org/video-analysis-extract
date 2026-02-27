@@ -25,6 +25,22 @@ jobs:
       - name: Validate env contract
         run: python scripts/check_env_contract.py --strict --env-file .env.example
 
+      - name: Generate env governance report
+        run: |
+          mkdir -p .runtime-cache
+          python scripts/report_env_governance.py \
+            --json-out .runtime-cache/env-governance.json \
+            --md-out .runtime-cache/env-governance.md
+
+      - name: Upload env governance artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: env-governance-report
+          path: |
+            .runtime-cache/env-governance.json
+            .runtime-cache/env-governance.md
+
       - name: Validate schema contract parity (apps/mcp vs shared-contracts)
         run: |
           python - <<'PY'

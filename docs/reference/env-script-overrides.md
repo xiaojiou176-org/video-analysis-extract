@@ -225,3 +225,21 @@ workflow 管理参数：
 - `--repo`
 - `--force-delete-instance`
 - `--force-replace-app-dir`
+
+## Env Governance Report (`scripts/report_env_governance.py`)
+
+用于输出环境变量治理报表（删除候选、残留引用、文档漂移）。
+
+示例：
+
+```bash
+python3 scripts/report_env_governance.py \
+  --json-out .runtime-cache/env-governance.json \
+  --md-out .runtime-cache/env-governance.md
+```
+
+输出说明：
+
+- JSON 报表包含 `summary`、`delete_candidates`、`residual_refs`、`doc_drift`
+- Markdown 报表用于人工审阅与 PR 附件
+- 默认 `--fail-on residual_refs,doc_drift`，命中返回码 `1`
