@@ -68,6 +68,8 @@ describe("SubscriptionBatchPanel", () => {
 
 	it("renders all subscriptions rows", () => {
 		render(<SubscriptionBatchPanel subscriptions={MOCK_SUBS} />);
+		expect(screen.getByText("当前订阅列表")).toBeInTheDocument();
+		expect(screen.getByRole("columnheader", { name: "来源" })).toHaveAttribute("scope", "col");
 		expect(screen.getByText("Tech Channel")).toBeInTheDocument();
 		expect(screen.getByText("Finance Blog")).toBeInTheDocument();
 	});

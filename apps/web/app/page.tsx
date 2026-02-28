@@ -202,41 +202,44 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
 					</output>
 				) : null}
 				{videos.length > 0 ? (
-					<table>
-						<thead>
-							<tr>
-								<th>标题</th>
-								<th>平台</th>
-								<th>状态</th>
-								<th>最近任务</th>
-							</tr>
-						</thead>
-						<tbody>
-							{videos.slice(0, 10).map((video) => {
-								const statusDisplay = toDisplayStatus(video.status);
-								return (
-									<tr key={video.id}>
-										<td>{video.title ?? video.video_uid}</td>
-										<td>{toPlatformLabel(video.platform)}</td>
-										<td>
-											<span className={`status-chip status-${statusDisplay.css}`}>
-												{statusDisplay.label}
-											</span>
-										</td>
-										<td>
-											{video.last_job_id ? (
-												<Link href={`/jobs?job_id=${encodeURIComponent(video.last_job_id)}`}>
-													{video.last_job_id}
-												</Link>
-											) : (
-												"-"
-											)}
-										</td>
-									</tr>
-								);
-							})}
-						</tbody>
-					</table>
+					<div className="table-scroll">
+						<table>
+							<caption className="sr-only">最近视频列表</caption>
+							<thead>
+								<tr>
+									<th scope="col">标题</th>
+									<th scope="col">平台</th>
+									<th scope="col">状态</th>
+									<th scope="col">最近任务</th>
+								</tr>
+							</thead>
+							<tbody>
+								{videos.slice(0, 10).map((video) => {
+									const statusDisplay = toDisplayStatus(video.status);
+									return (
+										<tr key={video.id}>
+											<td>{video.title ?? video.video_uid}</td>
+											<td>{toPlatformLabel(video.platform)}</td>
+											<td>
+												<span className={`status-chip status-${statusDisplay.css}`}>
+													{statusDisplay.label}
+												</span>
+											</td>
+											<td>
+												{video.last_job_id ? (
+													<Link href={`/jobs?job_id=${encodeURIComponent(video.last_job_id)}`}>
+														{video.last_job_id}
+													</Link>
+												) : (
+													"-"
+												)}
+											</td>
+										</tr>
+									);
+								})}
+							</tbody>
+						</table>
+					</div>
 				) : null}
 			</section>
 		</div>

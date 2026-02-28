@@ -164,6 +164,8 @@ describe("feed/jobs/artifacts pages", () => {
 		expect(mockGetJob).toHaveBeenCalledWith("job-1");
 		expect(screen.getByText("任务概览")).toBeInTheDocument();
 		expect(screen.getByText("job-1")).toBeInTheDocument();
+		expect(screen.getByText("任务步骤摘要表")).toBeInTheDocument();
+		expect(screen.getByText("任务步骤摘要表").closest(".table-scroll")).not.toBeNull();
 		expect(screen.getByText("fetch_video")).toBeInTheDocument();
 		expect(screen.getByText("llm_digest")).toBeInTheDocument();
 		expect(screen.getByRole("link", { name: "查看产物页" })).toHaveAttribute(

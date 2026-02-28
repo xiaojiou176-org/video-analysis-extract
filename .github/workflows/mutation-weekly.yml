@@ -13,9 +13,23 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  required-ci-secrets:
+    runs-on: e2-core
+    timeout-minutes: 5
+    env:
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - name: Enforce required CI secrets/env vars
+        run: |
+          python3 scripts/check_required_ci_secrets.py \
+            --required GEMINI_API_KEY
+
   python-mutmut:
     runs-on: e2-core
     timeout-minutes: 120
+    needs: [required-ci-secrets]
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4

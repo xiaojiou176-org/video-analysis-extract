@@ -110,8 +110,9 @@ export default async function JobsPage({ searchParams }: JobsPageProps) {
 						{job.step_summary.length === 0 ? (
 							<p className="small">暂无步骤记录。</p>
 						) : (
-							<div className="overflow-x-auto">
+							<div className="table-scroll">
 								<table>
+									<caption className="sr-only">任务步骤摘要表</caption>
 									<thead>
 										<tr>
 											<th scope="col">步骤</th>

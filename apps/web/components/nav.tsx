@@ -17,7 +17,7 @@ export function AppNav() {
 
 	return (
 		<div className="app-nav-shell">
-			<nav aria-label="Main navigation" className="app-nav">
+			<nav aria-label="主导航" className="app-nav">
 				{NAV_ITEMS.map((item) => {
 					const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
 					return (
