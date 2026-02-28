@@ -693,9 +693,20 @@ run_iac_compose_config_validation() {
     echo "[quality-gate] iac compose config validation failed: docker is required" >&2
     return 1
   fi
-  docker compose -f infra/compose/core-services.compose.yml config -q
+
+  local compose_cmd=()
+  if docker compose version >/dev/null 2>&1; then
+    compose_cmd=(docker compose)
+  elif command -v docker-compose >/dev/null 2>&1; then
+    compose_cmd=(docker-compose)
+  else
+    echo "[quality-gate] iac compose config validation failed: docker compose or docker-compose is required" >&2
+    return 1
+  fi
+
+  "${compose_cmd[@]}" -f infra/compose/core-services.compose.yml config -q
   if [[ -f infra/compose/miniflux-nextflux.compose.yml ]]; then
-    docker compose -f infra/compose/miniflux-nextflux.compose.yml config -q
+    "${compose_cmd[@]}" -f infra/compose/miniflux-nextflux.compose.yml config -q
   fi
   echo "[quality-gate] iac compose config validation passed"
 }
