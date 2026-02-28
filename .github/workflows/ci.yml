@@ -7,6 +7,7 @@ on:
       - main
       - release/**
       - codex/**
+  workflow_dispatch:
   schedule:
     - cron: "0 3 * * *"
 
@@ -259,7 +260,7 @@ jobs:
           fi
 
   quality-gate-pre-push:
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.event_name == 'pull_request' && 'ubuntu-latest' || 'e2-core' }}
     timeout-minutes: 90
     needs: [preflight-heavy, changes]
     steps:
@@ -307,7 +308,7 @@ jobs:
               --mutation-max-no-tests-ratio 0.75
 
   db-migration-smoke:
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.event_name == 'pull_request' && 'ubuntu-latest' || 'e2-core' }}
     timeout-minutes: 20
     needs: [preflight-fast, changes]
     if: ${{ github.event_name != 'pull_request' || needs.changes.outputs.migrations_changed == 'true' }}
@@ -349,7 +350,7 @@ jobs:
           done
 
   python-tests:
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.event_name == 'pull_request' && 'ubuntu-latest' || 'e2-core' }}
     timeout-minutes: 45
     needs: [preflight-fast, changes]
     if: ${{ github.event_name != 'pull_request' || needs.changes.outputs.backend_changed == 'true' }}
@@ -494,7 +495,7 @@ jobs:
             .runtime-cache/python-coverage.xml
 
   api-real-smoke:
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.event_name == 'pull_request' && 'ubuntu-latest' || 'e2-core' }}
     timeout-minutes: 25
     needs: [preflight-fast, changes]
     services:
@@ -769,7 +770,7 @@ jobs:
             .runtime-cache/pr-llm-real-smoke-result.json
 
   web-test-build:
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.event_name == 'pull_request' && 'ubuntu-latest' || 'e2-core' }}
     timeout-minutes: 25
     needs: [preflight-fast, changes]
     if: ${{ github.event_name != 'pull_request' || needs.changes.outputs.web_changed == 'true' || needs.changes.outputs.deps_changed == 'true' }}
@@ -826,7 +827,7 @@ jobs:
         run: python3 scripts/check_web_button_coverage.py --threshold 1.0
 
   web-e2e:
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.event_name == 'pull_request' && 'ubuntu-latest' || 'e2-core' }}
     timeout-minutes: 45
     needs: [preflight-fast, changes]
     if: ${{ github.event_name != 'pull_request' || needs.changes.outputs.backend_changed == 'true' || needs.changes.outputs.web_changed == 'true' || needs.changes.outputs.deps_changed == 'true' }}
@@ -1086,7 +1087,7 @@ jobs:
           fi
 
   external-playwright-smoke:
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.event_name == 'pull_request' && 'ubuntu-latest' || 'e2-core' }}
     timeout-minutes: 20
     if: ${{ github.event_name == 'schedule' || (github.event_name == 'push' && github.ref == 'refs/heads/main') }}
     needs: preflight-fast
@@ -1366,7 +1367,7 @@ jobs:
           echo "aggregate gate passed"
 
   nightly-flaky-python:
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.event_name == 'pull_request' && 'ubuntu-latest' || 'e2-core' }}
     timeout-minutes: 40
     if: ${{ github.event_name == 'schedule' }}
     needs: preflight-fast
@@ -1419,7 +1420,7 @@ jobs:
           done
 
   nightly-flaky-web-e2e:
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.event_name == 'pull_request' && 'ubuntu-latest' || 'e2-core' }}
     timeout-minutes: 60
     if: ${{ github.event_name == 'schedule' }}
     needs: preflight-fast
@@ -1485,7 +1486,7 @@ jobs:
 
   autofix-dry-run:
     name: autofix-dry-run
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.event_name == 'pull_request' && 'ubuntu-latest' || 'e2-core' }}
     timeout-minutes: 15
     needs: [python-tests, web-e2e]
     if: ${{ always() && (needs.python-tests.result == 'failure' || needs.web-e2e.result == 'failure') }}
@@ -1515,7 +1516,7 @@ jobs:
 
   live-smoke:
     needs: aggregate-gate
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.event_name == 'pull_request' && 'ubuntu-latest' || 'e2-core' }}
     timeout-minutes: 40
     if: >-
       always() &&
