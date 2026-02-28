@@ -2,6 +2,7 @@
 .runtime-cache/
 cache/
 .cache/
+.mypy_cache/
 .pytest_cache/
 .coverage
 .coverage.*
@@ -24,6 +25,12 @@ dist/
 # Logs and temp outputs
 logs/
 *.log
+htmlcov/
+playwright-report/
+test-results/
+*.tmp
+*.swp
+*.swo
 
 # Local env files
 .env*
@@ -32,6 +39,8 @@ env/profiles/*.local.env
 
 # Local/editor/system noise
 .DS_Store
+.idea/
+.vscode/
 
 # Personal local notes
 我和ChatGPT的对话.md
