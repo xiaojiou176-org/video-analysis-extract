@@ -450,6 +450,7 @@ jobs:
     runs-on: e2-core
     timeout-minutes: 20
     needs: preflight-fast
+    if: ${{ always() && needs.preflight-fast.result == 'success' }}
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -481,7 +482,7 @@ jobs:
   profile-governance:
     runs-on: e2-core
     timeout-minutes: 20
-    if: ${{ github.event_name == 'schedule' || (github.event_name == 'push' && github.ref == 'refs/heads/main') }}
+    if: ${{ always() && needs.preflight-heavy.result == 'success' && (github.event_name == 'schedule' || (github.event_name == 'push' && github.ref == 'refs/heads/main')) }}
     needs: preflight-heavy
     strategy:
       fail-fast: false
@@ -569,7 +570,7 @@ jobs:
     runs-on: e2-core
     timeout-minutes: 20
     needs: [preflight-fast, changes]
-    if: ${{ github.event_name != 'pull_request' || needs.changes.outputs.migrations_changed == 'true' }}
+    if: ${{ always() && needs.preflight-fast.result == 'success' && needs.changes.result == 'success' && (github.event_name != 'pull_request' || needs.changes.outputs.migrations_changed == 'true') }}
     services:
       postgres:
         image: pgvector/pgvector:pg16
@@ -611,7 +612,7 @@ jobs:
     runs-on: e2-core
     timeout-minutes: 45
     needs: [preflight-fast, changes]
-    if: ${{ github.event_name != 'pull_request' || needs.changes.outputs.backend_changed == 'true' }}
+    if: ${{ always() && needs.preflight-fast.result == 'success' && needs.changes.result == 'success' && (github.event_name != 'pull_request' || needs.changes.outputs.backend_changed == 'true') }}
     services:
       postgres:
         image: pgvector/pgvector:pg16
@@ -756,6 +757,7 @@ jobs:
     runs-on: e2-core
     timeout-minutes: 25
     needs: [preflight-fast, changes]
+    if: ${{ always() && needs.preflight-fast.result == 'success' && needs.changes.result == 'success' && (github.event_name != 'pull_request' || needs.changes.outputs.backend_changed == 'true') }}
     services:
       postgres:
         image: pgvector/pgvector:pg16
@@ -1031,7 +1033,7 @@ jobs:
     runs-on: e2-core
     timeout-minutes: 25
     needs: [preflight-fast, changes]
-    if: ${{ github.event_name != 'pull_request' || needs.changes.outputs.web_changed == 'true' || needs.changes.outputs.deps_changed == 'true' }}
+    if: ${{ always() && needs.preflight-fast.result == 'success' && needs.changes.result == 'success' && (github.event_name != 'pull_request' || needs.changes.outputs.web_changed == 'true' || needs.changes.outputs.deps_changed == 'true') }}
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -1088,7 +1090,7 @@ jobs:
     runs-on: e2-core
     timeout-minutes: 45
     needs: [preflight-fast, changes]
-    if: ${{ github.event_name != 'pull_request' || needs.changes.outputs.backend_changed == 'true' || needs.changes.outputs.web_changed == 'true' || needs.changes.outputs.deps_changed == 'true' }}
+    if: ${{ always() && needs.preflight-fast.result == 'success' && needs.changes.result == 'success' && (github.event_name != 'pull_request' || needs.changes.outputs.backend_changed == 'true' || needs.changes.outputs.web_changed == 'true' || needs.changes.outputs.deps_changed == 'true') }}
     services:
       postgres:
         image: pgvector/pgvector:pg16
@@ -1411,7 +1413,7 @@ jobs:
     runs-on: e2-core
     timeout-minutes: 25
     needs: [preflight-fast, changes]
-    if: ${{ github.event_name != 'pull_request' || needs.changes.outputs.deps_changed == 'true' }}
+    if: ${{ always() && needs.preflight-fast.result == 'success' && needs.changes.result == 'success' && (github.event_name != 'pull_request' || needs.changes.outputs.deps_changed == 'true') }}
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
