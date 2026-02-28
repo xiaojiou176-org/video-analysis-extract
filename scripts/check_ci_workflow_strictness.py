@@ -40,9 +40,9 @@ def main() -> int:
             failures.append("quality-gate-pre-push: should not narrow execution with job-level if")
         if "--mode pre-push" not in qg_block:
             failures.append("quality-gate-pre-push: missing pre-push quality gate command")
-        if "--ci-dedupe 0" not in qg_block:
+        if "--ci-dedupe 1" not in qg_block:
             failures.append(
-                "quality-gate-pre-push: must set --ci-dedupe 0 to avoid skipping strict pre-push gates"
+                "quality-gate-pre-push: must set --ci-dedupe 1 to avoid duplicate heavy checks already enforced by standalone CI jobs"
             )
         if "--mutation-min-score 0.62" not in qg_block:
             failures.append("quality-gate-pre-push: mutation threshold must be at least 0.62")

@@ -296,7 +296,7 @@ jobs:
               --mode pre-push \
               --profile ci \
               --profile live-smoke \
-              --ci-dedupe 0 \
+              --ci-dedupe 1 \
               --changed-backend "${{ needs.changes.outputs.backend_changed }}" \
               --changed-web "${{ needs.changes.outputs.web_changed }}" \
               --changed-deps "${{ needs.changes.outputs.deps_changed }}" \

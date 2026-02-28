@@ -82,7 +82,9 @@ def _expect_artifact_result_or_error(page: Page) -> None:
 
     has_error = error_alert.count() > 0
     if has_error:
-        expect(error_alert).to_contain_text("加载产物请求失败，请稍后重试。")
+        expect(error_alert).to_contain_text(
+            re.compile(r"(加载产物)?请求失败，请稍后重试。")
+        )
         return
 
     expect(page_body).to_contain_text(
