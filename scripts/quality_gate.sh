@@ -475,6 +475,31 @@ run_mutation_gate() {
   fi
 
   rm -rf "$ROOT_DIR/mutants"
+  mkdir -p "$ROOT_DIR/mutants"
+
+  # mutmut may fail to create nested .meta parents on some paths; pre-create them from configured targets.
+  if ! python3 - "$ROOT_DIR/pyproject.toml" "$ROOT_DIR/mutants" <<'PY'
+import sys
+import tomllib
+from pathlib import Path
+
+pyproject_path = Path(sys.argv[1])
+mutants_root = Path(sys.argv[2])
+data = tomllib.loads(pyproject_path.read_text(encoding="utf-8"))
+targets = data.get("tool", {}).get("mutmut", {}).get("paths_to_mutate", [])
+
+if not isinstance(targets, list):
+    raise SystemExit("mutation gate failed: [tool.mutmut].paths_to_mutate must be a list")
+
+for item in targets:
+    if not isinstance(item, str) or not item.strip():
+        continue
+    (mutants_root / item.strip()).parent.mkdir(parents=True, exist_ok=True)
+PY
+  then
+    echo "[quality-gate] mutation gate failed: unable to prepare mutants directory tree." >&2
+    return 1
+  fi
 
   if ! DATABASE_URL='sqlite+pysqlite:///:memory:' \
     PYTHONPATH="$ROOT_DIR:$ROOT_DIR/apps/worker" \

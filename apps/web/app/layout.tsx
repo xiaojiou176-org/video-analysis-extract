@@ -76,7 +76,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
 
 					<AppNav />
 
-					<main id="main-content" className="main-content">
+					<main id="main-content" className="main-content" tabIndex={-1}>
 						{children}
 					</main>
 				</div>

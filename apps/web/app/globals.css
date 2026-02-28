@@ -164,6 +164,7 @@
 html {
 	-webkit-font-smoothing: antialiased;
 	-moz-osx-font-smoothing: grayscale;
+	color-scheme: light dark;
 }
 
 body {
@@ -1443,5 +1444,20 @@ tbody tr:last-child td {
 	.batch-action-bar {
 		flex-direction: column;
 		align-items: flex-start;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	*,
+	*::before,
+	*::after {
+		animation-duration: 0.01ms !important;
+		animation-iteration-count: 1 !important;
+		scroll-behavior: auto !important;
+		transition-duration: 0.01ms !important;
+	}
+
+	.card-interactive:hover {
+		transform: none;
 	}
 }

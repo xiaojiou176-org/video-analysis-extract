@@ -93,6 +93,10 @@ export function SubscriptionBatchPanel({ subscriptions }: Props) {
 
 	const allSelected =
 		visibleSubscriptions.length > 0 && selected.size === visibleSubscriptions.length;
+	const isApplyError = Boolean(
+		applyResult &&
+			(applyResult.startsWith("操作失败") || applyResult.startsWith("删除失败")),
+	);
 
 	return (
 		<div className="stack">
@@ -102,9 +106,10 @@ export function SubscriptionBatchPanel({ subscriptions }: Props) {
 				<>
 					<div className="table-scroll">
 						<table>
+							<caption className="sr-only">当前订阅列表</caption>
 							<thead>
 								<tr>
-									<th>
+									<th scope="col">
 										<input
 											type="checkbox"
 											checked={allSelected}
@@ -112,12 +117,12 @@ export function SubscriptionBatchPanel({ subscriptions }: Props) {
 											aria-label="全选"
 										/>
 									</th>
-									<th>来源</th>
-									<th>平台 / 类型</th>
-									<th>分类 / 优先级</th>
-									<th>启用</th>
-									<th>更新时间</th>
-									<th>操作</th>
+									<th scope="col">来源</th>
+									<th scope="col">平台 / 类型</th>
+									<th scope="col">分类 / 优先级</th>
+									<th scope="col">启用</th>
+									<th scope="col">更新时间</th>
+									<th scope="col">操作</th>
 								</tr>
 							</thead>
 							<tbody>
@@ -231,17 +236,9 @@ export function SubscriptionBatchPanel({ subscriptions }: Props) {
 
 					{applyResult && (
 						<p
-							className={
-								applyResult.startsWith("操作失败") || applyResult.startsWith("删除失败")
-									? "alert error"
-									: "alert success"
-							}
-							role={
-								applyResult.startsWith("操作失败") || applyResult.startsWith("删除失败")
-									? "alert"
-									: "status"
-							}
-							aria-live="polite"
+							className={isApplyError ? "alert error" : "alert success"}
+							role={isApplyError ? "alert" : "status"}
+							aria-live={isApplyError ? "assertive" : "polite"}
 						>
 							{applyResult}
 						</p>

@@ -20,9 +20,31 @@ permissions:
   pull-requests: read
 
 jobs:
-  changes:
+  required-ci-secrets:
+    runs-on: e2-core
+    timeout-minutes: 5
+    env:
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+      RESEND_FROM_EMAIL: ${{ secrets.RESEND_FROM_EMAIL }}
+      YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+      LIVE_SMOKE_API_BASE_URL: ${{ secrets.LIVE_SMOKE_API_BASE_URL }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - name: Enforce required CI secrets/env vars
+        run: |
+          python3 scripts/check_required_ci_secrets.py \
+            --required GEMINI_API_KEY \
+            --required RESEND_API_KEY \
+            --required RESEND_FROM_EMAIL \
+            --required YOUTUBE_API_KEY \
+            --required LIVE_SMOKE_API_BASE_URL
+
+  changes-hosted:
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    needs: [required-ci-secrets]
     outputs:
       backend_changed: ${{ github.event_name == 'pull_request' && steps.filter.outputs.backend_changed || steps.non_pr_defaults.outputs.backend_changed }}
       web_changed: ${{ github.event_name == 'pull_request' && steps.filter.outputs.web_changed || steps.non_pr_defaults.outputs.web_changed }}
@@ -73,9 +95,84 @@ jobs:
             echo "migrations_changed=true"
           } >> "$GITHUB_OUTPUT"
 
-  preflight-fast:
+  changes-fallback:
+    runs-on: e2-core
+    timeout-minutes: 8
+    needs: [required-ci-secrets, changes-hosted]
+    if: ${{ always() && needs['changes-hosted'].result != 'success' }}
+    outputs:
+      backend_changed: ${{ github.event_name == 'pull_request' && steps.filter.outputs.backend_changed || steps.non_pr_defaults.outputs.backend_changed }}
+      web_changed: ${{ github.event_name == 'pull_request' && steps.filter.outputs.web_changed || steps.non_pr_defaults.outputs.web_changed }}
+      deps_changed: ${{ github.event_name == 'pull_request' && steps.filter.outputs.deps_changed || steps.non_pr_defaults.outputs.deps_changed }}
+      migrations_changed: ${{ github.event_name == 'pull_request' && steps.filter.outputs.migrations_changed || steps.non_pr_defaults.outputs.migrations_changed }}
+    steps:
+      - name: Checkout
+        if: ${{ github.event_name == 'pull_request' }}
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect changed paths (PR only)
+        if: ${{ github.event_name == 'pull_request' }}
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            backend_changed:
+              - 'apps/api/**'
+              - 'apps/worker/**'
+              - 'apps/mcp/**'
+              - 'packages/shared-contracts/**'
+              - 'scripts/**'
+              - 'infra/config/**'
+              - 'infra/compose/**'
+              - 'infra/sql/**'
+              - 'pyproject.toml'
+              - 'uv.lock'
+            web_changed:
+              - 'apps/web/**'
+            deps_changed:
+              - 'pyproject.toml'
+              - 'uv.lock'
+              - 'apps/web/package.json'
+              - 'apps/web/package-lock.json'
+            migrations_changed:
+              - 'infra/migrations/**'
+
+      - name: Default full-run flags (non-PR)
+        if: ${{ github.event_name != 'pull_request' }}
+        id: non_pr_defaults
+        run: |
+          {
+            echo "backend_changed=true"
+            echo "web_changed=true"
+            echo "deps_changed=true"
+            echo "migrations_changed=true"
+          } >> "$GITHUB_OUTPUT"
+
+  changes:
+    runs-on: e2-core
+    timeout-minutes: 3
+    needs: [changes-hosted, changes-fallback]
+    if: ${{ always() && (needs['changes-hosted'].result == 'success' || needs['changes-fallback'].result == 'success') }}
+    outputs:
+      backend_changed: ${{ needs['changes-hosted'].result == 'success' ? needs['changes-hosted'].outputs.backend_changed : needs['changes-fallback'].outputs.backend_changed }}
+      web_changed: ${{ needs['changes-hosted'].result == 'success' ? needs['changes-hosted'].outputs.web_changed : needs['changes-fallback'].outputs.web_changed }}
+      deps_changed: ${{ needs['changes-hosted'].result == 'success' ? needs['changes-hosted'].outputs.deps_changed : needs['changes-fallback'].outputs.deps_changed }}
+      migrations_changed: ${{ needs['changes-hosted'].result == 'success' ? needs['changes-hosted'].outputs.migrations_changed : needs['changes-fallback'].outputs.migrations_changed }}
+    steps:
+      - name: Select changes source
+        run: |
+          if [[ "${{ needs['changes-hosted'].result }}" == "success" ]]; then
+            echo "changes source: hosted"
+          else
+            echo "changes source: e2-core fallback"
+          fi
+
+  preflight-fast-hosted:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    needs: [required-ci-secrets]
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -140,9 +237,17 @@ jobs:
 
       - name: IaC compose config validation
         run: |
-          docker compose -f infra/compose/core-services.compose.yml config -q
+          if docker compose version >/dev/null 2>&1; then
+            COMPOSE_CMD=(docker compose)
+          elif command -v docker-compose >/dev/null 2>&1; then
+            COMPOSE_CMD=(docker-compose)
+          else
+            echo "docker compose or docker-compose is required" >&2
+            exit 1
+          fi
+          "${COMPOSE_CMD[@]}" -f infra/compose/core-services.compose.yml config -q
           if [[ -f infra/compose/miniflux-nextflux.compose.yml ]]; then
-            docker compose -f infra/compose/miniflux-nextflux.compose.yml config -q
+            "${COMPOSE_CMD[@]}" -f infra/compose/miniflux-nextflux.compose.yml config -q
           fi
 
       - name: Provider residual guard (blocking)
@@ -195,6 +300,152 @@ jobs:
           print("Schema parity check passed.")
           PY
 
+  preflight-fast-fallback:
+    runs-on: e2-core
+    timeout-minutes: 20
+    needs: [required-ci-secrets, preflight-fast-hosted]
+    if: ${{ always() && needs['preflight-fast-hosted'].result != 'success' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Setup Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+
+      - name: Install ripgrep
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ripgrep
+
+      - name: Env contract strict check
+        run: python3 scripts/check_env_contract.py --strict --env-file .env.example
+
+      - name: computer_use smoke CLI contract check
+        run: |
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+
+          script = Path("scripts/e2e_live_smoke.sh").read_text(encoding="utf-8")
+          required = [
+              "--api-base-url <url>",
+              "--require-api <0|1>",
+              "--require-secrets <0|1>",
+              "--computer-use-strict <0|1>",
+              "--computer-use-skip <0|1>",
+              "--computer-use-skip-reason <text>",
+          ]
+          missing = sorted(item for item in required if item not in script)
+          if missing:
+              raise SystemExit(f"missing computer_use smoke CLI options: {', '.join(missing)}")
+
+          defaults = {
+              "LIVE_SMOKE_REQUIRE_API": "1",
+              "LIVE_SMOKE_COMPUTER_USE_STRICT": "1",
+              "LIVE_SMOKE_COMPUTER_USE_SKIP": "0",
+              "LIVE_SMOKE_MAX_RETRIES": "2",
+          }
+          for name, expected in defaults.items():
+              pattern = rf'^{name}="{re.escape(expected)}"$'
+              if not re.search(pattern, script, re.MULTILINE):
+                  raise SystemExit(f"{name} default must be '{expected}'")
+          print("computer_use smoke CLI contract check passed")
+          PY
+
+      - name: CI smoke drift check
+        run: bash scripts/check_ci_smoke_drift.sh
+
+      - name: CI docs parity check (blocking)
+        run: python3 scripts/check_ci_docs_parity.py
+
+      - name: Docs env canonical check
+        run: |
+          ! rg -n 'cp \.env\.local\.example \.env\.local|source \.env\.local|自动加载 `?\.env\.local' README.md docs/runbook-local.md
+
+      - name: IaC entrypoint guard
+        run: bash scripts/check_iac_entrypoint.sh .
+
+      - name: IaC compose config validation
+        run: |
+          if docker compose version >/dev/null 2>&1; then
+            COMPOSE_CMD=(docker compose)
+          elif command -v docker-compose >/dev/null 2>&1; then
+            COMPOSE_CMD=(docker-compose)
+          else
+            echo "docker compose or docker-compose is required" >&2
+            exit 1
+          fi
+          "${COMPOSE_CMD[@]}" -f infra/compose/core-services.compose.yml config -q
+          if [[ -f infra/compose/miniflux-nextflux.compose.yml ]]; then
+            "${COMPOSE_CMD[@]}" -f infra/compose/miniflux-nextflux.compose.yml config -q
+          fi
+
+      - name: Provider residual guard (blocking)
+        run: bash scripts/guard_provider_residuals.sh .
+
+      - name: Worker file line limits (pipeline/steps + temporal <= 750)
+        run: python3 scripts/check_worker_line_limits.py
+
+      - name: Test focus/todo marker guard
+        run: python3 scripts/check_test_focus_markers.py
+
+      - name: E2E strictness guard
+        run: python3 scripts/check_e2e_strictness.py
+
+      - name: Mutation scope guard
+        run: python3 scripts/check_mutation_scope.py
+
+      - name: Mutation test selection guard
+        run: python3 scripts/check_mutation_test_selection.py
+
+      - name: CI workflow strictness guard
+        run: python3 scripts/check_ci_workflow_strictness.py
+
+      - name: Schema parity check (apps/mcp vs shared-contracts)
+        run: |
+          python - <<'PY'
+          import difflib
+          import json
+          from pathlib import Path
+
+          source_path = Path("apps/mcp/schemas/tools.json")
+          shared_path = Path("packages/shared-contracts/jsonschema/mcp-tools.schema.json")
+
+          source = json.loads(source_path.read_text(encoding="utf-8"))
+          shared = json.loads(shared_path.read_text(encoding="utf-8"))
+
+          if source != shared:
+              source_pretty = json.dumps(source, ensure_ascii=False, indent=2, sort_keys=True).splitlines()
+              shared_pretty = json.dumps(shared, ensure_ascii=False, indent=2, sort_keys=True).splitlines()
+              print("Schema parity check failed:")
+              for line in difflib.unified_diff(
+                  source_pretty,
+                  shared_pretty,
+                  fromfile=str(source_path),
+                  tofile=str(shared_path),
+                  lineterm="",
+              ):
+                  print(line)
+              raise SystemExit(1)
+          print("Schema parity check passed.")
+          PY
+
+  preflight-fast:
+    runs-on: e2-core
+    timeout-minutes: 3
+    needs: [preflight-fast-hosted, preflight-fast-fallback]
+    if: ${{ always() && (needs['preflight-fast-hosted'].result == 'success' || needs['preflight-fast-fallback'].result == 'success') }}
+    steps:
+      - name: Select preflight-fast source
+        run: |
+          if [[ "${{ needs['preflight-fast-hosted'].result }}" == "success" ]]; then
+            echo "preflight-fast source: hosted"
+          else
+            echo "preflight-fast source: e2-core fallback"
+          fi
+
   preflight-heavy:
     runs-on: e2-core
     timeout-minutes: 20
@@ -228,7 +479,7 @@ jobs:
         run: python3 scripts/check_structured_logs.py
 
   profile-governance:
-    runs-on: ubuntu-latest
+    runs-on: e2-core
     timeout-minutes: 20
     if: ${{ github.event_name == 'schedule' || (github.event_name == 'push' && github.ref == 'refs/heads/main') }}
     needs: preflight-heavy
@@ -1230,10 +1481,11 @@ jobs:
         run: npm --prefix apps/web audit --omit=dev --audit-level=high
 
   aggregate-gate:
-    runs-on: ubuntu-latest
+    runs-on: e2-core
     timeout-minutes: 10
     if: always()
     needs:
+      - required-ci-secrets
       - changes
       - preflight-fast
       - preflight-heavy
@@ -1601,7 +1853,7 @@ jobs:
             .runtime-cache/e2e-live-smoke-result.json
 
   ci-final-gate:
-    runs-on: ubuntu-latest
+    runs-on: e2-core
     timeout-minutes: 10
     if: always()
     needs:
@@ -1662,7 +1914,7 @@ jobs:
           fi
 
           echo "final gate passed"
-  backend-lint:
+  backend-lint-hosted:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     needs: [preflight-fast, changes]
@@ -1698,7 +1950,59 @@ jobs:
       - name: Backend lint (ruff critical rules)
         run: uv run --with ruff ruff check apps scripts --select E9,F63,F7,F82
 
-  frontend-lint:
+  backend-lint-fallback:
+    runs-on: e2-core
+    timeout-minutes: 25
+    needs: [preflight-fast, changes, backend-lint-hosted]
+    if: ${{ (github.event_name != 'pull_request' || needs.changes.outputs.backend_changed == 'true') && always() && needs['backend-lint-hosted'].result != 'success' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Setup Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+
+      - name: Setup uv
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install uv
+
+      - name: Cache uv
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ~/.cache/uv
+          key: ${{ runner.os }}-uv-${{ hashFiles('uv.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-uv-
+
+      - name: Sync Python deps (locked)
+        run: uv sync --frozen --extra dev --extra e2e
+
+      - name: Placebo assertion guard (all tests)
+        run: python3 scripts/check_test_assertions.py
+
+      - name: Backend lint (ruff critical rules)
+        run: uv run --with ruff ruff check apps scripts --select E9,F63,F7,F82
+
+  backend-lint:
+    runs-on: e2-core
+    timeout-minutes: 3
+    needs: [backend-lint-hosted, backend-lint-fallback]
+    if: ${{ always() && (needs['backend-lint-hosted'].result == 'success' || needs['backend-lint-fallback'].result == 'success' || (needs['backend-lint-hosted'].result == 'skipped' && needs['backend-lint-fallback'].result == 'skipped')) }}
+    steps:
+      - name: Select backend-lint source
+        run: |
+          if [[ "${{ needs['backend-lint-hosted'].result }}" == "success" ]]; then
+            echo "backend-lint source: hosted"
+          elif [[ "${{ needs['backend-lint-fallback'].result }}" == "success" ]]; then
+            echo "backend-lint source: e2-core fallback"
+          else
+            echo "backend-lint source: skipped"
+          fi
+
+  frontend-lint-hosted:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     needs: [preflight-fast, changes]
@@ -1722,3 +2026,44 @@ jobs:
 
       - name: Placebo assertion guard (web tests)
         run: python3 scripts/check_test_assertions.py --path apps/web
+
+  frontend-lint-fallback:
+    runs-on: e2-core
+    timeout-minutes: 25
+    needs: [preflight-fast, changes, frontend-lint-hosted]
+    if: ${{ (github.event_name != 'pull_request' || needs.changes.outputs.web_changed == 'true') && always() && needs['frontend-lint-hosted'].result != 'success' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: apps/web/package-lock.json
+
+      - name: Install web deps
+        run: npm --prefix apps/web ci
+
+      - name: Frontend lint
+        run: npm --prefix apps/web run lint
+
+      - name: Placebo assertion guard (web tests)
+        run: python3 scripts/check_test_assertions.py --path apps/web
+
+  frontend-lint:
+    runs-on: e2-core
+    timeout-minutes: 3
+    needs: [frontend-lint-hosted, frontend-lint-fallback]
+    if: ${{ always() && (needs['frontend-lint-hosted'].result == 'success' || needs['frontend-lint-fallback'].result == 'success' || (needs['frontend-lint-hosted'].result == 'skipped' && needs['frontend-lint-fallback'].result == 'skipped')) }}
+    steps:
+      - name: Select frontend-lint source
+        run: |
+          if [[ "${{ needs['frontend-lint-hosted'].result }}" == "success" ]]; then
+            echo "frontend-lint source: hosted"
+          elif [[ "${{ needs['frontend-lint-fallback'].result }}" == "success" ]]; then
+            echo "frontend-lint source: e2-core fallback"
+          else
+            echo "frontend-lint source: skipped"
+          fi

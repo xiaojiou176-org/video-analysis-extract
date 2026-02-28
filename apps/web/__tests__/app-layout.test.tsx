@@ -44,5 +44,7 @@ describe("RootLayout", () => {
 
 		expect(html).toContain("API 状态：未知");
 		expect(html).toContain("跳至主内容");
+		expect(html).toContain('id="main-content"');
+		expect(html).toContain('tabindex="-1"');
 	});
 });

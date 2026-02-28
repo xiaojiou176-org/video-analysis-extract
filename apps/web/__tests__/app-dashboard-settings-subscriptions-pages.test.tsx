@@ -95,6 +95,9 @@ describe("dashboard/settings/subscriptions pages", () => {
 		);
 
 		const recentVideoTable = screen.getByRole("table");
+		expect(within(recentVideoTable).getByText("最近视频列表")).toBeInTheDocument();
+		expect(within(recentVideoTable).getByText("标题").tagName).toBe("TH");
+		expect(within(recentVideoTable).getByText("标题")).toHaveAttribute("scope", "col");
 		expect(within(recentVideoTable).getByText("YouTube")).toBeInTheDocument();
 		expect(within(recentVideoTable).getByText("Bilibili")).toBeInTheDocument();
 		expect(within(recentVideoTable).getByText("rss_generic")).toBeInTheDocument();
