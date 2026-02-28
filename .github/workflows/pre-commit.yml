@@ -8,9 +8,31 @@ permissions:
   contents: read
 
 jobs:
+  required-ci-secrets:
+    runs-on: e2-core
+    timeout-minutes: 5
+    env:
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+      RESEND_FROM_EMAIL: ${{ secrets.RESEND_FROM_EMAIL }}
+      YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+      LIVE_SMOKE_API_BASE_URL: ${{ secrets.LIVE_SMOKE_API_BASE_URL }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - name: Enforce required CI secrets/env vars
+        run: |
+          python3 scripts/check_required_ci_secrets.py \
+            --required GEMINI_API_KEY \
+            --required RESEND_API_KEY \
+            --required RESEND_FROM_EMAIL \
+            --required YOUTUBE_API_KEY \
+            --required LIVE_SMOKE_API_BASE_URL
+
   pre-commit-hosted:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    needs: [required-ci-secrets]
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -80,7 +102,7 @@ jobs:
   pre-commit-fallback:
     runs-on: e2-core
     timeout-minutes: 25
-    needs: [pre-commit-hosted]
+    needs: [required-ci-secrets, pre-commit-hosted]
     if: ${{ always() && needs['pre-commit-hosted'].result != 'success' }}
     steps:
       - name: Checkout
