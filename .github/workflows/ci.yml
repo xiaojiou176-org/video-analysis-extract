@@ -23,7 +23,6 @@ jobs:
   changes-hosted:
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    continue-on-error: true
     outputs:
       backend_changed: ${{ github.event_name == 'pull_request' && steps.filter.outputs.backend_changed || steps.non_pr_defaults.outputs.backend_changed }}
       web_changed: ${{ github.event_name == 'pull_request' && steps.filter.outputs.web_changed || steps.non_pr_defaults.outputs.web_changed }}
@@ -151,7 +150,6 @@ jobs:
   preflight-fast-hosted:
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    continue-on-error: true
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -1896,7 +1894,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     needs: [preflight-fast, changes]
-    continue-on-error: true
     if: ${{ github.event_name != 'pull_request' || needs.changes.outputs.backend_changed == 'true' }}
     steps:
       - name: Checkout
@@ -1985,7 +1982,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     needs: [preflight-fast, changes]
-    continue-on-error: true
     if: ${{ github.event_name != 'pull_request' || needs.changes.outputs.web_changed == 'true' }}
     steps:
       - name: Checkout
