@@ -1,0 +1,6 @@
+self-hosted-runner:
+  labels:
+    - e2-core
+    - spot
+    - ssd-fast
+    - burst
