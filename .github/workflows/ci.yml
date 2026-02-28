@@ -1541,7 +1541,7 @@ jobs:
           version: "0.6.17"
 
       - name: Cache uv
-        uses: actions/cache@ea74a4b26a48d8198d2d93d604969e1b7e8e4d9f # v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: |
             ~/.cache/uv
