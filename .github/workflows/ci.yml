@@ -156,10 +156,10 @@ jobs:
     needs: [changes-hosted, changes-fallback]
     if: ${{ always() && (needs['changes-hosted'].result == 'success' || needs['changes-fallback'].result == 'success') }}
     outputs:
-      backend_changed: ${{ needs['changes-hosted'].result == 'success' ? needs['changes-hosted'].outputs.backend_changed : needs['changes-fallback'].outputs.backend_changed }}
-      web_changed: ${{ needs['changes-hosted'].result == 'success' ? needs['changes-hosted'].outputs.web_changed : needs['changes-fallback'].outputs.web_changed }}
-      deps_changed: ${{ needs['changes-hosted'].result == 'success' ? needs['changes-hosted'].outputs.deps_changed : needs['changes-fallback'].outputs.deps_changed }}
-      migrations_changed: ${{ needs['changes-hosted'].result == 'success' ? needs['changes-hosted'].outputs.migrations_changed : needs['changes-fallback'].outputs.migrations_changed }}
+      backend_changed: ${{ (needs['changes-hosted'].result == 'success' && needs['changes-hosted'].outputs.backend_changed) || needs['changes-fallback'].outputs.backend_changed }}
+      web_changed: ${{ (needs['changes-hosted'].result == 'success' && needs['changes-hosted'].outputs.web_changed) || needs['changes-fallback'].outputs.web_changed }}
+      deps_changed: ${{ (needs['changes-hosted'].result == 'success' && needs['changes-hosted'].outputs.deps_changed) || needs['changes-fallback'].outputs.deps_changed }}
+      migrations_changed: ${{ (needs['changes-hosted'].result == 'success' && needs['changes-hosted'].outputs.migrations_changed) || needs['changes-fallback'].outputs.migrations_changed }}
     steps:
       - name: Select changes source
         run: |
