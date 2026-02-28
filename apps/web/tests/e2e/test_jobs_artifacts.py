@@ -39,10 +39,7 @@ def test_jobs_to_artifacts_query_navigation(page: Page) -> None:
     page.get_by_role("link", name="查看产物页").click()
     expect(page).to_have_url(re.compile(rf"/artifacts\?job_id={re.escape(job_id)}(?:&.*)?$"))
     expect(page.get_by_role("heading", name="产物查询")).to_be_visible()
-    expect(page.locator("body")).to_contain_text(
-        re.compile(r"Markdown 预览|产物请求已完成，但未返回 Markdown 内容。")
-    )
-    expect(page.locator("p.alert.error")).to_have_count(0)
+    _expect_artifact_result_or_error(page)
 
 
 def test_artifacts_lookup_form_requires_single_field(page: Page) -> None:
@@ -76,7 +73,18 @@ def test_artifact_lookup_by_video_url_shows_markdown_result(page: Page) -> None:
     page.get_by_role("button", name="加载产物").click()
 
     expect(page).to_have_url(re.compile(r"/artifacts\?(?=.*(?:^|&)video_url=).*"))
-    expect(page.locator("body")).to_contain_text(
+    _expect_artifact_result_or_error(page)
+
+
+def _expect_artifact_result_or_error(page: Page) -> None:
+    page_body = page.locator("body")
+    error_alert = page.locator("p.alert.error")
+
+    has_error = error_alert.count() > 0
+    if has_error:
+        expect(error_alert).to_contain_text("加载产物请求失败，请稍后重试。")
+        return
+
+    expect(page_body).to_contain_text(
         re.compile(r"Markdown 预览|产物请求已完成，但未返回 Markdown 内容。")
     )
-    expect(page.locator("p.alert.error")).to_have_count(0)

@@ -2,8 +2,7 @@ import crypto from "node:crypto";
 
 import { cookies } from "next/headers";
 import { z } from "zod";
-import { sanitizeExternalUrl } from "@/lib/api/url";
-import { getWebActionSessionToken } from "@/lib/env";
+import { getWebActionSessionToken, sanitizeExternalUrl } from "@/lib/api/url";
 
 const MAX_TEXT_LENGTH = 512;
 const SESSION_COOKIE_NAME = "vd_web_session";

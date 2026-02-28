@@ -287,6 +287,9 @@ jobs:
       - name: Sync Python deps (locked)
         run: uv sync --frozen --extra dev --extra e2e
 
+      - name: Install web deps
+        run: npm --prefix apps/web ci
+
       - name: Full quality gate (pre-push, includes mutation gate)
         run: |
             ./scripts/quality_gate.sh \
