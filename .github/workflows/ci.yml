@@ -579,7 +579,7 @@ jobs:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
         ports:
-          - 5432:5432
+          - 5432/tcp
         options: >-
           --health-cmd "pg_isready -U postgres -d video_analysis_ci"
           --health-interval 10s
@@ -597,15 +597,16 @@ jobs:
       - name: Migration smoke
         env:
           PGPASSWORD: postgres
+          PGPORT: ${{ job.services.postgres.ports['5432'] }}
         run: |
           for _ in $(seq 1 30); do
-            if pg_isready -h 127.0.0.1 -p 5432 -U postgres -d video_analysis_ci >/dev/null 2>&1; then
+            if pg_isready -h 127.0.0.1 -p "$PGPORT" -U postgres -d video_analysis_ci >/dev/null 2>&1; then
               break
             fi
             sleep 1
           done
           for migration in $(find infra/migrations -maxdepth 1 -type f -name '*.sql' | sort); do
-            psql "postgresql://postgres:postgres@127.0.0.1:5432/video_analysis_ci" -v ON_ERROR_STOP=1 -f "$migration"
+            psql "postgresql://postgres:postgres@127.0.0.1:${PGPORT}/video_analysis_ci" -v ON_ERROR_STOP=1 -f "$migration"
           done
 
   python-tests:
@@ -621,7 +622,7 @@ jobs:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
         ports:
-          - 5432:5432
+          - 5432/tcp
         options: >-
           --health-cmd "pg_isready -U postgres -d video_analysis_pytests"
           --health-interval 10s
@@ -655,7 +656,7 @@ jobs:
       - name: Pipeline smoke
         env:
           PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/apps/worker
-          DATABASE_URL: "postgresql+psycopg://postgres:postgres@127.0.0.1:5432/video_analysis_pytests"
+          DATABASE_URL: "postgresql+psycopg://postgres:postgres@127.0.0.1:${{ job.services.postgres.ports['5432'] }}/video_analysis_pytests"
           TEMPORAL_TARGET_HOST: 127.0.0.1:7233
           TEMPORAL_NAMESPACE: default
           TEMPORAL_TASK_QUEUE: video-analysis-worker
@@ -671,7 +672,7 @@ jobs:
       - name: Run Python tests
         env:
           PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/apps/worker
-          DATABASE_URL: "postgresql+psycopg://postgres:postgres@127.0.0.1:5432/video_analysis_pytests"
+          DATABASE_URL: "postgresql+psycopg://postgres:postgres@127.0.0.1:${{ job.services.postgres.ports['5432'] }}/video_analysis_pytests"
           TEMPORAL_TARGET_HOST: 127.0.0.1:7233
           TEMPORAL_NAMESPACE: default
           TEMPORAL_TASK_QUEUE: video-analysis-worker
@@ -766,7 +767,7 @@ jobs:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
         ports:
-          - 5432:5432
+          - 5432/tcp
         options: >-
           --health-cmd "pg_isready -U postgres -d video_analysis_api_smoke"
           --health-interval 10s
@@ -805,20 +806,21 @@ jobs:
       - name: Run migrations for API smoke DB
         env:
           PGPASSWORD: postgres
+          PGPORT: ${{ job.services.postgres.ports['5432'] }}
         run: |
           for _ in $(seq 1 30); do
-            if pg_isready -h 127.0.0.1 -p 5432 -U postgres -d video_analysis_api_smoke >/dev/null 2>&1; then
+            if pg_isready -h 127.0.0.1 -p "$PGPORT" -U postgres -d video_analysis_api_smoke >/dev/null 2>&1; then
               break
             fi
             sleep 1
           done
           for migration in $(find infra/migrations -maxdepth 1 -type f -name '*.sql' | sort); do
-            psql "postgresql://postgres:postgres@127.0.0.1:5432/video_analysis_api_smoke" -v ON_ERROR_STOP=1 -f "$migration"
+            psql "postgresql://postgres:postgres@127.0.0.1:${PGPORT}/video_analysis_api_smoke" -v ON_ERROR_STOP=1 -f "$migration"
           done
 
       - name: Real API smoke (HTTP + DB path, no provider secret)
         env:
-          DATABASE_URL: "postgresql+psycopg://postgres:postgres@127.0.0.1:5432/video_analysis_api_smoke"
+          DATABASE_URL: "postgresql+psycopg://postgres:postgres@127.0.0.1:${{ job.services.postgres.ports['5432'] }}/video_analysis_api_smoke"
           TEMPORAL_TARGET_HOST: 127.0.0.1:7233
           TEMPORAL_NAMESPACE: default
           TEMPORAL_TASK_QUEUE: video-analysis-worker
@@ -1099,7 +1101,7 @@ jobs:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
         ports:
-          - 5432:5432
+          - 5432/tcp
         options: >-
           --health-cmd "pg_isready -U postgres -d video_analysis_web_e2e"
           --health-interval 10s
@@ -1165,15 +1167,16 @@ jobs:
       - name: Run migrations for web e2e DB
         env:
           PGPASSWORD: postgres
+          PGPORT: ${{ job.services.postgres.ports['5432'] }}
         run: |
           for _ in $(seq 1 30); do
-            if pg_isready -h 127.0.0.1 -p 5432 -U postgres -d video_analysis_web_e2e >/dev/null 2>&1; then
+            if pg_isready -h 127.0.0.1 -p "$PGPORT" -U postgres -d video_analysis_web_e2e >/dev/null 2>&1; then
               break
             fi
             sleep 1
           done
           for migration in $(find infra/migrations -maxdepth 1 -type f -name '*.sql' | sort); do
-            psql "postgresql://postgres:postgres@127.0.0.1:5432/video_analysis_web_e2e" -v ON_ERROR_STOP=1 -f "$migration"
+            psql "postgresql://postgres:postgres@127.0.0.1:${PGPORT}/video_analysis_web_e2e" -v ON_ERROR_STOP=1 -f "$migration"
           done
 
       - name: Start Temporal dev server for web e2e (127.0.0.1:7233)
@@ -1206,7 +1209,7 @@ jobs:
 
       - name: Start real API for web e2e (127.0.0.1:18080)
         env:
-          DATABASE_URL: "postgresql+psycopg://postgres:postgres@127.0.0.1:5432/video_analysis_web_e2e"
+          DATABASE_URL: "postgresql+psycopg://postgres:postgres@127.0.0.1:${{ job.services.postgres.ports['5432'] }}/video_analysis_web_e2e"
           TEMPORAL_TARGET_HOST: 127.0.0.1:7233
           TEMPORAL_NAMESPACE: default
           TEMPORAL_TASK_QUEUE: video-analysis-worker
@@ -1229,7 +1232,7 @@ jobs:
 
       - name: Start worker for web e2e (same DB/Temporal/queue)
         env:
-          DATABASE_URL: "postgresql+psycopg://postgres:postgres@127.0.0.1:5432/video_analysis_web_e2e"
+          DATABASE_URL: "postgresql+psycopg://postgres:postgres@127.0.0.1:${{ job.services.postgres.ports['5432'] }}/video_analysis_web_e2e"
           TEMPORAL_TARGET_HOST: 127.0.0.1:7233
           TEMPORAL_NAMESPACE: default
           TEMPORAL_TASK_QUEUE: video-analysis-worker
