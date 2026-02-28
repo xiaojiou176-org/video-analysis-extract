@@ -294,7 +294,11 @@ def page(browser: Browser, web_base_url: str, request: pytest.FixtureRequest) ->
     if trace_mode != "off":
         context.tracing.start(screenshots=True, snapshots=True, sources=False)
     page = context.new_page()
-    page.set_default_timeout(20_000)
+    if browser.browser_type.name == "webkit":
+        page.set_default_timeout(30_000)
+        page.set_default_navigation_timeout(45_000)
+    else:
+        page.set_default_timeout(20_000)
     yield page
     call_report = getattr(request.node, "rep_call", None)
     failed = call_report is not None and call_report.failed
