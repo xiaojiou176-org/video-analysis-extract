@@ -11,8 +11,10 @@ permissions:
   contents: read
 
 jobs:
-  upstream-lock-validation:
-    runs-on: e2-core
+  upstream-lock-validation-hosted:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    continue-on-error: true
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -24,3 +26,34 @@ jobs:
 
       - name: Validate UPSTREAM.lock files
         run: bash scripts/vendor/validate_upstream_lock.sh --root .
+
+  upstream-lock-validation-fallback:
+    runs-on: e2-core
+    timeout-minutes: 12
+    needs: [upstream-lock-validation-hosted]
+    if: ${{ always() && needs['upstream-lock-validation-hosted'].result != 'success' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Bash syntax check
+        run: |
+          bash -n scripts/vendor/upstream_sync.sh
+          bash -n scripts/vendor/validate_upstream_lock.sh
+
+      - name: Validate UPSTREAM.lock files
+        run: bash scripts/vendor/validate_upstream_lock.sh --root .
+
+  upstream-lock-validation:
+    runs-on: e2-core
+    timeout-minutes: 3
+    needs: [upstream-lock-validation-hosted, upstream-lock-validation-fallback]
+    if: ${{ always() && (needs['upstream-lock-validation-hosted'].result == 'success' || needs['upstream-lock-validation-fallback'].result == 'success') }}
+    steps:
+      - name: Select upstream-lock-validation source
+        run: |
+          if [[ "${{ needs['upstream-lock-validation-hosted'].result }}" == "success" ]]; then
+            echo "upstream-lock-validation source: hosted"
+          else
+            echo "upstream-lock-validation source: e2-core fallback"
+          fi
