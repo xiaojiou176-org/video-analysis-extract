@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   required-ci-secrets:
-    runs-on: e2-core
+    runs-on: ubuntu-latest
     timeout-minutes: 5
     env:
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
