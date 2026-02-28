@@ -62,9 +62,21 @@ def main() -> int:
 
     # 4) Aggregate gate must require critical jobs.
     aggregate = blocks.get("aggregate-gate", "")
+    if "- required-ci-secrets" not in aggregate:
+        failures.append("aggregate-gate: missing needs dependency `required-ci-secrets`")
     for required_job in ("quality-gate-pre-push", "api-real-smoke", "web-e2e", "python-tests"):
         if f"- {required_job}" not in aggregate:
             failures.append(f"aggregate-gate: missing needs dependency `{required_job}`")
+
+    # 4.1) CI secrets hard gate must exist and explicitly enforce GEMINI_API_KEY.
+    required_ci_secrets = blocks.get("required-ci-secrets", "")
+    if not required_ci_secrets:
+        failures.append("required-ci-secrets: missing job")
+    else:
+        if "GEMINI_API_KEY" not in required_ci_secrets:
+            failures.append("required-ci-secrets: missing GEMINI_API_KEY enforcement")
+        if "check_required_ci_secrets.py" not in required_ci_secrets:
+            failures.append("required-ci-secrets: missing required secret validation script")
 
     # 5) Preflight must include focused-test guard steps.
     required_preflight_markers = {
