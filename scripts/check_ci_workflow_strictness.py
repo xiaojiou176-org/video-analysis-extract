@@ -66,16 +66,25 @@ def main() -> int:
         if f"- {required_job}" not in aggregate:
             failures.append(f"aggregate-gate: missing needs dependency `{required_job}`")
 
-    # 5) Preflight must include focused-test guard step.
+    # 5) Preflight must include focused-test guard steps.
+    required_preflight_markers = {
+        "Test focus/todo marker guard": "test focus/todo marker guard step",
+        "E2E strictness guard": "e2e strictness guard step",
+        "Mutation scope guard": "mutation scope guard step",
+        "Mutation test selection guard": "mutation test selection guard step",
+    }
     preflight_fast = blocks.get("preflight-fast", "")
-    if "Test focus/todo marker guard" not in preflight_fast:
-        failures.append("preflight-fast: missing test focus/todo marker guard step")
-    if "E2E strictness guard" not in preflight_fast:
-        failures.append("preflight-fast: missing e2e strictness guard step")
-    if "Mutation scope guard" not in preflight_fast:
-        failures.append("preflight-fast: missing mutation scope guard step")
-    if "Mutation test selection guard" not in preflight_fast:
-        failures.append("preflight-fast: missing mutation test selection guard step")
+    missing_in_preflight = [
+        description for marker, description in required_preflight_markers.items() if marker not in preflight_fast
+    ]
+    if missing_in_preflight:
+        # Fallback-aware structure: `preflight-fast` can be a resolver while hosted/fallback
+        # execute the actual checks. In that case, both execution paths must contain markers.
+        for job_name in ("preflight-fast-hosted", "preflight-fast-fallback"):
+            block = blocks.get(job_name, "")
+            for marker, description in required_preflight_markers.items():
+                if marker not in block:
+                    failures.append(f"{job_name}: missing {description}")
 
     if failures:
         print("ci workflow strictness gate failed:")
