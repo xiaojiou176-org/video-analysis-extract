@@ -1530,6 +1530,29 @@ jobs:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
+      - name: Setup Python
+        uses: actions/setup-python@42375524e23c412d93fb67b49958b491fce71c38 # v5
+        with:
+          python-version: "3.11"
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.6.17"
+
+      - name: Cache uv
+        uses: actions/cache@ea74a4b26a48d8198d2d93d604969e1b7e8e4d9f # v4
+        with:
+          path: |
+            ~/.cache/uv
+            .venv
+          key: ${{ runner.os }}-uv-live-smoke-${{ hashFiles('uv.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-uv-live-smoke-
+
+      - name: Sync Python deps (locked)
+        run: uv sync --frozen --extra dev --extra e2e
+
       - name: Validate required live smoke secrets
         env:
           HAS_GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY != '' }}
