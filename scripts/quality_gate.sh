@@ -1421,6 +1421,8 @@ run_pre_push_mode() {
 
   if [[ "$STRICT_FULL_RUN" == "1" || "$CHANGED_DETECTION_RELIABLE" != "1" ]]; then
     mutation_relevant_changed="true"
+  elif is_true "$EFFECTIVE_BACKEND_CHANGED"; then
+    mutation_relevant_changed="true"
   elif match_changed_files '^(apps/(api|worker)/|pyproject\.toml$|uv\.lock$)'; then
     mutation_relevant_changed="true"
   fi

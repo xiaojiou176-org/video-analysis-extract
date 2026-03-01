@@ -35,7 +35,7 @@ def _check_global_rules(
 ) -> None:
     # Skip reusable workflows (workflow_call).
     is_reusable = "on:\n  workflow_call:" in text or "on:\n    workflow_call:" in text
-    
+
     # Any runnable job must declare timeout-minutes.
     # Jobs that delegate to reusable workflows (uses:) have timeout in the reusable workflow.
     for job, block in blocks.items():
@@ -129,6 +129,10 @@ def _check_ci_specific_rules(blocks: dict[str, str], failures: list[str]) -> Non
         if "--ci-dedupe 1" not in qg_block:
             failures.append(
                 "ci.yml: quality-gate-pre-push: must set --ci-dedupe 1 to avoid duplicate heavy checks already enforced by standalone CI jobs"
+            )
+        if "--skip-mutation 1" not in qg_block:
+            failures.append(
+                "ci.yml: quality-gate-pre-push: must set --skip-mutation 1 because mutation-testing runs as a dedicated standalone CI job"
             )
         if "--mutation-min-score 0.62" not in qg_block:
             failures.append(

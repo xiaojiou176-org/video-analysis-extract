@@ -300,13 +300,14 @@ jobs:
       - name: Install web deps
         run: npm --prefix apps/web ci
 
-      - name: Full quality gate (pre-push, includes mutation gate)
+      - name: Full quality gate (pre-push, mutation handled by dedicated job)
         run: |
             ./scripts/quality_gate.sh \
               --mode pre-push \
               --profile ci \
               --profile live-smoke \
               --ci-dedupe 1 \
+              --skip-mutation 1 \
               --changed-backend "${{ needs.changes.outputs.backend_changed }}" \
               --changed-web "${{ needs.changes.outputs.web_changed }}" \
               --changed-deps "${{ needs.changes.outputs.deps_changed }}" \
@@ -1557,6 +1558,7 @@ jobs:
           required_web_test_build=1
           required_web_e2e=1
           required_deps_scan=1
+          required_profile_governance="$require_main_schedule_release_only"
           if [[ "$is_pr" -eq 1 ]]; then
             [[ "$migrations_changed" == "true" ]] && required_db_migration=1 || required_db_migration=0
             [[ "$backend_changed" == "true" ]] && required_backend_group=1 || required_backend_group=0
@@ -1588,11 +1590,15 @@ jobs:
           profile_governance_result="${results[profile_governance]}"
           quality_gate_result="${results[quality_gate_pre_push]}"
           external_playwright_result="${results[external_playwright_smoke]}"
-          echo "profile_governance=$profile_governance_result"
+          echo "profile_governance=$profile_governance_result required=$required_profile_governance"
           echo "quality_gate_pre_push=$quality_gate_result"
           echo "external_playwright_smoke=$external_playwright_result"
 
-          if [[ "$profile_governance_result" != "success" ]]; then
+          if [[ "$required_profile_governance" == "1" ]]; then
+            if [[ "$profile_governance_result" != "success" ]]; then
+              failed=1
+            fi
+          elif [[ "$profile_governance_result" != "success" && "$profile_governance_result" != "skipped" ]]; then
             failed=1
           fi
           if [[ "$quality_gate_result" != "success" && "$quality_gate_result" != "skipped" ]]; then
