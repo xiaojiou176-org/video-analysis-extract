@@ -1988,6 +1988,10 @@ jobs:
           fi
 
       - name: Run live smoke
+        env:
+          SQLITE_PATH: /tmp/video-digestor-live-smoke-${{ github.run_id }}-${{ github.run_attempt }}.db
+          PIPELINE_WORKSPACE_DIR: /tmp/video-digestor-live-smoke-workspace-${{ github.run_id }}-${{ github.run_attempt }}
+          PIPELINE_ARTIFACT_ROOT: /tmp/video-digestor-live-smoke-artifacts-${{ github.run_id }}-${{ github.run_attempt }}
         run: |
           scripts/e2e_live_smoke.sh \
             --api-base-url "${{ secrets.LIVE_SMOKE_API_BASE_URL }}" \
