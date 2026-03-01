@@ -36,7 +36,13 @@ def test_jobs_to_artifacts_query_navigation(page: Page) -> None:
     expect(page).to_have_url(re.compile(rf"/jobs\?job_id={re.escape(job_id)}"))
     expect(page.get_by_role("heading", name="任务查询")).to_be_visible()
 
-    page.get_by_role("link", name="查看产物页").click()
+    artifacts_link = page.get_by_role("link", name="查看产物页")
+    expect(artifacts_link).to_have_attribute(
+        "href", re.compile(rf"/artifacts\?job_id={re.escape(job_id)}")
+    )
+    artifacts_href = artifacts_link.get_attribute("href")
+    assert artifacts_href is not None
+    page.goto(artifacts_href, wait_until="domcontentloaded")
     expect(page).to_have_url(re.compile(rf"/artifacts\?job_id={re.escape(job_id)}(?:&.*)?$"))
     expect(page.get_by_role("heading", name="产物查询")).to_be_visible()
     _expect_artifact_result_or_error(page)

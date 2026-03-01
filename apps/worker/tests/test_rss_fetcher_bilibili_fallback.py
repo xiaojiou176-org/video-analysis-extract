@@ -69,9 +69,9 @@ def test_fetch_one_falls_back_to_default_route_when_embed_zero_hits_risk_control
     entries = asyncio.run(run())
     assert len(entries) == 1
     assert entries[0]["title"] == "default-ok"
-    route_requests = [url for url in requested if "/bilibili/user/video/" in url]
-    assert route_requests and route_requests[0].endswith("embed=0")
-    assert any("embed=0" not in url for url in route_requests[1:])
+    target_route_requests = [url for url in requested if "/bilibili/user/video/12345" in url]
+    assert target_route_requests and target_route_requests[0].endswith("embed=0")
+    assert any("embed=0" not in url for url in target_route_requests[1:])
 
 
 def test_fetch_one_falls_back_to_public_base_url_when_private_base_fails() -> None:

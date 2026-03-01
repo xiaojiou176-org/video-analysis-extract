@@ -61,7 +61,7 @@ def _fail_or_skip_for_env(requirement: str, detail: str) -> None:
 def integration_api(
     monkeypatch: pytest.MonkeyPatch, tmp_path: pytest.TempPathFactory
 ) -> Iterator[IntegrationHarness]:
-    base_url = "postgresql+psycopg://postgres:postgres@127.0.0.1:5432/postgres"
+    base_url = os.getenv("DATABASE_URL", "postgresql+psycopg://postgres:postgres@127.0.0.1:5432/postgres")
     parsed_base = make_url(base_url)
     if parsed_base.drivername != "postgresql+psycopg":
         _fail_or_skip_for_env(
