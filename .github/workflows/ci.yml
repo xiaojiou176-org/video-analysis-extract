@@ -619,13 +619,8 @@ jobs:
             if sudo apt-get update && sudo apt-get install -y postgresql-client; then
               exit 0
             fi
-            if sudo fuser /var/lib/apt/lists/lock >/dev/null 2>&1 || sudo fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 || sudo fuser /var/cache/apt/archives/lock >/dev/null 2>&1; then
-              echo "apt lock detected, retrying ($attempt/20)..."
-              sleep 5
-              continue
-            fi
-            echo "apt install failed without lock contention"
-            exit 1
+            echo "apt install attempt ${attempt}/20 failed, retrying..."
+            sleep 5
           done
           echo "apt install failed after retries"
           exit 1
@@ -840,13 +835,8 @@ jobs:
             if sudo apt-get update && sudo apt-get install -y postgresql-client; then
               exit 0
             fi
-            if sudo fuser /var/lib/apt/lists/lock >/dev/null 2>&1 || sudo fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 || sudo fuser /var/cache/apt/archives/lock >/dev/null 2>&1; then
-              echo "apt lock detected, retrying ($attempt/20)..."
-              sleep 5
-              continue
-            fi
-            echo "apt install failed without lock contention"
-            exit 1
+            echo "apt install attempt ${attempt}/20 failed, retrying..."
+            sleep 5
           done
           echo "apt install failed after retries"
           exit 1
@@ -1216,13 +1206,8 @@ jobs:
             if sudo apt-get update && sudo apt-get install -y postgresql-client; then
               exit 0
             fi
-            if sudo fuser /var/lib/apt/lists/lock >/dev/null 2>&1 || sudo fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 || sudo fuser /var/cache/apt/archives/lock >/dev/null 2>&1; then
-              echo "apt lock detected, retrying ($attempt/20)..."
-              sleep 5
-              continue
-            fi
-            echo "apt install failed without lock contention"
-            exit 1
+            echo "apt install attempt ${attempt}/20 failed, retrying..."
+            sleep 5
           done
           echo "apt install failed after retries"
           exit 1
@@ -1988,13 +1973,8 @@ jobs:
             if sudo apt-get update && sudo apt-get install -y postgresql-client; then
               exit 0
             fi
-            if sudo fuser /var/lib/apt/lists/lock >/dev/null 2>&1 || sudo fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 || sudo fuser /var/cache/apt/archives/lock >/dev/null 2>&1; then
-              echo "apt lock detected, retrying ($attempt/20)..."
-              sleep 5
-              continue
-            fi
-            echo "apt install failed without lock contention"
-            exit 1
+            echo "apt install attempt ${attempt}/20 failed, retrying..."
+            sleep 5
           done
           echo "apt install failed after retries"
           exit 1
