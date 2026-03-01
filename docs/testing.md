@@ -35,6 +35,13 @@
 - `aggregate-gate`：汇总主链路结果；`api-real-smoke` / `web-e2e` 不允许 `skipped`，`live-smoke` 由 `ci-final-gate` 按触发源做强制校验。
 - `ci-final-gate`：最终门禁；`main` / `release` / nightly 要求 `live-smoke=success`，PR 允许 `live-smoke=skipped`。
 
+## Runner 标签策略（维护约定）
+
+- `e2-core`：通用池标签。默认 CI 作业落到该池，保证可用性与兼容性。
+- `spot-safe`：弹性池标签。用于可中断、可重试、对抢占容忍的作业，优先吃 Spot 扩容容量。
+- 路由建议：重任务若可容忍抢占，优先使用 `runs-on: [self-hosted, e2-core, spot-safe]`；关键不可中断链路继续使用 `runs-on: e2-core`。
+- 禁止硬编码 runner 实例名（例如 `github-runner-spot-02`）；统一用标签路由，避免扩缩容后工作流失效。
+
 ## D1~D5 决议与执行命令
 
 - D1 `main` / `release` / nightly 强制 live-smoke（不得 skip）：

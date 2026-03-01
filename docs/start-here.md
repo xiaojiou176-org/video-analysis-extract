@@ -170,7 +170,7 @@ curl -sS -X POST http://127.0.0.1:8000/api/v1/ingest/poll -H 'Content-Type: appl
 
 - 这里的一键 smoke 指本地联调烟测，不等同于 CI 的 live-smoke。
 - CI `live-smoke` 仅在 `main` push / nightly schedule 强制执行，且要求外部 provider secrets 完整（详见 `docs/testing.md`）。
-- PR 阶段仅有条件触发真实 LLM 烟测（`pr-llm-real-smoke`）；`web-e2e` 默认仍是 mock API 路径。
+- PR 阶段仅有条件触发真实 LLM 烟测（`pr-llm-real-smoke`）；`web-e2e` 在 CI 主路径默认走 real API，mock API 仅用于本地调试。
 
 可选阅读栈（Miniflux + Nextflux）：
 

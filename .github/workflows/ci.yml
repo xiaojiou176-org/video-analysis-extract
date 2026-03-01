@@ -1941,6 +1941,20 @@ jobs:
       RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
       RESEND_FROM_EMAIL: ${{ secrets.RESEND_FROM_EMAIL }}
       YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_DB: video_analysis_live_smoke
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432/tcp
+        options: >-
+          --health-cmd "pg_isready -U postgres -d video_analysis_live_smoke"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -1967,6 +1981,72 @@ jobs:
 
       - name: Sync Python deps (locked)
         run: uv sync --frozen --extra dev --extra e2e
+
+      - name: Install PostgreSQL client
+        run: |
+          for attempt in $(seq 1 20); do
+            if sudo apt-get update && sudo apt-get install -y postgresql-client; then
+              exit 0
+            fi
+            if sudo fuser /var/lib/apt/lists/lock >/dev/null 2>&1 || sudo fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 || sudo fuser /var/cache/apt/archives/lock >/dev/null 2>&1; then
+              echo "apt lock detected, retrying ($attempt/20)..."
+              sleep 5
+              continue
+            fi
+            echo "apt install failed without lock contention"
+            exit 1
+          done
+          echo "apt install failed after retries"
+          exit 1
+
+      - name: Install Temporal CLI
+        run: |
+          curl -sSfL https://temporal.download/cli.sh | sh
+          echo "$HOME/.temporalio/bin" >> "$GITHUB_PATH"
+
+      - name: Run migrations for live smoke DB
+        env:
+          PGPASSWORD: postgres
+          PGPORT: ${{ job.services.postgres.ports['5432'] }}
+        run: |
+          for _ in $(seq 1 30); do
+            if pg_isready -h 127.0.0.1 -p "$PGPORT" -U postgres -d video_analysis_live_smoke >/dev/null 2>&1; then
+              break
+            fi
+            sleep 1
+          done
+          for migration in $(find infra/migrations -maxdepth 1 -type f -name '*.sql' | sort); do
+            psql "postgresql://postgres:postgres@127.0.0.1:${PGPORT}/video_analysis_live_smoke" -v ON_ERROR_STOP=1 -f "$migration"
+          done
+
+      - name: Start Temporal dev server for live smoke (127.0.0.1:7233)
+        run: |
+          mkdir -p .runtime-cache
+          temporal server start-dev --ip 127.0.0.1 --port 7233 > .runtime-cache/live-smoke-temporal.log 2>&1 &
+          echo "LIVE_SMOKE_TEMPORAL_PID=$!" >> "$GITHUB_ENV"
+
+          python - <<'PY'
+          import socket
+          import sys
+          import time
+
+          port = 7233
+          for _ in range(60):
+              sock = socket.socket()
+              sock.settimeout(1)
+              try:
+                  sock.connect(("127.0.0.1", port))
+                  sock.close()
+                  print(f"temporal live-smoke ready on 127.0.0.1:{port}")
+                  sys.exit(0)
+              except OSError:
+                  time.sleep(1)
+              finally:
+                  sock.close()
+
+          print(f"temporal live-smoke failed to become ready on 127.0.0.1:{port}", file=sys.stderr)
+          sys.exit(1)
+          PY
 
       - name: Validate required live smoke secrets
         env:
@@ -2014,6 +2094,14 @@ jobs:
           if-no-files-found: warn
           path: |
             .runtime-cache/e2e-live-smoke-result.json
+            .runtime-cache/live-smoke-temporal.log
+
+      - name: Stop live smoke Temporal dev server
+        if: always()
+        run: |
+          if [[ -n "${LIVE_SMOKE_TEMPORAL_PID:-}" ]]; then
+            kill "${LIVE_SMOKE_TEMPORAL_PID}" >/dev/null 2>&1 || true
+          fi
 
   ci-final-gate:
     runs-on: e2-core

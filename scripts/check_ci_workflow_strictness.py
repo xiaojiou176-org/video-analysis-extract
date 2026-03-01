@@ -170,6 +170,22 @@ def _check_ci_specific_rules(blocks: dict[str, str], failures: list[str]) -> Non
                 if marker not in block:
                     failures.append(f"ci.yml: {job_name}: missing {description}")
 
+    # live-smoke must run on a fully provisioned local stack and enforce secrets.
+    live_smoke = blocks.get("live-smoke", "")
+    if not live_smoke:
+        failures.append("ci.yml: live-smoke: missing job")
+    else:
+        required_live_smoke_markers = {
+            "services:\n      postgres:": "postgres service",
+            "Run migrations for live smoke DB": "migration step",
+            "Start Temporal dev server for live smoke": "temporal startup step",
+            '--require-secrets "1"': "hard secrets requirement",
+            "Validate required live smoke secrets": "explicit secret validation step",
+        }
+        for marker, description in required_live_smoke_markers.items():
+            if marker not in live_smoke:
+                failures.append(f"ci.yml: live-smoke: missing {description}")
+
 
 def main() -> int:
     if not WORKFLOW_PATH.is_file():

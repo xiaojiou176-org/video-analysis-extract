@@ -226,7 +226,7 @@ uv run --with pytest --with playwright pytest apps/web/tests/e2e -q
 
 测试与门禁口径更新（2026-02）：
 
-- 远程 CI 成本治理：触发或重跑 GitHub Actions 前，必须先本地跑通 `./scripts/quality_gate.sh --mode pre-push --heartbeat-seconds 20 --mutation-min-score 0.60 --profile ci --profile live-smoke --skip-mutation 1`。
+- 远程 CI 成本治理：触发或重跑 GitHub Actions 前，必须先本地跑通 `./scripts/quality_gate.sh --mode pre-push --heartbeat-seconds 20 --mutation-min-score 0.62 --mutation-min-effective-ratio 0.25 --mutation-max-no-tests-ratio 0.75 --profile ci --profile live-smoke --ci-dedupe 1 --strict-full-run 1`。
 - 远程失败后必须先本地复现与修复，再触发下一次远程运行；禁止连续重跑碰运气。
 - CI 预检拆分为 `preflight-fast` + `preflight-heavy`，多数 job 先依赖 fast 以减少起跑阻塞，最终由 aggregate gate 同时约束两者成功。
 - `quality-gate-pre-push` 在 CI 全事件（PR/push/schedule）执行并透传 `--changed-*` 标记，作为远端最重门禁（含 mutation）；独立 lint/unit/coverage 作业提供并行交叉验证。
@@ -278,7 +278,7 @@ pre-commit run --all-files
 
 测试口径补充（与 CI 对齐）：
 
-- `web-e2e` 默认是 Playwright + mock API，不是“真实外部网站 smoke”。
+- `web-e2e` 在 CI 主路径是 Playwright + real API（不是 mock API，也不是“真实外部网站 smoke”）。
 - `external-playwright-smoke` 是独立作业，会在 CI 里真实访问外部站点（当前为 `https://example.com`），用于验证浏览器外网可达性。
   默认参数：`browser=chromium`、`expect_text="Example Domain"`、`timeout_ms=45000`、`retries=2`。
 - `pr-llm-real-smoke` 只在 PR 场景按条件运行：同仓 PR 且配置了 `GEMINI_API_KEY`；否则允许 `skipped` 不阻塞 aggregate gate。
