@@ -1327,7 +1327,21 @@ jobs:
           exit 1
 
       - name: Install Playwright browser (${{ matrix.browser }})
-        run: uv run --with playwright python -m playwright install --with-deps ${{ matrix.browser }}
+        run: |
+          for attempt in $(seq 1 8); do
+            if uv run --with playwright python -m playwright install --with-deps ${{ matrix.browser }}; then
+              exit 0
+            fi
+            if sudo fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 || sudo fuser /var/lib/apt/lists/lock >/dev/null 2>&1 || sudo fuser /var/cache/apt/archives/lock >/dev/null 2>&1; then
+              echo "playwright dependency install hit apt/dpkg lock, retrying (${attempt}/8)..."
+              sleep 8
+              continue
+            fi
+            echo "playwright install failed without apt lock contention"
+            exit 1
+          done
+          echo "playwright install failed after retries"
+          exit 1
 
       - name: Web E2E gate (no silent skip)
         run: |
@@ -1454,7 +1468,21 @@ jobs:
         run: uv sync --frozen --extra dev --extra e2e
 
       - name: Install Playwright browser (chromium)
-        run: uv run --with playwright python -m playwright install --with-deps chromium
+        run: |
+          for attempt in $(seq 1 8); do
+            if uv run --with playwright python -m playwright install --with-deps chromium; then
+              exit 0
+            fi
+            if sudo fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 || sudo fuser /var/lib/apt/lists/lock >/dev/null 2>&1 || sudo fuser /var/cache/apt/archives/lock >/dev/null 2>&1; then
+              echo "playwright dependency install hit apt/dpkg lock, retrying (${attempt}/8)..."
+              sleep 8
+              continue
+            fi
+            echo "playwright install failed without apt lock contention"
+            exit 1
+          done
+          echo "playwright install failed after retries"
+          exit 1
 
       - name: Real external site Playwright smoke
         run: |
@@ -1802,7 +1830,21 @@ jobs:
         run: npm --prefix apps/web ci
 
       - name: Install Playwright browser (${{ matrix.browser }})
-        run: uv run --with playwright python -m playwright install --with-deps ${{ matrix.browser }}
+        run: |
+          for attempt in $(seq 1 8); do
+            if uv run --with playwright python -m playwright install --with-deps ${{ matrix.browser }}; then
+              exit 0
+            fi
+            if sudo fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 || sudo fuser /var/lib/apt/lists/lock >/dev/null 2>&1 || sudo fuser /var/cache/apt/archives/lock >/dev/null 2>&1; then
+              echo "playwright dependency install hit apt/dpkg lock, retrying (${attempt}/8)..."
+              sleep 8
+              continue
+            fi
+            echo "playwright install failed without apt lock contention"
+            exit 1
+          done
+          echo "playwright install failed after retries"
+          exit 1
 
       - name: Nightly flaky web E2E subset (repeat x2)
         run: |
