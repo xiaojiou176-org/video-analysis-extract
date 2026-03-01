@@ -2,7 +2,7 @@
 """Minimal CI docs parity check for testing governance keywords.
 
 Checks whether docs/testing.md contains key strategy signals agreed in Phase0:
-- PR-enforced live-smoke
+- main/release/nightly-enforced live-smoke and PR real-smoke strategy
 - mutation baseline >=0.60 (current policy uses 0.62)
 - web coverage 85/95
 - no skip for key gates
@@ -37,11 +37,14 @@ def main() -> int:
     rules = [
         {
             "id": "D1",
-            "name": "PR强制live-smoke",
+            "name": "live-smoke与PR真实烟测策略",
             "mode": "any",
             "patterns": [
+                r"(?:main|release|nightly|schedule).{0,120}(?:强制|必须|必跑).{0,60}live[-_ ]?smoke",
+                r"live[-_ ]?smoke.{0,120}(?:main|release|nightly|schedule).{0,80}(?:强制|必须|必跑)",
                 r"(?:PR|pull[_ -]?request).{0,120}(?:强制|必须|必跑).{0,60}live[-_ ]?smoke",
                 r"live[-_ ]?smoke.{0,120}(?:PR|pull[_ -]?request).{0,60}(?:强制|必须|必跑)",
+                r"(?:PR|pull[_ -]?request).{0,120}(?:pr[-_ ]?llm[-_ ]?real[-_ ]?smoke|真实.{0,10}烟测|real.{0,10}smoke)",
                 r"live[-_ ]?smoke.{0,120}(?:not\s+skipped|不得\s*skipped|不允许\s*skipped)",
             ],
         },
