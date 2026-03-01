@@ -89,7 +89,9 @@ def _check_global_rules(
         fallback_block = blocks.get(fallback_name, "")
         resolver_block = blocks.get(resolver_name, "")
 
-        if "continue-on-error: true" not in hosted_block:
+        # Jobs that call reusable workflows via `uses:` cannot set
+        # `continue-on-error` at the caller level.
+        if "uses:" not in hosted_block and "continue-on-error: true" not in hosted_block:
             failures.append(
                 f"{workflow_path}: {job_name}: hosted jobs must set continue-on-error: true to allow fallback takeover"
             )
