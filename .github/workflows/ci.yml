@@ -1989,6 +1989,10 @@ jobs:
 
       - name: Run live smoke
         env:
+          DATABASE_URL: "postgresql+psycopg://postgres:postgres@127.0.0.1:${{ job.services.postgres.ports['5432'] }}/video_analysis_live_smoke"
+          TEMPORAL_TARGET_HOST: 127.0.0.1:7233
+          TEMPORAL_NAMESPACE: default
+          TEMPORAL_TASK_QUEUE: video-analysis-worker
           SQLITE_PATH: /tmp/video-digestor-live-smoke-${{ github.run_id }}-${{ github.run_attempt }}.db
           PIPELINE_WORKSPACE_DIR: /tmp/video-digestor-live-smoke-workspace-${{ github.run_id }}-${{ github.run_attempt }}
           PIPELINE_ARTIFACT_ROOT: /tmp/video-digestor-live-smoke-artifacts-${{ github.run_id }}-${{ github.run_attempt }}
