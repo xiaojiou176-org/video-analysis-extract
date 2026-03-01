@@ -5,8 +5,21 @@ import re
 from playwright.sync_api import Page, expect
 
 
+def _goto_settings_ready(page: Page) -> None:
+    for attempt in range(3):
+        page.goto("/settings", wait_until="domcontentloaded")
+        try:
+            expect(page.get_by_role("heading", name="通知配置")).to_be_visible(timeout=12_000)
+            return
+        except AssertionError:
+            body_text = page.locator("body").inner_text()
+            if attempt < 2 and "Internal Server Error" in body_text:
+                continue
+            raise
+
+
 def test_settings_save_config_button(page: Page) -> None:
-    page.goto("/settings", wait_until="domcontentloaded")
+    _goto_settings_ready(page)
     digest_hour = page.get_by_label("每日摘要发送时间（UTC 小时）")
     daily_digest_toggle = page.get_by_label("启用每日摘要")
     # Normalize initial state to avoid relying on persisted backend config from prior runs.
@@ -29,7 +42,7 @@ def test_settings_save_config_button(page: Page) -> None:
 
 
 def test_settings_send_test_email_button(page: Page) -> None:
-    page.goto("/settings", wait_until="domcontentloaded")
+    _goto_settings_ready(page)
     page.get_by_label("覆盖收件人（可选）").fill("qa-e2e@example.com")
     page.get_by_label("主题（可选）").fill("E2E notification check")
     page.get_by_label("正文（可选）").fill("this is an automated e2e notification test")

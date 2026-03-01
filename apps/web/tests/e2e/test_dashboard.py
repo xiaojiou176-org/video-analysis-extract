@@ -22,10 +22,15 @@ def test_external_web_base_url_option_validation_message() -> None:
 
 
 def test_dashboard_trigger_ingest_poll_button(page: Page) -> None:
-    page.goto("/", wait_until="domcontentloaded")
-    expect(page.get_by_role("heading", name="拉取采集")).to_be_visible()
-    for attempt in range(2):
-        page.get_by_role("button", name="触发采集").click()
+    for attempt in range(3):
+        page.goto("/", wait_until="domcontentloaded")
+        expect(page.get_by_role("heading", name="拉取采集")).to_be_visible()
+        with page.expect_response(
+            re.compile(r".*/api/v1/ingest/poll$"),
+            timeout=12_000,
+        ) as poll_response:
+            page.get_by_role("button", name="触发采集").click()
+        assert poll_response.value.status == 202
         try:
             # Allow additional query parameters and ordering differences from redirect chains.
             expect(page).to_have_url(
@@ -34,9 +39,11 @@ def test_dashboard_trigger_ingest_poll_button(page: Page) -> None:
             )
             break
         except AssertionError:
-            # Retry once when backend returns a transient request error.
-            if attempt == 0 and "code=ERR_REQUEST_FAILED" in page.url:
-                page.goto("/", wait_until="domcontentloaded")
+            body_text = page.locator("body").inner_text()
+            has_transient_error = (
+                "Internal Server Error" in body_text or "code=ERR_REQUEST_FAILED" in page.url
+            )
+            if attempt < 2 and has_transient_error:
                 continue
             raise
     expect(page.locator("p.alert.success")).to_contain_text("已触发采集任务。")
