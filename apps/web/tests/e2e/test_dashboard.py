@@ -26,7 +26,7 @@ def test_dashboard_trigger_ingest_poll_button(page: Page) -> None:
         page.goto("/", wait_until="domcontentloaded")
         expect(page.get_by_role("heading", name="拉取采集")).to_be_visible()
         with page.expect_response(
-            re.compile(r".*/api/v1/ingest/poll$"),
+            re.compile(r".*/api/v1/ingest/poll(?:\?.*)?$"),
             timeout=12_000,
         ) as poll_response:
             page.get_by_role("button", name="触发采集").click()
