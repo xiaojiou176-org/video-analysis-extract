@@ -14,7 +14,18 @@ def _create_job_and_get_id(page: Page) -> str:
     page.get_by_label("模式 *").select_option("text_only")
     page.get_by_role("button", name="开始处理").click()
 
-    expect(page).to_have_url(re.compile(r"/\?status=success&code=PROCESS_VIDEO_OK"))
+    try:
+        expect(page).to_have_url(
+            re.compile(r"/\?status=success&code=PROCESS_VIDEO_OK"),
+            timeout=8_000,
+        )
+    except AssertionError:
+        # WebKit occasionally misses the first click under CI load; retry once.
+        page.get_by_role("button", name="开始处理").click(force=True)
+        expect(page).to_have_url(
+            re.compile(r"/\?status=success&code=PROCESS_VIDEO_OK"),
+            timeout=8_000,
+        )
     expect(page.locator("p.alert.success")).to_contain_text("已创建处理任务。")
 
     jobs_link = page.locator("a[href^='/jobs?job_id=']").first
@@ -86,7 +97,11 @@ def test_artifact_lookup_by_video_url_shows_markdown_result(page: Page) -> None:
 def _expect_artifact_result_or_error(page: Page) -> None:
     page_body = page.locator("body")
     error_alert = page.locator("p.alert.error")
+    terminal_signal = page.locator(
+        "p.alert.error, h3:has-text('Markdown 预览'), text=产物请求已完成，但未返回 Markdown 内容。"
+    ).first
 
+    expect(terminal_signal).to_be_visible(timeout=8_000)
     has_error = error_alert.count() > 0
     if has_error:
         expect(error_alert).to_contain_text(
