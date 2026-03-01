@@ -360,11 +360,14 @@ a:hover {
 .nav-link {
 	text-decoration: none;
 	padding: 8px 16px;
+	min-height: 40px;
 	border-radius: var(--radius-md);
 	border: 1px solid transparent;
 	color: var(--color-muted);
 	font-weight: 600;
 	font-size: 14px;
+	display: inline-flex;
+	align-items: center;
 	transition:
 		background var(--transition-fast),
 		color var(--transition-fast);
@@ -680,6 +683,7 @@ button {
 	border: 1.5px solid var(--color-border);
 	border-radius: var(--radius-sm);
 	padding: 9px 18px;
+	min-height: 40px;
 	background: var(--color-surface);
 	color: var(--color-fg);
 	font-weight: 600;
@@ -772,6 +776,7 @@ button.destructive:hover:not(:disabled) {
 	display: inline-flex;
 	align-items: center;
 	gap: 4px;
+	min-height: 40px;
 	font-size: 13px;
 	font-weight: 600;
 	color: var(--color-muted);
@@ -796,6 +801,7 @@ button.destructive:hover:not(:disabled) {
 .btn-cta {
 	display: inline-flex;
 	align-items: center;
+	min-height: 40px;
 	padding: 10px 20px;
 	background: var(--color-primary-light);
 	color: var(--color-primary-dark);
@@ -816,6 +822,7 @@ button.destructive:hover:not(:disabled) {
 .btn-page {
 	display: inline-flex;
 	align-items: center;
+	min-height: 40px;
 	padding: 8px 16px;
 	border-radius: var(--radius-sm);
 	border: 1.5px solid var(--color-border);

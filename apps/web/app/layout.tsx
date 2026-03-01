@@ -17,14 +17,16 @@ export const metadata: Metadata = {
 
 type ApiHealthState = "healthy" | "unhealthy" | "unknown";
 
-const HEALTH_TIMEOUT_MS = 1000;
+const HEALTH_TIMEOUT_MS = 450;
+const HEALTH_REVALIDATE_SECONDS = 30;
 
 async function fetchApiHealthState(): Promise<ApiHealthState> {
 	const controller = new AbortController();
 	const timeout = setTimeout(() => controller.abort(), HEALTH_TIMEOUT_MS);
 	try {
 		const response = await fetch(buildApiUrl("/healthz"), {
-			cache: "no-store",
+			cache: "force-cache",
+			next: { revalidate: HEALTH_REVALIDATE_SECONDS },
 			signal: controller.signal,
 		});
 		return response.ok ? "healthy" : "unhealthy";

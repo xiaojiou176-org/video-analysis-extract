@@ -21,12 +21,20 @@ vi.mock("@/components/form-validation-controller", () => ({
 
 describe("RootLayout", () => {
 	it("shows healthy api state chip", async () => {
-		vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true }));
+		const fetchMock = vi.fn().mockResolvedValue({ ok: true });
+		vi.stubGlobal("fetch", fetchMock);
 
 		const html = renderToStaticMarkup(await RootLayout({ children: <div>content</div> }));
 
 		expect(html).toContain("API 状态：正常");
 		expect(html).toContain('href="http://127.0.0.1:8000/healthz"');
+		expect(fetchMock).toHaveBeenCalledWith(
+			"http://127.0.0.1:8000/healthz",
+			expect.objectContaining({
+				cache: "force-cache",
+				next: { revalidate: 30 },
+			}),
+		);
 	});
 
 	it("shows unhealthy api state chip", async () => {
