@@ -1011,6 +1011,7 @@ run_worker_workflow_once() {
   local command_name="$1"
   shift
   local output_path="/tmp/${SCRIPT_NAME}.${command_name}.json"
+  local worker_exit=0
   local idempotency_key
   idempotency_key="$(
     COMMAND_NAME="$command_name" EXTRA_ARGS="$*" python3 - <<'PY'
@@ -1035,18 +1036,34 @@ PY
   start_long_phase_heartbeat "worker.main ${command_name}"
   (
     cd "$ROOT_DIR/apps/worker"
-    if command -v uv >/dev/null 2>&1; then
-      PYTHONPATH="$ROOT_DIR/apps/worker:$ROOT_DIR:${PYTHONPATH:-}" \
-        uv run python -m worker.main "$command_name" --run-once "$@" >"$output_path"
+    if command -v timeout >/dev/null 2>&1; then
+      if command -v uv >/dev/null 2>&1; then
+        timeout --signal=TERM "${LIVE_SMOKE_TIMEOUT_SECONDS}s" \
+          env PYTHONPATH="$ROOT_DIR/apps/worker:$ROOT_DIR:${PYTHONPATH:-}" \
+          uv run python -m worker.main "$command_name" --run-once "$@" >"$output_path"
+      else
+        timeout --signal=TERM "${LIVE_SMOKE_TIMEOUT_SECONDS}s" \
+          env PYTHONPATH="$ROOT_DIR/apps/worker:$ROOT_DIR:${PYTHONPATH:-}" \
+          python3 -m worker.main "$command_name" --run-once "$@" >"$output_path"
+      fi
     else
-      PYTHONPATH="$ROOT_DIR/apps/worker:$ROOT_DIR:${PYTHONPATH:-}" \
-        python3 -m worker.main "$command_name" --run-once "$@" >"$output_path"
+      if command -v uv >/dev/null 2>&1; then
+        PYTHONPATH="$ROOT_DIR/apps/worker:$ROOT_DIR:${PYTHONPATH:-}" \
+          uv run python -m worker.main "$command_name" --run-once "$@" >"$output_path"
+      else
+        PYTHONPATH="$ROOT_DIR/apps/worker:$ROOT_DIR:${PYTHONPATH:-}" \
+          python3 -m worker.main "$command_name" --run-once "$@" >"$output_path"
+      fi
     fi
-  ) || {
-    stop_long_phase_heartbeat
-    fail "worker command failed: ${command_name}"
-  }
+  )
+  worker_exit=$?
   stop_long_phase_heartbeat
+  if [[ "$worker_exit" -eq 124 ]]; then
+    fail "worker command timed out after ${LIVE_SMOKE_TIMEOUT_SECONDS}s: ${command_name}"
+  fi
+  if [[ "$worker_exit" -ne 0 ]]; then
+    fail "worker command failed (exit=${worker_exit}): ${command_name}"
+  fi
   WORKER_TMP_OUTPUTS+=("$output_path")
 }
 
