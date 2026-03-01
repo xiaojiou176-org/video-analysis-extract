@@ -252,7 +252,7 @@ async def run_pipeline(
     for step_idx, (step_name, handler, critical) in enumerate(step_handlers):
         is_mode_skipped = step_name in mode_skip_steps
         force_run = step_name in mode_force_steps or is_mode_skipped
-        await execute_step(
+        step_record = await execute_step(
             ctx,
             state,
             step_name=step_name,
@@ -263,6 +263,12 @@ async def run_pipeline(
             resume_hint=(step_idx <= resume_upto_idx) and not force_run,
             force_run=force_run,
         )
+        # LLM gate failed: stop the remaining pipeline steps immediately.
+        # Continuing after a hard LLM failure can leave jobs in long-running states
+        # while downstream steps wait on unavailable model responses.
+        if step_name in {"llm_outline", "llm_digest"} and step_record.get("status") == "failed":
+            state["fatal_error"] = f"{step_name}:{step_record.get('error') or step_record.get('reason') or 'failed'}"
+            break
 
     final_status = resolve_pipeline_status(
         state["steps"],

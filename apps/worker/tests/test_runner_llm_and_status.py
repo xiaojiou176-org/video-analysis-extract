@@ -232,6 +232,7 @@ def test_run_pipeline_marks_failed_when_llm_step_failed(monkeypatch: Any, tmp_pa
     assert result["final_status"] == "failed"
     assert result["steps"]["llm_outline"]["status"] == "failed"
     assert result["steps"]["llm_outline"]["degraded"] is False
+    assert "llm_digest" not in result["steps"]
     assert result["llm_required"] is True
     assert result["llm_gate_passed"] is False
     assert result["hard_fail_reason"] == "llm_provider_unavailable"
