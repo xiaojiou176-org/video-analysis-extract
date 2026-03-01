@@ -1232,6 +1232,37 @@ jobs:
           curl -sSfL https://temporal.download/cli.sh | sh
           echo "$HOME/.temporalio/bin" >> "$GITHUB_PATH"
 
+      - name: Allocate isolated web e2e runtime resources
+        run: |
+          python - <<'PY'
+          import os
+          import socket
+          import uuid
+
+          browser = "${{ matrix.browser }}"
+          run_id = "${{ github.run_id }}"
+          attempt = "${{ github.run_attempt }}"
+          suffix = f"{browser}-{run_id}-{attempt}-{uuid.uuid4().hex[:8]}"
+
+          def pick_port() -> int:
+              with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+                  sock.bind(("127.0.0.1", 0))
+                  return int(sock.getsockname()[1])
+
+          api_port = pick_port()
+          temporal_port = pick_port()
+
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as fh:
+              fh.write(f"WEB_E2E_API_PORT={api_port}\n")
+              fh.write(f"WEB_E2E_TEMPORAL_PORT={temporal_port}\n")
+              fh.write(f"WEB_E2E_SQLITE_STATE_PATH=/tmp/video-digestor-api-web-e2e-{suffix}.db\n")
+              fh.write(f"WEB_E2E_SQLITE_PATH=/tmp/video-digestor-worker-web-e2e-{suffix}.db\n")
+              fh.write(f"WEB_E2E_WORKSPACE_DIR=/tmp/video-digestor-worker-web-e2e-workspace-{suffix}\n")
+              fh.write(f"WEB_E2E_ARTIFACT_ROOT=/tmp/video-digestor-worker-web-e2e-artifacts-{suffix}\n")
+
+          print(f"allocated web-e2e ports: api={api_port}, temporal={temporal_port}")
+          PY
+
       - name: Run migrations for web e2e DB
         env:
           PGPASSWORD: postgres
@@ -1247,50 +1278,52 @@ jobs:
             psql "postgresql://postgres:postgres@127.0.0.1:${PGPORT}/video_analysis_web_e2e" -v ON_ERROR_STOP=1 -f "$migration"
           done
 
-      - name: Start Temporal dev server for web e2e (127.0.0.1:7233)
+      - name: Start Temporal dev server for web e2e (127.0.0.1:${{ env.WEB_E2E_TEMPORAL_PORT }})
         run: |
           mkdir -p .runtime-cache
-          temporal server start-dev --ip 127.0.0.1 --port 7233 > .runtime-cache/web-e2e-temporal.log 2>&1 &
+          temporal server start-dev --ip 127.0.0.1 --port "${WEB_E2E_TEMPORAL_PORT}" > .runtime-cache/web-e2e-temporal.log 2>&1 &
           echo "WEB_E2E_TEMPORAL_PID=$!" >> "$GITHUB_ENV"
 
           python - <<'PY'
+          import os
           import socket
           import sys
           import time
 
+          port = int(os.environ["WEB_E2E_TEMPORAL_PORT"])
           for _ in range(60):
               sock = socket.socket()
               sock.settimeout(1)
               try:
-                  sock.connect(("127.0.0.1", 7233))
+                  sock.connect(("127.0.0.1", port))
                   sock.close()
-                  print("temporal web-e2e ready on 127.0.0.1:7233")
+                  print(f"temporal web-e2e ready on 127.0.0.1:{port}")
                   sys.exit(0)
               except OSError:
                   time.sleep(1)
               finally:
                   sock.close()
 
-          print("temporal web-e2e failed to become ready on 127.0.0.1:7233", file=sys.stderr)
+          print(f"temporal web-e2e failed to become ready on 127.0.0.1:{port}", file=sys.stderr)
           sys.exit(1)
           PY
 
-      - name: Start real API for web e2e (127.0.0.1:18080)
+      - name: Start real API for web e2e (127.0.0.1:${{ env.WEB_E2E_API_PORT }})
         env:
           DATABASE_URL: "postgresql+psycopg://postgres:postgres@127.0.0.1:${{ job.services.postgres.ports['5432'] }}/video_analysis_web_e2e"
-          TEMPORAL_TARGET_HOST: 127.0.0.1:7233
+          TEMPORAL_TARGET_HOST: 127.0.0.1:${{ env.WEB_E2E_TEMPORAL_PORT }}
           TEMPORAL_NAMESPACE: default
           TEMPORAL_TASK_QUEUE: video-analysis-worker
-          SQLITE_STATE_PATH: /tmp/video-digestor-api-web-e2e.db
+          SQLITE_STATE_PATH: ${{ env.WEB_E2E_SQLITE_STATE_PATH }}
           UI_AUDIT_GEMINI_ENABLED: "false"
           NOTIFICATION_ENABLED: "0"
           VD_ALLOW_UNAUTH_WRITE: "1"
         run: |
           mkdir -p .runtime-cache
-          uv run --with uvicorn uvicorn apps.api.app.main:app --host 127.0.0.1 --port 18080 > .runtime-cache/web-e2e-api.log 2>&1 &
+          uv run --with uvicorn uvicorn apps.api.app.main:app --host 127.0.0.1 --port "${WEB_E2E_API_PORT}" > .runtime-cache/web-e2e-api.log 2>&1 &
           echo "WEB_E2E_API_PID=$!" >> "$GITHUB_ENV"
           for _ in $(seq 1 30); do
-            if curl -fsS "http://127.0.0.1:18080/healthz" >/dev/null; then
+            if curl -fsS "http://127.0.0.1:${WEB_E2E_API_PORT}/healthz" >/dev/null; then
               exit 0
             fi
             sleep 1
@@ -1301,12 +1334,12 @@ jobs:
       - name: Start worker for web e2e (same DB/Temporal/queue)
         env:
           DATABASE_URL: "postgresql+psycopg://postgres:postgres@127.0.0.1:${{ job.services.postgres.ports['5432'] }}/video_analysis_web_e2e"
-          TEMPORAL_TARGET_HOST: 127.0.0.1:7233
+          TEMPORAL_TARGET_HOST: 127.0.0.1:${{ env.WEB_E2E_TEMPORAL_PORT }}
           TEMPORAL_NAMESPACE: default
           TEMPORAL_TASK_QUEUE: video-analysis-worker
-          SQLITE_PATH: /tmp/video-digestor-worker-web-e2e.db
-          PIPELINE_WORKSPACE_DIR: /tmp/video-digestor-worker-web-e2e-workspace
-          PIPELINE_ARTIFACT_ROOT: /tmp/video-digestor-worker-web-e2e-artifacts
+          SQLITE_PATH: ${{ env.WEB_E2E_SQLITE_PATH }}
+          PIPELINE_WORKSPACE_DIR: ${{ env.WEB_E2E_WORKSPACE_DIR }}
+          PIPELINE_ARTIFACT_ROOT: ${{ env.WEB_E2E_ARTIFACT_ROOT }}
           UI_AUDIT_GEMINI_ENABLED: "false"
           NOTIFICATION_ENABLED: "0"
         run: |
@@ -1354,7 +1387,7 @@ jobs:
           uv run --with pytest --with playwright \
             pytest apps/web/tests/e2e -q --junitxml=".runtime-cache/web-e2e-junit-${BROWSER}.xml" -rA \
             --web-e2e-browser "$BROWSER" \
-            --web-e2e-api-base-url "http://127.0.0.1:18080" \
+            --web-e2e-api-base-url "http://127.0.0.1:${WEB_E2E_API_PORT}" \
             2>&1 | tee ".runtime-cache/web-e2e-${BROWSER}.log"
 
           python - <<'PY'
