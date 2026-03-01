@@ -97,10 +97,10 @@ def test_artifact_lookup_by_video_url_shows_markdown_result(page: Page) -> None:
 def _expect_artifact_result_or_error(page: Page) -> None:
     page_body = page.locator("body")
     error_alert = page.locator("p.alert.error")
-    terminal_signal = page.locator(
-        "p.alert.error, h3:has-text('Markdown 预览'), text=产物请求已完成，但未返回 Markdown 内容。"
-    ).first
-
+    success_or_empty = page.locator("h3:has-text('Markdown 预览')").or_(
+        page.get_by_text("产物请求已完成，但未返回 Markdown 内容。")
+    )
+    terminal_signal = error_alert.or_(success_or_empty).first
     expect(terminal_signal).to_be_visible(timeout=8_000)
     has_error = error_alert.count() > 0
     if has_error:

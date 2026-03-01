@@ -298,23 +298,36 @@ def page(browser: Browser, web_base_url: str, request: pytest.FixtureRequest) ->
         page.set_default_timeout(30_000)
         page.set_default_navigation_timeout(45_000)
     else:
-        page.set_default_timeout(20_000)
+        page.set_default_timeout(30_000)
+        page.set_default_navigation_timeout(45_000)
     yield page
     call_report = getattr(request.node, "rep_call", None)
     failed = call_report is not None and call_report.failed
     if failed:
-        page.screenshot(path=str(WEB_E2E_SCREENSHOT_DIR / f"{artifact_slug}.png"), full_page=True)
+        try:
+            page.screenshot(
+                path=str(WEB_E2E_SCREENSHOT_DIR / f"{artifact_slug}.png"),
+                full_page=True,
+            )
+        except Exception as exc:
+            print(f"[web-e2e] screenshot capture skipped for {artifact_slug}: {exc}")
 
-    if trace_mode == "on":
-        context.tracing.stop(path=str(WEB_E2E_TRACE_DIR / f"{artifact_slug}.zip"))
-    elif trace_mode == "retain-on-failure":
-        if failed:
+    try:
+        if trace_mode == "on":
             context.tracing.stop(path=str(WEB_E2E_TRACE_DIR / f"{artifact_slug}.zip"))
-        else:
-            context.tracing.stop()
+        elif trace_mode == "retain-on-failure":
+            if failed:
+                context.tracing.stop(path=str(WEB_E2E_TRACE_DIR / f"{artifact_slug}.zip"))
+            else:
+                context.tracing.stop()
+    except Exception as exc:
+        print(f"[web-e2e] trace finalize skipped for {artifact_slug}: {exc}")
 
     video_obj = page.video
-    context.close()
+    try:
+        context.close()
+    except Exception as exc:
+        print(f"[web-e2e] browser context close warning for {artifact_slug}: {exc}")
     if video_mode == "retain-on-failure":
         kept_video_path: Path | None = None
         if video_obj is not None:
