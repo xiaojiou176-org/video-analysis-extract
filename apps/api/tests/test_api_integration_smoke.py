@@ -15,6 +15,10 @@ from sqlalchemy import create_engine, func, select, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session, sessionmaker
 
+_INTEGRATION_DB_URL = os.getenv(
+    "DATABASE_URL", "postgresql+psycopg://postgres:postgres@127.0.0.1:5432/postgres"
+)
+
 
 @dataclass
 class IntegrationHarness:
@@ -61,7 +65,8 @@ def _fail_or_skip_for_env(requirement: str, detail: str) -> None:
 def integration_api(
     monkeypatch: pytest.MonkeyPatch, tmp_path: pytest.TempPathFactory
 ) -> Iterator[IntegrationHarness]:
-    base_url = os.getenv("DATABASE_URL", "postgresql+psycopg://postgres:postgres@127.0.0.1:5432/postgres")
+    # Keep integration smoke deterministic even if other tests temporarily mutate DATABASE_URL.
+    base_url = _INTEGRATION_DB_URL
     parsed_base = make_url(base_url)
     if parsed_base.drivername != "postgresql+psycopg":
         _fail_or_skip_for_env(

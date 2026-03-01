@@ -830,6 +830,11 @@ jobs:
           VD_API_KEY: "ci-smoke-write-token"
         run: |
           mkdir -p .runtime-cache
+          uv run python - <<'PY'
+          import os
+          token = (os.getenv("VD_API_KEY") or "").strip()
+          assert token, "VD_API_KEY must be non-empty for api-real-smoke"
+          PY
           uv run --with uvicorn uvicorn apps.api.app.main:app --host 127.0.0.1 --port 18080 > .runtime-cache/api-real-smoke.log 2>&1 &
           api_pid=$!
           trap 'kill ${api_pid} >/dev/null 2>&1 || true' EXIT
@@ -840,6 +845,7 @@ jobs:
             fi
             sleep 1
           done
+          curl -fsS "http://127.0.0.1:18080/healthz" >/dev/null
 
           python - <<'PY'
           import json
