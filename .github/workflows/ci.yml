@@ -1735,19 +1735,22 @@ jobs:
           check_required_job web_e2e "$required_web_e2e"
           check_required_job dependency_vuln_scan "$required_deps_scan"
 
-          for job in profile_governance quality_gate_pre_push external_playwright_smoke; do
-            result="${results[$job]}"
-            echo "$job=$result"
-            if [[ "$require_main_schedule_release_only" -eq 1 ]]; then
-              if [[ "$result" != "success" ]]; then
-                failed=1
-              fi
-            else
-              if [[ "$result" != "success" && "$result" != "skipped" ]]; then
-                failed=1
-              fi
-            fi
-          done
+          profile_governance_result="${results[profile_governance]}"
+          quality_gate_result="${results[quality_gate_pre_push]}"
+          external_playwright_result="${results[external_playwright_smoke]}"
+          echo "profile_governance=$profile_governance_result"
+          echo "quality_gate_pre_push=$quality_gate_result"
+          echo "external_playwright_smoke=$external_playwright_result"
+
+          if [[ "$profile_governance_result" != "success" ]]; then
+            failed=1
+          fi
+          if [[ "$quality_gate_result" != "success" && "$quality_gate_result" != "skipped" ]]; then
+            failed=1
+          fi
+          if [[ "$external_playwright_result" != "success" && "$external_playwright_result" != "skipped" ]]; then
+            failed=1
+          fi
 
           pr_llm_result="${results[pr_llm_real_smoke]}"
           echo "pr_llm_real_smoke=$pr_llm_result"
