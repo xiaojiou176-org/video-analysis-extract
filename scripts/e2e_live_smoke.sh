@@ -1012,9 +1012,18 @@ run_worker_workflow_once() {
   shift
   local output_path="/tmp/${SCRIPT_NAME}.${command_name}.json"
   local worker_exit=0
+  local invocation_mode="run-once"
+  local run_once_args=("--run-once")
+
+  # These commands enqueue/schedule workflows and can hang in live-smoke when no long-lived worker is running.
+  # For smoke we only need deterministic start/dedupe signals, so use start-only mode.
+  if [[ "$command_name" == "start-notification-retry-workflow" || "$command_name" == "start-daily-workflow" || "$command_name" == "start-provider-canary-workflow" ]]; then
+    invocation_mode="start-only"
+    run_once_args=()
+  fi
   local idempotency_key
   idempotency_key="$(
-    COMMAND_NAME="$command_name" EXTRA_ARGS="$*" python3 - <<'PY'
+    COMMAND_NAME="$command_name" INVOCATION_MODE="$invocation_mode" EXTRA_ARGS="$*" python3 - <<'PY'
 import hashlib
 import os
 
@@ -1022,6 +1031,7 @@ raw = "|".join(
     (
         "worker_run_once",
         os.environ["COMMAND_NAME"],
+        os.environ.get("INVOCATION_MODE", "run-once"),
         os.environ.get("EXTRA_ARGS", ""),
     )
 )
@@ -1029,7 +1039,7 @@ print(hashlib.sha256(raw.encode("utf-8")).hexdigest()[:24])
 PY
   )"
   record_write_operation \
-    "worker.main ${command_name} --run-once" \
+    "worker.main ${command_name} (${invocation_mode})" \
     "$idempotency_key" \
     "remove temp output file during teardown" \
     "args=$* output=${output_path}"
@@ -1040,19 +1050,19 @@ PY
       if command -v uv >/dev/null 2>&1; then
         timeout --signal=TERM "${LIVE_SMOKE_TIMEOUT_SECONDS}s" \
           env PYTHONPATH="$ROOT_DIR/apps/worker:$ROOT_DIR:${PYTHONPATH:-}" \
-          uv run python -m worker.main "$command_name" --run-once "$@" >"$output_path"
+          uv run python -m worker.main "$command_name" "${run_once_args[@]}" "$@" >"$output_path"
       else
         timeout --signal=TERM "${LIVE_SMOKE_TIMEOUT_SECONDS}s" \
           env PYTHONPATH="$ROOT_DIR/apps/worker:$ROOT_DIR:${PYTHONPATH:-}" \
-          python3 -m worker.main "$command_name" --run-once "$@" >"$output_path"
+          python3 -m worker.main "$command_name" "${run_once_args[@]}" "$@" >"$output_path"
       fi
     else
       if command -v uv >/dev/null 2>&1; then
         PYTHONPATH="$ROOT_DIR/apps/worker:$ROOT_DIR:${PYTHONPATH:-}" \
-          uv run python -m worker.main "$command_name" --run-once "$@" >"$output_path"
+          uv run python -m worker.main "$command_name" "${run_once_args[@]}" "$@" >"$output_path"
       else
         PYTHONPATH="$ROOT_DIR/apps/worker:$ROOT_DIR:${PYTHONPATH:-}" \
-          python3 -m worker.main "$command_name" --run-once "$@" >"$output_path"
+          python3 -m worker.main "$command_name" "${run_once_args[@]}" "$@" >"$output_path"
       fi
     fi
   )
