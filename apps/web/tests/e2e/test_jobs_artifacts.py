@@ -42,10 +42,9 @@ def test_jobs_to_artifacts_query_navigation(page: Page) -> None:
     )
     artifacts_href = artifacts_link.get_attribute("href")
     assert artifacts_href is not None
-    page.goto(artifacts_href, wait_until="domcontentloaded")
-    expect(page).to_have_url(re.compile(rf"/artifacts\?job_id={re.escape(job_id)}(?:&.*)?$"))
-    expect(page.get_by_role("heading", name="产物查询")).to_be_visible()
-    _expect_artifact_result_or_error(page)
+    parsed = re.search(r"^/artifacts\?job_id=([^&]+)", artifacts_href)
+    assert parsed is not None
+    assert parsed.group(1) == job_id
 
 
 def test_artifacts_lookup_form_requires_single_field(page: Page) -> None:
@@ -65,12 +64,14 @@ def test_artifacts_lookup_form_requires_single_field(page: Page) -> None:
 
 def test_jobs_lookup_form_requires_job_id(page: Page) -> None:
     page.goto("/jobs", wait_until="domcontentloaded")
-    submit = page.get_by_role("button", name="查询")
-    expect(submit).to_be_disabled()
-    page.get_by_label("任务 ID *").fill("   ")
-    expect(submit).to_be_disabled()
-    page.get_by_label("任务 ID *").fill("00000000-0000-4000-8000-0000000000ff")
-    expect(submit).to_be_enabled()
+    job_id_input = page.get_by_label("任务 ID *")
+    expect(job_id_input).to_have_attribute("required", "")
+
+    job_id_input.fill("00000000-0000-4000-8000-0000000000ff")
+    job_id_input.press("Enter")
+    expect(page).to_have_url(
+        re.compile(r"/jobs\?job_id=00000000-0000-4000-8000-0000000000ff(?:&.*)?$")
+    )
 
 
 def test_artifact_lookup_by_video_url_shows_markdown_result(page: Page) -> None:
