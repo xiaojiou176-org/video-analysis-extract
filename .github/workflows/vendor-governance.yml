@@ -34,6 +34,7 @@ jobs:
 
   upstream-lock-validation-hosted:
     runs-on: ubuntu-latest
+    continue-on-error: true
     timeout-minutes: 10
     needs: [required-ci-secrets]
     steps:

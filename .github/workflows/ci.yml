@@ -43,6 +43,7 @@ jobs:
 
   changes-hosted:
     runs-on: ubuntu-latest
+    continue-on-error: true
     timeout-minutes: 5
     needs: [required-ci-secrets]
     outputs:
@@ -170,6 +171,7 @@ jobs:
           fi
 
   preflight-fast-hosted:
+    continue-on-error: true
     uses: ./.github/workflows/_preflight-fast-steps.yml
     needs: [required-ci-secrets]
     with:
@@ -2018,6 +2020,7 @@ jobs:
           echo "final gate passed"
   backend-lint-hosted:
     runs-on: ubuntu-latest
+    continue-on-error: true
     timeout-minutes: 20
     needs: [preflight-fast, changes]
     if: ${{ github.event_name != 'pull_request' || needs.changes.outputs.backend_changed == 'true' }}
@@ -2112,6 +2115,7 @@ jobs:
 
   frontend-lint-hosted:
     runs-on: ubuntu-latest
+    continue-on-error: true
     timeout-minutes: 20
     needs: [preflight-fast, changes]
     if: ${{ github.event_name != 'pull_request' || needs.changes.outputs.web_changed == 'true' }}

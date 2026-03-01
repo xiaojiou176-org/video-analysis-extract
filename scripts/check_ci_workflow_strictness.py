@@ -44,9 +44,26 @@ def _check_global_rules(
         if has_direct_runs_on and not has_uses and "timeout-minutes:" not in block:
             failures.append(f"{workflow_path.name}: {job}: missing timeout-minutes")
 
-    # continue-on-error in workflows creates bypass paths and is forbidden in this repo.
-    if re.search(r"^\s+continue-on-error:\s*true\s*$", text, flags=re.MULTILINE):
-        failures.append(f"{workflow_path.name}: continue-on-error=true is forbidden")
+    # continue-on-error=true is only allowed on hosted jobs that have explicit
+    # fallback partners. This lets hosted billing/capacity failures degrade
+    # gracefully without masking real failures in non-hosted jobs.
+    for job, block in blocks.items():
+        has_continue = re.search(
+            r"^\s{4}continue-on-error:\s*true\s*$", block, flags=re.MULTILINE
+        ) is not None
+        if not has_continue:
+            continue
+        if not job.endswith("-hosted"):
+            failures.append(
+                f"{workflow_path.name}: {job}: continue-on-error=true is only allowed on *-hosted jobs"
+            )
+            continue
+        base = job[: -len("-hosted")]
+        fallback_name = f"{base}-fallback"
+        if fallback_name not in blocks:
+            failures.append(
+                f"{workflow_path.name}: {job}: continue-on-error=true requires companion fallback job {fallback_name}"
+            )
 
     # Reusable workflows (workflow_call) don't need required-ci-secrets job.
     if is_reusable:
@@ -71,6 +88,11 @@ def _check_global_rules(
         resolver_name = base
         fallback_block = blocks.get(fallback_name, "")
         resolver_block = blocks.get(resolver_name, "")
+
+        if "continue-on-error: true" not in hosted_block:
+            failures.append(
+                f"{workflow_path}: {job_name}: hosted jobs must set continue-on-error: true to allow fallback takeover"
+            )
 
         if "runs-on: ubuntu-latest" not in hosted_block:
             failures.append(f"{workflow_path}: {job_name}: hosted jobs must use ubuntu-latest")
