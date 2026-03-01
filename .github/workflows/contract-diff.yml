@@ -8,7 +8,7 @@ permissions:
 
 jobs:
   required-ci-secrets:
-    runs-on: e2-core
+    runs-on: [self-hosted, e2-core, spot, shared-pool]
     timeout-minutes: 5
     env:
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
@@ -201,7 +201,7 @@ jobs:
           exit 1
 
   contract-diff:
-    runs-on: e2-core
+    runs-on: [self-hosted, e2-core, spot, shared-pool]
     timeout-minutes: 3
     needs: [contract-diff-hosted, contract-diff-fallback]
     if: ${{ always() && (needs['contract-diff-hosted'].result == 'success' || needs['contract-diff-fallback'].result == 'success') }}

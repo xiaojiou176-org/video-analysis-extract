@@ -21,7 +21,7 @@ permissions:
 
 jobs:
   required-ci-secrets:
-    runs-on: e2-core
+    runs-on: [self-hosted, e2-core, spot, shared-pool]
     timeout-minutes: 5
     env:
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
@@ -152,7 +152,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
   changes:
-    runs-on: e2-core
+    runs-on: [self-hosted, e2-core, spot, shared-pool]
     timeout-minutes: 3
     needs: [changes-hosted, changes-fallback]
     if: ${{ always() && (needs['changes-hosted'].result == 'success' || needs['changes-fallback'].result == 'success') }}
@@ -182,9 +182,8 @@ jobs:
     if: ${{ always() && needs['preflight-fast-hosted'].result != 'success' }}
     with:
       runs-on: e2-core
-
   preflight-fast:
-    runs-on: e2-core
+    runs-on: [self-hosted, e2-core, spot, shared-pool]
     timeout-minutes: 3
     needs: [preflight-fast-hosted, preflight-fast-fallback]
     if: ${{ always() && (needs['preflight-fast-hosted'].result == 'success' || needs['preflight-fast-fallback'].result == 'success') }}
@@ -198,7 +197,7 @@ jobs:
           fi
 
   preflight-heavy:
-    runs-on: e2-core
+    runs-on: [self-hosted, e2-core, spot, shared-pool]
     timeout-minutes: 20
     needs: preflight-fast
     if: ${{ always() && needs.preflight-fast.result == 'success' }}
@@ -231,7 +230,7 @@ jobs:
         run: python3 scripts/check_structured_logs.py
 
   profile-governance:
-    runs-on: e2-core
+    runs-on: [self-hosted, e2-core, spot, shared-pool]
     timeout-minutes: 20
     if: ${{ always() && needs.preflight-heavy.result == 'success' && (github.event_name == 'schedule' || (github.event_name == 'push' && github.ref == 'refs/heads/main')) }}
     needs: preflight-heavy
@@ -263,7 +262,7 @@ jobs:
           fi
 
   quality-gate-pre-push:
-    runs-on: e2-core
+    runs-on: [self-hosted, e2-core, spot, shared-pool]
     timeout-minutes: 90
     needs: [preflight-heavy, changes]
     steps:
@@ -319,7 +318,7 @@ jobs:
               --mutation-max-no-tests-ratio 0.75
 
   db-migration-smoke:
-    runs-on: e2-core
+    runs-on: [self-hosted, e2-core, spot, shared-pool]
     timeout-minutes: 20
     needs: [preflight-fast, changes]
     if: ${{ always() && needs.preflight-fast.result == 'success' && needs.changes.result == 'success' && (github.event_name != 'pull_request' || needs.changes.outputs.migrations_changed == 'true') }}
@@ -369,7 +368,7 @@ jobs:
           done
 
   mutation-testing:
-    runs-on: e2-core
+    runs-on: [self-hosted, e2-core, spot, shared-pool]
     timeout-minutes: 120
     needs: [preflight-fast, changes]
     if: ${{ always() && needs.preflight-fast.result == 'success' && needs.changes.result == 'success' && (github.event_name != 'pull_request' || needs.changes.outputs.backend_changed == 'true') }}
@@ -477,7 +476,7 @@ jobs:
           if-no-files-found: warn
 
   python-tests:
-    runs-on: e2-core
+    runs-on: [self-hosted, e2-core, spot, shared-pool]
     timeout-minutes: 45
     needs: [preflight-fast, changes]
     if: ${{ always() && needs.preflight-fast.result == 'success' && needs.changes.result == 'success' && (github.event_name != 'pull_request' || needs.changes.outputs.backend_changed == 'true') }}
@@ -622,7 +621,7 @@ jobs:
             .runtime-cache/python-coverage.xml
 
   api-real-smoke:
-    runs-on: e2-core
+    runs-on: [self-hosted, e2-core, spot, shared-pool]
     timeout-minutes: 25
     needs: [preflight-fast, changes]
     if: ${{ always() && needs.preflight-fast.result == 'success' && needs.changes.result == 'success' && (github.event_name != 'pull_request' || needs.changes.outputs.backend_changed == 'true') }}
@@ -837,7 +836,7 @@ jobs:
             .runtime-cache/api-real-smoke.log
 
   pr-llm-real-smoke:
-    runs-on: e2-core
+    runs-on: [self-hosted, e2-core, spot, shared-pool]
     timeout-minutes: 35
     needs: [preflight-fast, changes]
     if: >-
@@ -912,7 +911,7 @@ jobs:
             .runtime-cache/pr-llm-real-smoke-result.json
 
   web-test-build:
-    runs-on: e2-core
+    runs-on: [self-hosted, e2-core, spot, shared-pool]
     timeout-minutes: 25
     needs: [preflight-fast, changes]
     if: ${{ always() && needs.preflight-fast.result == 'success' && needs.changes.result == 'success' && (github.event_name != 'pull_request' || needs.changes.outputs.web_changed == 'true' || needs.changes.outputs.deps_changed == 'true') }}
@@ -969,7 +968,7 @@ jobs:
         run: python3 scripts/check_web_button_coverage.py --threshold 1.0
 
   web-e2e:
-    runs-on: e2-core
+    runs-on: [self-hosted, e2-core, spot, shared-pool]
     timeout-minutes: 45
     env:
       PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.runtime-cache/ms-playwright
@@ -1314,7 +1313,7 @@ jobs:
           fi
 
   external-playwright-smoke:
-    runs-on: e2-core
+    runs-on: [self-hosted, e2-core, spot, shared-pool]
     timeout-minutes: 20
     env:
       PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.runtime-cache/ms-playwright
@@ -1393,7 +1392,7 @@ jobs:
             .runtime-cache/external-playwright-smoke-result.json
 
   dependency-vuln-scan:
-    runs-on: e2-core
+    runs-on: [self-hosted, e2-core, spot, shared-pool]
     timeout-minutes: 25
     needs: [preflight-fast, changes]
     if: ${{ always() && needs.preflight-fast.result == 'success' && needs.changes.result == 'success' && (github.event_name != 'pull_request' || needs.changes.outputs.deps_changed == 'true') }}
@@ -1466,7 +1465,7 @@ jobs:
         run: npm --prefix apps/web audit --omit=dev --audit-level=high
 
   aggregate-gate:
-    runs-on: e2-core
+    runs-on: [self-hosted, e2-core, spot, shared-pool]
     timeout-minutes: 10
     if: always()
     needs:
@@ -1622,7 +1621,7 @@ jobs:
           echo "aggregate gate passed"
 
   nightly-flaky-python:
-    runs-on: e2-core
+    runs-on: [self-hosted, e2-core, spot, shared-pool]
     timeout-minutes: 40
     if: ${{ github.event_name == 'schedule' }}
     needs: preflight-fast
@@ -1675,7 +1674,7 @@ jobs:
           done
 
   nightly-flaky-web-e2e:
-    runs-on: e2-core
+    runs-on: [self-hosted, e2-core, spot, shared-pool]
     timeout-minutes: 60
     env:
       PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.runtime-cache/ms-playwright
@@ -1757,7 +1756,7 @@ jobs:
 
   autofix-dry-run:
     name: autofix-dry-run
-    runs-on: e2-core
+    runs-on: [self-hosted, e2-core, spot, shared-pool]
     timeout-minutes: 15
     needs: [python-tests, web-e2e]
     if: ${{ always() && (needs.python-tests.result == 'failure' || needs.web-e2e.result == 'failure') }}
@@ -1787,7 +1786,7 @@ jobs:
 
   live-smoke:
     needs: aggregate-gate
-    runs-on: e2-core
+    runs-on: [self-hosted, e2-core, spot, shared-pool]
     timeout-minutes: 40
     if: >-
       always() &&
@@ -1956,7 +1955,7 @@ jobs:
           fi
 
   ci-final-gate:
-    runs-on: e2-core
+    runs-on: [self-hosted, e2-core, spot, shared-pool]
     timeout-minutes: 10
     if: always()
     needs:
@@ -2097,7 +2096,7 @@ jobs:
         run: uv run --with ruff ruff check apps scripts
 
   backend-lint:
-    runs-on: e2-core
+    runs-on: [self-hosted, e2-core, spot, shared-pool]
     timeout-minutes: 3
     needs: [backend-lint-hosted, backend-lint-fallback]
     if: ${{ always() && (needs['backend-lint-hosted'].result == 'success' || needs['backend-lint-fallback'].result == 'success' || (needs['backend-lint-hosted'].result == 'skipped' && needs['backend-lint-fallback'].result == 'skipped')) }}
@@ -2164,7 +2163,7 @@ jobs:
         run: python3 scripts/check_test_assertions.py --path apps/web
 
   frontend-lint:
-    runs-on: e2-core
+    runs-on: [self-hosted, e2-core, spot, shared-pool]
     timeout-minutes: 3
     needs: [frontend-lint-hosted, frontend-lint-fallback]
     if: ${{ always() && (needs['frontend-lint-hosted'].result == 'success' || needs['frontend-lint-fallback'].result == 'success' || (needs['frontend-lint-hosted'].result == 'skipped' && needs['frontend-lint-fallback'].result == 'skipped')) }}

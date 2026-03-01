@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   required-ci-secrets:
-    runs-on: e2-core
+    runs-on: [self-hosted, e2-core, spot, shared-pool]
     timeout-minutes: 5
     env:
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
@@ -172,7 +172,7 @@ jobs:
           done
 
   pre-commit:
-    runs-on: e2-core
+    runs-on: [self-hosted, e2-core, spot, shared-pool]
     timeout-minutes: 3
     needs: [pre-commit-hosted, pre-commit-fallback]
     if: ${{ always() && (needs['pre-commit-hosted'].result == 'success' || needs['pre-commit-fallback'].result == 'success') }}

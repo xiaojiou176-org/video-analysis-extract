@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   required-ci-secrets:
-    runs-on: e2-core
+    runs-on: [self-hosted, e2-core, spot, shared-pool]
     timeout-minutes: 5
     env:
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
@@ -27,7 +27,7 @@ jobs:
             --required GEMINI_API_KEY
 
   python-mutmut:
-    runs-on: e2-core
+    runs-on: [self-hosted, e2-core, spot, shared-pool]
     timeout-minutes: 120
     needs: [required-ci-secrets]
     steps:
