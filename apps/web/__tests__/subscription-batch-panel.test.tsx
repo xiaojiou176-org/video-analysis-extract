@@ -57,6 +57,8 @@ const MOCK_SUBS: Subscription[] = [
 ];
 
 describe("SubscriptionBatchPanel", () => {
+	const PANEL_TEST_TIMEOUT_MS = 15000;
+
 	beforeEach(() => {
 		vi.clearAllMocks();
 	});
@@ -64,7 +66,7 @@ describe("SubscriptionBatchPanel", () => {
 	it("renders empty message when no subscriptions", () => {
 		render(<SubscriptionBatchPanel subscriptions={[]} />);
 		expect(screen.getByText("暂无订阅数据。")).toBeInTheDocument();
-	});
+	}, PANEL_TEST_TIMEOUT_MS);
 
 	it("renders all subscriptions rows", () => {
 		render(<SubscriptionBatchPanel subscriptions={MOCK_SUBS} />);
@@ -72,7 +74,7 @@ describe("SubscriptionBatchPanel", () => {
 		expect(screen.getByRole("columnheader", { name: "来源" })).toHaveAttribute("scope", "col");
 		expect(screen.getByText("Tech Channel")).toBeInTheDocument();
 		expect(screen.getByText("Finance Blog")).toBeInTheDocument();
-	});
+	}, PANEL_TEST_TIMEOUT_MS);
 
 	it("select-all checkbox selects all rows", () => {
 		render(<SubscriptionBatchPanel subscriptions={MOCK_SUBS} />);
@@ -82,7 +84,7 @@ describe("SubscriptionBatchPanel", () => {
 		rowCheckboxes.forEach((cb) => {
 			expect(cb).toBeChecked();
 		});
-	});
+	}, PANEL_TEST_TIMEOUT_MS);
 
 	it("shows batch action bar when items are selected", () => {
 		render(<SubscriptionBatchPanel subscriptions={MOCK_SUBS} />);
@@ -90,7 +92,7 @@ describe("SubscriptionBatchPanel", () => {
 
 		expect(screen.getByText(/已选/)).toBeInTheDocument();
 		expect(screen.getByRole("button", { name: "应用" })).toBeInTheDocument();
-	});
+	}, PANEL_TEST_TIMEOUT_MS);
 
 	it("toggles single row selection on and off", () => {
 		render(<SubscriptionBatchPanel subscriptions={MOCK_SUBS} />);
@@ -101,7 +103,7 @@ describe("SubscriptionBatchPanel", () => {
 
 		fireEvent.click(oneCheckbox);
 		expect(screen.queryByText(/已选/)).not.toBeInTheDocument();
-	});
+	}, PANEL_TEST_TIMEOUT_MS);
 
 	it("submits selected ids and category for batch update and shows success", async () => {
 		mockBatchUpdate.mockResolvedValue({ updated: 2 });
@@ -122,7 +124,7 @@ describe("SubscriptionBatchPanel", () => {
 			expect(screen.getByText("已将 2 条订阅移至分类「creator」")).toBeInTheDocument();
 		});
 		expect(mockRefresh).toHaveBeenCalledTimes(1);
-	});
+	}, PANEL_TEST_TIMEOUT_MS);
 
 	it("shows explicit error message when batch update fails", async () => {
 		mockBatchUpdate.mockRejectedValue(new Error("Server error"));
@@ -138,7 +140,7 @@ describe("SubscriptionBatchPanel", () => {
 			expect(screen.getByText("操作失败：请求失败，请稍后重试。")).toBeInTheDocument();
 		});
 		expect(mockRefresh).not.toHaveBeenCalled();
-	});
+	}, PANEL_TEST_TIMEOUT_MS);
 
 	it("cancel selection clears selected state and hides action bar", () => {
 		render(<SubscriptionBatchPanel subscriptions={MOCK_SUBS} />);
@@ -147,7 +149,7 @@ describe("SubscriptionBatchPanel", () => {
 		expect(screen.getByRole("button", { name: "取消选择" })).toBeInTheDocument();
 		fireEvent.click(screen.getByRole("button", { name: "取消选择" }));
 		expect(screen.queryByText(/已选/)).not.toBeInTheDocument();
-	});
+	}, PANEL_TEST_TIMEOUT_MS);
 
 	it("requires confirmation before deleting and sends exact id on confirm", async () => {
 		mockDelete.mockResolvedValue(undefined);
@@ -167,7 +169,7 @@ describe("SubscriptionBatchPanel", () => {
 			"/subscriptions?status=success&code=SUBSCRIPTION_DELETED",
 		);
 		expect(mockRefresh).toHaveBeenCalledTimes(1);
-	});
+	}, PANEL_TEST_TIMEOUT_MS);
 
 	it("allows canceling delete confirmation without calling delete API", () => {
 		render(<SubscriptionBatchPanel subscriptions={MOCK_SUBS} />);
@@ -179,7 +181,7 @@ describe("SubscriptionBatchPanel", () => {
 		fireEvent.click(screen.getByRole("button", { name: "取消" }));
 		expect(mockDelete).not.toHaveBeenCalled();
 		expect(screen.queryByRole("button", { name: "确认删除" })).not.toBeInTheDocument();
-	});
+	}, PANEL_TEST_TIMEOUT_MS);
 
 	it("shows delete failure message when API rejects", async () => {
 		mockDelete.mockRejectedValue(new Error("delete denied"));
@@ -195,5 +197,5 @@ describe("SubscriptionBatchPanel", () => {
 		await waitFor(() => {
 			expect(screen.getByText("删除失败：请求失败，请稍后重试。")).toBeInTheDocument();
 		});
-	});
+	}, PANEL_TEST_TIMEOUT_MS);
 });

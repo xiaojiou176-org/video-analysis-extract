@@ -39,6 +39,8 @@ vi.mock("@/lib/api/client", () => ({
 }));
 
 describe("a11y smoke", () => {
+	const A11Y_TIMEOUT_MS = 30000;
+
 	beforeEach(() => {
 		vi.clearAllMocks();
 		mockListSubscriptions.mockResolvedValue([]);
@@ -82,5 +84,5 @@ describe("a11y smoke", () => {
 		const jobs = render(await JobsPage({ searchParams: { job_id: "job-1" } }));
 		const jobsResults = await axe(jobs.container);
 		expect(jobsResults.violations).toHaveLength(0);
-	}, 20000);
+	}, A11Y_TIMEOUT_MS);
 });

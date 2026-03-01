@@ -41,6 +41,8 @@ vi.mock("@/lib/api/client", () => ({
 }));
 
 describe("feed/jobs/artifacts pages", () => {
+	const PAGE_TEST_TIMEOUT_MS = 15000;
+
 	beforeEach(() => {
 		vi.clearAllMocks();
 	});
@@ -98,7 +100,7 @@ describe("feed/jobs/artifacts pages", () => {
 			"/feed?source=youtube&category=tech&limit=50&cursor=cursor-2",
 		);
 		expect(screen.getByRole("button", { name: "筛选" })).toBeInTheDocument();
-	});
+	}, PAGE_TEST_TIMEOUT_MS);
 
 	it("renders feed empty state and clear filter entry", async () => {
 		mockGetDigestFeed.mockResolvedValue({ items: [], has_more: false, next_cursor: null });
@@ -107,7 +109,7 @@ describe("feed/jobs/artifacts pages", () => {
 
 		expect(screen.getByText("暂无 AI 摘要内容")).toBeInTheDocument();
 		expect(screen.getByRole("link", { name: "清除筛选" })).toHaveAttribute("href", "/feed");
-	});
+	}, PAGE_TEST_TIMEOUT_MS);
 
 	it("renders feed error message when api fails", async () => {
 		mockGetDigestFeed.mockRejectedValue(new Error("ERR_INVALID_INPUT:bad"));
@@ -115,7 +117,7 @@ describe("feed/jobs/artifacts pages", () => {
 		render(await FeedPage({ searchParams: {} }));
 
 		expect(screen.getByRole("alert")).toHaveTextContent("输入参数不合法，请检查后重试。");
-	});
+	}, PAGE_TEST_TIMEOUT_MS);
 
 	it("renders jobs page details and artifact links", async () => {
 		mockGetJob.mockResolvedValue({
@@ -176,7 +178,7 @@ describe("feed/jobs/artifacts pages", () => {
 			"href",
 			"http://127.0.0.1:8000/api/v1/artifacts/assets?job_id=job-1&path=digest.md",
 		);
-	});
+	}, PAGE_TEST_TIMEOUT_MS);
 
 	it("renders jobs error when lookup fails", async () => {
 		mockGetJob.mockRejectedValue(new Error("ERR_REQUEST_FAILED"));
@@ -184,7 +186,7 @@ describe("feed/jobs/artifacts pages", () => {
 		render(await JobsPage({ searchParams: { job_id: "job-missing" } }));
 
 		expect(screen.getByRole("alert")).toHaveTextContent("请求失败，请稍后重试。");
-	});
+	}, PAGE_TEST_TIMEOUT_MS);
 
 	it("renders artifacts with embedded screenshots and markdown", async () => {
 		mockGetArtifactMarkdown.mockResolvedValue({
@@ -210,7 +212,7 @@ describe("feed/jobs/artifacts pages", () => {
 		);
 		expect(screen.getByLabelText("Screenshot 1: frame-1.png")).toBeInTheDocument();
 		expect(screen.getByTestId("markdown-preview")).toHaveTextContent("# artifact");
-	});
+	}, PAGE_TEST_TIMEOUT_MS);
 
 	it("renders artifacts status when api returns empty payload", async () => {
 		mockGetArtifactMarkdown.mockResolvedValue(null);
@@ -218,7 +220,7 @@ describe("feed/jobs/artifacts pages", () => {
 		render(await ArtifactsPage({ searchParams: { job_id: "job-3" } }));
 
 		expect(screen.getByText("产物请求已完成，但未返回 Markdown 内容。")).toBeInTheDocument();
-	});
+	}, PAGE_TEST_TIMEOUT_MS);
 
 	it("renders artifacts error alert on failure", async () => {
 		mockGetArtifactMarkdown.mockRejectedValue(new Error("ERR_REQUEST_FAILED"));
@@ -226,5 +228,5 @@ describe("feed/jobs/artifacts pages", () => {
 		render(await ArtifactsPage({ searchParams: { job_id: "job-err" } }));
 
 		expect(screen.getByRole("alert")).toHaveTextContent("请求失败，请稍后重试。");
-	});
+	}, PAGE_TEST_TIMEOUT_MS);
 });

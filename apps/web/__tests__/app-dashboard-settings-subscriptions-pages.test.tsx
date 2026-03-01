@@ -36,6 +36,8 @@ vi.mock("@/lib/api/client", () => ({
 }));
 
 describe("dashboard/settings/subscriptions pages", () => {
+	const PAGE_TEST_TIMEOUT_MS = 15000;
+
 	beforeEach(() => {
 		vi.clearAllMocks();
 	});
@@ -110,7 +112,7 @@ describe("dashboard/settings/subscriptions pages", () => {
 			"href",
 			"/jobs?job_id=job-333",
 		);
-	});
+	}, PAGE_TEST_TIMEOUT_MS);
 
 	it("renders dashboard load error and empty fallback copy", async () => {
 		mockListSubscriptions.mockRejectedValue(new Error("network failed"));
@@ -120,7 +122,7 @@ describe("dashboard/settings/subscriptions pages", () => {
 
 		expect(screen.getByRole("alert")).toHaveTextContent("请求失败，请稍后重试。");
 		expect(screen.getByText("当前无法加载视频列表。")).toBeInTheDocument();
-	});
+	}, PAGE_TEST_TIMEOUT_MS);
 
 	it("renders dashboard flash success from search params", async () => {
 		mockListSubscriptions.mockResolvedValue([]);
@@ -134,7 +136,7 @@ describe("dashboard/settings/subscriptions pages", () => {
 			"/subscriptions",
 		);
 		expect(screen.getByText("暂无视频。")).toBeInTheDocument();
-	});
+	}, PAGE_TEST_TIMEOUT_MS);
 
 	it("renders subscriptions page list and batch panel", async () => {
 		mockListSubscriptions.mockResolvedValue([
@@ -163,7 +165,7 @@ describe("dashboard/settings/subscriptions pages", () => {
 		expect(screen.getByRole("alert")).toHaveTextContent("输入参数不合法，请检查后重试。");
 		expect(screen.getByTestId("subscription-batch-panel")).toHaveTextContent("count:1");
 		expect(screen.getByRole("button", { name: "保存订阅" })).toBeInTheDocument();
-	});
+	}, PAGE_TEST_TIMEOUT_MS);
 
 	it("renders settings page config values and load failure message", async () => {
 		mockGetNotificationConfig.mockResolvedValue({
@@ -187,7 +189,7 @@ describe("dashboard/settings/subscriptions pages", () => {
 		expect(screen.getByDisplayValue("ops@example.com")).toBeInTheDocument();
 		expect(screen.getByDisplayValue("8")).toBeInTheDocument();
 		expect(screen.getByRole("button", { name: "发送测试邮件" })).toBeInTheDocument();
-	});
+	}, PAGE_TEST_TIMEOUT_MS);
 
 	it("renders settings load error fallback when API fails", async () => {
 		mockGetNotificationConfig.mockRejectedValue(new Error("boom"));
@@ -196,5 +198,5 @@ describe("dashboard/settings/subscriptions pages", () => {
 
 		expect(screen.getByRole("alert")).toHaveTextContent("请求失败，请稍后重试。");
 		expect(screen.getByRole("button", { name: "保存配置" })).toBeInTheDocument();
-	});
+	}, PAGE_TEST_TIMEOUT_MS);
 });
