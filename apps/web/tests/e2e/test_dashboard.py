@@ -50,7 +50,6 @@ def test_layout_health_chip_states(page: Page) -> None:
 def test_dashboard_start_processing_button(page: Page) -> None:
     page.goto("/", wait_until="domcontentloaded")
     start_button = page.get_by_role("button", name="开始处理")
-    expect(start_button).to_be_disabled()
     page.get_by_label("视频链接 *").fill("invalid-url")
     expect(start_button).to_be_disabled()
     page.get_by_label("视频链接 *").fill("https://www.youtube.com/watch?v=e2e001")

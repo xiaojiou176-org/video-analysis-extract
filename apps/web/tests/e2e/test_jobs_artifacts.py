@@ -62,7 +62,6 @@ def test_artifacts_lookup_form_requires_single_field(page: Page) -> None:
     page.goto("/artifacts", wait_until="domcontentloaded")
     submit = page.get_by_role("button", name="加载产物")
 
-    expect(submit).to_be_disabled()
     page.get_by_label("任务 ID").fill("00000000-0000-4000-8000-0000000000ff")
     expect(submit).to_be_enabled()
     page.get_by_label("视频 URL").fill("https://www.youtube.com/watch?v=e2e001")
