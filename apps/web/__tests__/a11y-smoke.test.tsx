@@ -68,21 +68,25 @@ describe("a11y smoke", () => {
 		});
 	});
 
-	it("dashboard/subscriptions/settings/jobs pages have no critical accessibility violations", async () => {
-		const dashboard = render(await DashboardPage({ searchParams: {} }));
-		const dashboardResults = await axe(dashboard.container);
-		expect(dashboardResults.violations).toHaveLength(0);
+	it(
+		"dashboard/subscriptions/settings/jobs pages have no critical accessibility violations",
+		async () => {
+			const dashboard = render(await DashboardPage({ searchParams: {} }));
+			const dashboardResults = await axe(dashboard.container);
+			expect(dashboardResults.violations).toHaveLength(0);
 
-		const subscriptions = render(await SubscriptionsPage({ searchParams: {} }));
-		const subscriptionsResults = await axe(subscriptions.container);
-		expect(subscriptionsResults.violations).toHaveLength(0);
+			const subscriptions = render(await SubscriptionsPage({ searchParams: {} }));
+			const subscriptionsResults = await axe(subscriptions.container);
+			expect(subscriptionsResults.violations).toHaveLength(0);
 
-		const settings = render(await SettingsPage({ searchParams: {} }));
-		const settingsResults = await axe(settings.container);
-		expect(settingsResults.violations).toHaveLength(0);
+			const settings = render(await SettingsPage({ searchParams: {} }));
+			const settingsResults = await axe(settings.container);
+			expect(settingsResults.violations).toHaveLength(0);
 
-		const jobs = render(await JobsPage({ searchParams: { job_id: "job-1" } }));
-		const jobsResults = await axe(jobs.container);
-		expect(jobsResults.violations).toHaveLength(0);
-	}, A11Y_TIMEOUT_MS);
+			const jobs = render(await JobsPage({ searchParams: { job_id: "job-1" } }));
+			const jobsResults = await axe(jobs.container);
+			expect(jobsResults.violations).toHaveLength(0);
+		},
+		A11Y_TIMEOUT_MS,
+	);
 });

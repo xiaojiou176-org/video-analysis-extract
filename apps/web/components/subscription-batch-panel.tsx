@@ -94,8 +94,7 @@ export function SubscriptionBatchPanel({ subscriptions }: Props) {
 	const allSelected =
 		visibleSubscriptions.length > 0 && selected.size === visibleSubscriptions.length;
 	const isApplyError = Boolean(
-		applyResult &&
-			(applyResult.startsWith("操作失败") || applyResult.startsWith("删除失败")),
+		applyResult && (applyResult.startsWith("操作失败") || applyResult.startsWith("删除失败")),
 	);
 
 	return (

@@ -30,7 +30,9 @@ def _has_needs_dep(block: str, dep: str) -> bool:
     return re.search(pattern, block, flags=re.MULTILINE) is not None
 
 
-def _check_global_rules(workflow_path: Path, text: str, blocks: dict[str, str], failures: list[str]) -> None:
+def _check_global_rules(
+    workflow_path: Path, text: str, blocks: dict[str, str], failures: list[str]
+) -> None:
     # Any runnable job must declare timeout-minutes.
     for job, block in blocks.items():
         if "runs-on:" in block and "timeout-minutes:" not in block:
@@ -64,10 +66,14 @@ def _check_global_rules(workflow_path: Path, text: str, blocks: dict[str, str], 
             failures.append(f"{workflow_path}: {job_name}: hosted jobs must use ubuntu-latest")
 
         if not fallback_block:
-            failures.append(f"{workflow_path}: {fallback_name}: missing fallback job for {job_name}")
+            failures.append(
+                f"{workflow_path}: {fallback_name}: missing fallback job for {job_name}"
+            )
         else:
             if "runs-on: e2-core" not in fallback_block:
-                failures.append(f"{workflow_path}: {fallback_name}: fallback jobs must run on e2-core")
+                failures.append(
+                    f"{workflow_path}: {fallback_name}: fallback jobs must run on e2-core"
+                )
             if not re.search(
                 rf"^\s+if:\s+\$\{{\{{.*always\(\).*(needs\['{re.escape(job_name)}'\]\.result\s*!=\s*'success'|needs\.{re.escape(job_name)}\.result\s*!=\s*'success').*\}}\}}\s*$",
                 fallback_block,
@@ -78,14 +84,20 @@ def _check_global_rules(workflow_path: Path, text: str, blocks: dict[str, str], 
                 )
 
         if not resolver_block:
-            failures.append(f"{workflow_path}: {resolver_name}: missing resolver job for hosted/fallback chain")
+            failures.append(
+                f"{workflow_path}: {resolver_name}: missing resolver job for hosted/fallback chain"
+            )
         else:
-            if not _has_needs_dep(resolver_block, job_name) or not _has_needs_dep(resolver_block, fallback_name):
+            if not _has_needs_dep(resolver_block, job_name) or not _has_needs_dep(
+                resolver_block, fallback_name
+            ):
                 failures.append(
                     f"{workflow_path}: {resolver_name}: resolver needs must include both {job_name} and {fallback_name}"
                 )
             if not re.search(r"^\s+if:\s+\$\{\{\s*always\(\)", resolver_block, flags=re.MULTILINE):
-                failures.append(f"{workflow_path}: {resolver_name}: resolver must use if: ${{{{ always() ... }}}}")
+                failures.append(
+                    f"{workflow_path}: {resolver_name}: resolver must use if: ${{{{ always() ... }}}}"
+                )
             if "result == 'success'" not in resolver_block:
                 failures.append(
                     f"{workflow_path}: {resolver_name}: resolver must only pass when hosted or fallback is successful"
@@ -99,7 +111,9 @@ def _check_ci_specific_rules(blocks: dict[str, str], failures: list[str]) -> Non
         failures.append("ci.yml: quality-gate-pre-push: missing job")
     else:
         if re.search(r"^\s{4}if:\s", qg_block, flags=re.MULTILINE):
-            failures.append("ci.yml: quality-gate-pre-push: should not narrow execution with job-level if")
+            failures.append(
+                "ci.yml: quality-gate-pre-push: should not narrow execution with job-level if"
+            )
         if "--mode pre-push" not in qg_block:
             failures.append("ci.yml: quality-gate-pre-push: missing pre-push quality gate command")
         if "--ci-dedupe 1" not in qg_block:
@@ -107,11 +121,15 @@ def _check_ci_specific_rules(blocks: dict[str, str], failures: list[str]) -> Non
                 "ci.yml: quality-gate-pre-push: must set --ci-dedupe 1 to avoid duplicate heavy checks already enforced by standalone CI jobs"
             )
         if "--mutation-min-score 0.62" not in qg_block:
-            failures.append("ci.yml: quality-gate-pre-push: mutation threshold must be at least 0.62")
+            failures.append(
+                "ci.yml: quality-gate-pre-push: mutation threshold must be at least 0.62"
+            )
         if "--mutation-min-effective-ratio 0.25" not in qg_block:
             failures.append("ci.yml: quality-gate-pre-push: missing mutation effective ratio floor")
         if "--mutation-max-no-tests-ratio 0.75" not in qg_block:
-            failures.append("ci.yml: quality-gate-pre-push: missing mutation no-tests ratio ceiling")
+            failures.append(
+                "ci.yml: quality-gate-pre-push: missing mutation no-tests ratio ceiling"
+            )
 
     # Real smoke jobs must not bypass write auth.
     for job_name in ("api-real-smoke", "pr-llm-real-smoke"):
@@ -139,7 +157,9 @@ def _check_ci_specific_rules(blocks: dict[str, str], failures: list[str]) -> Non
     }
     preflight_fast = blocks.get("preflight-fast", "")
     missing_in_preflight = [
-        description for marker, description in required_preflight_markers.items() if marker not in preflight_fast
+        description
+        for marker, description in required_preflight_markers.items()
+        if marker not in preflight_fast
     ]
     if missing_in_preflight:
         # Fallback-aware structure: `preflight-fast` can be a resolver while hosted/fallback

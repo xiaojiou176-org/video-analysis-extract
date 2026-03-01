@@ -63,139 +63,183 @@ describe("SubscriptionBatchPanel", () => {
 		vi.clearAllMocks();
 	});
 
-	it("renders empty message when no subscriptions", () => {
-		render(<SubscriptionBatchPanel subscriptions={[]} />);
-		expect(screen.getByText("暂无订阅数据。")).toBeInTheDocument();
-	}, PANEL_TEST_TIMEOUT_MS);
+	it(
+		"renders empty message when no subscriptions",
+		() => {
+			render(<SubscriptionBatchPanel subscriptions={[]} />);
+			expect(screen.getByText("暂无订阅数据。")).toBeInTheDocument();
+		},
+		PANEL_TEST_TIMEOUT_MS,
+	);
 
-	it("renders all subscriptions rows", () => {
-		render(<SubscriptionBatchPanel subscriptions={MOCK_SUBS} />);
-		expect(screen.getByText("当前订阅列表")).toBeInTheDocument();
-		expect(screen.getByRole("columnheader", { name: "来源" })).toHaveAttribute("scope", "col");
-		expect(screen.getByText("Tech Channel")).toBeInTheDocument();
-		expect(screen.getByText("Finance Blog")).toBeInTheDocument();
-	}, PANEL_TEST_TIMEOUT_MS);
+	it(
+		"renders all subscriptions rows",
+		() => {
+			render(<SubscriptionBatchPanel subscriptions={MOCK_SUBS} />);
+			expect(screen.getByText("当前订阅列表")).toBeInTheDocument();
+			expect(screen.getByRole("columnheader", { name: "来源" })).toHaveAttribute("scope", "col");
+			expect(screen.getByText("Tech Channel")).toBeInTheDocument();
+			expect(screen.getByText("Finance Blog")).toBeInTheDocument();
+		},
+		PANEL_TEST_TIMEOUT_MS,
+	);
 
-	it("select-all checkbox selects all rows", () => {
-		render(<SubscriptionBatchPanel subscriptions={MOCK_SUBS} />);
-		const allCheckbox = screen.getByLabelText("全选");
-		fireEvent.click(allCheckbox);
-		const rowCheckboxes = screen.getAllByRole("checkbox").filter((cb) => cb !== allCheckbox);
-		rowCheckboxes.forEach((cb) => {
-			expect(cb).toBeChecked();
-		});
-	}, PANEL_TEST_TIMEOUT_MS);
-
-	it("shows batch action bar when items are selected", () => {
-		render(<SubscriptionBatchPanel subscriptions={MOCK_SUBS} />);
-		fireEvent.click(screen.getByLabelText("全选"));
-
-		expect(screen.getByText(/已选/)).toBeInTheDocument();
-		expect(screen.getByRole("button", { name: "应用" })).toBeInTheDocument();
-	}, PANEL_TEST_TIMEOUT_MS);
-
-	it("toggles single row selection on and off", () => {
-		render(<SubscriptionBatchPanel subscriptions={MOCK_SUBS} />);
-		const oneCheckbox = screen.getByLabelText("选择 Tech Channel");
-		fireEvent.click(oneCheckbox);
-		expect(screen.getByText(/已选/)).toBeInTheDocument();
-		expect(screen.getByText("1")).toBeInTheDocument();
-
-		fireEvent.click(oneCheckbox);
-		expect(screen.queryByText(/已选/)).not.toBeInTheDocument();
-	}, PANEL_TEST_TIMEOUT_MS);
-
-	it("submits selected ids and category for batch update and shows success", async () => {
-		mockBatchUpdate.mockResolvedValue({ updated: 2 });
-		render(<SubscriptionBatchPanel subscriptions={MOCK_SUBS} />);
-
-		fireEvent.click(screen.getByLabelText("全选"));
-		fireEvent.change(screen.getByRole("combobox"), { target: { value: "creator" } });
-		fireEvent.click(screen.getByRole("button", { name: "应用" }));
-
-		await waitFor(() => {
-			expect(mockBatchUpdate).toHaveBeenCalledTimes(1);
-			expect(mockBatchUpdate).toHaveBeenCalledWith({
-				ids: expect.arrayContaining(["sub-1", "sub-2"]),
-				category: "creator",
+	it(
+		"select-all checkbox selects all rows",
+		() => {
+			render(<SubscriptionBatchPanel subscriptions={MOCK_SUBS} />);
+			const allCheckbox = screen.getByLabelText("全选");
+			fireEvent.click(allCheckbox);
+			const rowCheckboxes = screen.getAllByRole("checkbox").filter((cb) => cb !== allCheckbox);
+			rowCheckboxes.forEach((cb) => {
+				expect(cb).toBeChecked();
 			});
-		});
-		await waitFor(() => {
-			expect(screen.getByText("已将 2 条订阅移至分类「creator」")).toBeInTheDocument();
-		});
-		expect(mockRefresh).toHaveBeenCalledTimes(1);
-	}, PANEL_TEST_TIMEOUT_MS);
+		},
+		PANEL_TEST_TIMEOUT_MS,
+	);
 
-	it("shows explicit error message when batch update fails", async () => {
-		mockBatchUpdate.mockRejectedValue(new Error("Server error"));
-		render(<SubscriptionBatchPanel subscriptions={MOCK_SUBS} />);
+	it(
+		"shows batch action bar when items are selected",
+		() => {
+			render(<SubscriptionBatchPanel subscriptions={MOCK_SUBS} />);
+			fireEvent.click(screen.getByLabelText("全选"));
 
-		fireEvent.click(screen.getByLabelText("全选"));
-		fireEvent.click(screen.getByRole("button", { name: "应用" }));
+			expect(screen.getByText(/已选/)).toBeInTheDocument();
+			expect(screen.getByRole("button", { name: "应用" })).toBeInTheDocument();
+		},
+		PANEL_TEST_TIMEOUT_MS,
+	);
 
-		await waitFor(() => {
-			expect(mockBatchUpdate).toHaveBeenCalledTimes(1);
-		});
-		await waitFor(() => {
-			expect(screen.getByText("操作失败：请求失败，请稍后重试。")).toBeInTheDocument();
-		});
-		expect(mockRefresh).not.toHaveBeenCalled();
-	}, PANEL_TEST_TIMEOUT_MS);
+	it(
+		"toggles single row selection on and off",
+		() => {
+			render(<SubscriptionBatchPanel subscriptions={MOCK_SUBS} />);
+			const oneCheckbox = screen.getByLabelText("选择 Tech Channel");
+			fireEvent.click(oneCheckbox);
+			expect(screen.getByText(/已选/)).toBeInTheDocument();
+			expect(screen.getByText("1")).toBeInTheDocument();
 
-	it("cancel selection clears selected state and hides action bar", () => {
-		render(<SubscriptionBatchPanel subscriptions={MOCK_SUBS} />);
-		fireEvent.click(screen.getByLabelText("全选"));
+			fireEvent.click(oneCheckbox);
+			expect(screen.queryByText(/已选/)).not.toBeInTheDocument();
+		},
+		PANEL_TEST_TIMEOUT_MS,
+	);
 
-		expect(screen.getByRole("button", { name: "取消选择" })).toBeInTheDocument();
-		fireEvent.click(screen.getByRole("button", { name: "取消选择" }));
-		expect(screen.queryByText(/已选/)).not.toBeInTheDocument();
-	}, PANEL_TEST_TIMEOUT_MS);
+	it(
+		"submits selected ids and category for batch update and shows success",
+		async () => {
+			mockBatchUpdate.mockResolvedValue({ updated: 2 });
+			render(<SubscriptionBatchPanel subscriptions={MOCK_SUBS} />);
 
-	it("requires confirmation before deleting and sends exact id on confirm", async () => {
-		mockDelete.mockResolvedValue(undefined);
-		render(<SubscriptionBatchPanel subscriptions={MOCK_SUBS} />);
+			fireEvent.click(screen.getByLabelText("全选"));
+			fireEvent.change(screen.getByRole("combobox"), { target: { value: "creator" } });
+			fireEvent.click(screen.getByRole("button", { name: "应用" }));
 
-		const deleteButtons = screen.getAllByRole("button", { name: "删除" });
-		fireEvent.click(deleteButtons[0]);
+			await waitFor(() => {
+				expect(mockBatchUpdate).toHaveBeenCalledTimes(1);
+				expect(mockBatchUpdate).toHaveBeenCalledWith({
+					ids: expect.arrayContaining(["sub-1", "sub-2"]),
+					category: "creator",
+				});
+			});
+			await waitFor(() => {
+				expect(screen.getByText("已将 2 条订阅移至分类「creator」")).toBeInTheDocument();
+			});
+			expect(mockRefresh).toHaveBeenCalledTimes(1);
+		},
+		PANEL_TEST_TIMEOUT_MS,
+	);
 
-		expect(mockDelete).not.toHaveBeenCalled();
-		fireEvent.click(screen.getByRole("button", { name: "确认删除" }));
+	it(
+		"shows explicit error message when batch update fails",
+		async () => {
+			mockBatchUpdate.mockRejectedValue(new Error("Server error"));
+			render(<SubscriptionBatchPanel subscriptions={MOCK_SUBS} />);
 
-		await waitFor(() => {
-			expect(mockDelete).toHaveBeenCalledTimes(1);
-			expect(mockDelete).toHaveBeenCalledWith("sub-1");
-		});
-		expect(mockReplace).toHaveBeenCalledWith(
-			"/subscriptions?status=success&code=SUBSCRIPTION_DELETED",
-		);
-		expect(mockRefresh).toHaveBeenCalledTimes(1);
-	}, PANEL_TEST_TIMEOUT_MS);
+			fireEvent.click(screen.getByLabelText("全选"));
+			fireEvent.click(screen.getByRole("button", { name: "应用" }));
 
-	it("allows canceling delete confirmation without calling delete API", () => {
-		render(<SubscriptionBatchPanel subscriptions={MOCK_SUBS} />);
+			await waitFor(() => {
+				expect(mockBatchUpdate).toHaveBeenCalledTimes(1);
+			});
+			await waitFor(() => {
+				expect(screen.getByText("操作失败：请求失败，请稍后重试。")).toBeInTheDocument();
+			});
+			expect(mockRefresh).not.toHaveBeenCalled();
+		},
+		PANEL_TEST_TIMEOUT_MS,
+	);
 
-		const deleteButtons = screen.getAllByRole("button", { name: "删除" });
-		fireEvent.click(deleteButtons[0]);
-		expect(screen.getByRole("button", { name: "确认删除" })).toBeInTheDocument();
+	it(
+		"cancel selection clears selected state and hides action bar",
+		() => {
+			render(<SubscriptionBatchPanel subscriptions={MOCK_SUBS} />);
+			fireEvent.click(screen.getByLabelText("全选"));
 
-		fireEvent.click(screen.getByRole("button", { name: "取消" }));
-		expect(mockDelete).not.toHaveBeenCalled();
-		expect(screen.queryByRole("button", { name: "确认删除" })).not.toBeInTheDocument();
-	}, PANEL_TEST_TIMEOUT_MS);
+			expect(screen.getByRole("button", { name: "取消选择" })).toBeInTheDocument();
+			fireEvent.click(screen.getByRole("button", { name: "取消选择" }));
+			expect(screen.queryByText(/已选/)).not.toBeInTheDocument();
+		},
+		PANEL_TEST_TIMEOUT_MS,
+	);
 
-	it("shows delete failure message when API rejects", async () => {
-		mockDelete.mockRejectedValue(new Error("delete denied"));
-		render(<SubscriptionBatchPanel subscriptions={MOCK_SUBS} />);
+	it(
+		"requires confirmation before deleting and sends exact id on confirm",
+		async () => {
+			mockDelete.mockResolvedValue(undefined);
+			render(<SubscriptionBatchPanel subscriptions={MOCK_SUBS} />);
 
-		const deleteButtons = screen.getAllByRole("button", { name: "删除" });
-		fireEvent.click(deleteButtons[0]);
-		fireEvent.click(screen.getByRole("button", { name: "确认删除" }));
+			const deleteButtons = screen.getAllByRole("button", { name: "删除" });
+			fireEvent.click(deleteButtons[0]);
 
-		await waitFor(() => {
-			expect(mockDelete).toHaveBeenCalledTimes(1);
-		});
-		await waitFor(() => {
-			expect(screen.getByText("删除失败：请求失败，请稍后重试。")).toBeInTheDocument();
-		});
-	}, PANEL_TEST_TIMEOUT_MS);
+			expect(mockDelete).not.toHaveBeenCalled();
+			fireEvent.click(screen.getByRole("button", { name: "确认删除" }));
+
+			await waitFor(() => {
+				expect(mockDelete).toHaveBeenCalledTimes(1);
+				expect(mockDelete).toHaveBeenCalledWith("sub-1");
+			});
+			expect(mockReplace).toHaveBeenCalledWith(
+				"/subscriptions?status=success&code=SUBSCRIPTION_DELETED",
+			);
+			expect(mockRefresh).toHaveBeenCalledTimes(1);
+		},
+		PANEL_TEST_TIMEOUT_MS,
+	);
+
+	it(
+		"allows canceling delete confirmation without calling delete API",
+		() => {
+			render(<SubscriptionBatchPanel subscriptions={MOCK_SUBS} />);
+
+			const deleteButtons = screen.getAllByRole("button", { name: "删除" });
+			fireEvent.click(deleteButtons[0]);
+			expect(screen.getByRole("button", { name: "确认删除" })).toBeInTheDocument();
+
+			fireEvent.click(screen.getByRole("button", { name: "取消" }));
+			expect(mockDelete).not.toHaveBeenCalled();
+			expect(screen.queryByRole("button", { name: "确认删除" })).not.toBeInTheDocument();
+		},
+		PANEL_TEST_TIMEOUT_MS,
+	);
+
+	it(
+		"shows delete failure message when API rejects",
+		async () => {
+			mockDelete.mockRejectedValue(new Error("delete denied"));
+			render(<SubscriptionBatchPanel subscriptions={MOCK_SUBS} />);
+
+			const deleteButtons = screen.getAllByRole("button", { name: "删除" });
+			fireEvent.click(deleteButtons[0]);
+			fireEvent.click(screen.getByRole("button", { name: "确认删除" }));
+
+			await waitFor(() => {
+				expect(mockDelete).toHaveBeenCalledTimes(1);
+			});
+			await waitFor(() => {
+				expect(screen.getByText("删除失败：请求失败，请稍后重试。")).toBeInTheDocument();
+			});
+		},
+		PANEL_TEST_TIMEOUT_MS,
+	);
 });

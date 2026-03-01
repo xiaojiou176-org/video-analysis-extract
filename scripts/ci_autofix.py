@@ -237,7 +237,7 @@ def main() -> int:
     fingerprints, fix_plan = _aggregate(findings)
     report = {
         "mode": "dry-run",
-        "generated_at": dt.datetime.now(dt.timezone.utc).isoformat(),
+        "generated_at": dt.datetime.now(dt.UTC).isoformat(),
         "inputs": {
             "junit_files": [str(path) for path in junit_files],
             "log_files": [str(path) for path in log_files],
