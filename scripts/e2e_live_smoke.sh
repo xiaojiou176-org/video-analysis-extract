@@ -1049,12 +1049,12 @@ PY
     if [[ "$invocation_mode" == "start-only" ]]; then
       # start-only commands return immediately and don't require timeout watchdog.
       # Avoid timeout+uv process wrapping here to reduce interpreter finalization flakiness.
-      if command -v python3 >/dev/null 2>&1; then
-        PYTHONPATH="$ROOT_DIR/apps/worker:$ROOT_DIR:${PYTHONPATH:-}" \
-          python3 -m worker.main "$command_name" "${run_once_args[@]}" "$@" >"$output_path"
-      elif command -v uv >/dev/null 2>&1; then
+      if command -v uv >/dev/null 2>&1; then
         PYTHONPATH="$ROOT_DIR/apps/worker:$ROOT_DIR:${PYTHONPATH:-}" \
           uv run python -m worker.main "$command_name" "${run_once_args[@]}" "$@" >"$output_path"
+      elif command -v python3 >/dev/null 2>&1; then
+        PYTHONPATH="$ROOT_DIR/apps/worker:$ROOT_DIR:${PYTHONPATH:-}" \
+          python3 -m worker.main "$command_name" "${run_once_args[@]}" "$@" >"$output_path"
       else
         fail "python runtime not found for worker command: ${command_name}"
       fi
