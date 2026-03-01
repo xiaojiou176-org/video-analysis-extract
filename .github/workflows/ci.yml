@@ -1145,6 +1145,8 @@ jobs:
   web-e2e:
     runs-on: e2-core
     timeout-minutes: 45
+    env:
+      PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.runtime-cache/ms-playwright
     needs: [preflight-fast, changes]
     if: ${{ always() && needs.preflight-fast.result == 'success' && needs.changes.result == 'success' && (github.event_name != 'pull_request' || needs.changes.outputs.backend_changed == 'true' || needs.changes.outputs.web_changed == 'true' || needs.changes.outputs.deps_changed == 'true') }}
     services:
@@ -1197,7 +1199,7 @@ jobs:
       - name: Cache Playwright browsers
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
-          path: ~/.cache/ms-playwright
+          path: ${{ env.PLAYWRIGHT_BROWSERS_PATH }}
           key: ${{ runner.os }}-playwright-${{ matrix.browser }}-${{ hashFiles('uv.lock') }}
           restore-keys: |
             ${{ runner.os }}-playwright-${{ matrix.browser }}-
@@ -1432,6 +1434,8 @@ jobs:
   external-playwright-smoke:
     runs-on: e2-core
     timeout-minutes: 20
+    env:
+      PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.runtime-cache/ms-playwright
     if: ${{ github.event_name == 'schedule' || (github.event_name == 'push' && github.ref == 'refs/heads/main') }}
     needs: preflight-fast
     steps:
@@ -1459,7 +1463,7 @@ jobs:
       - name: Cache Playwright browsers
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
-          path: ~/.cache/ms-playwright
+          path: ${{ env.PLAYWRIGHT_BROWSERS_PATH }}
           key: ${{ runner.os }}-playwright-external-smoke-${{ hashFiles('uv.lock') }}
           restore-keys: |
             ${{ runner.os }}-playwright-external-smoke-
@@ -1780,6 +1784,8 @@ jobs:
   nightly-flaky-web-e2e:
     runs-on: e2-core
     timeout-minutes: 60
+    env:
+      PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.runtime-cache/ms-playwright
     if: ${{ github.event_name == 'schedule' }}
     needs: preflight-fast
     strategy:
@@ -1818,7 +1824,7 @@ jobs:
       - name: Cache Playwright browsers
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
-          path: ~/.cache/ms-playwright
+          path: ${{ env.PLAYWRIGHT_BROWSERS_PATH }}
           key: ${{ runner.os }}-playwright-${{ matrix.browser }}-${{ hashFiles('uv.lock') }}
           restore-keys: |
             ${{ runner.os }}-playwright-${{ matrix.browser }}-
