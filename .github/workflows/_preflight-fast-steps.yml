@@ -1,0 +1,152 @@
+name: _preflight-fast-steps (reusable)
+
+on:
+  workflow_call:
+    inputs:
+      runs-on:
+        required: true
+        type: string
+        description: "Runner label to use (e.g. ubuntu-latest or e2-core)"
+
+jobs:
+  run:
+    runs-on: ${{ inputs.runs-on }}
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Setup Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+
+      - name: Install ripgrep
+        run: |
+          for attempt in $(seq 1 20); do
+            if sudo apt-get update && sudo apt-get install -y ripgrep; then
+              exit 0
+            fi
+            if sudo fuser /var/lib/apt/lists/lock >/dev/null 2>&1 || sudo fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 || sudo fuser /var/cache/apt/archives/lock >/dev/null 2>&1; then
+              echo "apt lock detected, retrying ($attempt/20)..."
+              sleep 5
+              continue
+            fi
+            echo "apt install failed without lock contention"
+            exit 1
+          done
+          echo "apt install failed after retries"
+          exit 1
+
+      - name: Env contract strict check
+        run: python3 scripts/check_env_contract.py --strict --env-file .env.example
+
+      - name: computer_use smoke CLI contract check
+        run: |
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+
+          script = Path("scripts/e2e_live_smoke.sh").read_text(encoding="utf-8")
+          required = [
+              "--api-base-url <url>",
+              "--require-api <0|1>",
+              "--require-secrets <0|1>",
+              "--computer-use-strict <0|1>",
+              "--computer-use-skip <0|1>",
+              "--computer-use-skip-reason <text>",
+          ]
+          missing = sorted(item for item in required if item not in script)
+          if missing:
+              raise SystemExit(f"missing computer_use smoke CLI options: {', '.join(missing)}")
+
+          defaults = {
+              "LIVE_SMOKE_REQUIRE_API": "1",
+              "LIVE_SMOKE_COMPUTER_USE_STRICT": "1",
+              "LIVE_SMOKE_COMPUTER_USE_SKIP": "0",
+              "LIVE_SMOKE_MAX_RETRIES": "2",
+          }
+          for name, expected in defaults.items():
+              pattern = rf'^{name}="{re.escape(expected)}"$'
+              if not re.search(pattern, script, re.MULTILINE):
+                  raise SystemExit(f"{name} default must be '{expected}'")
+          print("computer_use smoke CLI contract check passed")
+          PY
+
+      - name: CI smoke drift check
+        run: bash scripts/check_ci_smoke_drift.sh
+
+      - name: CI docs parity check (blocking)
+        run: python3 scripts/check_ci_docs_parity.py
+
+      - name: Docs env canonical check
+        run: |
+          ! rg -n 'cp \.env\.local\.example \.env\.local|source \.env\.local|自动加载 `?\.env\.local' README.md docs/runbook-local.md
+
+      - name: IaC entrypoint guard
+        run: bash scripts/check_iac_entrypoint.sh .
+
+      - name: IaC compose config validation
+        run: |
+          if docker compose version >/dev/null 2>&1; then
+            COMPOSE_CMD=(docker compose)
+          elif command -v docker-compose >/dev/null 2>&1; then
+            COMPOSE_CMD=(docker-compose)
+          else
+            echo "docker compose or docker-compose is required" >&2
+            exit 1
+          fi
+          "${COMPOSE_CMD[@]}" -f infra/compose/core-services.compose.yml config -q
+          if [[ -f infra/compose/miniflux-nextflux.compose.yml ]]; then
+            "${COMPOSE_CMD[@]}" -f infra/compose/miniflux-nextflux.compose.yml config -q
+          fi
+
+      - name: Provider residual guard (blocking)
+        run: bash scripts/guard_provider_residuals.sh .
+
+      - name: Worker file line limits (pipeline/steps + temporal <= 750)
+        run: python3 scripts/check_worker_line_limits.py
+
+      - name: Test focus/todo marker guard
+        run: python3 scripts/check_test_focus_markers.py
+
+      - name: E2E strictness guard
+        run: python3 scripts/check_e2e_strictness.py
+
+      - name: Mutation scope guard
+        run: python3 scripts/check_mutation_scope.py
+
+      - name: Mutation test selection guard
+        run: python3 scripts/check_mutation_test_selection.py
+
+      - name: CI workflow strictness guard
+        run: python3 scripts/check_ci_workflow_strictness.py
+
+      - name: Schema parity check (apps/mcp vs shared-contracts)
+        run: |
+          python - <<'PY'
+          import difflib
+          import json
+          from pathlib import Path
+
+          source_path = Path("apps/mcp/schemas/tools.json")
+          shared_path = Path("packages/shared-contracts/jsonschema/mcp-tools.schema.json")
+
+          source = json.loads(source_path.read_text(encoding="utf-8"))
+          shared = json.loads(shared_path.read_text(encoding="utf-8"))
+
+          if source != shared:
+              source_pretty = json.dumps(source, ensure_ascii=False, indent=2, sort_keys=True).splitlines()
+              shared_pretty = json.dumps(shared, ensure_ascii=False, indent=2, sort_keys=True).splitlines()
+              print("Schema parity check failed:")
+              for line in difflib.unified_diff(
+                  source_pretty,
+                  shared_pretty,
+                  fromfile=str(source_path),
+                  tofile=str(shared_path),
+                  lineterm="",
+              ):
+                  print(line)
+              raise SystemExit(1)
+          print("Schema parity check passed.")
+          PY

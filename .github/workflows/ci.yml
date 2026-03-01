@@ -170,291 +170,17 @@ jobs:
           fi
 
   preflight-fast-hosted:
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
+    uses: ./.github/workflows/_preflight-fast-steps.yml
     needs: [required-ci-secrets]
-    steps:
-      - name: Checkout
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-
-      - name: Setup Python
-        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
-        with:
-          python-version: "3.12"
-
-      - name: Install ripgrep
-        run: |
-          for attempt in $(seq 1 20); do
-            if sudo apt-get update && sudo apt-get install -y ripgrep; then
-              exit 0
-            fi
-            if sudo fuser /var/lib/apt/lists/lock >/dev/null 2>&1 || sudo fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 || sudo fuser /var/cache/apt/archives/lock >/dev/null 2>&1; then
-              echo "apt lock detected, retrying ($attempt/20)..."
-              sleep 5
-              continue
-            fi
-            echo "apt install failed without lock contention"
-            exit 1
-          done
-          echo "apt install failed after retries"
-          exit 1
-
-      - name: Env contract strict check
-        run: python3 scripts/check_env_contract.py --strict --env-file .env.example
-
-      - name: computer_use smoke CLI contract check
-        run: |
-          python3 - <<'PY'
-          import re
-          from pathlib import Path
-
-          script = Path("scripts/e2e_live_smoke.sh").read_text(encoding="utf-8")
-          required = [
-              "--api-base-url <url>",
-              "--require-api <0|1>",
-              "--require-secrets <0|1>",
-              "--computer-use-strict <0|1>",
-              "--computer-use-skip <0|1>",
-              "--computer-use-skip-reason <text>",
-          ]
-          missing = sorted(item for item in required if item not in script)
-          if missing:
-              raise SystemExit(f"missing computer_use smoke CLI options: {', '.join(missing)}")
-
-          defaults = {
-              "LIVE_SMOKE_REQUIRE_API": "1",
-              "LIVE_SMOKE_COMPUTER_USE_STRICT": "1",
-              "LIVE_SMOKE_COMPUTER_USE_SKIP": "0",
-              "LIVE_SMOKE_MAX_RETRIES": "2",
-          }
-          for name, expected in defaults.items():
-              pattern = rf'^{name}="{re.escape(expected)}"$'
-              if not re.search(pattern, script, re.MULTILINE):
-                  raise SystemExit(f"{name} default must be '{expected}'")
-          print("computer_use smoke CLI contract check passed")
-          PY
-
-      - name: CI smoke drift check
-        run: bash scripts/check_ci_smoke_drift.sh
-
-      - name: CI docs parity check (blocking)
-        run: python3 scripts/check_ci_docs_parity.py
-
-      - name: Docs env canonical check
-        run: |
-          ! rg -n 'cp \.env\.local\.example \.env\.local|source \.env\.local|自动加载 `?\.env\.local' README.md docs/runbook-local.md
-
-      - name: IaC entrypoint guard
-        run: bash scripts/check_iac_entrypoint.sh .
-
-      - name: IaC compose config validation
-        run: |
-          if docker compose version >/dev/null 2>&1; then
-            COMPOSE_CMD=(docker compose)
-          elif command -v docker-compose >/dev/null 2>&1; then
-            COMPOSE_CMD=(docker-compose)
-          else
-            echo "docker compose or docker-compose is required" >&2
-            exit 1
-          fi
-          "${COMPOSE_CMD[@]}" -f infra/compose/core-services.compose.yml config -q
-          if [[ -f infra/compose/miniflux-nextflux.compose.yml ]]; then
-            "${COMPOSE_CMD[@]}" -f infra/compose/miniflux-nextflux.compose.yml config -q
-          fi
-
-      - name: Provider residual guard (blocking)
-        run: bash scripts/guard_provider_residuals.sh .
-
-      - name: Worker file line limits (pipeline/steps + temporal <= 750)
-        run: python3 scripts/check_worker_line_limits.py
-
-      - name: Test focus/todo marker guard
-        run: python3 scripts/check_test_focus_markers.py
-
-      - name: E2E strictness guard
-        run: python3 scripts/check_e2e_strictness.py
-
-      - name: Mutation scope guard
-        run: python3 scripts/check_mutation_scope.py
-
-      - name: Mutation test selection guard
-        run: python3 scripts/check_mutation_test_selection.py
-
-      - name: CI workflow strictness guard
-        run: python3 scripts/check_ci_workflow_strictness.py
-
-      - name: Schema parity check (apps/mcp vs shared-contracts)
-        run: |
-          python - <<'PY'
-          import difflib
-          import json
-          from pathlib import Path
-
-          source_path = Path("apps/mcp/schemas/tools.json")
-          shared_path = Path("packages/shared-contracts/jsonschema/mcp-tools.schema.json")
-
-          source = json.loads(source_path.read_text(encoding="utf-8"))
-          shared = json.loads(shared_path.read_text(encoding="utf-8"))
-
-          if source != shared:
-              source_pretty = json.dumps(source, ensure_ascii=False, indent=2, sort_keys=True).splitlines()
-              shared_pretty = json.dumps(shared, ensure_ascii=False, indent=2, sort_keys=True).splitlines()
-              print("Schema parity check failed:")
-              for line in difflib.unified_diff(
-                  source_pretty,
-                  shared_pretty,
-                  fromfile=str(source_path),
-                  tofile=str(shared_path),
-                  lineterm="",
-              ):
-                  print(line)
-              raise SystemExit(1)
-          print("Schema parity check passed.")
-          PY
+    with:
+      runs-on: ubuntu-latest
 
   preflight-fast-fallback:
-    runs-on: e2-core
-    timeout-minutes: 20
+    uses: ./.github/workflows/_preflight-fast-steps.yml
     needs: [required-ci-secrets, preflight-fast-hosted]
     if: ${{ always() && needs['preflight-fast-hosted'].result != 'success' }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-
-      - name: Setup Python
-        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
-        with:
-          python-version: "3.12"
-
-      - name: Install ripgrep
-        run: |
-          for attempt in $(seq 1 20); do
-            if sudo apt-get update && sudo apt-get install -y ripgrep; then
-              exit 0
-            fi
-            if sudo fuser /var/lib/apt/lists/lock >/dev/null 2>&1 || sudo fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 || sudo fuser /var/cache/apt/archives/lock >/dev/null 2>&1; then
-              echo "apt lock detected, retrying ($attempt/20)..."
-              sleep 5
-              continue
-            fi
-            echo "apt install failed without lock contention"
-            exit 1
-          done
-          echo "apt install failed after retries"
-          exit 1
-
-      - name: Env contract strict check
-        run: python3 scripts/check_env_contract.py --strict --env-file .env.example
-
-      - name: computer_use smoke CLI contract check
-        run: |
-          python3 - <<'PY'
-          import re
-          from pathlib import Path
-
-          script = Path("scripts/e2e_live_smoke.sh").read_text(encoding="utf-8")
-          required = [
-              "--api-base-url <url>",
-              "--require-api <0|1>",
-              "--require-secrets <0|1>",
-              "--computer-use-strict <0|1>",
-              "--computer-use-skip <0|1>",
-              "--computer-use-skip-reason <text>",
-          ]
-          missing = sorted(item for item in required if item not in script)
-          if missing:
-              raise SystemExit(f"missing computer_use smoke CLI options: {', '.join(missing)}")
-
-          defaults = {
-              "LIVE_SMOKE_REQUIRE_API": "1",
-              "LIVE_SMOKE_COMPUTER_USE_STRICT": "1",
-              "LIVE_SMOKE_COMPUTER_USE_SKIP": "0",
-              "LIVE_SMOKE_MAX_RETRIES": "2",
-          }
-          for name, expected in defaults.items():
-              pattern = rf'^{name}="{re.escape(expected)}"$'
-              if not re.search(pattern, script, re.MULTILINE):
-                  raise SystemExit(f"{name} default must be '{expected}'")
-          print("computer_use smoke CLI contract check passed")
-          PY
-
-      - name: CI smoke drift check
-        run: bash scripts/check_ci_smoke_drift.sh
-
-      - name: CI docs parity check (blocking)
-        run: python3 scripts/check_ci_docs_parity.py
-
-      - name: Docs env canonical check
-        run: |
-          ! rg -n 'cp \.env\.local\.example \.env\.local|source \.env\.local|自动加载 `?\.env\.local' README.md docs/runbook-local.md
-
-      - name: IaC entrypoint guard
-        run: bash scripts/check_iac_entrypoint.sh .
-
-      - name: IaC compose config validation
-        run: |
-          if docker compose version >/dev/null 2>&1; then
-            COMPOSE_CMD=(docker compose)
-          elif command -v docker-compose >/dev/null 2>&1; then
-            COMPOSE_CMD=(docker-compose)
-          else
-            echo "docker compose or docker-compose is required" >&2
-            exit 1
-          fi
-          "${COMPOSE_CMD[@]}" -f infra/compose/core-services.compose.yml config -q
-          if [[ -f infra/compose/miniflux-nextflux.compose.yml ]]; then
-            "${COMPOSE_CMD[@]}" -f infra/compose/miniflux-nextflux.compose.yml config -q
-          fi
-
-      - name: Provider residual guard (blocking)
-        run: bash scripts/guard_provider_residuals.sh .
-
-      - name: Worker file line limits (pipeline/steps + temporal <= 750)
-        run: python3 scripts/check_worker_line_limits.py
-
-      - name: Test focus/todo marker guard
-        run: python3 scripts/check_test_focus_markers.py
-
-      - name: E2E strictness guard
-        run: python3 scripts/check_e2e_strictness.py
-
-      - name: Mutation scope guard
-        run: python3 scripts/check_mutation_scope.py
-
-      - name: Mutation test selection guard
-        run: python3 scripts/check_mutation_test_selection.py
-
-      - name: CI workflow strictness guard
-        run: python3 scripts/check_ci_workflow_strictness.py
-
-      - name: Schema parity check (apps/mcp vs shared-contracts)
-        run: |
-          python - <<'PY'
-          import difflib
-          import json
-          from pathlib import Path
-
-          source_path = Path("apps/mcp/schemas/tools.json")
-          shared_path = Path("packages/shared-contracts/jsonschema/mcp-tools.schema.json")
-
-          source = json.loads(source_path.read_text(encoding="utf-8"))
-          shared = json.loads(shared_path.read_text(encoding="utf-8"))
-
-          if source != shared:
-              source_pretty = json.dumps(source, ensure_ascii=False, indent=2, sort_keys=True).splitlines()
-              shared_pretty = json.dumps(shared, ensure_ascii=False, indent=2, sort_keys=True).splitlines()
-              print("Schema parity check failed:")
-              for line in difflib.unified_diff(
-                  source_pretty,
-                  shared_pretty,
-                  fromfile=str(source_path),
-                  tofile=str(shared_path),
-                  lineterm="",
-              ):
-                  print(line)
-              raise SystemExit(1)
-          print("Schema parity check passed.")
-          PY
+    with:
+      runs-on: e2-core
 
   preflight-fast:
     runs-on: e2-core
@@ -639,6 +365,114 @@ jobs:
           for migration in $(find infra/migrations -maxdepth 1 -type f -name '*.sql' | sort); do
             psql "postgresql://postgres:postgres@127.0.0.1:${PGPORT}/video_analysis_ci" -v ON_ERROR_STOP=1 -f "$migration"
           done
+
+  mutation-testing:
+    runs-on: e2-core
+    timeout-minutes: 120
+    needs: [preflight-fast, changes]
+    if: ${{ always() && needs.preflight-fast.result == 'success' && needs.changes.result == 'success' && (github.event_name != 'pull_request' || needs.changes.outputs.backend_changed == 'true') }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Setup Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+
+      - name: Setup uv
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install uv
+
+      - name: Cache uv
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ~/.cache/uv
+          key: ${{ runner.os }}-uv-${{ hashFiles('uv.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-uv-
+
+      - name: Sync Python deps (locked)
+        run: uv sync --frozen --extra dev --extra e2e
+
+      - name: Run mutation testing (mutmut)
+        env:
+          DATABASE_URL: "sqlite+pysqlite:///:memory:"
+          PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/apps/worker
+        run: |
+          rm -rf mutants
+          uv run --extra dev --with mutmut mutmut run
+          uv run --extra dev --with mutmut mutmut export-cicd-stats
+
+      - name: Validate mutation score and effective ratio
+        env:
+          MUTATION_MIN_SCORE: "0.62"
+          MUTATION_MIN_EFFECTIVE_RATIO: "0.25"
+          MUTATION_MAX_NO_TESTS_RATIO: "0.75"
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          stats_path = Path("mutants/mutmut-cicd-stats.json")
+          if not stats_path.exists():
+              raise SystemExit("mutation-testing failed: mutants/mutmut-cicd-stats.json not found")
+
+          stats = json.loads(stats_path.read_text(encoding="utf-8"))
+          killed = int(stats.get("killed", 0))
+          survived = int(stats.get("survived", 0))
+          suspicious = int(stats.get("suspicious", 0))
+          timeout = int(stats.get("timeout", 0))
+          skipped = int(stats.get("skipped", 0))
+          total = int(stats.get("total", 0))
+
+          effective = killed + survived
+          score = killed / effective if effective > 0 else 0.0
+          effective_ratio = effective / total if total > 0 else 0.0
+          no_tests_ratio = skipped / total if total > 0 else 0.0
+
+          min_score = float(os.environ.get("MUTATION_MIN_SCORE", "0.62"))
+          min_effective_ratio = float(os.environ.get("MUTATION_MIN_EFFECTIVE_RATIO", "0.25"))
+          max_no_tests_ratio = float(os.environ.get("MUTATION_MAX_NO_TESTS_RATIO", "0.75"))
+
+          print(
+              f"mutation stats: killed={killed}, survived={survived}, suspicious={suspicious}, "
+              f"timeout={timeout}, skipped={skipped}, total={total}"
+          )
+          print(
+              f"mutation quality: score={score:.4f} (threshold={min_score:.4f}), "
+              f"effective_ratio={effective_ratio:.4f} (threshold={min_effective_ratio:.4f}), "
+              f"no_tests_ratio={no_tests_ratio:.4f} (ceiling={max_no_tests_ratio:.4f})"
+          )
+
+          if effective <= 0:
+              raise SystemExit("mutation-testing failed: no effective mutants (killed+survived=0)")
+          if score < min_score:
+              raise SystemExit(
+                  f"mutation-testing failed: score {score:.4f} < threshold {min_score:.4f}"
+              )
+          if effective_ratio < min_effective_ratio:
+              raise SystemExit(
+                  f"mutation-testing failed: effective_ratio {effective_ratio:.4f} < threshold {min_effective_ratio:.4f}"
+              )
+          if no_tests_ratio > max_no_tests_ratio:
+              raise SystemExit(
+                  f"mutation-testing failed: no_tests_ratio {no_tests_ratio:.4f} > ceiling {max_no_tests_ratio:.4f}"
+              )
+
+          print("mutation-testing: all gates passed")
+          PY
+
+      - name: Upload mutation stats artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mutmut-cicd-stats
+          path: |
+            mutants/mutmut-cicd-stats.json
+          if-no-files-found: warn
 
   python-tests:
     runs-on: e2-core
@@ -1641,6 +1475,7 @@ jobs:
       - profile-governance
       - quality-gate-pre-push
       - db-migration-smoke
+      - mutation-testing
       - python-tests
       - api-real-smoke
       - pr-llm-real-smoke
@@ -1672,6 +1507,7 @@ jobs:
           results[profile_governance]="${{ needs.profile-governance.result }}"
           results[quality_gate_pre_push]="${{ needs.quality-gate-pre-push.result }}"
           results[db_migration_smoke]="${{ needs.db-migration-smoke.result }}"
+          results[mutation_testing]="${{ needs.mutation-testing.result }}"
           results[python_tests]="${{ needs.python-tests.result }}"
           results[api_real_smoke]="${{ needs.api-real-smoke.result }}"
           results[pr_llm_real_smoke]="${{ needs.pr-llm-real-smoke.result }}"
@@ -1740,6 +1576,7 @@ jobs:
           fi
 
           check_required_job db_migration_smoke "$required_db_migration"
+          check_required_job mutation_testing "$required_backend_group"
           check_required_job python_tests "$required_backend_group"
           check_required_job api_real_smoke "$required_api_real_smoke"
           check_required_job backend_lint "$required_backend_group"
@@ -2209,6 +2046,9 @@ jobs:
       - name: Backend lint (ruff critical rules)
         run: uv run --with ruff ruff check apps scripts --select E9,F63,F7,F82
 
+      - name: Backend lint (ruff full rules)
+        run: uv run --with ruff ruff check apps scripts
+
   backend-lint-fallback:
     runs-on: e2-core
     timeout-minutes: 25
@@ -2244,6 +2084,9 @@ jobs:
 
       - name: Backend lint (ruff critical rules)
         run: uv run --with ruff ruff check apps scripts --select E9,F63,F7,F82
+
+      - name: Backend lint (ruff full rules)
+        run: uv run --with ruff ruff check apps scripts
 
   backend-lint:
     runs-on: e2-core

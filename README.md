@@ -19,7 +19,7 @@
 - 任务执行：Temporal Worker（9-step pipeline）
 - 工具层：FastMCP
 - 前端：Next.js
-- 存储：PostgreSQL + SQLite（状态）+ Redis（可选）
+- 存储：PostgreSQL（含 pgvector 扩展用于向量检索）+ SQLite（状态）+ Redis（可选）
 - 质量门禁：uv、pytest、Playwright、ruff、npm lint/test、git hooks
 
 ## 1 分钟入口
@@ -46,7 +46,7 @@
 
 仓库当前可复现环境方案：
 
-- Docker Compose（基础设施真相源）：`infra/compose/core-services.compose.yml`、`infra/compose/miniflux-nextflux.compose.yml`
+- Docker Compose（基础设施真相源）：`infra/compose/core-services.compose.yml`（使用 `pgvector/pgvector:pg16` 镜像支持向量检索）、`infra/compose/miniflux-nextflux.compose.yml`
 - DevContainer（AI/自动化标准执行环境）：`.devcontainer/devcontainer.json`
 
 推荐进入标准环境后再执行 lint/test/live smoke：

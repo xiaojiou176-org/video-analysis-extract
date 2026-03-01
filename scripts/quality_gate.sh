@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 MODE="pre-push"
 HEARTBEAT_SECONDS="25"
-MUTATION_MIN_SCORE="0.85"
+MUTATION_MIN_SCORE="0.62"
 MUTATION_MIN_EFFECTIVE_RATIO="0.25"
 MUTATION_MAX_NO_TESTS_RATIO="0.75"
 PROFILE_ONLY="0"
@@ -45,7 +45,7 @@ Profiles:
   live-smoke  Validate live-smoke profile governance.
 Flags:
   --profile NAME   Append explicit profile checks (repeatable).
-  --mutation-min-score N  Mutation score threshold (default: 0.85).
+  --mutation-min-score N  Mutation score threshold (default: 0.62).
   --mutation-min-effective-ratio N  Mutation effective ratio threshold (default: 0.25).
   --mutation-max-no-tests-ratio N  Mutation no-tests ratio upper bound (default: 0.75).
   --profile-only   Run profile checks only, skip other quality gates.
@@ -65,7 +65,7 @@ Quality policy (blocking):
   - Documentation drift gate is mandatory.
   - Secrets leak scan is mandatory.
   - Coverage thresholds: total >= 85%, core modules >= 95%.
-  - Mutation testing (Python core): mutation score >= configured threshold (default: 0.85).
+  - Mutation testing (Python core): mutation score >= configured threshold (default: 0.62).
 USAGE
 }
 

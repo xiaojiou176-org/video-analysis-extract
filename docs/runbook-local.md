@@ -5,7 +5,7 @@
 ## 标准环境约束（AI/自动化必须）
 
 - AI 执行 lint/test/live smoke 必须在标准环境完成：`.devcontainer/devcontainer.json`。
-- 基础设施编排真相源固定为：`infra/compose/core-services.compose.yml` 与 `infra/compose/miniflux-nextflux.compose.yml`。
+- 基础设施编排真相源固定为：`infra/compose/core-services.compose.yml`（使用 `pgvector/pgvector:pg16` 镜像支持向量检索扩展）与 `infra/compose/miniflux-nextflux.compose.yml`。
 - 若不使用 DevContainer，必须提供等价隔离环境（依赖版本、工具链、Compose 服务拓扑一致），否则验证结果不具备门禁效力。
 
 进入标准环境：

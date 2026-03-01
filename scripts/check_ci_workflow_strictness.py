@@ -33,22 +33,32 @@ def _has_needs_dep(block: str, dep: str) -> bool:
 def _check_global_rules(
     workflow_path: Path, text: str, blocks: dict[str, str], failures: list[str]
 ) -> None:
+    # Skip reusable workflows (workflow_call).
+    is_reusable = "on:\n  workflow_call:" in text or "on:\n    workflow_call:" in text
+    
     # Any runnable job must declare timeout-minutes.
+    # Jobs that delegate to reusable workflows (uses:) have timeout in the reusable workflow.
     for job, block in blocks.items():
-        if "runs-on:" in block and "timeout-minutes:" not in block:
-            failures.append(f"{workflow_path}: {job}: missing timeout-minutes")
+        has_direct_runs_on = re.search(r"^\s{4}runs-on:", block, flags=re.MULTILINE) is not None
+        has_uses = "uses:" in block
+        if has_direct_runs_on and not has_uses and "timeout-minutes:" not in block:
+            failures.append(f"{workflow_path.name}: {job}: missing timeout-minutes")
 
     # continue-on-error in workflows creates bypass paths and is forbidden in this repo.
     if re.search(r"^\s+continue-on-error:\s*true\s*$", text, flags=re.MULTILINE):
-        failures.append(f"{workflow_path}: continue-on-error=true is forbidden")
+        failures.append(f"{workflow_path.name}: continue-on-error=true is forbidden")
+
+    # Reusable workflows (workflow_call) don't need required-ci-secrets job.
+    if is_reusable:
+        return
 
     # Every workflow must hard-fail when required CI secrets are missing.
     required_ci_secrets = blocks.get("required-ci-secrets", "")
     if not required_ci_secrets:
-        failures.append(f"{workflow_path}: required-ci-secrets: missing job")
+        failures.append(f"{workflow_path.name}: required-ci-secrets: missing job")
     elif not _contains_required_ci_gate(required_ci_secrets):
         failures.append(
-            f"{workflow_path}: required-ci-secrets: must run check_required_ci_secrets.py with --required GEMINI_API_KEY"
+            f"{workflow_path.name}: required-ci-secrets: must run check_required_ci_secrets.py with --required GEMINI_API_KEY"
         )
 
     # Hosted -> fallback -> resolver chain checks for small tasks.
@@ -164,11 +174,24 @@ def _check_ci_specific_rules(blocks: dict[str, str], failures: list[str]) -> Non
     if missing_in_preflight:
         # Fallback-aware structure: `preflight-fast` can be a resolver while hosted/fallback
         # execute the actual checks. In that case, both execution paths must contain markers.
+        # If hosted/fallback use reusable workflows (uses:), check the reusable workflow file.
         for job_name in ("preflight-fast-hosted", "preflight-fast-fallback"):
             block = blocks.get(job_name, "")
-            for marker, description in required_preflight_markers.items():
-                if marker not in block:
-                    failures.append(f"ci.yml: {job_name}: missing {description}")
+            if "uses: ./.github/workflows/_preflight-fast-steps.yml" in block:
+                # Read the reusable workflow and check it contains the markers.
+                reusable_path = Path(".github/workflows/_preflight-fast-steps.yml")
+                if reusable_path.is_file():
+                    reusable_text = reusable_path.read_text(encoding="utf-8")
+                    for marker, description in required_preflight_markers.items():
+                        if marker not in reusable_text:
+                            failures.append(f"ci.yml: {job_name}: missing {description} (delegated to _preflight-fast-steps.yml)")
+                else:
+                    failures.append(f"ci.yml: {job_name}: reusable workflow _preflight-fast-steps.yml not found")
+            else:
+                # Inline steps mode.
+                for marker, description in required_preflight_markers.items():
+                    if marker not in block:
+                        failures.append(f"ci.yml: {job_name}: missing {description}")
 
     # live-smoke must run on a fully provisioned local stack and enforce secrets.
     live_smoke = blocks.get("live-smoke", "")
