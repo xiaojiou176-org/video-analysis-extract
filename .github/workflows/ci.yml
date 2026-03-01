@@ -184,8 +184,20 @@ jobs:
 
       - name: Install ripgrep
         run: |
-          sudo apt-get update
-          sudo apt-get install -y ripgrep
+          for attempt in $(seq 1 20); do
+            if sudo apt-get update && sudo apt-get install -y ripgrep; then
+              exit 0
+            fi
+            if sudo fuser /var/lib/apt/lists/lock >/dev/null 2>&1 || sudo fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 || sudo fuser /var/cache/apt/archives/lock >/dev/null 2>&1; then
+              echo "apt lock detected, retrying ($attempt/20)..."
+              sleep 5
+              continue
+            fi
+            echo "apt install failed without lock contention"
+            exit 1
+          done
+          echo "apt install failed after retries"
+          exit 1
 
       - name: Env contract strict check
         run: python3 scripts/check_env_contract.py --strict --env-file .env.example
@@ -316,8 +328,20 @@ jobs:
 
       - name: Install ripgrep
         run: |
-          sudo apt-get update
-          sudo apt-get install -y ripgrep
+          for attempt in $(seq 1 20); do
+            if sudo apt-get update && sudo apt-get install -y ripgrep; then
+              exit 0
+            fi
+            if sudo fuser /var/lib/apt/lists/lock >/dev/null 2>&1 || sudo fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 || sudo fuser /var/cache/apt/archives/lock >/dev/null 2>&1; then
+              echo "apt lock detected, retrying ($attempt/20)..."
+              sleep 5
+              continue
+            fi
+            echo "apt install failed without lock contention"
+            exit 1
+          done
+          echo "apt install failed after retries"
+          exit 1
 
       - name: Env contract strict check
         run: python3 scripts/check_env_contract.py --strict --env-file .env.example
@@ -591,8 +615,20 @@ jobs:
 
       - name: Install PostgreSQL client
         run: |
-          sudo apt-get update
-          sudo apt-get install -y postgresql-client
+          for attempt in $(seq 1 20); do
+            if sudo apt-get update && sudo apt-get install -y postgresql-client; then
+              exit 0
+            fi
+            if sudo fuser /var/lib/apt/lists/lock >/dev/null 2>&1 || sudo fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 || sudo fuser /var/cache/apt/archives/lock >/dev/null 2>&1; then
+              echo "apt lock detected, retrying ($attempt/20)..."
+              sleep 5
+              continue
+            fi
+            echo "apt install failed without lock contention"
+            exit 1
+          done
+          echo "apt install failed after retries"
+          exit 1
 
       - name: Migration smoke
         env:
@@ -800,8 +836,20 @@ jobs:
 
       - name: Install PostgreSQL client
         run: |
-          sudo apt-get update
-          sudo apt-get install -y postgresql-client
+          for attempt in $(seq 1 20); do
+            if sudo apt-get update && sudo apt-get install -y postgresql-client; then
+              exit 0
+            fi
+            if sudo fuser /var/lib/apt/lists/lock >/dev/null 2>&1 || sudo fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 || sudo fuser /var/cache/apt/archives/lock >/dev/null 2>&1; then
+              echo "apt lock detected, retrying ($attempt/20)..."
+              sleep 5
+              continue
+            fi
+            echo "apt install failed without lock contention"
+            exit 1
+          done
+          echo "apt install failed after retries"
+          exit 1
 
       - name: Run migrations for API smoke DB
         env:
@@ -1162,8 +1210,20 @@ jobs:
 
       - name: Install PostgreSQL client
         run: |
-          sudo apt-get update
-          sudo apt-get install -y postgresql-client
+          for attempt in $(seq 1 20); do
+            if sudo apt-get update && sudo apt-get install -y postgresql-client; then
+              exit 0
+            fi
+            if sudo fuser /var/lib/apt/lists/lock >/dev/null 2>&1 || sudo fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 || sudo fuser /var/cache/apt/archives/lock >/dev/null 2>&1; then
+              echo "apt lock detected, retrying ($attempt/20)..."
+              sleep 5
+              continue
+            fi
+            echo "apt install failed without lock contention"
+            exit 1
+          done
+          echo "apt install failed after retries"
+          exit 1
 
       - name: Install Temporal CLI
         run: |
