@@ -1264,6 +1264,8 @@ run_pre_commit_mode() {
 }
 
 run_pre_push_mode() {
+  local mutation_relevant_changed="false"
+
   cleanup_mutation_artifacts
 
   echo "[quality-gate] mode=pre-push"
@@ -1417,16 +1419,22 @@ run_pre_push_mode() {
     exit 1
   fi
 
+  if [[ "$STRICT_FULL_RUN" == "1" || "$CHANGED_DETECTION_RELIABLE" != "1" ]]; then
+    mutation_relevant_changed="true"
+  elif match_changed_files '^(apps/(api|worker)/|pyproject\.toml$|uv\.lock$)'; then
+    mutation_relevant_changed="true"
+  fi
+
   if [[ "$SKIP_MUTATION" == "1" ]]; then
     echo "[quality-gate] skip: mutation gate (--skip-mutation=1)"
-  elif is_true "$EFFECTIVE_BACKEND_CHANGED"; then
+  elif [[ "$mutation_relevant_changed" == "true" ]]; then
     echo "[quality-gate] phase=mutation-gate (heartbeat=${HEARTBEAT_SECONDS}s)"
     if ! run_sync_gate_with_heartbeat "mutation_gate" "mutation gate" "run_mutation_gate"; then
       echo "[quality-gate] pre-push failed in mutation-gate phase" >&2
       exit 1
     fi
   else
-    echo "[quality-gate] skip: mutation gate (effective_backend_changed=false)"
+    echo "[quality-gate] skip: mutation gate (mutation_relevant_changed=false)"
   fi
 
   echo "[quality-gate] all checks passed"
