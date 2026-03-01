@@ -8,9 +8,11 @@ from playwright.sync_api import Page, expect
 def test_settings_save_config_button(page: Page) -> None:
     page.goto("/settings", wait_until="domcontentloaded")
     digest_hour = page.get_by_label("每日摘要发送时间（UTC 小时）")
+    daily_digest_toggle = page.get_by_label("启用每日摘要")
+    # Normalize initial state to avoid relying on persisted backend config from prior runs.
+    daily_digest_toggle.uncheck()
     expect(digest_hour).to_be_disabled()
     page.get_by_label("收件人邮箱").fill("ops-e2e@example.com")
-    daily_digest_toggle = page.get_by_label("启用每日摘要")
     daily_digest_toggle.check()
     expect(digest_hour).to_be_enabled()
     digest_hour.fill("7")
