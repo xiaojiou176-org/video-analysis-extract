@@ -12,14 +12,13 @@ permissions:
 
 jobs:
   required-ci-secrets:
-    runs-on: ubuntu-latest
+    runs-on: e2-core
     timeout-minutes: 5
     env:
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
       RESEND_FROM_EMAIL: ${{ secrets.RESEND_FROM_EMAIL }}
       YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
-      LIVE_SMOKE_API_BASE_URL: ${{ secrets.LIVE_SMOKE_API_BASE_URL }}
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -29,8 +28,7 @@ jobs:
             --required GEMINI_API_KEY \
             --required RESEND_API_KEY \
             --required RESEND_FROM_EMAIL \
-            --required YOUTUBE_API_KEY \
-            --required LIVE_SMOKE_API_BASE_URL
+            --required YOUTUBE_API_KEY
 
   env-contract-hosted:
     runs-on: ubuntu-latest
