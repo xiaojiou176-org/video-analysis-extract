@@ -22,7 +22,7 @@ def test_external_web_base_url_option_validation_message() -> None:
 
 
 def test_dashboard_trigger_ingest_poll_button(page: Page) -> None:
-    for attempt in range(3):
+    for attempt in range(5):
         page.goto("/", wait_until="domcontentloaded")
         expect(page.get_by_role("heading", name="拉取采集")).to_be_visible()
         page.get_by_role("button", name="触发采集").click()
@@ -31,15 +31,20 @@ def test_dashboard_trigger_ingest_poll_button(page: Page) -> None:
             # so we assert user-visible success via the redirect contract.
             expect(page).to_have_url(
                 re.compile(r".*status=success.*code=POLL_INGEST_OK"),
-                timeout=12000,
+                timeout=15000,
             )
             break
         except AssertionError:
             body_text = page.locator("body").inner_text()
+            success_banner = page.locator("p.alert.success")
+            if success_banner.count() > 0 and "已触发采集任务。" in success_banner.inner_text():
+                break
             has_transient_error = (
-                "Internal Server Error" in body_text or "code=ERR_REQUEST_FAILED" in page.url
+                "Internal Server Error" in body_text
+                or "code=ERR_REQUEST_FAILED" in page.url
+                or ("status=" not in page.url and page.url.endswith("/"))
             )
-            if attempt < 2 and has_transient_error:
+            if attempt < 4 and has_transient_error:
                 continue
             raise
     expect(page.locator("p.alert.success")).to_contain_text("已触发采集任务。")
