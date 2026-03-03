@@ -27,7 +27,7 @@ env:
 
 jobs:
   required-ci-secrets:
-    runs-on: [self-hosted, e2-core, spot, shared-pool]
+    runs-on: ubuntu-latest
     timeout-minutes: 5
     env:
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
