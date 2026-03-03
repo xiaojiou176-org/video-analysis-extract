@@ -464,3 +464,6 @@ python3 scripts/release/verify_db_rollback_readiness.py \
 
 
 <!-- doc-sync: integration smoke uses xfail instead of skip when env unmet (2026-03-03) -->
+
+
+<!-- doc-sync: ci failure fixes (integration smoke auth + ci_autofix timezone compatibility) (2026-03-03) -->

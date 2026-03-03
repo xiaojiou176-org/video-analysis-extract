@@ -405,3 +405,6 @@ curl -sS -X POST http://127.0.0.1:8000/api/v1/videos/process \
 
 
 <!-- doc-sync: integration smoke uses xfail instead of skip when env unmet (2026-03-03) -->
+
+
+<!-- doc-sync: ci failure fixes (integration smoke auth + ci_autofix timezone compatibility) (2026-03-03) -->

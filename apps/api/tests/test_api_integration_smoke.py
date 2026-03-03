@@ -101,6 +101,7 @@ def integration_api(
         monkeypatch.setenv("TEMPORAL_TASK_QUEUE", "video-analysis-worker")
         monkeypatch.setenv("SQLITE_STATE_PATH", state_db_path)
         monkeypatch.setenv("UI_AUDIT_GEMINI_ENABLED", "false")
+        monkeypatch.setenv("VD_ALLOW_UNAUTH_WRITE", "true")
 
         _purge_api_modules()
 
