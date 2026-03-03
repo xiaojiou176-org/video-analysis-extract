@@ -156,7 +156,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
   changes:
-    runs-on: [self-hosted, e2-core, spot, shared-pool]
+    runs-on: ubuntu-latest
     timeout-minutes: 3
     needs: [changes-hosted, changes-fallback]
     if: ${{ always() && (needs['changes-hosted'].result == 'success' || needs['changes-fallback'].result == 'success') }}
@@ -187,7 +187,7 @@ jobs:
     with:
       runs-on: e2-core
   preflight-fast:
-    runs-on: [self-hosted, e2-core, spot, shared-pool]
+    runs-on: ubuntu-latest
     timeout-minutes: 3
     needs: [preflight-fast-hosted, preflight-fast-fallback]
     if: ${{ always() && (needs['preflight-fast-hosted'].result == 'success' || needs['preflight-fast-fallback'].result == 'success') }}
