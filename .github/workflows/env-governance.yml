@@ -35,6 +35,8 @@ jobs:
     continue-on-error: true
     timeout-minutes: 20
     needs: [required-ci-secrets]
+    outputs:
+      hosted_ok: ${{ steps.hosted_status.outputs.hosted_ok }}
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -92,11 +94,21 @@ jobs:
           print("Schema parity check passed.")
           PY
 
+      - name: Record hosted env-contract outcome
+        if: ${{ always() }}
+        id: hosted_status
+        run: |
+          if [[ "${{ job.status }}" == "success" ]]; then
+            echo "hosted_ok=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "hosted_ok=false" >> "$GITHUB_OUTPUT"
+          fi
+
   env-contract-fallback:
     runs-on: e2-core
     timeout-minutes: 25
     needs: [required-ci-secrets, env-contract-hosted]
-    if: ${{ always() && needs['env-contract-hosted'].result != 'success' }}
+    if: ${{ always() && (needs['env-contract-hosted'].result != 'success' || needs['env-contract-hosted'].outputs.hosted_ok != 'true') }}
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -173,6 +185,8 @@ jobs:
     continue-on-error: true
     timeout-minutes: 15
     needs: [required-ci-secrets]
+    outputs:
+      hosted_ok: ${{ steps.hosted_status.outputs.hosted_ok }}
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -201,11 +215,21 @@ jobs:
             gitleaks detect --source . "${config_args[@]}" --verbose --redact
           fi
 
+      - name: Record hosted secret-scan outcome
+        if: ${{ always() }}
+        id: hosted_status
+        run: |
+          if [[ "${{ job.status }}" == "success" ]]; then
+            echo "hosted_ok=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "hosted_ok=false" >> "$GITHUB_OUTPUT"
+          fi
+
   secret-scan-fallback:
     runs-on: e2-core
     timeout-minutes: 20
     needs: [required-ci-secrets, secret-scan-hosted]
-    if: ${{ always() && needs['secret-scan-hosted'].result != 'success' }}
+    if: ${{ always() && (needs['secret-scan-hosted'].result != 'success' || needs['secret-scan-hosted'].outputs.hosted_ok != 'true') }}
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4

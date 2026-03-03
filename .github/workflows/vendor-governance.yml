@@ -35,6 +35,8 @@ jobs:
     continue-on-error: true
     timeout-minutes: 10
     needs: [required-ci-secrets]
+    outputs:
+      hosted_ok: ${{ steps.hosted_status.outputs.hosted_ok }}
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -47,11 +49,21 @@ jobs:
       - name: Validate UPSTREAM.lock files
         run: bash scripts/vendor/validate_upstream_lock.sh --root .
 
+      - name: Record hosted vendor-governance outcome
+        if: ${{ always() }}
+        id: hosted_status
+        run: |
+          if [[ "${{ job.status }}" == "success" ]]; then
+            echo "hosted_ok=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "hosted_ok=false" >> "$GITHUB_OUTPUT"
+          fi
+
   upstream-lock-validation-fallback:
     runs-on: e2-core
     timeout-minutes: 12
     needs: [required-ci-secrets, upstream-lock-validation-hosted]
-    if: ${{ always() && needs['upstream-lock-validation-hosted'].result != 'success' }}
+    if: ${{ always() && (needs['upstream-lock-validation-hosted'].result != 'success' || needs['upstream-lock-validation-hosted'].outputs.hosted_ok != 'true') }}
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4

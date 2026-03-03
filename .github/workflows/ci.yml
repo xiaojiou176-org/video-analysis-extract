@@ -55,6 +55,7 @@ jobs:
       web_changed: ${{ github.event_name == 'pull_request' && steps.filter.outputs.web_changed || steps.non_pr_defaults.outputs.web_changed }}
       deps_changed: ${{ github.event_name == 'pull_request' && steps.filter.outputs.deps_changed || steps.non_pr_defaults.outputs.deps_changed }}
       migrations_changed: ${{ github.event_name == 'pull_request' && steps.filter.outputs.migrations_changed || steps.non_pr_defaults.outputs.migrations_changed }}
+      hosted_ok: ${{ steps.hosted_status.outputs.hosted_ok }}
     steps:
       - name: Checkout
         if: ${{ github.event_name == 'pull_request' }}
@@ -100,11 +101,21 @@ jobs:
             echo "migrations_changed=true"
           } >> "$GITHUB_OUTPUT"
 
+      - name: Record hosted changes outcome
+        if: ${{ always() }}
+        id: hosted_status
+        run: |
+          if [[ "${{ job.status }}" == "success" ]]; then
+            echo "hosted_ok=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "hosted_ok=false" >> "$GITHUB_OUTPUT"
+          fi
+
   changes-fallback:
     runs-on: e2-core
     timeout-minutes: 8
     needs: [required-ci-secrets, changes-hosted]
-    if: ${{ always() && needs['changes-hosted'].result != 'success' }}
+    if: ${{ always() && (needs['changes-hosted'].result != 'success' || needs['changes-hosted'].outputs.hosted_ok != 'true') }}
     outputs:
       backend_changed: ${{ github.event_name == 'pull_request' && steps.filter.outputs.backend_changed || steps.non_pr_defaults.outputs.backend_changed }}
       web_changed: ${{ github.event_name == 'pull_request' && steps.filter.outputs.web_changed || steps.non_pr_defaults.outputs.web_changed }}

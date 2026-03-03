@@ -35,6 +35,8 @@ jobs:
     continue-on-error: true
     timeout-minutes: 20
     needs: [required-ci-secrets]
+    outputs:
+      hosted_ok: ${{ steps.hosted_status.outputs.hosted_ok }}
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -111,11 +113,21 @@ jobs:
           fi
           exit 0
 
+      - name: Record hosted pre-commit outcome
+        if: ${{ always() }}
+        id: hosted_status
+        run: |
+          if [[ "${{ job.status }}" == "success" ]]; then
+            echo "hosted_ok=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "hosted_ok=false" >> "$GITHUB_OUTPUT"
+          fi
+
   pre-commit-fallback:
     runs-on: e2-core
     timeout-minutes: 25
     needs: [required-ci-secrets, pre-commit-hosted]
-    if: ${{ always() && needs['pre-commit-hosted'].result != 'success' }}
+    if: ${{ always() && (needs['pre-commit-hosted'].result != 'success' || needs['pre-commit-hosted'].outputs.hosted_ok != 'true') }}
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
