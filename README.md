@@ -290,7 +290,7 @@ pre-commit run --all-files
 - `web-e2e` 默认注入 real API：`NEXT_PUBLIC_API_BASE_URL` 由 `--web-e2e-api-base-url`（默认 `http://127.0.0.1:18080`）提供；仅在显式开启 `--web-e2e-use-mock-api=1`（或 `WEB_E2E_USE_MOCK_API=1`）时切换 mock API。
 - 若要复用外部 Web 实例，可用：`uv run --with pytest --with playwright pytest apps/web/tests/e2e -q --web-e2e-base-url 'http://127.0.0.1:3000'`。
 - PR 不强制 `live-smoke`；`main` push 与 nightly schedule 强制 `live-smoke=success`。
-- `live-smoke` 为真实 LLM/provider 链路，CI 需要：`LIVE_SMOKE_API_BASE_URL`、`GEMINI_API_KEY`、`RESEND_API_KEY`、`RESEND_FROM_EMAIL`、`YOUTUBE_API_KEY`；工作流会拉起本地 API/Worker，并通过 `LIVE_SMOKE_API_BASE_URL` 作为 smoke 目标。
+- `live-smoke` 为真实 LLM/provider 链路，CI 需要：`GEMINI_API_KEY`、`RESEND_API_KEY`、`RESEND_FROM_EMAIL`、`YOUTUBE_API_KEY`；工作流会拉起本地 API/Worker，并固定通过 `http://127.0.0.1:18080` 作为 smoke 目标。
 - `scripts/smoke_full_stack.sh` 是本地联调用 smoke，不等同于 CI 强制 `live-smoke` 门禁。
 - 两类真实 smoke 的本地复现命令见 `docs/testing.md` 的“本地复现两类真实 Smoke（CI 同口径）”。
 

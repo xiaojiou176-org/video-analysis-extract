@@ -1949,14 +1949,12 @@ jobs:
 
       - name: Validate required live smoke secrets
         env:
-          HAS_LIVE_SMOKE_API_BASE_URL: ${{ secrets.LIVE_SMOKE_API_BASE_URL != '' }}
           HAS_GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY != '' }}
           HAS_RESEND_API_KEY: ${{ secrets.RESEND_API_KEY != '' }}
           HAS_RESEND_FROM_EMAIL: ${{ secrets.RESEND_FROM_EMAIL != '' }}
           HAS_YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY != '' }}
         run: |
           missing=()
-          [[ "$HAS_LIVE_SMOKE_API_BASE_URL" != "true" ]] && missing+=("LIVE_SMOKE_API_BASE_URL")
           [[ "$HAS_GEMINI_API_KEY" != "true" ]] && missing+=("GEMINI_API_KEY")
           [[ "$HAS_RESEND_API_KEY" != "true" ]] && missing+=("RESEND_API_KEY")
           [[ "$HAS_RESEND_FROM_EMAIL" != "true" ]] && missing+=("RESEND_FROM_EMAIL")
@@ -2009,7 +2007,7 @@ jobs:
           PIPELINE_ARTIFACT_ROOT: /tmp/video-digestor-live-smoke-artifacts-${{ github.run_id }}-${{ github.run_attempt }}
         run: |
           scripts/e2e_live_smoke.sh \
-            --api-base-url "${{ secrets.LIVE_SMOKE_API_BASE_URL }}" \
+            --api-base-url "http://127.0.0.1:18080" \
             --require-api "1" \
             --require-secrets "1" \
             --computer-use-strict "1" \

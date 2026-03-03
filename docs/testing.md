@@ -48,7 +48,7 @@
 
 ```bash
 scripts/e2e_live_smoke.sh \
-  --api-base-url "${LIVE_SMOKE_API_BASE_URL}" \
+  --api-base-url "http://127.0.0.1:18080" \
   --require-api "1" \
   --require-secrets "1" \
   --computer-use-strict "1" \
@@ -107,7 +107,6 @@ python3 scripts/check_web_coverage_threshold.py \
 
 CI `live-smoke` 必需 secrets（main/release/nightly）：
 
-- `LIVE_SMOKE_API_BASE_URL`
 - `GEMINI_API_KEY`
 - `RESEND_API_KEY`
 - `RESEND_FROM_EMAIL`
