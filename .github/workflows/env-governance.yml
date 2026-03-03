@@ -155,7 +155,7 @@ jobs:
           PY
 
   env-contract:
-    runs-on: ubuntu-latest
+    runs-on: e2-core
     timeout-minutes: 3
     needs: [env-contract-hosted, env-contract-fallback]
     if: ${{ always() && (needs['env-contract-hosted'].result == 'success' || needs['env-contract-fallback'].result == 'success') }}
@@ -235,7 +235,7 @@ jobs:
           fi
 
   secret-scan:
-    runs-on: ubuntu-latest
+    runs-on: e2-core
     timeout-minutes: 3
     needs: [secret-scan-hosted, secret-scan-fallback]
     if: ${{ always() && (needs['secret-scan-hosted'].result == 'success' || needs['secret-scan-fallback'].result == 'success') }}

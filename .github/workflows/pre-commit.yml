@@ -185,7 +185,7 @@ jobs:
           done
 
   pre-commit:
-    runs-on: ubuntu-latest
+    runs-on: e2-core
     timeout-minutes: 3
     needs: [pre-commit-hosted, pre-commit-fallback]
     if: ${{ always() && (needs['pre-commit-hosted'].result == 'success' || needs['pre-commit-fallback'].result == 'success') }}

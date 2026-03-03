@@ -65,7 +65,7 @@ jobs:
         run: bash scripts/vendor/validate_upstream_lock.sh --root .
 
   upstream-lock-validation:
-    runs-on: ubuntu-latest
+    runs-on: e2-core
     timeout-minutes: 3
     needs: [upstream-lock-validation-hosted, upstream-lock-validation-fallback]
     if: ${{ always() && (needs['upstream-lock-validation-hosted'].result == 'success' || needs['upstream-lock-validation-fallback'].result == 'success') }}
