@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import concurrent.futures
+import importlib
 import json
-import sys
 import types
 import uuid
 from pathlib import Path
@@ -12,6 +12,7 @@ from typing import Any
 import pytest
 from sqlalchemy.exc import DBAPIError
 
+from apps.api.app.errors import ApiServiceError
 from apps.api.app.services.retrieval import RetrievalService
 
 
@@ -334,20 +335,29 @@ def test_build_query_embedding_returns_none_for_blank_query_or_no_key(monkeypatc
 
 
 def test_build_query_embedding_handles_import_error(monkeypatch) -> None:
-    service = RetrievalService(_FakeDB([]))  # type: ignore[arg-type]
+    retrieval_module = __import__("apps.api.app.services.retrieval", fromlist=["RetrievalService"])
+    retrieval_module = __import__("importlib").reload(retrieval_module)
+    service = retrieval_module.RetrievalService(_FakeDB([]))  # type: ignore[arg-type]
     monkeypatch.setattr(
-        "apps.api.app.services.retrieval.Settings.from_env",
+        retrieval_module.Settings,
+        "from_env",
         lambda: SimpleNamespace(
             gemini_api_key="key",
+            llm_provider="gemini",
             gemini_embedding_model="x",
             api_retrieval_embedding_timeout_seconds=1.0,
         ),
     )
 
-    monkeypatch.setitem(sys.modules, "google", None)
-    monkeypatch.setitem(sys.modules, "google.genai", None)
+    def _fake_import(name: str):
+        if name in {"google.genai", "google.genai.types"}:
+            raise ImportError(name)
+        return importlib.import_module(name)
 
-    assert service._build_query_embedding("hello") is None
+    monkeypatch.setattr(retrieval_module.importlib, "import_module", _fake_import)
+
+    with pytest.raises(retrieval_module.ApiServiceError, match="dependency not available"):
+        service._build_query_embedding("hello")
 
 
 def test_build_query_embedding_timeout_raises_api_timeout(monkeypatch) -> None:
@@ -421,11 +431,15 @@ def test_build_query_embedding_timeout_raises_api_timeout(monkeypatch) -> None:
 
 
 def test_build_query_embedding_returns_none_on_runtime_exception(monkeypatch) -> None:
-    service = RetrievalService(_FakeDB([]))  # type: ignore[arg-type]
+    retrieval_module = __import__("apps.api.app.services.retrieval", fromlist=["RetrievalService"])
+    retrieval_module = __import__("importlib").reload(retrieval_module)
+    service = retrieval_module.RetrievalService(_FakeDB([]))  # type: ignore[arg-type]
     monkeypatch.setattr(
-        "apps.api.app.services.retrieval.Settings.from_env",
+        retrieval_module.Settings,
+        "from_env",
         lambda: types.SimpleNamespace(
             gemini_api_key="key",
+            llm_provider="gemini",
             gemini_embedding_model="gemini-embedding-001",
             api_retrieval_embedding_timeout_seconds=0.5,
         ),
@@ -457,7 +471,7 @@ def test_build_query_embedding_returns_none_on_runtime_exception(monkeypatch) ->
             return fake_types_module
         raise ImportError(name)
 
-    monkeypatch.setattr("apps.api.app.services.retrieval.importlib.import_module", _fake_import)
+    monkeypatch.setattr(retrieval_module.importlib, "import_module", _fake_import)
 
     class _Future:
         def result(self, timeout: float):
@@ -478,8 +492,26 @@ def test_build_query_embedding_returns_none_on_runtime_exception(monkeypatch) ->
             del fn
             return _Future()
 
-    monkeypatch.setattr(concurrent.futures, "ThreadPoolExecutor", _Executor)
-    assert service._build_query_embedding("hello") is None
+    monkeypatch.setattr(retrieval_module.concurrent.futures, "ThreadPoolExecutor", _Executor)
+    with pytest.raises(retrieval_module.ApiServiceError, match="retrieval embedding request failed"):
+        service._build_query_embedding("hello")
+
+
+def test_search_semantic_raises_when_embedding_fails_in_strict_mode(monkeypatch) -> None:
+    service = RetrievalService(_FakeDB([]))  # type: ignore[arg-type]
+    monkeypatch.setattr(
+        service,
+        "_build_query_embedding",
+        lambda _query: (_ for _ in ()).throw(
+            ApiServiceError(
+                detail="retrieval embedding request failed",
+                error_code="RETRIEVAL_EMBEDDING_REQUEST_FAILED",
+            )
+        ),
+    )
+
+    with pytest.raises(ApiServiceError, match="embedding request failed"):
+        service.search(query="timeout", top_k=3, mode="semantic", filters={"platform": "youtube"})
 
 
 def test_extract_embedding_values_and_extract_values_paths() -> None:

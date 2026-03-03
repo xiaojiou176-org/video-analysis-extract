@@ -122,6 +122,7 @@ async def send_video_digest_activity_impl(
             text_body=body_markdown,
             resend_api_key=settings.resend_api_key,
             resend_from_email=settings.resend_from_email,
+            idempotency_key=f"delivery-initial:{delivery_id}",
         )
     except RuntimeError as exc:
         error_message = str(exc)
@@ -314,6 +315,7 @@ async def send_daily_digest_activity_impl(
             text_body=digest_markdown,
             resend_api_key=settings.resend_api_key,
             resend_from_email=settings.resend_from_email,
+            idempotency_key=f"delivery-initial:{delivery_id}",
         )
     except RuntimeError as exc:
         error_message = str(exc)

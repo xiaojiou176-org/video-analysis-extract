@@ -110,6 +110,7 @@ def send_with_resend(
     text_body: str,
     resend_api_key: str | None,
     resend_from_email: str | None,
+    idempotency_key: str | None = None,
 ) -> str | None:
     if not resend_api_key or not resend_api_key.strip():
         raise RuntimeError("RESEND_API_KEY is not configured")
@@ -123,15 +124,19 @@ def send_with_resend(
         "text": text_body,
         "html": to_html(text_body),
     }
+    headers = {
+        "Authorization": f"Bearer {resend_api_key}",
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "User-Agent": "video-digestor/1.0 (+https://local.video-digestor)",
+    }
+    if isinstance(idempotency_key, str) and idempotency_key.strip():
+        headers["Idempotency-Key"] = idempotency_key.strip()
+
     try:
         response = httpx.post(
             RESEND_API_URL,
-            headers={
-                "Authorization": f"Bearer {resend_api_key}",
-                "Content-Type": "application/json",
-                "Accept": "application/json",
-                "User-Agent": "video-digestor/1.0 (+https://local.video-digestor)",
-            },
+            headers=headers,
             json=payload,
             timeout=10.0,
         )

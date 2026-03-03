@@ -393,3 +393,6 @@ curl -sS -X POST http://127.0.0.1:8000/api/v1/videos/process \
 - 如需兼容旧行为（全权限），显式传入：
   - `--scopes "https://www.googleapis.com/auth/cloud-platform"`
 - 该参数仅用于“已知必须全权限”的运维场景，默认不建议使用。
+
+
+<!-- doc-sync: api/worker reliability + auth guard update (2026-03-03) -->

@@ -111,7 +111,12 @@ def build_frame_policy(settings: Settings, overrides: dict[str, Any]) -> dict[st
     return {"method": method, "max_frames": max_frames}
 
 
-def build_llm_policy_section(default_model: str, section: dict[str, Any]) -> dict[str, Any]:
+def build_llm_policy_section(
+    default_model: str,
+    section: dict[str, Any],
+    *,
+    allow_computer_use: bool,
+) -> dict[str, Any]:
     model = str(section.get("model") or default_model).strip() or default_model
     temperature = coerce_float(section.get("temperature"), None)
     if temperature is not None:
@@ -124,7 +129,8 @@ def build_llm_policy_section(default_model: str, section: dict[str, Any]) -> dic
             max_output_tokens = parsed
     max_function_call_rounds = max(0, coerce_int(section.get("max_function_call_rounds"), 2))
     include_thoughts = coerce_bool(section.get("include_thoughts"), default=False)
-    enable_computer_use = coerce_bool(section.get("enable_computer_use"), default=False)
+    requested_computer_use = coerce_bool(section.get("enable_computer_use"), default=False)
+    enable_computer_use = bool(allow_computer_use and requested_computer_use)
     computer_use_require_confirmation = coerce_bool(
         section.get("computer_use_require_confirmation"),
         default=True,
@@ -184,8 +190,17 @@ def build_llm_policy(settings: Settings, overrides: dict[str, Any]) -> dict[str,
     if speed_priority and "model" not in digest_section:
         digest_default_model = settings.gemini_fast_model
 
-    outline = build_llm_policy_section(outline_default_model, outline_section)
-    digest = build_llm_policy_section(digest_default_model, digest_section)
+    allow_computer_use = bool(settings.gemini_computer_use_enabled)
+    outline = build_llm_policy_section(
+        outline_default_model,
+        outline_section,
+        allow_computer_use=allow_computer_use,
+    )
+    digest = build_llm_policy_section(
+        digest_default_model,
+        digest_section,
+        allow_computer_use=allow_computer_use,
+    )
     model = str(section.get("model") or default_model).strip() or default_model
     temperature = coerce_float(section.get("temperature"), None)
     if temperature is not None:
@@ -197,10 +212,11 @@ def build_llm_policy(settings: Settings, overrides: dict[str, Any]) -> dict[str,
         if parsed > 0:
             max_output_tokens = parsed
     max_function_call_rounds = max(0, coerce_int(section.get("max_function_call_rounds"), 2))
-    enable_computer_use = coerce_bool(
+    requested_computer_use = coerce_bool(
         section.get("enable_computer_use"),
-        default=bool(settings.gemini_computer_use_enabled),
+        default=allow_computer_use,
     )
+    enable_computer_use = bool(allow_computer_use and requested_computer_use)
     computer_use_require_confirmation = coerce_bool(
         section.get("computer_use_require_confirmation"),
         default=bool(settings.gemini_computer_use_require_confirmation),

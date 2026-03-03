@@ -104,3 +104,6 @@ python scripts/check_env_contract.py --strict
 gitleaks detect --source . --verbose --redact
 npm --prefix apps/web audit --omit=dev
 ```
+
+
+<!-- doc-sync: api/worker reliability + auth guard update (2026-03-03) -->

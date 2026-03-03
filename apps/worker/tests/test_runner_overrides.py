@@ -180,7 +180,14 @@ def test_step_llm_outline_applies_overrides(monkeypatch: Any, tmp_path: Path) ->
         )
 
     monkeypatch.setattr(runner, "_gemini_generate", _fake_gemini_generate)
-    ctx = _build_ctx(tmp_path)
+    ctx = _build_ctx(
+        tmp_path,
+        settings=Settings(
+            pipeline_workspace_dir=str((tmp_path / "workspace").resolve()),
+            pipeline_artifact_root=str((tmp_path / "artifacts").resolve()),
+            gemini_computer_use_enabled=True,
+        ),
+    )
     state = {
         "metadata": {"title": "Demo"},
         "title": "Demo",
@@ -278,6 +285,7 @@ def test_build_llm_policy_supports_thoughts_media_and_function_rounds(tmp_path: 
         pipeline_workspace_dir=str((tmp_path / "workspace").resolve()),
         pipeline_artifact_root=str((tmp_path / "artifacts").resolve()),
         gemini_include_thoughts=False,
+        gemini_computer_use_enabled=True,
     )
 
     policy = runner._build_llm_policy(
@@ -312,3 +320,23 @@ def test_build_llm_policy_supports_thoughts_media_and_function_rounds(tmp_path: 
     assert policy["outline"]["max_function_call_rounds"] == 1
     assert policy["outline"]["media_resolution"]["image"] == "medium"
     assert policy["digest"]["include_thoughts"] is True
+
+
+def test_build_llm_policy_blocks_computer_use_override_when_globally_disabled(tmp_path: Path) -> None:
+    settings = Settings(
+        pipeline_workspace_dir=str((tmp_path / "workspace").resolve()),
+        pipeline_artifact_root=str((tmp_path / "artifacts").resolve()),
+        gemini_computer_use_enabled=False,
+    )
+    policy = runner._build_llm_policy(
+        settings,
+        {
+            "llm": {"enable_computer_use": True},
+            "llm_outline": {"enable_computer_use": True},
+            "llm_digest": {"enable_computer_use": True},
+        },
+    )
+
+    assert policy["enable_computer_use"] is False
+    assert policy["outline"]["enable_computer_use"] is False
+    assert policy["digest"]["enable_computer_use"] is False

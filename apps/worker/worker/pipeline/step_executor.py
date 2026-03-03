@@ -448,8 +448,11 @@ async def execute_step(
         skip_is_degrade = (
             execution.status == "skipped" and execution.reason not in NON_DEGRADING_SKIP_REASONS
         )
+        llm_hard_required = bool((state.get("llm_policy") or {}).get("hard_required", True))
         llm_hard_failed = (
-            step_name in {"llm_outline", "llm_digest"} and execution.status == "failed"
+            step_name in {"llm_outline", "llm_digest"}
+            and execution.status == "failed"
+            and llm_hard_required
         )
         if (
             (execution.status == "failed" and not llm_hard_failed)

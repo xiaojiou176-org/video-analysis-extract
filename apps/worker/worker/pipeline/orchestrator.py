@@ -17,6 +17,7 @@ from worker.pipeline.policies import (
     normalize_llm_input_mode,
     normalize_overrides_payload,
     normalize_pipeline_mode,
+    pipeline_llm_hard_required,
     refresh_llm_media_input_dimension,
 )
 from worker.pipeline.step_executor import (
@@ -27,6 +28,7 @@ from worker.pipeline.step_executor import (
     utc_now_iso,
 )
 from worker.pipeline.steps import (
+    step_build_embeddings,
     step_collect_comments,
     step_collect_subtitles,
     step_download_media,
@@ -90,23 +92,45 @@ def build_context(
 def resolve_pipeline_status(
     step_records: dict[str, dict[str, Any]],
     degradations: list[dict[str, Any]] | None = None,
+    *,
+    pipeline_llm_hard_required: bool | None = True,
 ) -> PipelineStatus:
-    statuses = [record.get("status") for record in step_records.values()]
-    if any(status == "failed" for status in statuses):
+    if not step_records:
         return "failed"
 
-    if not all(status in {"succeeded", "skipped"} for status in statuses):
+    llm_required = (
+        True if pipeline_llm_hard_required is None else bool(pipeline_llm_hard_required)
+    )
+    soft_llm_failed = False
+    for step_name, record in step_records.items():
+        status = str(record.get("status") or "").strip().lower()
+        if status in {"succeeded", "skipped"}:
+            continue
+        if status == "failed":
+            if step_name in {"llm_outline", "llm_digest"} and not llm_required:
+                soft_llm_failed = True
+                continue
+            return "failed"
         return "failed"
 
-    if degradations:
+    if degradations or soft_llm_failed:
         return "degraded"
 
     return "succeeded"
 
 
-def resolve_llm_gate(step_records: dict[str, dict[str, Any]]) -> tuple[bool, bool, str | None]:
+def resolve_llm_gate(
+    step_records: dict[str, dict[str, Any]],
+    *,
+    pipeline_llm_hard_required: bool | None = True,
+) -> tuple[bool, bool, str | None]:
     llm_steps = ("llm_outline", "llm_digest")
-    llm_required = True
+    llm_required = (
+        True if pipeline_llm_hard_required is None else bool(pipeline_llm_hard_required)
+    )
+    if not llm_required:
+        return llm_required, True, None
+
     hard_fail_reason: str | None = None
 
     for step_name in llm_steps:
@@ -243,11 +267,13 @@ async def run_pipeline(
                 lambda ctx, state: step_llm_digest(ctx, state, gemini_generate_fn=gemini_generate),
                 True,
             ),
+            ("build_embeddings", step_build_embeddings, False),
             ("write_artifacts", step_write_artifacts, True),
         ]
 
     mode_skip_steps = PIPELINE_MODE_SKIP_STEPS.get(pipeline_mode, set())
     mode_force_steps = PIPELINE_MODE_FORCE_STEPS.get(pipeline_mode, set())
+    llm_hard_required = pipeline_llm_hard_required(settings, state.get("llm_policy"))
 
     for step_idx, (step_name, handler, critical) in enumerate(step_handlers):
         is_mode_skipped = step_name in mode_skip_steps
@@ -263,18 +289,24 @@ async def run_pipeline(
             resume_hint=(step_idx <= resume_upto_idx) and not force_run,
             force_run=force_run,
         )
-        # LLM gate failed: stop the remaining pipeline steps immediately.
-        # Continuing after a hard LLM failure can leave jobs in long-running states
-        # while downstream steps wait on unavailable model responses.
-        if step_name in {"llm_outline", "llm_digest"} and step_record.get("status") == "failed":
+        # Only hard-required LLM failures should stop the pipeline early.
+        if (
+            llm_hard_required
+            and step_name in {"llm_outline", "llm_digest"}
+            and step_record.get("status") == "failed"
+        ):
             state["fatal_error"] = f"{step_name}:{step_record.get('error') or step_record.get('reason') or 'failed'}"
             break
 
     final_status = resolve_pipeline_status(
         state["steps"],
         degradations=list(state.get("degradations") or []),
+        pipeline_llm_hard_required=llm_hard_required,
     )
-    llm_required, llm_gate_passed, hard_fail_reason = resolve_llm_gate(state["steps"])
+    llm_required, llm_gate_passed, hard_fail_reason = resolve_llm_gate(
+        state["steps"],
+        pipeline_llm_hard_required=llm_hard_required,
+    )
 
     return {
         "job_id": job_id,

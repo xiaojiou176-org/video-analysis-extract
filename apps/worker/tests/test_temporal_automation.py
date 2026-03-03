@@ -168,10 +168,78 @@ def test_video_digest_delivery_sql_uses_video_digest_kind() -> None:
 
     notification_sql = [item for item in conn.executed_sql if "notification_deliveries" in item]
     assert any("WHERE kind = 'video_digest'" in item for item in notification_sql)
+    assert any("status IN ('queued', 'sent', 'skipped')" in item for item in notification_sql)
+    assert any("status = 'failed' AND next_retry_at IS NOT NULL" in item for item in notification_sql)
     assert not any("kind = 'daily_digest'" in item for item in notification_sql)
     assert any(
         "INSERT INTO notification_deliveries" in item and "'video_digest'" in item
         for item in notification_sql
+    )
+
+
+def test_get_existing_video_digest_sql_excludes_non_retryable_failed() -> None:
+    existing_row = {
+        "delivery_id": "delivery-1",
+        "status": "queued",
+        "recipient_email": "notify@example.com",
+        "subject": "[Video Digestor] Video digest Demo",
+    }
+    conn = _CaptureNotificationConn(existing_row=existing_row)
+
+    existing = temporal_activities._get_existing_video_digest(
+        conn,
+        job_id="00000000-0000-0000-0000-000000000001",
+    )
+
+    assert existing is not None
+    assert existing["delivery_id"] == "delivery-1"
+    assert any(
+        "status IN ('queued', 'sent', 'skipped')" in item for item in conn.executed_sql
+    )
+    assert any(
+        "status = 'failed' AND next_retry_at IS NOT NULL" in item for item in conn.executed_sql
+    )
+
+
+def test_daily_digest_delivery_sql_reuses_retryable_failed_rows() -> None:
+    conn = _CaptureNotificationConn(existing_row=None)
+
+    created = temporal_activities._insert_daily_digest_delivery(
+        conn,
+        digest_date=date(2026, 2, 21),
+        recipient_email="notify@example.com",
+        subject="[Video Digestor] Daily digest 2026-02-21",
+        payload_json={"digest_scope": "daily", "digest_date": "2026-02-21"},
+    )
+
+    assert created is not None
+    notification_sql = [item for item in conn.executed_sql if "notification_deliveries" in item]
+    assert any("WHERE kind = 'daily_digest'" in item for item in notification_sql)
+    assert any("status IN ('queued', 'sent', 'skipped')" in item for item in notification_sql)
+    assert any("status = 'failed' AND next_retry_at IS NOT NULL" in item for item in notification_sql)
+
+
+def test_get_existing_daily_digest_sql_excludes_non_retryable_failed() -> None:
+    existing_row = {
+        "delivery_id": "delivery-daily-1",
+        "status": "queued",
+        "recipient_email": "notify@example.com",
+        "subject": "[Video Digestor] Daily digest 2026-02-21",
+    }
+    conn = _CaptureNotificationConn(existing_row=existing_row)
+
+    existing = temporal_activities._get_existing_daily_digest(
+        conn,
+        digest_date=date(2026, 2, 21),
+    )
+
+    assert existing is not None
+    assert existing["delivery_id"] == "delivery-daily-1"
+    assert any(
+        "status IN ('queued', 'sent', 'skipped')" in item for item in conn.executed_sql
+    )
+    assert any(
+        "status = 'failed' AND next_retry_at IS NOT NULL" in item for item in conn.executed_sql
     )
 
 
@@ -259,9 +327,11 @@ def test_send_video_digest_activity_duplicate_job_skips_second_send(monkeypatch)
         text_body: str,
         resend_api_key: str | None,
         resend_from_email: str | None,
+        idempotency_key: str | None = None,
     ) -> str:
         assert resend_api_key is None
         assert resend_from_email is None
+        assert idempotency_key == "delivery-initial:delivery-1"
         state["send_calls"] += 1
         return f"msg-{state['send_calls']}"
 

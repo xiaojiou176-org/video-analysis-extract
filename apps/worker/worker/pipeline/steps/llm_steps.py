@@ -3,12 +3,14 @@ from __future__ import annotations
 import asyncio
 import json
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Any
 
 from pydantic import ValidationError
 
 from worker.config import Settings
 from worker.pipeline.policies import (
+    coerce_bool,
     coerce_float,
     coerce_int,
     digest_is_chinese,
@@ -109,6 +111,7 @@ def _llm_failure_result(
     llm_model: str,
     llm_temperature: float | None,
     llm_max_output_tokens: int | None,
+    llm_required: bool,
     reason: str,
     error: str,
     error_kind: str | None = None,
@@ -124,9 +127,9 @@ def _llm_failure_result(
             "model": llm_model,
             "temperature": llm_temperature,
             "max_output_tokens": llm_max_output_tokens,
-            "llm_required": True,
+            "llm_required": llm_required,
             "llm_gate_passed": False,
-            "hard_fail_reason": reason,
+            "hard_fail_reason": reason if llm_required else None,
             "llm_meta": dict(llm_meta or {}),
         },
         reason=reason,
@@ -134,6 +137,70 @@ def _llm_failure_result(
         error_kind=error_kind,
         degraded=False,
     )
+
+
+@dataclass(frozen=True)
+class _LlmStepRuntime:
+    include_frame_context: bool
+    media_input: str
+    llm_input_mode: str
+    llm_model: str
+    llm_temperature: float | None
+    llm_max_output_tokens: int | None
+    llm_required: bool
+    llm_meta: dict[str, Any]
+
+
+def _llm_failure(
+    runtime: _LlmStepRuntime,
+    *,
+    reason: str,
+    error: str,
+    error_kind: str | None = None,
+) -> StepExecution:
+    return _llm_failure_result(
+        include_frame_context=runtime.include_frame_context,
+        media_input=runtime.media_input,
+        llm_input_mode=runtime.llm_input_mode,
+        llm_model=runtime.llm_model,
+        llm_temperature=runtime.llm_temperature,
+        llm_max_output_tokens=runtime.llm_max_output_tokens,
+        llm_required=runtime.llm_required,
+        reason=reason,
+        error=error,
+        error_kind=error_kind,
+        llm_meta=runtime.llm_meta,
+    )
+
+
+def _llm_success(runtime: _LlmStepRuntime, *, output_key: str, payload: dict[str, Any]) -> StepExecution:
+    return StepExecution(
+        status="succeeded",
+        output={
+            "provider": "gemini",
+            "frame_context_used": runtime.include_frame_context,
+            "media_input": runtime.media_input,
+            "llm_input_mode": runtime.llm_input_mode,
+            "model": runtime.llm_model,
+            "temperature": runtime.llm_temperature,
+            "max_output_tokens": runtime.llm_max_output_tokens,
+            "llm_required": runtime.llm_required,
+            "llm_gate_passed": True,
+            "hard_fail_reason": None,
+            "llm_meta": runtime.llm_meta,
+        },
+        state_updates={output_key: payload},
+    )
+
+
+def _resolve_provider_failure(settings: Settings, llm_meta: dict[str, Any]) -> tuple[str, str, str | None]:
+    missing_api_key = not str(settings.gemini_api_key or "").strip()
+    reason = str(llm_meta.get("error_code") or "").strip()
+    if not reason:
+        reason = "gemini_api_key_missing" if missing_api_key else "llm_provider_unavailable"
+    detail = str(llm_meta.get("error_detail") or "").strip() or reason
+    error_kind = str(llm_meta.get("error_kind") or "").strip() or ("auth" if missing_api_key else None)
+    return reason, detail, error_kind
 
 
 def _unpack_gemini_result(result: GeminiGenerateReturn) -> tuple[str | None, str, dict[str, Any]]:
@@ -188,6 +255,13 @@ async def step_llm_outline(
         state.get("llm_input_mode") or ctx.settings.pipeline_llm_input_mode
     )
     llm_policy = dict(state.get("llm_policy") or {})
+    llm_required_default = coerce_bool(
+        getattr(ctx.settings, "pipeline_llm_hard_required", True), default=True
+    )
+    llm_required = coerce_bool(
+        llm_policy.get("hard_required"),
+        default=llm_required_default,
+    )
     llm_outline_policy = dict(llm_policy.get("outline") or {})
     llm_model = (
         str(
@@ -240,66 +314,38 @@ async def step_llm_outline(
         **_computer_use_options(ctx, state, llm_policy, llm_outline_policy),
     )
     generated, media_input, llm_meta = _unpack_gemini_result(generated_result)
+    runtime = _LlmStepRuntime(
+        include_frame_context=include_frame_context,
+        media_input=media_input,
+        llm_input_mode=llm_input_mode,
+        llm_model=llm_model,
+        llm_temperature=llm_temperature,
+        llm_max_output_tokens=llm_max_output_tokens,
+        llm_required=llm_required,
+        llm_meta=llm_meta,
+    )
     if not include_thoughts:
-        return _llm_failure_result(
-            include_frame_context=include_frame_context,
-            media_input=media_input,
-            llm_input_mode=llm_input_mode,
-            llm_model=llm_model,
-            llm_temperature=llm_temperature,
-            llm_max_output_tokens=llm_max_output_tokens,
+        return _llm_failure(
+            runtime,
             reason="llm_thoughts_required",
             error="llm_thoughts_required:include_thoughts_must_be_true",
-            llm_meta=llm_meta,
         )
     if not generated:
-        missing_api_key = not str(ctx.settings.gemini_api_key or "").strip()
-        reason = str(llm_meta.get("error_code") or "").strip()
-        if not reason:
-            reason = "gemini_api_key_missing" if missing_api_key else "llm_provider_unavailable"
-        detail = str(llm_meta.get("error_detail") or "").strip() or reason
-        return _llm_failure_result(
-            include_frame_context=include_frame_context,
-            media_input=media_input,
-            llm_input_mode=llm_input_mode,
-            llm_model=llm_model,
-            llm_temperature=llm_temperature,
-            llm_max_output_tokens=llm_max_output_tokens,
-            reason=reason,
-            error=detail,
-            error_kind=str(llm_meta.get("error_kind") or "").strip()
-            or ("auth" if missing_api_key else None),
-            llm_meta=llm_meta,
-        )
+        reason, detail, error_kind = _resolve_provider_failure(ctx.settings, llm_meta)
+        return _llm_failure(runtime, reason=reason, error=detail, error_kind=error_kind)
     thoughts_ok, thoughts_error = _ensure_thought_signatures(llm_meta)
     if not thoughts_ok:
-        return _llm_failure_result(
-            include_frame_context=include_frame_context,
-            media_input=media_input,
-            llm_input_mode=llm_input_mode,
-            llm_model=llm_model,
-            llm_temperature=llm_temperature,
-            llm_max_output_tokens=llm_max_output_tokens,
-            reason="llm_thoughts_required",
-            error=thoughts_error,
-            llm_meta=llm_meta,
-        )
+        return _llm_failure(runtime, reason="llm_thoughts_required", error=thoughts_error)
     try:
         payload = json.loads(extract_json_object(generated))
         if not isinstance(payload, dict):
             raise ValueError("outline payload is not object")
         parsed = OutlinePayload.model_validate(payload).model_dump()
     except (json.JSONDecodeError, TypeError, ValueError, ValidationError) as exc:
-        return _llm_failure_result(
-            include_frame_context=include_frame_context,
-            media_input=media_input,
-            llm_input_mode=llm_input_mode,
-            llm_model=llm_model,
-            llm_temperature=llm_temperature,
-            llm_max_output_tokens=llm_max_output_tokens,
+        return _llm_failure(
+            runtime,
             reason="llm_output_invalid_json",
             error=f"llm_output_invalid_json:{exc}",
-            llm_meta=llm_meta,
         )
     if not outline_is_chinese(parsed):
         translated_payload = await asyncio.to_thread(
@@ -312,75 +358,35 @@ async def step_llm_outline(
             thinking_level=_thinking_level_from_policy(llm_policy),
         )
         if not isinstance(translated_payload, dict):
-            return _llm_failure_result(
-                include_frame_context=include_frame_context,
-                media_input=media_input,
-                llm_input_mode=llm_input_mode,
-                llm_model=llm_model,
-                llm_temperature=llm_temperature,
-                llm_max_output_tokens=llm_max_output_tokens,
+            return _llm_failure(
+                runtime,
                 reason="llm_translation_failed",
                 error="llm_translation_failed:outline",
-                llm_meta=llm_meta,
             )
         try:
             parsed = OutlinePayload.model_validate(translated_payload).model_dump()
         except ValidationError as exc:
-            return _llm_failure_result(
-                include_frame_context=include_frame_context,
-                media_input=media_input,
-                llm_input_mode=llm_input_mode,
-                llm_model=llm_model,
-                llm_temperature=llm_temperature,
-                llm_max_output_tokens=llm_max_output_tokens,
+            return _llm_failure(
+                runtime,
                 reason="llm_translation_failed",
                 error=f"llm_translation_failed:outline:{exc}",
-                llm_meta=llm_meta,
             )
         if not outline_is_chinese(parsed):
-            return _llm_failure_result(
-                include_frame_context=include_frame_context,
-                media_input=media_input,
-                llm_input_mode=llm_input_mode,
-                llm_model=llm_model,
-                llm_temperature=llm_temperature,
-                llm_max_output_tokens=llm_max_output_tokens,
+            return _llm_failure(
+                runtime,
                 reason="llm_output_not_chinese",
                 error="llm_output_not_chinese:outline",
-                llm_meta=llm_meta,
             )
     if not _outline_quality_ok(parsed):
-        return _llm_failure_result(
-            include_frame_context=include_frame_context,
-            media_input=media_input,
-            llm_input_mode=llm_input_mode,
-            llm_model=llm_model,
-            llm_temperature=llm_temperature,
-            llm_max_output_tokens=llm_max_output_tokens,
+        return _llm_failure(
+            runtime,
             reason="llm_quality_insufficient",
             error="llm_quality_insufficient:outline",
-            llm_meta=llm_meta,
         )
     outline = normalize_outline_payload(parsed, state)
     outline["generated_by"] = "gemini"
     outline["generated_at"] = utc_now_iso()
-    return StepExecution(
-        status="succeeded",
-        output={
-            "provider": "gemini",
-            "frame_context_used": include_frame_context,
-            "media_input": media_input,
-            "llm_input_mode": llm_input_mode,
-            "model": llm_model,
-            "temperature": llm_temperature,
-            "max_output_tokens": llm_max_output_tokens,
-            "llm_required": True,
-            "llm_gate_passed": True,
-            "hard_fail_reason": None,
-            "llm_meta": llm_meta,
-        },
-        state_updates={"outline": outline},
-    )
+    return _llm_success(runtime, output_key="outline", payload=outline)
 
 
 async def step_llm_digest(
@@ -398,6 +404,13 @@ async def step_llm_digest(
         state.get("llm_input_mode") or ctx.settings.pipeline_llm_input_mode
     )
     llm_policy = dict(state.get("llm_policy") or {})
+    llm_required_default = coerce_bool(
+        getattr(ctx.settings, "pipeline_llm_hard_required", True), default=True
+    )
+    llm_required = coerce_bool(
+        llm_policy.get("hard_required"),
+        default=llm_required_default,
+    )
     llm_digest_policy = dict(llm_policy.get("digest") or {})
     llm_model = (
         str(
@@ -451,66 +464,38 @@ async def step_llm_digest(
         **_computer_use_options(ctx, state, llm_policy, llm_digest_policy),
     )
     generated, media_input, llm_meta = _unpack_gemini_result(generated_result)
+    runtime = _LlmStepRuntime(
+        include_frame_context=include_frame_context,
+        media_input=media_input,
+        llm_input_mode=llm_input_mode,
+        llm_model=llm_model,
+        llm_temperature=llm_temperature,
+        llm_max_output_tokens=llm_max_output_tokens,
+        llm_required=llm_required,
+        llm_meta=llm_meta,
+    )
     if not include_thoughts:
-        return _llm_failure_result(
-            include_frame_context=include_frame_context,
-            media_input=media_input,
-            llm_input_mode=llm_input_mode,
-            llm_model=llm_model,
-            llm_temperature=llm_temperature,
-            llm_max_output_tokens=llm_max_output_tokens,
+        return _llm_failure(
+            runtime,
             reason="llm_thoughts_required",
             error="llm_thoughts_required:include_thoughts_must_be_true",
-            llm_meta=llm_meta,
         )
     if not generated:
-        missing_api_key = not str(ctx.settings.gemini_api_key or "").strip()
-        reason = str(llm_meta.get("error_code") or "").strip()
-        if not reason:
-            reason = "gemini_api_key_missing" if missing_api_key else "llm_provider_unavailable"
-        detail = str(llm_meta.get("error_detail") or "").strip() or reason
-        return _llm_failure_result(
-            include_frame_context=include_frame_context,
-            media_input=media_input,
-            llm_input_mode=llm_input_mode,
-            llm_model=llm_model,
-            llm_temperature=llm_temperature,
-            llm_max_output_tokens=llm_max_output_tokens,
-            reason=reason,
-            error=detail,
-            error_kind=str(llm_meta.get("error_kind") or "").strip()
-            or ("auth" if missing_api_key else None),
-            llm_meta=llm_meta,
-        )
+        reason, detail, error_kind = _resolve_provider_failure(ctx.settings, llm_meta)
+        return _llm_failure(runtime, reason=reason, error=detail, error_kind=error_kind)
     thoughts_ok, thoughts_error = _ensure_thought_signatures(llm_meta)
     if not thoughts_ok:
-        return _llm_failure_result(
-            include_frame_context=include_frame_context,
-            media_input=media_input,
-            llm_input_mode=llm_input_mode,
-            llm_model=llm_model,
-            llm_temperature=llm_temperature,
-            llm_max_output_tokens=llm_max_output_tokens,
-            reason="llm_thoughts_required",
-            error=thoughts_error,
-            llm_meta=llm_meta,
-        )
+        return _llm_failure(runtime, reason="llm_thoughts_required", error=thoughts_error)
     try:
         payload = json.loads(extract_json_object(generated))
         if not isinstance(payload, dict):
             raise ValueError("digest payload is not object")
         parsed = DigestPayload.model_validate(payload).model_dump()
     except (json.JSONDecodeError, TypeError, ValueError, ValidationError) as exc:
-        return _llm_failure_result(
-            include_frame_context=include_frame_context,
-            media_input=media_input,
-            llm_input_mode=llm_input_mode,
-            llm_model=llm_model,
-            llm_temperature=llm_temperature,
-            llm_max_output_tokens=llm_max_output_tokens,
+        return _llm_failure(
+            runtime,
             reason="llm_output_invalid_json",
             error=f"llm_output_invalid_json:{exc}",
-            llm_meta=llm_meta,
         )
     if not digest_is_chinese(parsed):
         translated_payload = await asyncio.to_thread(
@@ -523,72 +508,32 @@ async def step_llm_digest(
             thinking_level=_thinking_level_from_policy(llm_policy),
         )
         if not isinstance(translated_payload, dict):
-            return _llm_failure_result(
-                include_frame_context=include_frame_context,
-                media_input=media_input,
-                llm_input_mode=llm_input_mode,
-                llm_model=llm_model,
-                llm_temperature=llm_temperature,
-                llm_max_output_tokens=llm_max_output_tokens,
+            return _llm_failure(
+                runtime,
                 reason="llm_translation_failed",
                 error="llm_translation_failed:digest",
-                llm_meta=llm_meta,
             )
         try:
             parsed = DigestPayload.model_validate(translated_payload).model_dump()
         except ValidationError as exc:
-            return _llm_failure_result(
-                include_frame_context=include_frame_context,
-                media_input=media_input,
-                llm_input_mode=llm_input_mode,
-                llm_model=llm_model,
-                llm_temperature=llm_temperature,
-                llm_max_output_tokens=llm_max_output_tokens,
+            return _llm_failure(
+                runtime,
                 reason="llm_translation_failed",
                 error=f"llm_translation_failed:digest:{exc}",
-                llm_meta=llm_meta,
             )
         if not digest_is_chinese(parsed):
-            return _llm_failure_result(
-                include_frame_context=include_frame_context,
-                media_input=media_input,
-                llm_input_mode=llm_input_mode,
-                llm_model=llm_model,
-                llm_temperature=llm_temperature,
-                llm_max_output_tokens=llm_max_output_tokens,
+            return _llm_failure(
+                runtime,
                 reason="llm_output_not_chinese",
                 error="llm_output_not_chinese:digest",
-                llm_meta=llm_meta,
             )
     if not _digest_quality_ok(parsed):
-        return _llm_failure_result(
-            include_frame_context=include_frame_context,
-            media_input=media_input,
-            llm_input_mode=llm_input_mode,
-            llm_model=llm_model,
-            llm_temperature=llm_temperature,
-            llm_max_output_tokens=llm_max_output_tokens,
+        return _llm_failure(
+            runtime,
             reason="llm_quality_insufficient",
             error="llm_quality_insufficient:digest",
-            llm_meta=llm_meta,
         )
     digest = normalize_digest_payload(parsed, state)
     digest["generated_by"] = "gemini"
     digest["generated_at"] = utc_now_iso()
-    return StepExecution(
-        status="succeeded",
-        output={
-            "provider": "gemini",
-            "frame_context_used": include_frame_context,
-            "media_input": media_input,
-            "llm_input_mode": llm_input_mode,
-            "model": llm_model,
-            "temperature": llm_temperature,
-            "max_output_tokens": llm_max_output_tokens,
-            "llm_required": True,
-            "llm_gate_passed": True,
-            "hard_fail_reason": None,
-            "llm_meta": llm_meta,
-        },
-        state_updates={"digest": digest},
-    )
+    return _llm_success(runtime, output_key="digest", payload=digest)

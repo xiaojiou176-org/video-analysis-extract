@@ -110,11 +110,27 @@ def test_media_resolution_rounds_and_computer_use_options() -> None:
         {},
     )
     assert options == {
-        "enable_computer_use": True,
+        "enable_computer_use": False,
         "computer_use_require_confirmation": False,
         "computer_use_max_steps": 0,
         "computer_use_timeout_seconds": 1.5,
     }
+
+    enabled_ctx = SimpleNamespace(
+        settings=SimpleNamespace(
+            gemini_include_thoughts=True,
+            gemini_computer_use_enabled=True,
+            gemini_computer_use_require_confirmation=True,
+            gemini_computer_use_max_steps=3,
+            gemini_computer_use_timeout_seconds=1.5,
+        )
+    )
+    enabled_options = gates.build_computer_use_options(
+        enabled_ctx,
+        {"enable_computer_use": "1"},
+        {},
+    )
+    assert enabled_options["enable_computer_use"] is True
 
     clamped = gates.build_computer_use_options(
         _ctx(),

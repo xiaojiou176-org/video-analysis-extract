@@ -112,10 +112,11 @@ def build_computer_use_options(
     max_steps_default = max(0, int(ctx.settings.gemini_computer_use_max_steps))
     timeout_default = max(0.1, float(ctx.settings.gemini_computer_use_timeout_seconds))
 
-    enable_computer_use = _coerce_bool(
+    requested_computer_use = _coerce_bool(
         section_policy.get("enable_computer_use", llm_policy.get("enable_computer_use")),
         default=enabled_default,
     )
+    enable_computer_use = bool(enabled_default and requested_computer_use)
     require_confirmation = _coerce_bool(
         section_policy.get(
             "computer_use_require_confirmation",

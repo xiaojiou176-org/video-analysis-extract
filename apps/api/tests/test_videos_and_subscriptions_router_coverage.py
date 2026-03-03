@@ -19,6 +19,8 @@ from apps.api.app.services.videos import (
     _url_hash,
 )
 
+pytestmark = pytest.mark.allow_unauth_write
+
 
 @dataclass
 class _JobRow:

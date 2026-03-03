@@ -3,6 +3,7 @@ from __future__ import annotations
 import concurrent.futures
 import importlib
 import json
+import logging
 import re
 from pathlib import Path
 from typing import Any, Literal, cast
@@ -12,7 +13,7 @@ from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session
 
 from ..config import Settings
-from ..errors import ApiTimeoutError
+from ..errors import ApiServiceError, ApiTimeoutError
 
 _ALLOWED_FILTERS = {
     "platform",
@@ -35,6 +36,7 @@ _RETRIEVAL_MODES = {"keyword", "semantic", "hybrid"}
 _EMBEDDING_DIMENSION = 768
 
 RetrievalMode = Literal["keyword", "semantic", "hybrid"]
+logger = logging.getLogger(__name__)
 
 
 class RetrievalService:
@@ -64,6 +66,7 @@ class RetrievalService:
                 query=normalized_query,
                 top_k=top_k,
                 filters=normalized_filters,
+                strict=(normalized_mode == "semantic"),
             )
             if normalized_mode == "semantic":
                 hits = semantic_hits
@@ -111,9 +114,18 @@ class RetrievalService:
         return hits[:top_k]
 
     def _search_semantic(
-        self, *, query: str, top_k: int, filters: dict[str, Any]
+        self, *, query: str, top_k: int, filters: dict[str, Any], strict: bool = False
     ) -> list[dict[str, Any]]:
-        query_embedding = self._build_query_embedding(query)
+        try:
+            query_embedding = self._build_query_embedding(query)
+        except ApiServiceError:
+            if strict:
+                raise
+            logger.warning(
+                "retrieval_semantic_embedding_failed_fallback",
+                extra={"query_length": len(query.strip())},
+            )
+            return []
         if not query_embedding:
             return []
         params: dict[str, Any] = {
@@ -156,8 +168,21 @@ class RetrievalService:
         )
         try:
             rows = self.db.execute(statement, params).mappings().all()
-        except DBAPIError:
+        except DBAPIError as exc:
             self.db.rollback()
+            if strict:
+                logger.exception(
+                    "retrieval_semantic_query_failed",
+                    extra={"query_length": len(query.strip())},
+                )
+                raise ApiServiceError(
+                    detail="retrieval semantic query failed",
+                    error_code="RETRIEVAL_SEMANTIC_QUERY_FAILED",
+                ) from exc
+            logger.warning(
+                "retrieval_semantic_query_failed_fallback",
+                extra={"query_length": len(query.strip())},
+            )
             return []
 
         hits: list[dict[str, Any]] = []
@@ -212,8 +237,13 @@ class RetrievalService:
         if not normalized_query:
             return None
         settings = Settings.from_env()
+        provider = (getattr(settings, "llm_provider", "gemini") or "").strip().lower()
         api_key = (settings.gemini_api_key or "").strip()
+        if provider != "gemini":
+            logger.info("retrieval_embedding_skipped_provider_not_supported", extra={"provider": provider})
+            return None
         if not api_key:
+            logger.info("retrieval_embedding_skipped_missing_api_key", extra={"provider": provider})
             return None
         model = (
             settings.gemini_embedding_model or "gemini-embedding-001"
@@ -221,8 +251,16 @@ class RetrievalService:
         try:
             genai = importlib.import_module("google.genai")  # type: ignore[assignment]
             genai_types = importlib.import_module("google.genai.types")  # type: ignore[assignment]
-        except Exception:
-            return None
+        except ImportError as exc:
+            logger.exception(
+                "retrieval_embedding_dependency_missing",
+                extra={"provider": provider, "model": model, "query_length": len(normalized_query)},
+            )
+            raise ApiServiceError(
+                detail="retrieval embedding dependency not available",
+                error_code="RETRIEVAL_EMBEDDING_DEPENDENCY_MISSING",
+                error_kind="dependency_error",
+            ) from exc
 
         def _embed_content() -> Any:
             client = genai.Client(api_key=api_key)
@@ -244,12 +282,47 @@ class RetrievalService:
                     timeout=settings.api_retrieval_embedding_timeout_seconds
                 )
         except concurrent.futures.TimeoutError as exc:
+            logger.error(
+                "retrieval_embedding_timeout",
+                extra={
+                    "provider": provider,
+                    "model": model,
+                    "timeout_seconds": settings.api_retrieval_embedding_timeout_seconds,
+                    "query_length": len(normalized_query),
+                },
+            )
             _raise_embedding_timeout(settings.api_retrieval_embedding_timeout_seconds, exc)
         except Exception as exc:
             if isinstance(exc, TimeoutError) or exc.__class__.__name__ == "TimeoutError":
+                logger.error(
+                    "retrieval_embedding_timeout",
+                    extra={
+                        "provider": provider,
+                        "model": model,
+                        "timeout_seconds": settings.api_retrieval_embedding_timeout_seconds,
+                        "query_length": len(normalized_query),
+                    },
+                )
                 _raise_embedding_timeout(settings.api_retrieval_embedding_timeout_seconds, exc)
-            return None
-        return self._extract_embedding_values(response)
+            logger.exception(
+                "retrieval_embedding_request_failed",
+                extra={"provider": provider, "model": model, "query_length": len(normalized_query)},
+            )
+            raise ApiServiceError(
+                detail="retrieval embedding request failed",
+                error_code="RETRIEVAL_EMBEDDING_REQUEST_FAILED",
+            ) from exc
+        embedding = self._extract_embedding_values(response)
+        if not embedding:
+            logger.error(
+                "retrieval_embedding_response_invalid",
+                extra={"provider": provider, "model": model, "query_length": len(normalized_query)},
+            )
+            raise ApiServiceError(
+                detail="retrieval embedding response invalid",
+                error_code="RETRIEVAL_EMBEDDING_RESPONSE_INVALID",
+            )
+        return embedding
 
     def _extract_embedding_values(self, response: Any) -> list[float] | None:
         embeddings = getattr(response, "embeddings", None)

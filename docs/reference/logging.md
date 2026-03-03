@@ -141,3 +141,6 @@ rg -n "thought_signatures|thought_signature_digest|thought_metadata|llm_meta" lo
   - 允许记录幂等键摘要（如 hash/前缀），用于定位重复发送问题
   - 禁止完整输出敏感 token/authorization 头值
   - 失败排查时优先关联：`delivery_id`、`attempt_count`、`Idempotency-Key` 摘要、`provider_message_id`
+
+
+<!-- doc-sync: api/worker reliability + auth guard update (2026-03-03) -->

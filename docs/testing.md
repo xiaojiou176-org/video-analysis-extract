@@ -512,3 +512,6 @@ npm run lint
 - API 路由测试会通过 `monkeypatch` 隔离 Temporal/数据库外部依赖，验证路由层映射行为。
 - 需要访问真实依赖（Postgres/Temporal）的端到端链路，可在后续补专门的 integration 套件。
 - CI 缓存策略：`web-test-build`、`web-e2e`、`nightly-flaky-web-e2e`、`dependency-vuln-scan` 都使用 `setup-node` 的 npm 缓存（锁文件 `apps/web/package-lock.json`）；Python 使用 `actions/cache@v4` 缓存 `~/.cache/uv`，Playwright 浏览器二进制使用 `actions/cache@v4` 缓存 `~/.cache/ms-playwright`；测试与 e2e 产物统一写入 `.runtime-cache` 并作为 artifact 上传。
+
+
+<!-- doc-sync: api/worker reliability + auth guard update (2026-03-03) -->

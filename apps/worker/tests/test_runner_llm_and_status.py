@@ -126,9 +126,48 @@ def test_step_llm_outline_still_fails_when_flags_disable_provider_soft_fail(
     assert execution.status == "failed"
     assert execution.degraded is False
     assert execution.output["provider"] == "gemini"
-    assert execution.output["llm_required"] is True
+    assert execution.output["llm_required"] is False
     assert execution.output["llm_gate_passed"] is False
-    assert execution.output["hard_fail_reason"] == "gemini_api_key_missing"
+    assert execution.output["hard_fail_reason"] is None
+
+
+def test_step_llm_outline_soft_mode_success_keeps_step_gate_consistent(
+    monkeypatch: Any, tmp_path: Path
+) -> None:
+    def _fake_gemini_generate(*_: Any, **__: Any) -> tuple[str | None, str]:
+        return (
+            '{"title":"演示视频深度拆解","tldr":["总结关键问题与修复路径。"],"highlights":["我们定位了队列拥塞、重试放大和超时雪崩之间的因果链条。"],"recommended_actions":["先降低重试上限并按依赖分层隔离超时策略。"],"risk_or_pitfalls":["若只提高超时阈值会掩盖真实瓶颈并放大资源占用。"],"chapters":[{"chapter_no":1,"title":"根因定位","anchor":"chapter-01","start_s":0,"end_s":90,"summary":"通过关联日志与追踪数据，确认瓶颈发生在上游服务限流与重试叠加阶段。","bullets":["先按链路拆分超时预算，再逐层收敛重试策略。"],"key_terms":["重试风暴"],"code_snippets":[]}],"timestamp_references":[]}',
+            "text",
+        )
+
+    monkeypatch.setattr(runner, "_gemini_generate", _fake_gemini_generate)
+    ctx = _build_ctx(
+        tmp_path,
+        settings=Settings(
+            pipeline_workspace_dir=str((tmp_path / "workspace").resolve()),
+            pipeline_artifact_root=str((tmp_path / "artifact-root").resolve()),
+            pipeline_llm_hard_required=False,
+        ),
+    )
+    state = {
+        "metadata": {"title": "Demo"},
+        "title": "Demo",
+        "transcript": "hello",
+        "comments": {"top_comments": []},
+        "frames": [],
+        "media_path": "",
+        "source_url": "https://www.youtube.com/watch?v=demo",
+        "llm_input_mode": "text",
+        "llm_policy": {"hard_required": False},
+    }
+
+    execution = asyncio.run(runner._step_llm_outline(ctx, state))
+
+    assert execution.status == "succeeded"
+    assert execution.output["provider"] == "gemini"
+    assert execution.output["llm_required"] is False
+    assert execution.output["llm_gate_passed"] is True
+    assert execution.output["hard_fail_reason"] is None
 
 
 def test_run_pipeline_marks_degraded_when_non_llm_step_degraded(
@@ -236,6 +275,146 @@ def test_run_pipeline_marks_failed_when_llm_step_failed(monkeypatch: Any, tmp_pa
     assert result["llm_required"] is True
     assert result["llm_gate_passed"] is False
     assert result["hard_fail_reason"] == "llm_provider_unavailable"
+
+
+def test_run_pipeline_continues_after_llm_failure_when_not_hard_required(
+    monkeypatch: Any, tmp_path: Path
+) -> None:
+    settings = Settings(
+        pipeline_workspace_dir=str((tmp_path / "workspace").resolve()),
+        pipeline_artifact_root=str((tmp_path / "artifact-root").resolve()),
+        pipeline_llm_hard_required=False,
+    )
+    calls = {"llm_digest": 0, "build_embeddings": 0, "write_artifacts": 0}
+
+    async def _ok(_: runner.PipelineContext, __: dict[str, Any]) -> runner.StepExecution:
+        return runner.StepExecution(status="succeeded")
+
+    async def _llm_failed(_: runner.PipelineContext, __: dict[str, Any]) -> runner.StepExecution:
+        return runner.StepExecution(
+            status="failed",
+            reason="llm_provider_unavailable",
+            error="llm_provider_unavailable",
+        )
+
+    async def _llm_digest(_: runner.PipelineContext, __: dict[str, Any]) -> runner.StepExecution:
+        calls["llm_digest"] += 1
+        return runner.StepExecution(status="succeeded")
+
+    async def _embedding(_: runner.PipelineContext, __: dict[str, Any]) -> runner.StepExecution:
+        calls["build_embeddings"] += 1
+        return runner.StepExecution(status="succeeded")
+
+    async def _write(_: runner.PipelineContext, __: dict[str, Any]) -> runner.StepExecution:
+        calls["write_artifacts"] += 1
+        return runner.StepExecution(
+            status="succeeded",
+            state_updates={"artifact_dir": str((tmp_path / "artifacts").resolve())},
+        )
+
+    monkeypatch.setattr(runner, "_step_fetch_metadata", _ok)
+    monkeypatch.setattr(runner, "_step_download_media", _ok)
+    monkeypatch.setattr(runner, "_step_collect_subtitles", _ok)
+    monkeypatch.setattr(runner, "_step_collect_comments", _ok)
+    monkeypatch.setattr(runner, "_step_extract_frames", _ok)
+    monkeypatch.setattr(runner, "_step_llm_outline", _llm_failed)
+    monkeypatch.setattr(runner, "_step_llm_digest", _llm_digest)
+    monkeypatch.setattr(runner, "_step_build_embeddings", _embedding)
+    monkeypatch.setattr(runner, "_step_write_artifacts", _write)
+
+    result = asyncio.run(
+        runner.run_pipeline(
+            settings,
+            _FakeSQLiteStore(),  # type: ignore[arg-type]
+            _FakePGStore(),  # type: ignore[arg-type]
+            job_id="job-llm-soft-fail",
+            attempt=1,
+            mode="full",
+        )
+    )
+
+    assert result["steps"]["llm_outline"]["status"] == "failed"
+    assert result["steps"]["llm_digest"]["status"] == "succeeded"
+    assert result["steps"]["build_embeddings"]["status"] == "succeeded"
+    assert result["steps"]["write_artifacts"]["status"] == "succeeded"
+    assert result["final_status"] == "degraded"
+    assert result["llm_required"] is False
+    assert result["llm_gate_passed"] is True
+    assert result["hard_fail_reason"] is None
+    assert any(item.get("step") == "llm_outline" for item in result["degradations"])
+    assert calls["llm_digest"] == 1
+    assert calls["build_embeddings"] == 1
+    assert calls["write_artifacts"] == 1
+
+
+def test_run_pipeline_respects_llm_hard_required_override(
+    monkeypatch: Any, tmp_path: Path
+) -> None:
+    settings = Settings(
+        pipeline_workspace_dir=str((tmp_path / "workspace").resolve()),
+        pipeline_artifact_root=str((tmp_path / "artifact-root").resolve()),
+        pipeline_llm_hard_required=True,
+    )
+    calls = {"llm_digest": 0, "build_embeddings": 0, "write_artifacts": 0}
+
+    async def _ok(_: runner.PipelineContext, __: dict[str, Any]) -> runner.StepExecution:
+        return runner.StepExecution(status="succeeded")
+
+    async def _llm_failed(_: runner.PipelineContext, __: dict[str, Any]) -> runner.StepExecution:
+        return runner.StepExecution(
+            status="failed",
+            reason="llm_provider_unavailable",
+            error="llm_provider_unavailable",
+        )
+
+    async def _llm_digest(_: runner.PipelineContext, __: dict[str, Any]) -> runner.StepExecution:
+        calls["llm_digest"] += 1
+        return runner.StepExecution(status="succeeded")
+
+    async def _embedding(_: runner.PipelineContext, __: dict[str, Any]) -> runner.StepExecution:
+        calls["build_embeddings"] += 1
+        return runner.StepExecution(status="succeeded")
+
+    async def _write(_: runner.PipelineContext, __: dict[str, Any]) -> runner.StepExecution:
+        calls["write_artifacts"] += 1
+        return runner.StepExecution(
+            status="succeeded",
+            state_updates={"artifact_dir": str((tmp_path / "artifacts").resolve())},
+        )
+
+    monkeypatch.setattr(runner, "_step_fetch_metadata", _ok)
+    monkeypatch.setattr(runner, "_step_download_media", _ok)
+    monkeypatch.setattr(runner, "_step_collect_subtitles", _ok)
+    monkeypatch.setattr(runner, "_step_collect_comments", _ok)
+    monkeypatch.setattr(runner, "_step_extract_frames", _ok)
+    monkeypatch.setattr(runner, "_step_llm_outline", _llm_failed)
+    monkeypatch.setattr(runner, "_step_llm_digest", _llm_digest)
+    monkeypatch.setattr(runner, "_step_build_embeddings", _embedding)
+    monkeypatch.setattr(runner, "_step_write_artifacts", _write)
+
+    result = asyncio.run(
+        runner.run_pipeline(
+            settings,
+            _FakeSQLiteStore(),  # type: ignore[arg-type]
+            _FakePGStore(),  # type: ignore[arg-type]
+            job_id="job-llm-override-soft-fail",
+            attempt=1,
+            mode="full",
+            overrides={"llm": {"hard_required": False}},
+        )
+    )
+
+    assert result["steps"]["llm_outline"]["status"] == "failed"
+    assert result["steps"]["llm_digest"]["status"] == "succeeded"
+    assert result["steps"]["build_embeddings"]["status"] == "succeeded"
+    assert result["steps"]["write_artifacts"]["status"] == "succeeded"
+    assert result["final_status"] == "degraded"
+    assert result["llm_required"] is False
+    assert result["llm_gate_passed"] is True
+    assert result["hard_fail_reason"] is None
+    assert calls["llm_digest"] == 1
+    assert calls["build_embeddings"] == 1
+    assert calls["write_artifacts"] == 1
 
 
 def test_run_pipeline_embedding_degraded_does_not_fail_llm_gate(

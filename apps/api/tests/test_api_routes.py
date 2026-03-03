@@ -8,10 +8,13 @@ import uuid
 from datetime import UTC, datetime
 from types import SimpleNamespace
 
+import pytest
 from fastapi.testclient import TestClient
 from starlette import status
 
 from apps.api.app.security import sanitize_exception_detail
+
+pytestmark = pytest.mark.allow_unauth_write
 
 
 def test_healthz_returns_ok_status(api_client: TestClient) -> None:
@@ -19,6 +22,24 @@ def test_healthz_returns_ok_status(api_client: TestClient) -> None:
 
     assert response.status_code == 200
     assert response.json()["status"] == "ok"
+
+
+def test_metrics_endpoint_exposes_prometheus_text(api_client: TestClient) -> None:
+    api_client.get("/healthz")
+    response = api_client.get("/metrics")
+
+    assert response.status_code == 200
+    assert "text/plain" in response.headers.get("content-type", "")
+    body = response.text
+    assert "vd_http_requests_total" in body
+    assert 'route="/healthz"' in body
+
+
+def test_trace_id_is_echoed_back_in_response_header(api_client: TestClient) -> None:
+    response = api_client.get("/healthz", headers={"x-trace-id": "trace-audit-0001"})
+
+    assert response.status_code == 200
+    assert response.headers.get("x-trace-id") == "trace-audit-0001"
 
 
 def test_ingest_poll_returns_candidates(
@@ -223,7 +244,7 @@ def test_job_get_returns_mode_and_pipeline_fields(
         return SimpleNamespace(
             id=job_id,
             video_id=uuid.uuid4(),
-            kind="phase2_ingest_stub",
+            kind="video_digest_v1",
             status="succeeded",
             mode="refresh_llm",
             idempotency_key="idem-1",
@@ -283,7 +304,7 @@ def test_job_get_returns_mode_and_pipeline_fields(
     payload = response.json()
 
     assert response.status_code == 200
-    assert payload["kind"] == "phase2_ingest_stub"
+    assert payload["kind"] == "video_digest_v1"
     assert payload["mode"] == "refresh_llm"
     assert payload["llm_required"] is True
     assert payload["llm_gate_passed"] is False
@@ -294,6 +315,100 @@ def test_job_get_returns_mode_and_pipeline_fields(
     assert payload["pipeline_final_status"] == "degraded"
     assert payload["notification_retry"]["status"] == "failed"
     assert payload["notification_retry"]["attempt_count"] == 2
+
+
+def test_job_get_accepts_legacy_phase2_kind(api_client: TestClient, monkeypatch) -> None:
+    job_id = uuid.uuid4()
+    now = datetime.now(UTC)
+
+    def fake_get_job(self, query_job_id):
+        assert query_job_id == job_id
+        return SimpleNamespace(
+            id=job_id,
+            video_id=uuid.uuid4(),
+            kind="phase2_ingest_stub",
+            status="succeeded",
+            mode="full",
+            idempotency_key="idem-phase2",
+            error_message=None,
+            artifact_digest_md=None,
+            artifact_root=None,
+            llm_required=None,
+            llm_gate_passed=None,
+            hard_fail_reason=None,
+            created_at=now,
+            updated_at=now,
+        )
+
+    monkeypatch.setattr("apps.api.app.services.jobs.JobsService.get_job", fake_get_job)
+    monkeypatch.setattr("apps.api.app.services.jobs.JobsService.get_steps", lambda self, _job_id: [])
+    monkeypatch.setattr(
+        "apps.api.app.services.jobs.JobsService.get_degradations", lambda self, **kwargs: []
+    )
+    monkeypatch.setattr(
+        "apps.api.app.services.jobs.JobsService.get_artifacts_index", lambda self, **kwargs: {}
+    )
+    monkeypatch.setattr(
+        "apps.api.app.services.jobs.JobsService.get_pipeline_final_status",
+        lambda self, _job_id, fallback_status: None,
+    )
+    monkeypatch.setattr(
+        "apps.api.app.services.jobs.JobsService.get_notification_retry",
+        lambda self, _job_id: None,
+    )
+
+    response = api_client.get(f"/api/v1/jobs/{job_id}")
+
+    assert response.status_code == 200
+    assert response.json()["kind"] == "phase2_ingest_stub"
+
+
+def test_job_get_preserves_explicit_llm_required_false(api_client: TestClient, monkeypatch) -> None:
+    job_id = uuid.uuid4()
+    now = datetime.now(UTC)
+
+    monkeypatch.setattr(
+        "apps.api.app.services.jobs.JobsService.get_job",
+        lambda self, query_job_id: SimpleNamespace(
+            id=query_job_id,
+            video_id=uuid.uuid4(),
+            kind="video_digest_v1",
+            status="queued",
+            mode="text_only",
+            idempotency_key="idem-llm-false",
+            error_message=None,
+            artifact_digest_md=None,
+            artifact_root=None,
+            llm_required=False,
+            llm_gate_passed=None,
+            hard_fail_reason=None,
+            created_at=now,
+            updated_at=now,
+        ),
+    )
+    monkeypatch.setattr("apps.api.app.services.jobs.JobsService.get_steps", lambda self, _job_id: [])
+    monkeypatch.setattr(
+        "apps.api.app.services.jobs.JobsService.get_degradations", lambda self, **kwargs: []
+    )
+    monkeypatch.setattr(
+        "apps.api.app.services.jobs.JobsService.get_artifacts_index", lambda self, **kwargs: {}
+    )
+    monkeypatch.setattr(
+        "apps.api.app.services.jobs.JobsService.get_pipeline_final_status",
+        lambda self, _job_id, fallback_status: None,
+    )
+    monkeypatch.setattr(
+        "apps.api.app.services.jobs.JobsService.get_notification_retry",
+        lambda self, _job_id: None,
+    )
+
+    response = api_client.get(f"/api/v1/jobs/{job_id}")
+    payload = response.json()
+
+    assert response.status_code == 200
+    assert payload["llm_required"] is False
+    assert payload["llm_gate_passed"] is None
+    assert payload["hard_fail_reason"] is None
 
 
 def test_retrieval_search_returns_items(api_client: TestClient, monkeypatch) -> None:
@@ -365,6 +480,40 @@ def test_retrieval_search_passes_semantic_mode(api_client: TestClient, monkeypat
     assert payload["top_k"] == 3
     assert payload["filters"] == {"platform": "youtube"}
     assert payload["items"] == []
+
+
+def test_retrieval_search_semantic_failure_is_observable(
+    api_client: TestClient, monkeypatch
+) -> None:
+    from apps.api.app.routers import retrieval as retrieval_router
+
+    def fake_search(self, *, query, top_k, mode, filters):
+        del self, query, top_k, mode, filters
+        raise retrieval_router.ApiServiceError(
+            detail="retrieval embedding request failed",
+            error_code="RETRIEVAL_EMBEDDING_REQUEST_FAILED",
+            status_code=503,
+            error_kind="upstream_error",
+        )
+
+    monkeypatch.setattr("apps.api.app.services.retrieval.RetrievalService.search", fake_search)
+
+    response = api_client.post(
+        "/api/v1/retrieval/search",
+        json={
+            "query": "retry policy",
+            "top_k": 3,
+            "mode": "semantic",
+            "filters": {"platform": "youtube"},
+        },
+    )
+
+    assert response.status_code == 503
+    assert response.json() == {
+        "detail": "retrieval embedding request failed",
+        "error_code": "RETRIEVAL_EMBEDDING_REQUEST_FAILED",
+        "error_kind": "upstream_error",
+    }
 
 
 def test_feed_digests_returns_items(api_client: TestClient, monkeypatch) -> None:
@@ -587,9 +736,10 @@ def test_computer_use_run_redacts_sensitive_error_detail(
     api_client: TestClient, monkeypatch
 ) -> None:
     screenshot_b64 = base64.b64encode(b"fake-image-bytes").decode("ascii")
+    fake_token = "ghp_" + "12345678901234567890"
 
     def fake_run(self, **kwargs):
-        raise ValueError("computer_use_provider_error: Bearer ghp_12345678901234567890")
+        raise ValueError(f"computer_use_provider_error: Bearer {fake_token}")
 
     monkeypatch.setattr(
         "apps.api.app.services.computer_use.ComputerUseService.run",
@@ -607,7 +757,7 @@ def test_computer_use_run_redacts_sensitive_error_detail(
 
     assert response.status_code == 400
     assert "Bearer ***REDACTED***" in detail
-    assert "ghp_12345678901234567890" not in detail
+    assert fake_token not in detail
 
 
 def test_job_get_infers_llm_gate_fields_from_steps_when_legacy_fields_are_null(
@@ -1214,6 +1364,33 @@ def test_sanitize_exception_detail_redacts_basic_userinfo_and_common_tokens() ->
     assert "jwt=***REDACTED***" in sanitized
     assert "dXNlcjpwYXNz" not in sanitized
     assert "alice:secret" not in sanitized
+
+
+def test_sanitize_exception_detail_redacts_json_like_sensitive_values() -> None:
+    message = '{"password":"abc","token":"def","api_key":"ghi","secret":"jkl","safe":"ok"}'
+    sanitized = sanitize_exception_detail(RuntimeError(message))
+
+    assert '"password":***REDACTED***' in sanitized
+    assert '"token":***REDACTED***' in sanitized
+    assert '"api_key":***REDACTED***' in sanitized
+    assert '"secret":***REDACTED***' in sanitized
+    assert '"safe":"ok"' in sanitized
+    assert '"password":"abc"' not in sanitized
+    assert '"token":"def"' not in sanitized
+    assert '"api_key":"ghi"' not in sanitized
+    assert '"secret":"jkl"' not in sanitized
+
+
+def test_sanitize_exception_detail_redacts_aws_access_key_prefixes() -> None:
+    akia_token = "AKIA" + "0ABCDEF123456789"
+    asia_token = "ASIA" + "0ABCDEF123456789"
+    message = f"keys {akia_token} and {asia_token} should be hidden"
+    sanitized = sanitize_exception_detail(RuntimeError(message))
+
+    assert "AKIA***REDACTED***" in sanitized
+    assert "ASIA***REDACTED***" in sanitized
+    assert akia_token not in sanitized
+    assert asia_token not in sanitized
 
 
 def test_workflows_run_returns_already_running_when_conflict(

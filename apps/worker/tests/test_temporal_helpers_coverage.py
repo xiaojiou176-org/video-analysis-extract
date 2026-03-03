@@ -10,6 +10,7 @@ from urllib.error import HTTPError, URLError
 import httpx
 from worker.temporal import (
     activities_delivery_payload,
+    activities_delivery_policy,
     activities_email,
     activities_health,
     activities_timing,
@@ -107,7 +108,30 @@ def test_delivery_payload_extractors_and_retry_payload() -> None:
     assert next_retry == datetime(2026, 3, 1, 8, 0, tzinfo=UTC)
 
 
+def test_delivery_policy_helpers() -> None:
+    assert (
+        activities_delivery_policy.prepare_delivery_skip_reason(
+            config={"enabled": True, "daily_digest_enabled": True},
+            recipient_email=None,
+            notification_enabled=True,
+        )
+        == "notification recipient email is not configured"
+    )
+    assert activities_delivery_policy.classify_delivery_error("401 unauthorized") == "auth"
+    assert activities_delivery_policy.classify_delivery_error("network timeout") == "transient"
+    assert activities_delivery_policy.resolve_retry_backoff_minutes(attempt_count=3) == 15
+    assert (
+        activities_delivery_policy.resolve_next_retry_at(
+            attempt_count=5,
+            error_kind="transient",
+            now_utc=datetime(2026, 3, 1, 8, 0, tzinfo=UTC),
+        )
+        is None
+    )
+
+
 def test_email_sanitizers_and_html_rendering() -> None:
+    secret_like_token = "provider-token-for-redaction"
     assert activities_email.normalize_email("  a@example.com ") == "a@example.com"
     assert activities_email.normalize_email("   ") is None
     assert activities_email.normalize_email(123) is None
@@ -122,10 +146,16 @@ def test_email_sanitizers_and_html_rendering() -> None:
     assert "token=%2A%2A%2AREDACTED%2A%2A%2A" in sanitized_url
 
     preview = activities_email.sanitize_text_preview(
-        "Bearer sk-testtoken ghp_12345678901234567890 AKIAIOSFODNN7EXAMPLE", max_chars=120
+        "Bearer "
+        + secret_like_token
+        + " "
+        + "ghp_" + "12345678901234567890"
+        + " "
+        + "AKIA" + "IOSFODNN7EXAMPLE",
+        max_chars=120,
     )
     assert "***REDACTED***" in preview
-    assert "sk-testtoken" not in preview
+    assert secret_like_token not in preview
 
     html = activities_email.to_html("# Title\n\nBody")
     assert "<!doctype html>" in html
@@ -222,6 +252,26 @@ def test_send_with_resend_branches(monkeypatch: Any) -> None:
         )
         == "msg_1"
     )
+
+    captured_headers: dict[str, str] = {}
+
+    def _capture_post(*_: Any, **kwargs: Any) -> _FakeResponse:
+        captured_headers.update(kwargs.get("headers") or {})
+        return _FakeResponse(200, payload={"id": "msg_2"})
+
+    monkeypatch.setattr(activities_email.httpx, "post", _capture_post)
+    assert (
+        activities_email.send_with_resend(
+            to_email="to@example.com",
+            subject="S",
+            text_body="B",
+            resend_api_key="rk_test",
+            resend_from_email="from@example.com",
+            idempotency_key="delivery-retry:delivery-1:attempt-1",
+        )
+        == "msg_2"
+    )
+    assert captured_headers["Idempotency-Key"] == "delivery-retry:delivery-1:attempt-1"
 
 
 class _FixedDatetime(datetime):

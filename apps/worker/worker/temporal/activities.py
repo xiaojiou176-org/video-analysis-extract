@@ -4,6 +4,7 @@ from typing import Any
 
 from worker.temporal import activities_delivery as _delivery
 from worker.temporal import activities_job_state as _job_state
+from worker.temporal import activities_timing as _timing
 from worker.temporal.activities_entry import *  # noqa: F403
 
 try:
@@ -79,7 +80,20 @@ async def send_video_digest_activity(payload: dict[str, Any]) -> dict[str, Any]:
     return await _delivery.send_video_digest_activity(payload)
 
 
+@activity.defn(name="send_daily_digest_activity")
+async def send_daily_digest_activity(payload: dict[str, Any]) -> dict[str, Any]:
+    _sync_symbols(_delivery, _DELIVERY_PATCHABLES)
+    return await _delivery.send_daily_digest_activity(payload)
+
+
 @activity.defn(name="retry_failed_deliveries_activity")
 async def retry_failed_deliveries_activity(payload: dict[str, Any] | None = None) -> dict[str, Any]:
     _sync_symbols(_delivery, _DELIVERY_PATCHABLES)
     return await _delivery.retry_failed_deliveries_activity(payload)
+
+
+mark_running_activity = _job_state.mark_running_activity
+mark_succeeded_activity = _job_state.mark_succeeded_activity
+mark_failed_activity = _job_state.mark_failed_activity
+reconcile_stale_queued_jobs_activity = _job_state.reconcile_stale_queued_jobs_activity
+resolve_daily_digest_timing_activity = _timing.resolve_daily_digest_timing_activity

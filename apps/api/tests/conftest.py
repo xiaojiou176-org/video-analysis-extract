@@ -23,6 +23,7 @@ os.environ.setdefault(
 
 @pytest.fixture(autouse=True)
 def _isolated_api_test_env(
+    request: pytest.FixtureRequest,
     monkeypatch: pytest.MonkeyPatch,
     tmp_path_factory: pytest.TempPathFactory,
 ) -> None:
@@ -33,7 +34,14 @@ def _isolated_api_test_env(
     monkeypatch.setenv("TEMPORAL_TASK_QUEUE", "video-analysis-worker")
     monkeypatch.setenv("SQLITE_STATE_PATH", str((env_root / "state.db").resolve()))
     monkeypatch.setenv("UI_AUDIT_GEMINI_ENABLED", "false")
-    # Keep historical test behavior unless a test explicitly overrides auth hardening.
+    if request.node.get_closest_marker("allow_unauth_write") is not None:
+        monkeypatch.setenv("VD_ALLOW_UNAUTH_WRITE", "true")
+    else:
+        monkeypatch.delenv("VD_ALLOW_UNAUTH_WRITE", raising=False)
+
+
+@pytest.fixture
+def allow_unauth_write(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("VD_ALLOW_UNAUTH_WRITE", "true")
 
 

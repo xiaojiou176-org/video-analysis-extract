@@ -35,6 +35,9 @@ pythonpath = [
   ".",
   "apps/worker",
 ]
+markers = [
+  "allow_unauth_write: enable VD_ALLOW_UNAUTH_WRITE for tests that explicitly opt in",
+]
 reruns = 0
 reruns_delay = 0
 

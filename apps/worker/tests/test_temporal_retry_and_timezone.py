@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import types
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 import pytest
@@ -25,6 +25,13 @@ class _DummyEngine:
 class _DummyPostgresStore:
     def __init__(self, _database_url: str):
         self._engine = _DummyEngine()
+        self.released_leases: list[Any] = []
+
+    def try_acquire_advisory_lock(self, *, lock_key: str) -> tuple[bool, Any, str | None]:
+        return (False, None, f"advisory_unsupported:{lock_key}")
+
+    def release_advisory_lock(self, lease: Any) -> None:
+        self.released_leases.append(lease)
 
 
 def test_retry_failed_deliveries_activity_schedules_retry_for_transient(monkeypatch: Any) -> None:
@@ -138,6 +145,7 @@ def test_retry_backoff_stops_for_config_error() -> None:
 
 def test_retry_failed_deliveries_activity_marks_sent_on_recovery(monkeypatch: Any) -> None:
     captured: list[dict[str, Any]] = []
+    send_calls: list[dict[str, Any]] = []
 
     monkeypatch.setattr(activities, "PostgresBusinessStore", _DummyPostgresStore)
     monkeypatch.setattr(
@@ -180,7 +188,12 @@ def test_retry_failed_deliveries_activity_marks_sent_on_recovery(monkeypatch: An
         },
     )
     monkeypatch.setattr(activities, "_safe_read_text", lambda _path: "digest")
-    monkeypatch.setattr(activities, "_send_with_resend", lambda **_: "provider-msg-1")
+
+    def _fake_send_with_resend(**kwargs: Any) -> str:
+        send_calls.append(dict(kwargs))
+        return "provider-msg-1"
+
+    monkeypatch.setattr(activities, "_send_with_resend", _fake_send_with_resend)
 
     def _fake_mark_delivery_state(
         _pg_store,
@@ -226,6 +239,295 @@ def test_retry_failed_deliveries_activity_marks_sent_on_recovery(monkeypatch: An
     assert captured[0]["status"] == "sent"
     assert captured[0]["record_attempt"] is True
     assert captured[0]["clear_retry_meta"] is True
+    assert send_calls[0]["idempotency_key"] == "delivery-retry:delivery-2:attempt-2"
+
+
+def test_retry_failed_deliveries_reclaimed_first_attempt_reuses_initial_idempotency(
+    monkeypatch: Any,
+) -> None:
+    send_calls: list[dict[str, Any]] = []
+    mark_calls: list[dict[str, Any]] = []
+
+    monkeypatch.setattr(activities, "PostgresBusinessStore", _DummyPostgresStore)
+    monkeypatch.setattr(
+        activities.Settings,
+        "from_env",
+        staticmethod(
+            lambda: types.SimpleNamespace(
+                database_url="postgresql://example.invalid/db",
+                resend_api_key="rk_test",
+                resend_from_email="digest@example.com",
+            )
+        ),
+    )
+    monkeypatch.setattr(
+        activities,
+        "_claim_due_failed_deliveries",
+        lambda _conn, *, limit: [
+            {
+                "delivery_id": "delivery-3",
+                "kind": "video_digest",
+                "recipient_email": "notify@example.com",
+                "subject": "Digest",
+                "payload_json": {},
+                "job_id": "00000000-0000-0000-0000-000000000003",
+                "attempt_count": 0,
+            }
+        ],
+    )
+    monkeypatch.setattr(
+        activities,
+        "_fetch_job_digest_record",
+        lambda _conn, *, job_id: {
+            "job_id": job_id,
+            "title": "Demo",
+            "video_uid": "demo-uid",
+            "source_url": "https://example.com",
+            "artifact_digest_md": "",
+        },
+    )
+    monkeypatch.setattr(activities, "_safe_read_text", lambda _path: "digest")
+    monkeypatch.setattr(
+        activities,
+        "_send_with_resend",
+        lambda **kwargs: send_calls.append(dict(kwargs)) or "provider-msg-3",
+    )
+
+    def _fake_mark_delivery_state(_pg_store, **kwargs: Any) -> dict[str, Any]:
+        mark_calls.append(dict(kwargs))
+        return {
+            "delivery_id": kwargs["delivery_id"],
+            "status": kwargs["status"],
+            "attempt_count": kwargs.get("expected_attempt_count", 0) + (1 if kwargs.get("record_attempt") else 0),
+            "next_retry_at": kwargs.get("next_retry_at"),
+        }
+
+    monkeypatch.setattr(activities, "_mark_delivery_state", _fake_mark_delivery_state)
+
+    payload = asyncio.run(activities.retry_failed_deliveries_activity({"limit": 10}))
+
+    assert payload["checked"] == 1
+    assert payload["retried"] == 1
+    assert payload["sent"] == 1
+    assert payload["failed"] == 0
+    assert send_calls[0]["idempotency_key"] == "delivery-initial:delivery-3"
+    assert mark_calls[0]["expected_attempt_count"] == 0
+
+
+def test_retry_failed_deliveries_activity_skips_delivery_when_lock_busy(monkeypatch: Any) -> None:
+    class _LockBusyStore(_DummyPostgresStore):
+        def try_acquire_advisory_lock(self, *, lock_key: str) -> tuple[bool, Any, str | None]:
+            assert lock_key == "notification_delivery_retry:delivery-lock-busy"
+            return (True, None, None)
+
+    monkeypatch.setattr(activities, "PostgresBusinessStore", _LockBusyStore)
+    monkeypatch.setattr(
+        activities.Settings,
+        "from_env",
+        staticmethod(
+            lambda: types.SimpleNamespace(
+                database_url="postgresql://example.invalid/db",
+                resend_api_key="rk_test",
+                resend_from_email="digest@example.com",
+            )
+        ),
+    )
+    monkeypatch.setattr(
+        activities,
+        "_claim_due_failed_deliveries",
+        lambda _conn, *, limit: [
+            {
+                "delivery_id": "delivery-lock-busy",
+                "kind": "video_digest",
+                "recipient_email": "notify@example.com",
+                "subject": "Digest",
+                "payload_json": {},
+                "job_id": "00000000-0000-0000-0000-000000000003",
+                "attempt_count": 1,
+            }
+        ],
+    )
+
+    send_calls: list[dict[str, Any]] = []
+    mark_calls: list[dict[str, Any]] = []
+    monkeypatch.setattr(activities, "_fetch_job_digest_record", lambda _conn, *, job_id: {"job_id": job_id})
+    monkeypatch.setattr(activities, "_safe_read_text", lambda _path: "digest")
+    monkeypatch.setattr(
+        activities,
+        "_send_with_resend",
+        lambda **kwargs: send_calls.append(dict(kwargs)) or "provider-msg-1",
+    )
+    monkeypatch.setattr(
+        activities,
+        "_mark_delivery_state",
+        lambda _pg_store, **kwargs: mark_calls.append(dict(kwargs))
+        or {"delivery_id": kwargs["delivery_id"], "status": kwargs["status"]},
+    )
+
+    payload = asyncio.run(activities.retry_failed_deliveries_activity({"limit": 10}))
+
+    assert payload["checked"] == 1
+    assert payload["retried"] == 0
+    assert payload["lock_skipped"] == 1
+    assert payload["sent"] == 0
+    assert payload["failed"] == 0
+    assert send_calls == []
+    assert mark_calls == []
+
+
+def test_send_video_digest_activity_uses_stable_idempotency_key_on_first_send(
+    monkeypatch: Any,
+) -> None:
+    send_calls: list[dict[str, Any]] = []
+
+    monkeypatch.setattr(activities, "PostgresBusinessStore", _DummyPostgresStore)
+    monkeypatch.setattr(
+        activities.Settings,
+        "from_env",
+        staticmethod(
+            lambda: types.SimpleNamespace(
+                database_url="postgresql://example.invalid/db",
+                notification_enabled=True,
+                resend_api_key="rk_test",
+                resend_from_email="digest@example.com",
+            )
+        ),
+    )
+    monkeypatch.setattr(
+        activities,
+        "_fetch_job_digest_record",
+        lambda _conn, *, job_id: {
+            "job_id": job_id,
+            "title": "Demo",
+            "video_uid": "demo",
+            "platform": "youtube",
+            "source_url": "https://example.com/video",
+            "status": "succeeded",
+            "artifact_digest_md": "",
+        },
+    )
+    monkeypatch.setattr(
+        activities,
+        "_get_or_init_notification_config",
+        lambda _conn: {
+            "enabled": True,
+            "daily_digest_enabled": True,
+            "to_email": "notify@example.com",
+        },
+    )
+    monkeypatch.setattr(activities, "_normalize_email", lambda value: value)
+    monkeypatch.setattr(activities, "_prepare_delivery_skip_reason", lambda **_: None)
+    monkeypatch.setattr(activities, "_safe_read_text", lambda _path: "digest")
+    monkeypatch.setattr(activities, "_build_video_digest_markdown", lambda _job, _md: "digest-body")
+    monkeypatch.setattr(
+        activities,
+        "_insert_video_digest_delivery",
+        lambda _conn, **_: {
+            "delivery_id": "delivery-video-1",
+            "subject": "Digest",
+            "attempt_count": 0,
+        },
+    )
+    monkeypatch.setattr(activities, "_get_existing_video_digest", lambda _conn, *, job_id: None)
+    monkeypatch.setattr(
+        activities,
+        "_send_with_resend",
+        lambda **kwargs: send_calls.append(dict(kwargs)) or "provider-msg-video-1",
+    )
+    monkeypatch.setattr(
+        activities,
+        "_mark_delivery_state",
+        lambda _pg_store, **kwargs: {
+            "delivery_id": kwargs["delivery_id"],
+            "status": kwargs["status"],
+            "provider_message_id": kwargs.get("provider_message_id"),
+            "sent_at": None,
+            "attempt_count": 1,
+        },
+    )
+
+    payload = asyncio.run(
+        activities.send_video_digest_activity(
+            {"job_id": "00000000-0000-0000-0000-000000000010"}
+        )
+    )
+
+    assert payload["ok"] is True
+    assert send_calls[0]["idempotency_key"] == "delivery-initial:delivery-video-1"
+
+
+def test_send_daily_digest_activity_uses_stable_idempotency_key_on_first_send(
+    monkeypatch: Any,
+) -> None:
+    send_calls: list[dict[str, Any]] = []
+
+    monkeypatch.setattr(activities, "PostgresBusinessStore", _DummyPostgresStore)
+    monkeypatch.setattr(
+        activities.Settings,
+        "from_env",
+        staticmethod(
+            lambda: types.SimpleNamespace(
+                database_url="postgresql://example.invalid/db",
+                notification_enabled=True,
+                resend_api_key="rk_test",
+                resend_from_email="digest@example.com",
+            )
+        ),
+    )
+    monkeypatch.setattr(activities, "_coerce_int", lambda value, fallback=0: int(value or fallback))
+    monkeypatch.setattr(
+        activities,
+        "_resolve_local_digest_date",
+        lambda **_: date(2026, 2, 22),
+    )
+    monkeypatch.setattr(activities, "_load_daily_digest_jobs", lambda _conn, **_: [])
+    monkeypatch.setattr(activities, "_build_daily_digest_markdown", lambda **_: "daily-body")
+    monkeypatch.setattr(
+        activities,
+        "_get_or_init_notification_config",
+        lambda _conn: {
+            "enabled": True,
+            "daily_digest_enabled": True,
+            "to_email": "notify@example.com",
+        },
+    )
+    monkeypatch.setattr(activities, "_normalize_email", lambda value: value)
+    monkeypatch.setattr(activities, "_prepare_delivery_skip_reason", lambda **_: None)
+    monkeypatch.setattr(
+        activities,
+        "_insert_daily_digest_delivery",
+        lambda _conn, **_: {
+            "delivery_id": "delivery-daily-1",
+            "subject": "Daily Digest",
+            "attempt_count": 0,
+        },
+    )
+    monkeypatch.setattr(activities, "_get_existing_daily_digest", lambda _conn, *, digest_date: None)
+    monkeypatch.setattr(
+        activities,
+        "_send_with_resend",
+        lambda **kwargs: send_calls.append(dict(kwargs)) or "provider-msg-daily-1",
+    )
+    monkeypatch.setattr(
+        activities,
+        "_mark_delivery_state",
+        lambda _pg_store, **kwargs: {
+            "delivery_id": kwargs["delivery_id"],
+            "status": kwargs["status"],
+            "provider_message_id": kwargs.get("provider_message_id"),
+            "sent_at": None,
+            "attempt_count": 1,
+        },
+    )
+
+    payload = asyncio.run(
+        activities.send_daily_digest_activity(
+            {"digest_date": "2026-02-22", "timezone_name": "UTC", "timezone_offset_minutes": 0}
+        )
+    )
+
+    assert payload["ok"] is True
+    assert send_calls[0]["idempotency_key"] == "delivery-initial:delivery-daily-1"
 
 
 def test_daily_digest_workflow_uses_timezone_name_across_dst(monkeypatch: Any) -> None:

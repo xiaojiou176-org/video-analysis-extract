@@ -413,6 +413,7 @@ class PostgresBusinessStore:
                             WHEN COALESCE(j.error_message, '') = '' THEN :error_message
                             ELSE j.error_message
                         END,
+                        pipeline_final_status = 'failed',
                         hard_fail_reason = 'dispatch_timeout',
                         updated_at = NOW()
                     FROM stale_jobs

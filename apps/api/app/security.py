@@ -23,9 +23,17 @@ _SENSITIVE_TEXT_PATTERNS = (
     (re.compile(r"(sk-[A-Za-z0-9]{20,})"), "sk-***REDACTED***"),
     (re.compile(r"(ghp_[A-Za-z0-9]{20,})"), "ghp_***REDACTED***"),
     (re.compile(r"(AKIA[0-9A-Z]{16})"), "AKIA***REDACTED***"),
+    (re.compile(r"(ASIA[0-9A-Z]{16})"), "ASIA***REDACTED***"),
     (
         re.compile(
             r"([?&](?:api[_-]?key|apikey|key|token|access[_-]?token|refresh[_-]?token|id[_-]?token|oauth[_-]?token|jwt|secret|client[_-]?secret|password|passwd|session(?:id)?|auth(?:orization)?|signature)=)[^&\s]+",
+            re.IGNORECASE,
+        ),
+        r"\1***REDACTED***",
+    ),
+    (
+        re.compile(
+            r"((?:^|[{,\s])(?:\"|')?(?:password|passwd|token|access[_-]?token|refresh[_-]?token|id[_-]?token|oauth[_-]?token|api[_-]?key|apikey|secret|client[_-]?secret|session(?:id)?|signature)(?:\"|')?\s*[:=]\s*)(?:\"[^\"]*\"|'[^']*'|[^,\s}\]&]+)",
             re.IGNORECASE,
         ),
         r"\1***REDACTED***",
@@ -60,7 +68,20 @@ def _allow_unauth_write() -> bool:
     if raw is None:
         return False
     value = raw.strip().lower()
-    return value in {"1", "true", "yes", "on"}
+    if value not in {"1", "true", "yes", "on"}:
+        return False
+
+    if os.getenv("PYTEST_CURRENT_TEST"):
+        return True
+
+    ci_raw = os.getenv("CI", "").strip().lower()
+    actions_raw = os.getenv("GITHUB_ACTIONS", "").strip().lower()
+    ci_opt_in_raw = os.getenv("VD_CI_ALLOW_UNAUTH_WRITE", "").strip().lower()
+    return (
+        ci_raw in {"1", "true", "yes", "on"}
+        and actions_raw in {"1", "true", "yes", "on"}
+        and ci_opt_in_raw in {"1", "true", "yes", "on"}
+    )
 
 
 def _actor_label(
@@ -98,7 +119,7 @@ def require_write_access(
     bearer: HTTPAuthorizationCredentials | None = Security(_bearer_security),
     api_key_header: str | None = Security(_api_key_header),
 ) -> None:
-    trace_id = "missing_trace"
+    trace_id = secrets.token_hex(8)
     actor = _actor_label(bearer, api_key_header)
     expected = _configured_api_key()
     if expected is None:

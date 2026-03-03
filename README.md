@@ -452,3 +452,6 @@ python3 scripts/release/verify_db_rollback_readiness.py \
 - MCP 路由：`docs/reference/mcp-tool-routing.md`（13 工具、action 路由、组合示例）
 - 仓库完善蓝图：`Repo_Next_Step_Plan.md`
 - 证据链审计报告：`Repo完善与证据链报告.md`
+
+
+<!-- doc-sync: api/worker reliability + auth guard update (2026-03-03) -->

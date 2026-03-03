@@ -92,6 +92,10 @@ class JobsRepository:
         job.status = "queued"
         job.error_message = None
         job.hard_fail_reason = None
+        job.pipeline_final_status = None
+        job.degradation_count = None
+        job.last_error_code = None
+        job.llm_gate_passed = None
         self.db.add(job)
         self.db.commit()
         self.db.refresh(job)
@@ -109,6 +113,7 @@ class JobsRepository:
             raise ValueError(f"job not found: {job_id}")
         job.status = "failed"
         job.error_message = error_message
+        job.pipeline_final_status = "failed"
         job.hard_fail_reason = reason
         self.db.add(job)
         self.db.commit()

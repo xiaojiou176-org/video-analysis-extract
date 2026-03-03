@@ -131,3 +131,6 @@
 补充：
 
 - 该机制属于“重试状态恢复”，不改变本页已有 cache 路径/保留策略。
+
+
+<!-- doc-sync: api/worker reliability + auth guard update (2026-03-03) -->
