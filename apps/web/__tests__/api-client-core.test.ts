@@ -323,4 +323,31 @@ describe("apiClient core behavior", () => {
 		expect(String(fetchSpy.mock.calls[3][0])).toContain("/api/v1/subscriptions/sub-1");
 		expect(fetchSpy.mock.calls[3][1]).toMatchObject({ method: "DELETE" });
 	});
+
+	it("normalizes digest booleans and cursor from non-string payloads", async () => {
+		vi.spyOn(globalThis, "fetch").mockResolvedValue(
+			new Response(
+				JSON.stringify({
+					items: [],
+					has_more: 1,
+					next_cursor: 123,
+				}),
+				{ status: 200 },
+			),
+		);
+
+		const result = await apiClient.getDigestFeed();
+		expect(result.has_more).toBe(true);
+		expect(result.next_cursor).toBeNull();
+	});
+
+	it("extracts structured error code from JSON body fields", async () => {
+		vi.spyOn(globalThis, "fetch").mockResolvedValue(
+			new Response(JSON.stringify({ message: "prefix ERR_RATE_LIMITED suffix" }), {
+				status: 429,
+			}),
+		);
+
+		await expect(apiClient.getNotificationConfig()).rejects.toThrow("ERR_RATE_LIMITED");
+	});
 });

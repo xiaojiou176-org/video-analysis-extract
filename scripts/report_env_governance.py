@@ -31,6 +31,7 @@ IGNORE_REFS = {
     "HOME",
     "PATH",
     "PIPELINE_STEPS",
+    "PYTEST_CURRENT_TEST",
     "PYTEST_XDIST_WORKER",
     "PWD",
     "PYTHONPATH",

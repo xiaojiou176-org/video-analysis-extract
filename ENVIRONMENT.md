@@ -214,6 +214,8 @@ Live smoke includes strict computer-use controls via CLI flags in `scripts/e2e_l
   - `--bilibili-url` (default `https://www.bilibili.com/video/BV1xx411c7mD`)
 - Full-stack bootstrap/smoke fallback behavior is controlled by CLI flags in the scripts above.
 - Failure-kind contract alignment: `e2e_live_smoke` diagnostics keep `failure_kind` in `{code_logic_error, network_or_environment_timeout}`; enabling offline fallback does not add new `failure_kind` enum values.
+- `LIVE_SMOKE_API_BASE_URL` is the canonical live-smoke API target variable used by smoke scripts and CI live-smoke jobs.
+- CI pins Temporal CLI download integrity with `TEMPORAL_CLI_VERSION`, `TEMPORAL_CLI_SHA256_LINUX_AMD64`, and `TEMPORAL_CLI_SHA256_LINUX_ARM64`.
 - CI/Test behavior flags are contract-registered:
   - `CI` / `GITHUB_ACTIONS`: CI context detection flags (hosted CI normally injects these automatically).
   - `API_INTEGRATION_SMOKE_STRICT`: local strictness override for `apps/api/tests/test_api_integration_smoke.py`.
