@@ -201,7 +201,7 @@ jobs:
           fi
 
   preflight-heavy:
-    runs-on: [self-hosted, e2-core, spot, shared-pool]
+    runs-on: ubuntu-latest
     timeout-minutes: 20
     needs: preflight-fast
     if: ${{ always() && needs.preflight-fast.result == 'success' }}
