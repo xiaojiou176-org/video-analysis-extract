@@ -53,6 +53,7 @@ scripts/e2e_live_smoke.sh \
   --require-secrets "1" \
   --computer-use-strict "1" \
   --computer-use-skip "0" \
+  --timeout-seconds "600" \
   --heartbeat-seconds "30" \
   --diagnostics-json ".runtime-cache/e2e-live-smoke-result.json"
 ```

@@ -29,6 +29,7 @@ required_patterns=(
   "--require-secrets \"1\""
   "--computer-use-strict \"1\""
   "--computer-use-skip \"0\""
+  "--timeout-seconds \"600\""
   "--diagnostics-json \".runtime-cache/e2e-live-smoke-result.json\""
   "--heartbeat-seconds \"30\""
 )

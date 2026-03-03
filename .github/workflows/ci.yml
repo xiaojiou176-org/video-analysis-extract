@@ -1979,22 +1979,40 @@ jobs:
         run: |
           mkdir -p .runtime-cache
           scripts/dev_api.sh --host 127.0.0.1 --port 18080 --no-reload > .runtime-cache/live-smoke-api.log 2>&1 &
-          echo "LIVE_SMOKE_API_PID=$!" >> "$GITHUB_ENV"
+          LIVE_SMOKE_API_PID="$!"
+          echo "LIVE_SMOKE_API_PID=${LIVE_SMOKE_API_PID}" >> "$GITHUB_ENV"
           scripts/dev_worker.sh --no-show-hints > .runtime-cache/live-smoke-worker.log 2>&1 &
-          echo "LIVE_SMOKE_WORKER_PID=$!" >> "$GITHUB_ENV"
+          LIVE_SMOKE_WORKER_PID="$!"
+          echo "LIVE_SMOKE_WORKER_PID=${LIVE_SMOKE_WORKER_PID}" >> "$GITHUB_ENV"
 
+          api_ready=0
           for _ in $(seq 1 60); do
             if curl -fsS "http://127.0.0.1:18080/healthz" >/dev/null 2>&1; then
-              echo "local live smoke API is ready"
-              exit 0
+              api_ready=1
+              break
             fi
             sleep 1
           done
 
-          echo "local live smoke API failed to become ready"
-          tail -n 120 .runtime-cache/live-smoke-api.log || true
-          tail -n 120 .runtime-cache/live-smoke-worker.log || true
-          exit 1
+          if [[ "$api_ready" != "1" ]]; then
+            echo "local live smoke API failed to become ready"
+            tail -n 120 .runtime-cache/live-smoke-api.log || true
+            tail -n 120 .runtime-cache/live-smoke-worker.log || true
+            exit 1
+          fi
+          echo "local live smoke API is ready"
+
+          if ! kill -0 "${LIVE_SMOKE_WORKER_PID}" >/dev/null 2>&1; then
+            echo "live smoke worker process exited unexpectedly"
+            tail -n 120 .runtime-cache/live-smoke-worker.log || true
+            exit 1
+          fi
+
+          if ! kill -0 "${LIVE_SMOKE_TEMPORAL_PID}" >/dev/null 2>&1; then
+            echo "live smoke temporal process exited unexpectedly"
+            tail -n 120 .runtime-cache/live-smoke-temporal.log || true
+            exit 1
+          fi
 
       - name: Run live smoke
         env:
@@ -2012,6 +2030,7 @@ jobs:
             --require-secrets "1" \
             --computer-use-strict "1" \
             --computer-use-skip "0" \
+            --timeout-seconds "600" \
             --heartbeat-seconds "30" \
             --diagnostics-json ".runtime-cache/e2e-live-smoke-result.json"
 

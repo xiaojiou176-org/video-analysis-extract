@@ -960,6 +960,7 @@ wait_for_terminal_status() {
   local next_heartbeat=$((SECONDS + LIVE_SMOKE_HEARTBEAT_SECONDS))
 
   while (( SECONDS < deadline )); do
+    assert_ci_runtime_alive "$label" "$job_id"
     local response http_status body parsed
     response="$(api_get "/api/v1/jobs/${job_id}")"
     http_status="${response%%$'\n'*}"
@@ -997,6 +998,7 @@ PY
     fi
 
     if (( SECONDS >= next_heartbeat )); then
+      assert_ci_runtime_alive "$label" "$job_id"
       log "heartbeat: ${label} waiting job_id=${job_id} status=${status} pipeline_final_status=${pipeline_final_status:-null}"
       record_scenario "$label" "running" "job_id=${job_id} status=${status} pipeline_final_status=${pipeline_final_status:-null}"
       next_heartbeat=$((SECONDS + LIVE_SMOKE_HEARTBEAT_SECONDS))
@@ -1005,6 +1007,21 @@ PY
   done
 
   fail "${label}: timeout waiting terminal status for job_id=${job_id}, last_status=${status:-unknown}, last_pipeline_final_status=${pipeline_final_status:-null}"
+}
+
+assert_ci_runtime_alive() {
+  local label="$1"
+  local job_id="$2"
+
+  if [[ -n "${LIVE_SMOKE_API_PID:-}" ]] && ! kill -0 "${LIVE_SMOKE_API_PID}" >/dev/null 2>&1; then
+    fail "${label}: live-smoke runtime check failed (api process exited), job_id=${job_id}, pid=${LIVE_SMOKE_API_PID}"
+  fi
+  if [[ -n "${LIVE_SMOKE_WORKER_PID:-}" ]] && ! kill -0 "${LIVE_SMOKE_WORKER_PID}" >/dev/null 2>&1; then
+    fail "${label}: live-smoke runtime check failed (worker process exited), job_id=${job_id}, pid=${LIVE_SMOKE_WORKER_PID}"
+  fi
+  if [[ -n "${LIVE_SMOKE_TEMPORAL_PID:-}" ]] && ! kill -0 "${LIVE_SMOKE_TEMPORAL_PID}" >/dev/null 2>&1; then
+    fail "${label}: live-smoke runtime check failed (temporal process exited), job_id=${job_id}, pid=${LIVE_SMOKE_TEMPORAL_PID}"
+  fi
 }
 
 run_worker_workflow_once() {
