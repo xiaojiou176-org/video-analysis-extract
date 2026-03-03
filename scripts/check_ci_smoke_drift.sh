@@ -24,7 +24,7 @@ required_patterns=(
   "--retries \"\${{ vars.EXTERNAL_SMOKE_RETRIES || '2' }}\""
   "live-smoke:"
   "scripts/e2e_live_smoke.sh"
-  "--api-base-url \"\${{ secrets.LIVE_SMOKE_API_BASE_URL }}\""
+  "--api-base-url \"http://127.0.0.1:18080\""
   "--require-api \"1\""
   "--require-secrets \"1\""
   "--computer-use-strict \"1\""
