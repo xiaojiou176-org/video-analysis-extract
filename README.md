@@ -461,3 +461,6 @@ python3 scripts/release/verify_db_rollback_readiness.py \
 
 
 <!-- doc-sync: mcp api-client redaction fixture adjustment (2026-03-03) -->
+
+
+<!-- doc-sync: integration smoke uses xfail instead of skip when env unmet (2026-03-03) -->

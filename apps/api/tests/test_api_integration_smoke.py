@@ -58,7 +58,7 @@ def _fail_or_skip_for_env(requirement: str, detail: str) -> None:
     message = f"{header}. {detail}. {guidance}"
     if _integration_smoke_strict_mode():
         pytest.fail(message, pytrace=False)
-    pytest.skip(message)
+    pytest.xfail(message)
 
 
 @pytest.fixture

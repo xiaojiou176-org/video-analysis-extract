@@ -402,3 +402,6 @@ curl -sS -X POST http://127.0.0.1:8000/api/v1/videos/process \
 
 
 <!-- doc-sync: mcp api-client redaction fixture adjustment (2026-03-03) -->
+
+
+<!-- doc-sync: integration smoke uses xfail instead of skip when env unmet (2026-03-03) -->
