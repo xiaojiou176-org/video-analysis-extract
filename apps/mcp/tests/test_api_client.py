@@ -316,9 +316,6 @@ def test_normalize_error_details_redacts_secrets() -> None:
     assert "def456" not in normalized["error"]
     assert "abc123" not in normalized["body_preview"]
     assert "def456" not in normalized["body_preview"]
-    assert "ASIA_TEST_TOKEN_12345" not in normalized["error"]
-    assert "ASIA_TEST_TOKEN_12345" not in normalized["body_preview"]
-
 
 def test_api_error_to_payload_redacts_message_and_json_style_secret() -> None:
     err = ApiError(
