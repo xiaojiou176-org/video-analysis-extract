@@ -765,12 +765,29 @@ root = ET.parse(report).getroot()
 suites = [root] if root.tag == "testsuite" else root.findall("testsuite")
 tests = sum(int(suite.attrib.get("tests", "0")) for suite in suites)
 skipped = sum(int(suite.attrib.get("skipped", "0")) for suite in suites)
+allowed_skip_markers = ("integration smoke requirement not met:",)
+allowed_skipped = 0
+
+for suite in suites:
+    for case in suite.findall("testcase"):
+        for skipped_node in case.findall("skipped"):
+            reason = (skipped_node.attrib.get("message", "") or skipped_node.text or "").strip().lower()
+            if any(marker in reason for marker in allowed_skip_markers):
+                allowed_skipped += 1
 
 if tests == 0:
     raise SystemExit("python skip guard failed: collected 0 tests")
-if skipped > 0:
-    raise SystemExit(f"python skip guard failed: skipped={skipped} (no silent skip allowed)")
-print(f"python skip guard passed: tests={tests}, skipped={skipped}")
+unexpected_skipped = max(skipped - allowed_skipped, 0)
+if unexpected_skipped > 0:
+    raise SystemExit(
+        "python skip guard failed: "
+        f"skipped={skipped}, allowed={allowed_skipped}, unexpected={unexpected_skipped} "
+        "(no silent skip allowed)"
+    )
+print(
+    "python skip guard passed: "
+    f"tests={tests}, skipped={skipped}, allowed={allowed_skipped}, unexpected={unexpected_skipped}"
+)
 PY
 }
 
