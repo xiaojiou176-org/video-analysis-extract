@@ -2,12 +2,14 @@
 -- Notification automation schema updates.
 
 DO $$
+DECLARE
+    target_table regclass := to_regclass('notification_deliveries');
 BEGIN
-    IF EXISTS (
+    IF target_table IS NOT NULL AND EXISTS (
         SELECT 1
         FROM pg_constraint
         WHERE conname = 'notification_deliveries_kind_check'
-          AND conrelid = 'notification_deliveries'::regclass
+          AND conrelid = target_table
     ) THEN
         ALTER TABLE notification_deliveries
             DROP CONSTRAINT notification_deliveries_kind_check;

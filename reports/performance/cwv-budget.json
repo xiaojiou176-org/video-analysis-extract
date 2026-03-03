@@ -1,0 +1,14 @@
+{
+  "name": "video-analysis-performance-budget",
+  "version": "1.0.0",
+  "source": "lighthouse",
+  "generated_at": "2026-03-02T00:00:00Z",
+  "budgets": {
+    "lcp_ms_p75": 2500,
+    "inp_ms_p75": 200,
+    "cls_p75": 0.1,
+    "ttfb_ms_p75": 800,
+    "js_kb_max": 350,
+    "css_kb_max": 120
+  }
+}

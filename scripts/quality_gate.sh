@@ -26,6 +26,8 @@ EFFECTIVE_WEB_CHANGED="true"
 CHANGED_DETECTION_SOURCE="manual"
 CHANGED_DETECTION_RELIABLE="1"
 CHANGED_FILE_LIST=""
+DIFF_BASE_SOURCE="manual"
+DIFF_BASE_SHA=""
 PROFILES=()
 
 usage() {
@@ -470,7 +472,7 @@ run_mutation_gate() {
 
   if ! command -v uv >/dev/null 2>&1; then
     echo "[quality-gate] mutation gate failed: uv is required to auto-install/run mutmut." >&2
-    echo "[quality-gate] install hint: curl -LsSf https://astral.sh/uv/install.sh | sh" >&2
+    echo "[quality-gate] install hint: python -m pip install 'uv==0.10.7'" >&2
     return 1
   fi
 
@@ -609,8 +611,6 @@ PY
 
 run_contract_diff_local_gate() {
   local base_sha=""
-  local merge_base=""
-  local upstream_ref=""
   local contract_dir="$ROOT_DIR/.runtime-cache/temp/contract-diff-local"
   local base_tree="$contract_dir/base-tree"
   local base_json="$contract_dir/contract-base.json"
@@ -621,21 +621,11 @@ run_contract_diff_local_gate() {
   mkdir -p "$contract_dir"
   rm -rf "$base_tree"
 
-  if upstream_ref="$(git rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' 2>/dev/null)"; then
-    merge_base="$(git merge-base HEAD '@{upstream}' 2>/dev/null || true)"
-  fi
-
-  if [[ -n "$merge_base" ]]; then
-    base_sha="$merge_base"
-  else
-    git fetch origin main --quiet || true
-    base_sha="$(git rev-parse origin/main 2>/dev/null || true)"
-  fi
-
-  if [[ -z "$base_sha" ]]; then
-    echo "[quality-gate] contract diff local gate failed: unable to determine base sha" >&2
+  if ! resolve_pre_push_diff_base; then
+    echo "[quality-gate] contract diff local gate failed: unable to determine base sha (source=${DIFF_BASE_SOURCE})" >&2
     return 1
   fi
+  base_sha="$DIFF_BASE_SHA"
 
   git worktree add --detach "$base_tree" "$base_sha" >/dev/null
 
@@ -737,19 +727,12 @@ run_iac_compose_config_validation() {
 }
 
 run_web_design_token_guard_local() {
-  local merge_base=""
+  local base_sha=""
 
-  if git rev-parse --verify HEAD >/dev/null 2>&1; then
-    if git rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' >/dev/null 2>&1; then
-      merge_base="$(git merge-base HEAD '@{upstream}' 2>/dev/null || true)"
-    elif git rev-parse --verify HEAD~1 >/dev/null 2>&1; then
-      merge_base="$(git rev-parse HEAD~1 2>/dev/null || true)"
-    fi
-  fi
-
-  if [[ -n "$merge_base" ]]; then
+  if resolve_pre_push_diff_base; then
+    base_sha="$DIFF_BASE_SHA"
     python3 scripts/check_design_tokens.py \
-      --from-ref "$merge_base" \
+      --from-ref "$base_sha" \
       --to-ref HEAD \
       apps/web
   else
@@ -942,10 +925,69 @@ is_true() {
   [[ "$1" == "true" ]]
 }
 
-detect_changed_files() {
-  local changed_files=""
+resolve_pre_push_diff_base() {
   local upstream_ref=""
   local merge_base=""
+  local remote_head_ref=""
+  local root_commit=""
+  local head_sha=""
+  local empty_tree_sha=""
+  local candidate=""
+
+  DIFF_BASE_SOURCE=""
+  DIFF_BASE_SHA=""
+
+  if upstream_ref="$(git rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' 2>/dev/null)"; then
+    merge_base="$(git merge-base HEAD '@{upstream}' 2>/dev/null || true)"
+    if [[ -n "$merge_base" ]]; then
+      DIFF_BASE_SOURCE="upstream:${upstream_ref}"
+      DIFF_BASE_SHA="$merge_base"
+      return 0
+    fi
+  fi
+
+  remote_head_ref="$(git symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null || true)"
+  if [[ -n "$remote_head_ref" ]]; then
+    merge_base="$(git merge-base HEAD "$remote_head_ref" 2>/dev/null || true)"
+    if [[ -n "$merge_base" ]]; then
+      DIFF_BASE_SOURCE="origin-head:${remote_head_ref}"
+      DIFF_BASE_SHA="$merge_base"
+      return 0
+    fi
+  fi
+
+  for candidate in origin/main origin/master origin/trunk; do
+    if git rev-parse --verify "$candidate" >/dev/null 2>&1; then
+      merge_base="$(git merge-base HEAD "$candidate" 2>/dev/null || true)"
+      if [[ -n "$merge_base" ]]; then
+        DIFF_BASE_SOURCE="origin-default-candidate:${candidate}"
+        DIFF_BASE_SHA="$merge_base"
+        return 0
+      fi
+    fi
+  done
+
+  root_commit="$(git rev-list --max-parents=0 HEAD 2>/dev/null | head -n 1 || true)"
+  if [[ -n "$root_commit" ]]; then
+    head_sha="$(git rev-parse HEAD 2>/dev/null || true)"
+    if [[ -n "$head_sha" && "$root_commit" == "$head_sha" ]]; then
+      empty_tree_sha="$(git hash-object -t tree /dev/null)"
+      DIFF_BASE_SOURCE="root-commit-empty-tree"
+      DIFF_BASE_SHA="$empty_tree_sha"
+      return 0
+    fi
+    DIFF_BASE_SOURCE="root-commit"
+    DIFF_BASE_SHA="$root_commit"
+    return 0
+  fi
+
+  DIFF_BASE_SOURCE="base-unavailable"
+  return 1
+}
+
+detect_changed_files() {
+  local changed_files=""
+  local base_sha=""
 
   CHANGED_DETECTION_RELIABLE="1"
 
@@ -956,25 +998,15 @@ detect_changed_files() {
       CHANGED_DETECTION_SOURCE="staged-unavailable"
     fi
   else
-    if upstream_ref="$(git rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' 2>/dev/null)"; then
-      if merge_base="$(git merge-base HEAD '@{upstream}' 2>/dev/null)"; then
-        CHANGED_DETECTION_SOURCE="upstream:${upstream_ref} (${merge_base}..HEAD)"
-        if ! changed_files="$(git diff --name-only "$merge_base" HEAD 2>/dev/null)"; then
-          CHANGED_DETECTION_RELIABLE="0"
-        fi
-      else
+    if resolve_pre_push_diff_base; then
+      base_sha="$DIFF_BASE_SHA"
+      CHANGED_DETECTION_SOURCE="${DIFF_BASE_SOURCE} (${base_sha}..HEAD)"
+      if ! changed_files="$(git diff --name-only "$base_sha" HEAD 2>/dev/null)"; then
         CHANGED_DETECTION_RELIABLE="0"
       fi
     else
-      if git rev-parse --verify HEAD~1 >/dev/null 2>&1; then
-        CHANGED_DETECTION_SOURCE="fallback:HEAD~1..HEAD"
-        if ! changed_files="$(git diff --name-only HEAD~1 HEAD 2>/dev/null)"; then
-          CHANGED_DETECTION_RELIABLE="0"
-        fi
-      else
-        CHANGED_DETECTION_RELIABLE="0"
-        CHANGED_DETECTION_SOURCE="upstream-and-fallback-unavailable"
-      fi
+      CHANGED_DETECTION_RELIABLE="0"
+      CHANGED_DETECTION_SOURCE="$DIFF_BASE_SOURCE"
     fi
   fi
 
@@ -1122,6 +1154,7 @@ required = {
     "UI_AUDIT_GEMINI_ENABLED",
     "NOTIFICATION_ENABLED",
     "VD_ALLOW_UNAUTH_WRITE",
+    "VD_CI_ALLOW_UNAUTH_WRITE",
 }
 missing = sorted(name for name in required if name not in variables)
 if missing:
@@ -1265,6 +1298,7 @@ run_pre_commit_mode() {
 
 run_pre_push_mode() {
   local mutation_relevant_changed="false"
+  local run_web_coverage_threshold_after_tests="false"
 
   cleanup_mutation_artifacts
 
@@ -1348,17 +1382,11 @@ run_pre_push_mode() {
 
   if [[ "$CI_DEDUPE" == "1" ]]; then
     echo "[quality-gate] skip: web unit tests (--ci-dedupe=1)"
+    echo "[quality-gate] skip: web coverage threshold gate (--ci-dedupe=1, covered by CI web-test-build)"
   elif is_true "$EFFECTIVE_WEB_CHANGED"; then
     run_async_gate "web_unit_tests" "web unit tests" \
       "npm --prefix apps/web run test -- --coverage"
-  else
-    echo "[quality-gate] skip: web unit tests (effective_web_changed=false)"
-  fi
-  if [[ "$CI_DEDUPE" == "1" ]]; then
-    echo "[quality-gate] skip: web coverage threshold gate (--ci-dedupe=1, covered by CI web-test-build)"
-  elif is_true "$EFFECTIVE_WEB_CHANGED"; then
-    run_async_gate "web_coverage_threshold" "web coverage threshold gate (global>=85, core>=95)" \
-      "python3 scripts/check_web_coverage_threshold.py --summary-path apps/web/coverage/coverage-summary.json --global-threshold 85 --core-threshold 95"
+    run_web_coverage_threshold_after_tests="true"
     run_async_gate "web_design_token_guard" "web design token guard (local diff)" \
       "run_web_design_token_guard_local"
     run_async_gate "web_build" "web build" \
@@ -1366,6 +1394,7 @@ run_pre_push_mode() {
     run_async_gate "web_button_coverage" "web button coverage gate (threshold=1.0)" \
       "python3 scripts/check_web_button_coverage.py --threshold 1.0"
   else
+    echo "[quality-gate] skip: web unit tests (effective_web_changed=false)"
     echo "[quality-gate] skip: web coverage threshold gate (effective_web_changed=false)"
   fi
   if [[ "$CI_DEDUPE" == "1" ]]; then
@@ -1396,6 +1425,15 @@ run_pre_push_mode() {
   if ! wait_async_gates_with_heartbeat; then
     echo "[quality-gate] pre-push failed in long-tests phase" >&2
     exit 1
+  fi
+
+  if [[ "$run_web_coverage_threshold_after_tests" == "true" ]]; then
+    echo "[quality-gate] phase=web-coverage-threshold (post web unit tests)"
+    if ! run_sync_gate_with_heartbeat "web_coverage_threshold" "web coverage threshold gate (global>=85, core>=95)" \
+      "python3 scripts/check_web_coverage_threshold.py --summary-path apps/web/coverage/coverage-summary.json --global-threshold 85 --core-threshold 95"; then
+      echo "[quality-gate] pre-push failed in web-coverage-threshold phase" >&2
+      exit 1
+    fi
   fi
 
   echo "[quality-gate] phase=coverage-core-gates (parallel)"

@@ -6,15 +6,29 @@ from pathlib import Path
 
 WORKFLOW_DIR = Path(".github/workflows")
 WORKFLOW_PATH = WORKFLOW_DIR / "ci.yml"
+MIN_MUTATION_SCORE = 0.62
+MIN_MUTATION_EFFECTIVE_RATIO = 0.25
+MAX_MUTATION_NO_TESTS_RATIO = 0.75
 
 
 def _job_blocks(text: str) -> list[tuple[str, str]]:
+    jobs_section = re.search(r"^jobs:\s*$", text, flags=re.MULTILINE)
+    if not jobs_section:
+        return []
+
+    section_start = jobs_section.end()
+    section_end = len(text)
+    next_top_level = re.search(r"^[A-Za-z0-9_-]+:\s*$", text[section_start:], flags=re.MULTILINE)
+    if next_top_level:
+        section_end = section_start + next_top_level.start()
+
     jobs: list[tuple[str, int]] = []
-    for match in re.finditer(r"^  ([A-Za-z0-9_-]+):\n", text, flags=re.MULTILINE):
-        jobs.append((match.group(1), match.start()))
+    jobs_text = text[section_start:section_end]
+    for match in re.finditer(r"^  ([A-Za-z0-9_-]+):\n", jobs_text, flags=re.MULTILINE):
+        jobs.append((match.group(1), section_start + match.start()))
     blocks: list[tuple[str, str]] = []
     for i, (name, start) in enumerate(jobs):
-        end = jobs[i + 1][1] if i + 1 < len(jobs) else len(text)
+        end = jobs[i + 1][1] if i + 1 < len(jobs) else section_end
         blocks.append((name, text[start:end]))
     return blocks
 
@@ -23,16 +37,179 @@ def _contains_required_ci_gate(block: str) -> bool:
     return "check_required_ci_secrets.py" in block and "--required GEMINI_API_KEY" in block
 
 
+def _has_job_level_uses(block: str) -> bool:
+    return re.search(r"^\s{4}uses:\s+\S+", block, flags=re.MULTILINE) is not None
+
+
+def _job_level_uses_target(block: str) -> str | None:
+    match = re.search(r"^\s{4}uses:\s+(\S+?)(?:\s+#.*)?\s*$", block, flags=re.MULTILINE)
+    return match.group(1) if match else None
+
+
+def _local_reusable_workflow_has_timeouts(uses_target: str) -> bool:
+    reusable_path = Path(uses_target[2:])
+    if not reusable_path.is_file():
+        return False
+    reusable_text = reusable_path.read_text(encoding="utf-8")
+    reusable_blocks = dict(_job_blocks(reusable_text))
+    for block in reusable_blocks.values():
+        has_direct_runs_on = re.search(r"^\s{4}runs-on:", block, flags=re.MULTILINE) is not None
+        has_uses = _has_job_level_uses(block)
+        if has_direct_runs_on and not has_uses and "timeout-minutes:" not in block:
+            return False
+    return True
+
+
 def _has_needs_dep(block: str, dep: str) -> bool:
-    if f"- {dep}" in block:
+    lines = block.splitlines()
+    for i, line in enumerate(lines):
+        match = re.match(r"^\s{4}needs:\s*(.*)$", line)
+        if not match:
+            continue
+
+        tail = match.group(1).strip()
+        if tail.startswith("&"):
+            tail = ""
+
+        if tail:
+            # needs: [a, b] (single or multi-line flow style)
+            if tail.startswith("["):
+                flow = tail
+                j = i + 1
+                while "]" not in flow and j < len(lines):
+                    flow += lines[j].strip()
+                    j += 1
+                inner = flow[flow.find("[") + 1 : flow.rfind("]")]
+                items = [
+                    item.strip().strip("'\"")
+                    for item in inner.split(",")
+                    if item.strip()
+                ]
+                return dep in items
+
+            value = tail.split("#", 1)[0].strip().strip("'\"")
+            return dep == value
+
+        # needs:
+        #   - a
+        #   - b
+        j = i + 1
+        items: list[str] = []
+        while j < len(lines):
+            item_line = lines[j]
+            if item_line.strip() == "":
+                j += 1
+                continue
+            if not re.match(r"^\s{6,}", item_line):
+                break
+            item_match = re.match(r"^\s{6,}-\s*(.+?)\s*$", item_line)
+            if item_match:
+                item = item_match.group(1).split("#", 1)[0].strip().strip("'\"")
+                if item:
+                    items.append(item)
+            j += 1
+        return dep in items
+
+    return False
+
+
+def _extract_flag_value(block: str, flag: str) -> float | None:
+    pattern = rf"{re.escape(flag)}\s+([0-9]+(?:\.[0-9]+)?)"
+    match = re.search(pattern, block)
+    if not match:
+        return None
+    try:
+        return float(match.group(1))
+    except ValueError:
+        return None
+
+
+def _extract_job_level_if_expression(block: str) -> str | None:
+    lines = block.splitlines()
+    for i, line in enumerate(lines):
+        match = re.match(r"^\s{4}if:\s*(.+)$", line)
+        if not match:
+            continue
+
+        value = match.group(1).strip()
+        if value.startswith("${{"):
+            expr = value
+            j = i + 1
+            while "}}" not in expr and j < len(lines):
+                cont = lines[j]
+                if not re.match(r"^\s{6,}", cont):
+                    break
+                expr += " " + cont.strip()
+                j += 1
+            if "}}" in expr:
+                return expr[expr.find("${{") + 3 : expr.rfind("}}")].strip()
+        return value
+    return None
+
+
+def _if_expr_checks_success_for_job(if_expr: str, job_name: str) -> bool:
+    patterns = (
+        rf"needs\.{re.escape(job_name)}\.result\s*==\s*['\"]success['\"]",
+        rf"needs\[['\"]{re.escape(job_name)}['\"]\]\.result\s*==\s*['\"]success['\"]",
+    )
+    return any(re.search(pattern, if_expr) is not None for pattern in patterns)
+
+
+def _aggregate_maps_required_ci_result(block: str) -> bool:
+    patterns = (
+        r"results\[required_ci_secrets\]\s*=\s*['\"]\$\{\{\s*needs\.required-ci-secrets\.result\s*\}\}['\"]",
+        r"results\[required_ci_secrets\]\s*=\s*['\"]\$\{\{\s*needs\[['\"]required-ci-secrets['\"]\]\.result\s*\}\}['\"]",
+    )
+    return any(re.search(pattern, block) is not None for pattern in patterns)
+
+
+def _aggregate_enforces_required_ci_success(block: str) -> bool:
+    direct_patterns = (
+        r'if\s+\[\[\s*"\$\{results\[required_ci_secrets\]\}"\s*!=\s*"success"\s*\]\]',
+        r"check_required_job\s+required_ci_secrets\s+['\"]?1['\"]?",
+    )
+    if any(re.search(pattern, block) is not None for pattern in direct_patterns):
         return True
-    pattern = rf"^\s+needs:\s*\[[^\]]*\b{re.escape(dep)}\b[^\]]*\]\s*$"
-    return re.search(pattern, block, flags=re.MULTILINE) is not None
+
+    has_required_in_for_loop = re.search(
+        r"for\s+job\s+in\s+[^\n]*\brequired_ci_secrets\b", block
+    ) is not None
+    has_success_only_guard = re.search(
+        r'if\s+\[\[\s*"\$result"\s*!=\s*"success"\s*\]\]\s*;\s*then(?:\s|\n)*failed=1',
+        block,
+    ) is not None
+    return has_required_in_for_loop and has_success_only_guard
 
 
 def _check_global_rules(
     workflow_path: Path, text: str, blocks: dict[str, str], failures: list[str]
 ) -> None:
+    # Third-party actions must be pinned to immutable commit SHAs.
+    for match in re.finditer(r"^\s+uses:\s+([^\s#]+)", text, flags=re.MULTILINE):
+        uses_target = match.group(1).strip()
+        if uses_target.startswith(("./", "docker://")):
+            continue
+        if "@" not in uses_target:
+            failures.append(
+                f"{workflow_path.name}: unpinned action reference `{uses_target}` (missing @<commit-sha>)"
+            )
+            continue
+        action_ref = uses_target.rsplit("@", 1)[1]
+        if not re.fullmatch(r"[0-9a-f]{40}", action_ref):
+            failures.append(
+                f"{workflow_path.name}: action `{uses_target}` must pin a 40-char commit SHA"
+            )
+
+    # Inline pipe-to-shell patterns are forbidden in workflows.
+    for lineno, line in enumerate(text.splitlines(), start=1):
+        stripped = line.strip()
+        if stripped.startswith("#"):
+            continue
+        if re.search(r"\b(?:curl|wget)\b[^\n|]*\|\s*(?:bash|sh)\b", stripped):
+            failures.append(
+                f"{workflow_path.name}:{lineno}: forbidden pipe-to-shell command detected (`curl|sh` or `wget|sh`)"
+            )
+
     # Skip reusable workflows (workflow_call).
     is_reusable = "on:\n  workflow_call:" in text or "on:\n    workflow_call:" in text
 
@@ -40,9 +217,24 @@ def _check_global_rules(
     # Jobs that delegate to reusable workflows (uses:) have timeout in the reusable workflow.
     for job, block in blocks.items():
         has_direct_runs_on = re.search(r"^\s{4}runs-on:", block, flags=re.MULTILINE) is not None
-        has_uses = "uses:" in block
+        has_uses = _has_job_level_uses(block)
         if has_direct_runs_on and not has_uses and "timeout-minutes:" not in block:
             failures.append(f"{workflow_path.name}: {job}: missing timeout-minutes")
+            continue
+        if has_uses and "timeout-minutes:" not in block:
+            uses_target = _job_level_uses_target(block)
+            if not uses_target:
+                failures.append(f"{workflow_path.name}: {job}: missing timeout-minutes")
+                continue
+            if not uses_target.startswith("./"):
+                failures.append(
+                    f"{workflow_path.name}: {job}: reusable workflow jobs without local `uses: ./...` must set timeout-minutes explicitly"
+                )
+                continue
+            if not _local_reusable_workflow_has_timeouts(uses_target):
+                failures.append(
+                    f"{workflow_path.name}: {job}: reusable workflow {uses_target} must define timeout-minutes on runnable jobs"
+                )
 
     # continue-on-error=true is only allowed on hosted jobs that have explicit
     # fallback partners. This lets hosted billing/capacity failures degrade
@@ -91,7 +283,7 @@ def _check_global_rules(
 
         # Jobs that call reusable workflows via `uses:` cannot set
         # `continue-on-error` at the caller level.
-        if "uses:" not in hosted_block and "continue-on-error: true" not in hosted_block:
+        if not _has_job_level_uses(hosted_block) and "continue-on-error: true" not in hosted_block:
             failures.append(
                 f"{workflow_path}: {job_name}: hosted jobs must set continue-on-error: true to allow fallback takeover"
             )
@@ -109,7 +301,7 @@ def _check_global_rules(
                     f"{workflow_path}: {fallback_name}: fallback jobs must run on e2-core"
                 )
             if not re.search(
-                rf"^\s+if:\s+\$\{{\{{.*always\(\).*(needs\['{re.escape(job_name)}'\]\.result\s*!=\s*'success'|needs\.{re.escape(job_name)}\.result\s*!=\s*'success').*\}}\}}\s*$",
+                rf"^\s+if:\s+\$\{{\{{.*always\(\).*(needs\['{re.escape(job_name)}'\]\.result\s*!=\s*['\"]success['\"]|needs\.{re.escape(job_name)}\.result\s*!=\s*['\"]success['\"]).*\}}\}}\s*$",
                 fallback_block,
                 flags=re.MULTILINE,
             ):
@@ -132,7 +324,10 @@ def _check_global_rules(
                 failures.append(
                     f"{workflow_path}: {resolver_name}: resolver must use if: ${{{{ always() ... }}}}"
                 )
-            if "result == 'success'" not in resolver_block:
+            resolver_if_expr = _extract_job_level_if_expression(resolver_block) or ""
+            hosted_ok = _if_expr_checks_success_for_job(resolver_if_expr, job_name)
+            fallback_ok = _if_expr_checks_success_for_job(resolver_if_expr, fallback_name)
+            if not (hosted_ok and fallback_ok):
                 failures.append(
                     f"{workflow_path}: {resolver_name}: resolver must only pass when hosted or fallback is successful"
                 )
@@ -148,25 +343,38 @@ def _check_ci_specific_rules(blocks: dict[str, str], failures: list[str]) -> Non
             failures.append(
                 "ci.yml: quality-gate-pre-push: should not narrow execution with job-level if"
             )
-        if "--mode pre-push" not in qg_block:
+        if not re.search(r"--mode\s+pre-push\b", qg_block):
             failures.append("ci.yml: quality-gate-pre-push: missing pre-push quality gate command")
-        if "--ci-dedupe 1" not in qg_block:
+        if not re.search(r"--ci-dedupe\s+1\b", qg_block):
             failures.append(
                 "ci.yml: quality-gate-pre-push: must set --ci-dedupe 1 to avoid duplicate heavy checks already enforced by standalone CI jobs"
             )
-        if "--skip-mutation 1" not in qg_block:
+        if not re.search(r"--skip-mutation\s+1\b", qg_block):
             failures.append(
                 "ci.yml: quality-gate-pre-push: must set --skip-mutation 1 because mutation-testing runs as a dedicated standalone CI job"
             )
-        if "--mutation-min-score 0.62" not in qg_block:
+        min_score = _extract_flag_value(qg_block, "--mutation-min-score")
+        if min_score is None:
+            failures.append("ci.yml: quality-gate-pre-push: missing mutation score floor")
+        elif min_score < MIN_MUTATION_SCORE:
             failures.append(
                 "ci.yml: quality-gate-pre-push: mutation threshold must be at least 0.62"
             )
-        if "--mutation-min-effective-ratio 0.25" not in qg_block:
+        min_effective_ratio = _extract_flag_value(qg_block, "--mutation-min-effective-ratio")
+        if min_effective_ratio is None:
             failures.append("ci.yml: quality-gate-pre-push: missing mutation effective ratio floor")
-        if "--mutation-max-no-tests-ratio 0.75" not in qg_block:
+        elif min_effective_ratio < MIN_MUTATION_EFFECTIVE_RATIO:
+            failures.append(
+                "ci.yml: quality-gate-pre-push: mutation effective ratio floor must be at least 0.25"
+            )
+        max_no_tests_ratio = _extract_flag_value(qg_block, "--mutation-max-no-tests-ratio")
+        if max_no_tests_ratio is None:
             failures.append(
                 "ci.yml: quality-gate-pre-push: missing mutation no-tests ratio ceiling"
+            )
+        elif max_no_tests_ratio > MAX_MUTATION_NO_TESTS_RATIO:
+            failures.append(
+                "ci.yml: quality-gate-pre-push: mutation no-tests ratio ceiling must be at most 0.75"
             )
 
     # Real smoke jobs must not bypass write auth.
@@ -180,11 +388,21 @@ def _check_ci_specific_rules(blocks: dict[str, str], failures: list[str]) -> Non
 
     # Aggregate gate must require critical jobs.
     aggregate = blocks.get("aggregate-gate", "")
-    if "- required-ci-secrets" not in aggregate:
+    if not aggregate:
+        failures.append("ci.yml: aggregate-gate: missing job")
+    if aggregate and not _has_needs_dep(aggregate, "required-ci-secrets"):
         failures.append("ci.yml: aggregate-gate: missing needs dependency `required-ci-secrets`")
     for required_job in ("quality-gate-pre-push", "api-real-smoke", "web-e2e", "python-tests"):
-        if f"- {required_job}" not in aggregate:
+        if aggregate and not _has_needs_dep(aggregate, required_job):
             failures.append(f"ci.yml: aggregate-gate: missing needs dependency `{required_job}`")
+    if aggregate and not _aggregate_maps_required_ci_result(aggregate):
+        failures.append(
+            "ci.yml: aggregate-gate: must map required-ci-secrets job result into runtime gate logic (results[required_ci_secrets]=...)"
+        )
+    if aggregate and not _aggregate_enforces_required_ci_success(aggregate):
+        failures.append(
+            "ci.yml: aggregate-gate: must hard-fail when required-ci-secrets result is not success"
+        )
 
     # Preflight must include focused-test guard steps.
     required_preflight_markers = {

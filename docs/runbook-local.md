@@ -135,6 +135,8 @@ done
 sqlite3 "$SQLITE_PATH" < infra/sql/sqlite_state_init.sql
 ```
 
+说明：`20260222_000010_phase4_status_contract.sql` 在加新约束前会先归一化历史脏状态（含旧 `partial` 语义），用于避免历史库迁移失败。
+
 ### 5) 启动应用进程
 
 分别在 3 个终端运行：
@@ -161,6 +163,23 @@ curl -sS http://127.0.0.1:8000/api/v1/jobs/<job_id>
 ```
 
 ## 可选操作
+
+### 发布前证据与回滚清单
+
+```bash
+python3 scripts/release/generate_release_prechecks.py
+python3 scripts/build_release_readiness_report.py \
+  --kpi-json reports/release-readiness/ci-kpi-summary.json \
+  --check-json .runtime-cache/temp/release-readiness/prechecks.json
+
+scripts/release/capture_release_manifest.sh <release-tag>
+
+python3 scripts/release/verify_db_rollback_readiness.py \
+  --release-tag <release-tag> \
+  --output reports/releases/<release-tag>/rollback/db-rollback-readiness.json
+```
+
+说明：该门禁会同时检查 `missing_policy`、`blocked_without_down` 与 `invalid_down_sql`，任一大于 0 都会阻断发版。
 
 ### 手动触发日报与失败告警
 
@@ -359,3 +378,18 @@ curl -sS -X POST http://127.0.0.1:8000/api/v1/videos/process \
 - 新增迁移文件（`infra/migrations/*.sql`）
 - 环境变量契约调整
 - 启动脚本参数或默认值调整
+
+## GCE Instance Scope 最小权限（2026-03）
+
+`scripts/recreate_gce_instance.sh` 已切换为“默认最小权限 scopes”，不再默认 `cloud-platform` 全权限。
+
+- 默认 scopes：
+  - `https://www.googleapis.com/auth/devstorage.read_only`
+  - `https://www.googleapis.com/auth/logging.write`
+  - `https://www.googleapis.com/auth/monitoring.write`
+  - `https://www.googleapis.com/auth/service.management.readonly`
+  - `https://www.googleapis.com/auth/servicecontrol`
+  - `https://www.googleapis.com/auth/trace.append`
+- 如需兼容旧行为（全权限），显式传入：
+  - `--scopes "https://www.googleapis.com/auth/cloud-platform"`
+- 该参数仅用于“已知必须全权限”的运维场景，默认不建议使用。

@@ -17,7 +17,7 @@
 
 - `queued -> running -> succeeded`
 - `queued -> running -> failed`
-- `failed -> running`（允许重跑）
+- `failed -> queued -> running`（允许重跑，先重置为 queued 再启动）
 
 ## Step Ledger 状态（`sqlite.step_runs.status`）
 
@@ -98,6 +98,7 @@
 - `steps`
 - `degradations`
 - `pipeline_final_status`
+- `kind`（`video_digest_v1`，兼容历史 `phase2_ingest_stub`）
 - `llm_required`
 - `llm_gate_passed`
 - `hard_fail_reason`

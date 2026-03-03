@@ -26,6 +26,22 @@ UPDATE jobs
 SET status = 'succeeded'
 WHERE status = 'partial';
 
+-- Defensive normalization for historical/manual writes:
+-- make sure values always satisfy the new status contracts before constraints are re-added.
+UPDATE jobs
+SET status = 'failed'
+WHERE status IS NULL
+   OR status NOT IN ('queued', 'running', 'succeeded', 'failed');
+
+UPDATE jobs
+SET pipeline_final_status = CASE
+    WHEN status = 'failed' THEN 'failed'
+    WHEN status = 'succeeded' THEN 'succeeded'
+    ELSE NULL
+END
+WHERE pipeline_final_status IS NOT NULL
+  AND pipeline_final_status NOT IN ('succeeded', 'degraded', 'failed');
+
 ALTER TABLE jobs
     DROP CONSTRAINT IF EXISTS jobs_pipeline_final_status_check;
 

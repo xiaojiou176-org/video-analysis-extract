@@ -121,6 +121,11 @@ devcontainer up --workspace-folder .
 
 标准环境内再执行下文 6 步或一键路径，确保 lint/test/live smoke 结果可复现。
 
+DevContainer 启动拓扑补充（2026-03）：
+
+- `.devcontainer/post-create.sh` 已移除 `curl|sh` 安装模式，改为 `python3 -m pip install --user --upgrade "uv>=0.10,<1.0"`。
+- 并发 Web E2E 场景可通过 `WEB_E2E_NEXT_DIST_DIR` 隔离 Next.js `distDir`，避免 `.next/dev/lock` 冲突（默认常规开发无需设置）。
+
 ## 6 步启动（可直接执行）
 
 ```bash

@@ -1,0 +1,196 @@
+{
+  "generated_at": "2026-03-03T08:11:37.804813+00:00",
+  "release_tag": "v0.1.0",
+  "latest_tag": "v0.1.0",
+  "summary": {
+    "total_up_migrations": 15,
+    "with_down_sql": 1,
+    "blocked_without_down": 14,
+    "missing_policy": 0,
+    "gate_status": "fail"
+  },
+  "drill_evidence": {
+    "path": "reports/releases/v0.1.0/rollback/drill.json",
+    "valid": true,
+    "errors": []
+  },
+  "migrations": [
+    {
+      "migration": "20260221_000001_init.sql",
+      "status": "blocked",
+      "strategy": "explicit_blocker",
+      "evidence": {
+        "up": "infra/migrations/20260221_000001_init.sql",
+        "blocker": {
+          "reason": "Initial schema bootstrap migration is not safely reversible in-place.",
+          "required_action": "Rollback via N-1 release restore and data restore strategy in rollback runbook."
+        }
+      }
+    },
+    {
+      "migration": "20260221_000002_phase3_artifacts.sql",
+      "status": "blocked",
+      "strategy": "explicit_blocker",
+      "evidence": {
+        "up": "infra/migrations/20260221_000002_phase3_artifacts.sql",
+        "blocker": {
+          "reason": "Legacy migration has no dedicated down SQL.",
+          "required_action": "Add down migration or use N-1 restore path for emergency rollback."
+        }
+      }
+    },
+    {
+      "migration": "20260221_000003_phase4_observability.sql",
+      "status": "blocked",
+      "strategy": "explicit_blocker",
+      "evidence": {
+        "up": "infra/migrations/20260221_000003_phase4_observability.sql",
+        "blocker": {
+          "reason": "Legacy migration has no dedicated down SQL.",
+          "required_action": "Add down migration or use N-1 restore path for emergency rollback."
+        }
+      }
+    },
+    {
+      "migration": "20260221_000004_notifications.sql",
+      "status": "blocked",
+      "strategy": "explicit_blocker",
+      "evidence": {
+        "up": "infra/migrations/20260221_000004_notifications.sql",
+        "blocker": {
+          "reason": "Legacy migration has no dedicated down SQL.",
+          "required_action": "Add down migration or use N-1 restore path for emergency rollback."
+        }
+      }
+    },
+    {
+      "migration": "20260221_000005_pipeline_mode_multimodal.sql",
+      "status": "blocked",
+      "strategy": "explicit_blocker",
+      "evidence": {
+        "up": "infra/migrations/20260221_000005_pipeline_mode_multimodal.sql",
+        "blocker": {
+          "reason": "Legacy migration has no dedicated down SQL.",
+          "required_action": "Add down migration or use N-1 restore path for emergency rollback."
+        }
+      }
+    },
+    {
+      "migration": "20260221_000006_notifications_automation.sql",
+      "status": "blocked",
+      "strategy": "explicit_blocker",
+      "evidence": {
+        "up": "infra/migrations/20260221_000006_notifications_automation.sql",
+        "blocker": {
+          "reason": "Legacy migration has no dedicated down SQL.",
+          "required_action": "Add down migration or use N-1 restore path for emergency rollback."
+        }
+      }
+    },
+    {
+      "migration": "20260222_000007_delivery_retry_and_health.sql",
+      "status": "blocked",
+      "strategy": "explicit_blocker",
+      "evidence": {
+        "up": "infra/migrations/20260222_000007_delivery_retry_and_health.sql",
+        "blocker": {
+          "reason": "Legacy migration has no dedicated down SQL.",
+          "required_action": "Add down migration or use N-1 restore path for emergency rollback."
+        }
+      }
+    },
+    {
+      "migration": "20260222_000008_job_kind_video_digest_v1.sql",
+      "status": "blocked",
+      "strategy": "explicit_blocker",
+      "evidence": {
+        "up": "infra/migrations/20260222_000008_job_kind_video_digest_v1.sql",
+        "blocker": {
+          "reason": "Legacy migration has no dedicated down SQL.",
+          "required_action": "Add down migration or use N-1 restore path for emergency rollback."
+        }
+      }
+    },
+    {
+      "migration": "20260222_000009_job_kind_enforce_video_digest_v1.sql",
+      "status": "blocked",
+      "strategy": "explicit_blocker",
+      "evidence": {
+        "up": "infra/migrations/20260222_000009_job_kind_enforce_video_digest_v1.sql",
+        "blocker": {
+          "reason": "Legacy migration has no dedicated down SQL.",
+          "required_action": "Add down migration or use N-1 restore path for emergency rollback."
+        }
+      }
+    },
+    {
+      "migration": "20260222_000010_phase4_status_contract.sql",
+      "status": "rehearsable",
+      "strategy": "down_sql",
+      "evidence": {
+        "up": "infra/migrations/20260222_000010_phase4_status_contract.sql",
+        "down": "infra/migrations/down/20260222_000010_phase4_status_contract.down.sql"
+      }
+    },
+    {
+      "migration": "20260222_000011_embedding_pgvector.sql",
+      "status": "blocked",
+      "strategy": "explicit_blocker",
+      "evidence": {
+        "up": "infra/migrations/20260222_000011_embedding_pgvector.sql",
+        "blocker": {
+          "reason": "Legacy migration has no dedicated down SQL.",
+          "required_action": "Add down migration or use N-1 restore path for emergency rollback."
+        }
+      }
+    },
+    {
+      "migration": "20260223_000012_subscriptions_category_and_notification_rules.sql",
+      "status": "blocked",
+      "strategy": "explicit_blocker",
+      "evidence": {
+        "up": "infra/migrations/20260223_000012_subscriptions_category_and_notification_rules.sql",
+        "blocker": {
+          "reason": "Legacy migration has no dedicated down SQL.",
+          "required_action": "Add down migration or use N-1 restore path for emergency rollback."
+        }
+      }
+    },
+    {
+      "migration": "20260223_000013_remove_platform_source_type_checks.sql",
+      "status": "blocked",
+      "strategy": "explicit_blocker",
+      "evidence": {
+        "up": "infra/migrations/20260223_000013_remove_platform_source_type_checks.sql",
+        "blocker": {
+          "reason": "Legacy migration has no dedicated down SQL.",
+          "required_action": "Add down migration or use N-1 restore path for emergency rollback."
+        }
+      }
+    },
+    {
+      "migration": "20260223_000014_feed_priority_dispatch_key.sql",
+      "status": "blocked",
+      "strategy": "explicit_blocker",
+      "evidence": {
+        "up": "infra/migrations/20260223_000014_feed_priority_dispatch_key.sql",
+        "blocker": {
+          "reason": "Legacy migration has no dedicated down SQL.",
+          "required_action": "Add down migration or use N-1 restore path for emergency rollback."
+        }
+      }
+    },
+    {
+      "migration": "20260226_000015_notification_deliveries_updated_at.sql",
+      "status": "blocked",
+      "strategy": "explicit_blocker",
+      "evidence": {
+        "up": "infra/migrations/20260226_000015_notification_deliveries_updated_at.sql",
+        "blocker": {
+          "reason": "Legacy migration has no dedicated down SQL.",
+          "required_action": "Add down migration or use N-1 restore path for emergency rollback."
+        }
+      }
+    }
+  ]
+}

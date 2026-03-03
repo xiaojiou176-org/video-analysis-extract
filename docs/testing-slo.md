@@ -151,8 +151,9 @@ python3 scripts/build_release_readiness_report.py \
 Optional external checks:
 
 ```bash
+python3 scripts/release/generate_release_prechecks.py
+
 python3 scripts/build_release_readiness_report.py \
   --kpi-json reports/release-readiness/ci-kpi-summary.json \
-  --check-json path/to/check-a.json \
-  --check-json path/to/check-b.json
+  --check-json .runtime-cache/temp/release-readiness/prechecks.json
 ```

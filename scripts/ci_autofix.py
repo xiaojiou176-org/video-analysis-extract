@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import glob
 import hashlib
 import json
 import re
@@ -13,6 +14,16 @@ from typing import Any
 
 TOKEN_RE = re.compile(r"\b\d+\b")
 HEX_RE = re.compile(r"\b[0-9a-f]{7,}\b", re.IGNORECASE)
+SENSITIVE_PATTERNS: list[re.Pattern[str]] = [
+    re.compile(r"sk-[A-Za-z0-9]{20,}"),
+    re.compile(r"ghp_[A-Za-z0-9]{20,}"),
+    re.compile(r"AKIA[0-9A-Z]{16}"),
+    re.compile(r"(?i)\bBearer\s+[A-Za-z0-9\-._~+/]+=*"),
+    re.compile(r"(?i)\b(?:token|secret|password|passwd|api[_-]?key|authorization)\s*[:=]\s*\S+"),
+]
+MAX_EXAMPLE_CHARS = 240
+DEFAULT_MAX_JUNIT_FILE_BYTES = 5 * 1024 * 1024
+DEFAULT_MAX_LOG_FILE_BYTES = 5 * 1024 * 1024
 
 LOG_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     ("pytest-assertion", re.compile(r"AssertionError[:\s].+")),
@@ -29,6 +40,13 @@ def _normalize_signal(value: str) -> str:
     compact = TOKEN_RE.sub("#", compact)
     compact = HEX_RE.sub("<hash>", compact)
     return compact[:240]
+
+
+def _sanitize_report_text(value: str, *, max_chars: int = MAX_EXAMPLE_CHARS) -> str:
+    compact = " ".join(value.strip().split())
+    for pattern in SENSITIVE_PATTERNS:
+        compact = pattern.sub("<redacted>", compact)
+    return compact[:max_chars]
 
 
 def _fingerprint_id(parts: list[str]) -> str:
@@ -75,23 +93,59 @@ def _suggestion_for_signal(kind: str, signal: str) -> dict[str, str]:
     }
 
 
-def _parse_junit_file(path: Path) -> list[dict[str, Any]]:
+def _build_oversize_finding(source_type: str, path: Path, *, max_bytes: int) -> dict[str, Any]:
+    size = path.stat().st_size
+    signal = f"skipped {source_type} parsing: file too large ({size} bytes > {max_bytes} bytes)"
+    return {
+        "source_type": source_type,
+        "source_file": str(path),
+        "signal": _sanitize_report_text(signal),
+        "examples": [_sanitize_report_text(str(path))],
+        "fingerprint_id": _fingerprint_id([source_type, "oversize", str(path), str(max_bytes)]),
+        "category": "resource_limit",
+        "action": "拆分或压缩输入文件后重试，避免超大单文件导致解析风险。",
+        "validation": "确认输入文件体积受控后重跑该步骤。",
+    }
+
+
+def _local_name(tag: str) -> str:
+    if "}" in tag:
+        return tag.rsplit("}", 1)[1]
+    return tag
+
+
+def _iter_testcases(root: ET.Element) -> list[ET.Element]:
+    return [node for node in root.iter() if _local_name(node.tag) == "testcase"]
+
+
+def _find_failure_or_error(case: ET.Element) -> ET.Element | None:
+    for child in case:
+        if _local_name(child.tag) in {"failure", "error"}:
+            return child
+    return None
+
+
+def _parse_junit_file(path: Path, *, max_bytes: int = DEFAULT_MAX_JUNIT_FILE_BYTES) -> list[dict[str, Any]]:
     findings: list[dict[str, Any]] = []
+    if path.stat().st_size > max_bytes:
+        return [_build_oversize_finding("junit", path, max_bytes=max_bytes)]
     root = ET.parse(path).getroot()
-    testcases = root.findall(".//testcase")
-    for case in testcases:
-        failure = case.find("failure") or case.find("error")
+    for case in _iter_testcases(root):
+        failure = _find_failure_or_error(case)
         if failure is None:
             continue
         message = failure.get("message") or failure.text or "unknown junit failure"
-        signal = _normalize_signal(message)
+        signal = _sanitize_report_text(_normalize_signal(message))
         testsuite = case.get("classname") or "unknown_suite"
         testname = case.get("name") or "unknown_test"
         finding = {
             "source_type": "junit",
             "source_file": str(path),
             "signal": signal,
-            "examples": [f"{testsuite}::{testname}", signal],
+            "examples": [
+                _sanitize_report_text(f"{testsuite}::{testname}"),
+                _sanitize_report_text(signal),
+            ],
             "fingerprint_id": _fingerprint_id(["junit", testsuite, testname, signal]),
         }
         finding.update(_suggestion_for_signal("junit", signal))
@@ -99,25 +153,28 @@ def _parse_junit_file(path: Path) -> list[dict[str, Any]]:
     return findings
 
 
-def _parse_log_file(path: Path) -> list[dict[str, Any]]:
+def _parse_log_file(path: Path, *, max_bytes: int = DEFAULT_MAX_LOG_FILE_BYTES) -> list[dict[str, Any]]:
     findings: list[dict[str, Any]] = []
-    lines = path.read_text(encoding="utf-8", errors="ignore").splitlines()
-    for line in lines:
-        for label, pattern in LOG_PATTERNS:
-            match = pattern.search(line)
-            if not match:
-                continue
-            signal = _normalize_signal(match.group(0))
-            finding = {
-                "source_type": "log",
-                "source_file": str(path),
-                "signal": signal,
-                "examples": [line.strip()[:300]],
-                "fingerprint_id": _fingerprint_id(["log", label, signal]),
-            }
-            finding.update(_suggestion_for_signal("log", signal))
-            findings.append(finding)
-            break
+    if path.stat().st_size > max_bytes:
+        return [_build_oversize_finding("log", path, max_bytes=max_bytes)]
+    with path.open("r", encoding="utf-8", errors="ignore") as handle:
+        for raw_line in handle:
+            line = raw_line.rstrip("\n")
+            for label, pattern in LOG_PATTERNS:
+                match = pattern.search(line)
+                if not match:
+                    continue
+                signal = _sanitize_report_text(_normalize_signal(match.group(0)))
+                finding = {
+                    "source_type": "log",
+                    "source_file": str(path),
+                    "signal": signal,
+                    "examples": [_sanitize_report_text(line)],
+                    "fingerprint_id": _fingerprint_id(["log", label, signal]),
+                }
+                finding.update(_suggestion_for_signal("log", signal))
+                findings.append(finding)
+                break
     return findings
 
 
@@ -128,7 +185,9 @@ def _expand_inputs(paths: list[str], globs: list[str]) -> list[Path]:
         if path.is_file():
             result.append(path)
     for pattern in globs:
-        result.extend(path for path in Path().glob(pattern) if path.is_file())
+        result.extend(
+            path for path in (Path(match) for match in glob.glob(pattern, recursive=True)) if path.is_file()
+        )
     unique: dict[str, Path] = {str(path): path for path in result}
     return [unique[key] for key in sorted(unique)]
 
@@ -171,11 +230,11 @@ def _aggregate(findings: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], li
         fingerprints.append(
             {
                 "fingerprint_id": payload["fingerprint_id"],
-                "signal": payload["signal"],
+                "signal": _sanitize_report_text(payload["signal"]),
                 "occurrences": payload["occurrences"],
                 "source_types": sorted(payload["source_types"]),
                 "source_files": sorted(payload["source_files"]),
-                "examples": payload["examples"],
+                "examples": [_sanitize_report_text(item) for item in payload["examples"]],
                 "suggestion": plan_payload[plan_key],
             }
         )
@@ -207,6 +266,18 @@ def main() -> int:
     parser.add_argument("--log", action="append", default=[], help="Path to a log file.")
     parser.add_argument("--log-glob", action="append", default=[], help="Glob for log files.")
     parser.add_argument(
+        "--max-junit-bytes",
+        type=int,
+        default=DEFAULT_MAX_JUNIT_FILE_BYTES,
+        help="Reject junit files larger than this size.",
+    )
+    parser.add_argument(
+        "--max-log-bytes",
+        type=int,
+        default=DEFAULT_MAX_LOG_FILE_BYTES,
+        help="Reject log files larger than this size.",
+    )
+    parser.add_argument(
         "--output",
         default=".runtime-cache/autofix-report.json",
         help="Output report path.",
@@ -219,25 +290,26 @@ def main() -> int:
     findings: list[dict[str, Any]] = []
     for path in junit_files:
         try:
-            findings.extend(_parse_junit_file(path))
+            findings.extend(_parse_junit_file(path, max_bytes=max(1, args.max_junit_bytes)))
         except Exception as exc:
+            signal = _sanitize_report_text(f"failed to parse junit: {exc}")
             findings.append(
                 {
                     "source_type": "junit",
                     "source_file": str(path),
-                    "signal": f"failed to parse junit: {exc}",
-                    "examples": [str(path)],
+                    "signal": signal,
+                    "examples": [_sanitize_report_text(str(path))],
                     "fingerprint_id": _fingerprint_id(["junit-parse-error", str(path), str(exc)]),
                     **_suggestion_for_signal("log", "junit parse error"),
                 }
             )
     for path in log_files:
-        findings.extend(_parse_log_file(path))
+        findings.extend(_parse_log_file(path, max_bytes=max(1, args.max_log_bytes)))
 
     fingerprints, fix_plan = _aggregate(findings)
     report = {
         "mode": "dry-run",
-        "generated_at": dt.datetime.now(dt.timezone.utc).isoformat(),
+        "generated_at": dt.datetime.now(dt.UTC).isoformat(),
         "inputs": {
             "junit_files": [str(path) for path in junit_files],
             "log_files": [str(path) for path in log_files],

@@ -7,6 +7,9 @@ on:
 permissions:
   contents: read
 
+env:
+  PRE_COMMIT_PIP_VERSION: "4.3.0"
+
 jobs:
   required-ci-secrets:
     runs-on: [self-hosted, e2-core, spot, shared-pool]
@@ -59,17 +62,19 @@ jobs:
             ${{ runner.os }}-pre-commit-
 
       - name: Install pre-commit
-        run: python -m pip install pre-commit
+        run: python -m pip install "pre-commit==${PRE_COMMIT_PIP_VERSION}"
 
       - name: Install gitleaks CLI
         shell: bash
         run: |
           set -euo pipefail
           version="8.30.0"
+          expected_sha256="79a3ab579b53f71efd634f3aaf7e04a0fa0cf206b7ed434638d1547a2470a66e"
           archive="gitleaks_${version}_linux_x64.tar.gz"
           url="https://github.com/gitleaks/gitleaks/releases/download/v${version}/${archive}"
 
           curl -fsSL "$url" -o "$archive"
+          echo "${expected_sha256}  ${archive}" | sha256sum -c -
           tar -xzf "$archive" gitleaks
           sudo install -m 0755 gitleaks /usr/local/bin/gitleaks
           rm -f "$archive" gitleaks
@@ -130,17 +135,19 @@ jobs:
             ${{ runner.os }}-pre-commit-
 
       - name: Install pre-commit
-        run: python -m pip install pre-commit
+        run: python -m pip install "pre-commit==${PRE_COMMIT_PIP_VERSION}"
 
       - name: Install gitleaks CLI
         shell: bash
         run: |
           set -euo pipefail
           version="8.30.0"
+          expected_sha256="79a3ab579b53f71efd634f3aaf7e04a0fa0cf206b7ed434638d1547a2470a66e"
           archive="gitleaks_${version}_linux_x64.tar.gz"
           url="https://github.com/gitleaks/gitleaks/releases/download/v${version}/${archive}"
 
           curl -fsSL "$url" -o "$archive"
+          echo "${expected_sha256}  ${archive}" | sha256sum -c -
           tar -xzf "$archive" gitleaks
           sudo install -m 0755 gitleaks /usr/local/bin/gitleaks
           rm -f "$archive" gitleaks

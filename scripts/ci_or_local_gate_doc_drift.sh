@@ -44,8 +44,39 @@ get_push_base() {
     return
   fi
 
-  if git -C "$ROOT_DIR" rev-parse --verify HEAD~1 >/dev/null 2>&1; then
-    git -C "$ROOT_DIR" rev-parse HEAD~1
+  local remote_head_ref=""
+  remote_head_ref="$(git -C "$ROOT_DIR" symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null || true)"
+  if [[ -n "$remote_head_ref" ]]; then
+    local remote_head_merge_base=""
+    remote_head_merge_base="$(git -C "$ROOT_DIR" merge-base HEAD "$remote_head_ref" 2>/dev/null || true)"
+    if [[ -n "$remote_head_merge_base" ]]; then
+      echo "$remote_head_merge_base"
+      return
+    fi
+  fi
+
+  local candidate=""
+  for candidate in origin/main origin/master origin/trunk; do
+    if git -C "$ROOT_DIR" rev-parse --verify "$candidate" >/dev/null 2>&1; then
+      local candidate_merge_base=""
+      candidate_merge_base="$(git -C "$ROOT_DIR" merge-base HEAD "$candidate" 2>/dev/null || true)"
+      if [[ -n "$candidate_merge_base" ]]; then
+        echo "$candidate_merge_base"
+        return
+      fi
+    fi
+  done
+
+  local root_commit=""
+  root_commit="$(git -C "$ROOT_DIR" rev-list --max-parents=0 HEAD 2>/dev/null | head -n 1 || true)"
+  if [[ -n "$root_commit" ]]; then
+    local head_sha=""
+    head_sha="$(git -C "$ROOT_DIR" rev-parse HEAD 2>/dev/null || true)"
+    if [[ -n "$head_sha" && "$root_commit" == "$head_sha" ]]; then
+      echo "$empty_tree_sha"
+      return
+    fi
+    echo "$root_commit"
     return
   fi
 
@@ -174,6 +205,7 @@ fi
 
 if has_changed_matching 'apps/api/app/routers/*.py' || \
    has_changed_matching 'apps/api/app/services/*.py' || \
+   has_changed_matching 'apps/mcp/*.py' || \
    has_changed_matching 'apps/mcp/**/*.py'; then
   check_required_docs "api behavior/signature contract changes" \
     "README.md" \

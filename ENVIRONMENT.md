@@ -139,7 +139,7 @@ Default model lane:
 
 ### API / MCP / Web
 
-- API/MCP runtime: `VD_API_BASE_URL`, `VD_API_TIMEOUT_SEC`, `VD_API_KEY`, `VD_ALLOW_UNAUTH_WRITE`
+- API/MCP runtime: `VD_API_BASE_URL`, `VD_API_TIMEOUT_SEC`, `VD_API_KEY`, `VD_ALLOW_UNAUTH_WRITE`, `VD_CI_ALLOW_UNAUTH_WRITE`, `VD_API_RETRY_ATTEMPTS`, `VD_API_RETRY_BACKOFF_SEC`
 - Web runtime: `NEXT_PUBLIC_API_BASE_URL` (web client only reads this variable for API base URL)
 - `UI_AUDIT_GEMINI_ENABLED` (API-side Gemini UI audit toggle, default `true`)
 - `UI_AUDIT_ARTIFACT_BASE_ROOT` (UI audit artifact directory whitelist root; only `artifact_root` paths within this base are accepted; defaults to OS temp directory when unset)
@@ -149,7 +149,9 @@ Default model lane:
 Write auth behavior contract (`apps/api/app/security.py`):
 
 - Default secure mode: protected write routes require token auth, even when `VD_API_KEY` is unset/blank.
-- Compatibility override: write routes are allowed without token only when `VD_ALLOW_UNAUTH_WRITE=true`.
+- Compatibility override: write routes are allowed without token only when:
+  - test runtime sets `PYTEST_CURRENT_TEST`, or
+  - GitHub Actions CI explicitly opts in with all of `VD_ALLOW_UNAUTH_WRITE=true`, `CI=true`, `GITHUB_ACTIONS=true`, and `VD_CI_ALLOW_UNAUTH_WRITE=true`.
 - Recommended production posture: set `VD_API_KEY` and keep `VD_ALLOW_UNAUTH_WRITE=false`.
 - Accepted auth headers:
   - `Authorization: Bearer <VD_API_KEY>`
@@ -168,7 +170,12 @@ Write auth behavior contract (`apps/api/app/security.py`):
   - `POST /api/v1/computer-use/run`
   - `POST /api/v1/ui-audit/run`
   - `POST /api/v1/ui-audit/{run_id}/autofix`
-- If `VD_API_KEY` is unset/blank and `VD_ALLOW_UNAUTH_WRITE` is not explicitly true, write requests return `401`.
+- If `VD_API_KEY` is unset/blank, write requests return `401` unless either `PYTEST_CURRENT_TEST` is present, or GitHub Actions CI satisfies all of `VD_ALLOW_UNAUTH_WRITE=true`, `CI=true`, `GITHUB_ACTIONS=true`, and `VD_CI_ALLOW_UNAUTH_WRITE=true`.
+
+MCP upstream retry behavior (`apps/mcp/server.py`):
+
+- `VD_API_RETRY_ATTEMPTS` controls retry count for retryable methods (`GET/HEAD/OPTIONS`), clamped to `1..5` (default `1`).
+- `VD_API_RETRY_BACKOFF_SEC` controls exponential backoff base seconds, clamped to `0..5` (default `0.2`).
 
 Exception detail sanitization contract:
 
@@ -211,6 +218,7 @@ Live smoke includes strict computer-use controls via CLI flags in `scripts/e2e_l
   - `CI` / `GITHUB_ACTIONS`: CI context detection flags (hosted CI normally injects these automatically).
   - `API_INTEGRATION_SMOKE_STRICT`: local strictness override for `apps/api/tests/test_api_integration_smoke.py`.
   - `WEB_E2E_USE_MOCK_API`: local-only debug toggle for web E2E mock API wiring; CI/mainline must keep real API path.
+  - `WEB_E2E_NEXT_DIST_DIR`: optional E2E-only Next.js distDir isolation; used to avoid concurrent `.next/dev/lock` contention across parallel E2E workers.
 
 `scripts/external_playwright_smoke.sh` defaults (override via CLI flags):
 
@@ -232,8 +240,9 @@ Live smoke includes strict computer-use controls via CLI flags in `scripts/e2e_l
 
 `--web-e2e-base-url` controls web e2e target mode:
 
-- unset/empty: pytest starts local Next.js (`npm run dev`) and injects mock API base URL.
+- unset/empty: pytest starts local Next.js (`npm run dev`) and injects real API base URL from `--web-e2e-api-base-url` (default `http://127.0.0.1:18080`).
 - set to absolute `http(s)://...`: pytest reuses the external web instance and skips local web boot.
+- mock API is local debug only: enable via `--web-e2e-use-mock-api=1` or `WEB_E2E_USE_MOCK_API=1`.
 
 ## Local Setup
 
@@ -345,9 +354,9 @@ GitHub Actions workflow: `.github/workflows/env-governance.yml`
 ## CI Job Topology and Cache Policy (`.github/workflows/ci.yml`)
 
 - Job topology:
-  - `preflight` is the primary prerequisite gate.
-  - `db-migration-smoke` / `python-tests` / `api-real-smoke` / `pr-llm-real-smoke` / `backend-lint` / `frontend-lint` / `web-test-build` / `web-e2e` / `external-playwright-smoke` / `dependency-vuln-scan` all depend on `preflight` (directly or through shared setup).
-  - `aggregate-gate` depends on `preflight` and all jobs above. It allows `pr-llm-real-smoke` to be `success` or `skipped`; all other listed jobs must be `success`.
+  - `preflight-fast` is the primary prerequisite gate; `preflight-heavy` depends on `preflight-fast` and is enforced by `aggregate-gate`.
+  - `db-migration-smoke` / `python-tests` / `api-real-smoke` / `pr-llm-real-smoke` / `backend-lint` / `frontend-lint` / `web-test-build` / `web-e2e` / `external-playwright-smoke` / `dependency-vuln-scan` depend on `preflight-fast` (directly or through shared setup).
+  - `aggregate-gate` depends on `preflight-fast` + `preflight-heavy` and all jobs above. It allows `pr-llm-real-smoke` and `external-playwright-smoke` to be `success` or `skipped` (depending on trigger boundary / change scope); required jobs must be `success`.
   - `live-smoke` depends on `aggregate-gate`; it is required on `main` push and nightly schedule. Missing required secrets fails the job (not skipped).
   - `autofix-dry-run` depends on `python-tests` and `web-e2e`, and runs only when either one fails.
   - `ci-final-gate` is the final gate: it always checks `aggregate-gate`, and additionally enforces `live-smoke` on `main` push / nightly schedule.
@@ -358,7 +367,7 @@ GitHub Actions workflow: `.github/workflows/env-governance.yml`
 
 ### CI Trigger Boundary (PR vs main vs nightly)
 
-- `pull_request`: runs aggregate test/lint/build gates (including `external-playwright-smoke`), while `live-smoke` is optional (`skipped` is allowed). It may also run conditional real LLM smoke `pr-llm-real-smoke` only when all are true: same-repo PR (`head.repo.full_name == github.repository`) and non-empty `GEMINI_API_KEY`; otherwise `skipped`.
+- `pull_request`: runs aggregate test/lint/build gates; `external-playwright-smoke` is not triggered on PR and is accepted as `skipped`. `live-smoke` is optional (`skipped` is allowed). `pr-llm-real-smoke` is conditional and only runs when all are true: same-repo PR (`head.repo.full_name == github.repository`) and `needs.changes.outputs.backend_changed == 'true'`; otherwise `skipped`. If it runs but `GEMINI_API_KEY` is missing, the job fails.
 - `push` to `main`: `live-smoke` becomes mandatory and must be `success`.
 - `schedule` nightly: both `live-smoke` and `nightly-flaky-*` subsets are mandatory.
 

@@ -3,7 +3,7 @@
 
 Checks whether docs/testing.md contains key strategy signals agreed in Phase0:
 - main/release/nightly-enforced live-smoke and PR real-smoke strategy
-- mutation baseline >=0.60 (current policy uses 0.62)
+- mutation baseline >=0.62
 - web coverage 85/95
 - no skip for key gates
 - E2E real API
@@ -50,11 +50,11 @@ def main() -> int:
         },
         {
             "id": "D2",
-            "name": "mutation>=0.60",
+            "name": "mutation>=0.62",
             "mode": "any",
             "patterns": [
-                r"mutation[^\n]{0,80}(?:>=\s*0\.(?:6[0-9]|[7-9][0-9])|0\.(?:6[0-9]|[7-9][0-9])|60\s*%|61\s*%|62\s*%|63\s*%|64\s*%|65\s*%)",
-                r"mutmut[^\n]{0,80}(?:>=\s*0\.(?:6[0-9]|[7-9][0-9])|0\.(?:6[0-9]|[7-9][0-9])|60\s*%|61\s*%|62\s*%|63\s*%|64\s*%|65\s*%)",
+                r"mutation[^\n]{0,80}(?:>=\s*0\.(?:6[2-9]|[7-9][0-9])|0\.(?:6[2-9]|[7-9][0-9])|(?:6[2-9]|[7-9][0-9]|100)\s*%)",
+                r"mutmut[^\n]{0,80}(?:>=\s*0\.(?:6[2-9]|[7-9][0-9])|0\.(?:6[2-9]|[7-9][0-9])|(?:6[2-9]|[7-9][0-9]|100)\s*%)",
             ],
         },
         {

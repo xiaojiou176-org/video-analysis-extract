@@ -13,7 +13,8 @@ Internet
   │
   ▼ 80/443
 [ nginx ]  (反代)
-  ├── /api/*   → localhost:8000  (FastAPI, vd-api.service)
+  ├── /api/*   → stable/canary 路由 (默认 localhost:8000；canary localhost:18000)
+  ├── /healthz|/readyz|/metrics → localhost:8000 (稳定探针)
   └── /*       → localhost:3001  (Next.js, vd-web.service)
 
 [ vd-worker.service ]  (Temporal Worker, 无端口)
@@ -69,6 +70,9 @@ gcloud compute instances create vd-server \
 
 - 若实例已存在但未传 `--force-delete-instance`，脚本会拒绝删除并退出。
 - 若远端 `~/app` 已存在但未传 `--force-replace-app-dir`，脚本会拒绝覆盖并退出。
+- 默认会使用最小权限实例 scopes（不再默认 `cloud-platform`）。
+- 如需兼容旧行为，可显式传入：
+  `--scopes https://www.googleapis.com/auth/cloud-platform`
 
 ---
 
@@ -195,6 +199,8 @@ for f in $(ls infra/migrations/*.sql | sort); do
     psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$f"
 done
 
+# 若历史库存在旧状态字段，000010 会自动做防御性归一化（partial/异常状态 -> 新契约值）
+
 # 初始化 SQLite 状态库
 sqlite3 "$SQLITE_PATH" < infra/sql/sqlite_state_init.sql
 ```
@@ -225,6 +231,8 @@ sudo systemctl status vd-api vd-worker vd-web
 ```bash
 # 复制 nginx 配置
 sudo cp /opt/vd/repo/infra/nginx/vd.conf /etc/nginx/sites-available/vd.conf
+sudo mkdir -p /etc/nginx/snippets
+sudo cp /opt/vd/repo/infra/nginx/vd.canary-routing.conf /etc/nginx/snippets/vd.canary-routing.conf
 
 # 替换域名（或使用 VM 外部 IP 做临时测试）
 sudo sed -i 's/YOUR_DOMAIN/YOUR_ACTUAL_DOMAIN_OR_IP/g' /etc/nginx/sites-available/vd.conf
@@ -249,6 +257,8 @@ sudo systemctl reload nginx
 ```bash
 # API 健康检查
 curl http://YOUR_DOMAIN/healthz
+curl http://YOUR_DOMAIN/readyz
+curl http://YOUR_DOMAIN/metrics | head -n 20
 
 # 查看服务日志
 sudo journalctl -u vd-api    -f --no-pager
@@ -283,6 +293,25 @@ source /opt/vd/.env
 python3 /opt/vd/repo/scripts/probe_rsshub_health.py --write-env --env-file /opt/vd/.env
 sudo systemctl restart vd-worker
 ```
+
+### 10.1 渐进发布（Canary）与自动回滚
+
+1. 先在 canary 端口部署新 API 版本（默认 `127.0.0.1:18000`）。
+2. 通过脚本逐步放量，脚本会在每个阶段同时探测稳定流量和 canary 头流量；失败即自动回滚到 0%。
+
+```bash
+cd /opt/vd/repo
+HEALTH_URL='http://127.0.0.1/healthz' \
+scripts/deploy/canary_rollout.sh --target 10 --step 5 --settle-seconds 20
+```
+
+3. 若需要紧急回滚，直接置零：
+
+```bash
+TARGET_WEIGHT=0 scripts/deploy/canary_rollout.sh --target 0 --step 100
+```
+
+完整流程与 RTO 目标见 [`rollback-runbook.md`](rollback-runbook.md)。
 
 ---
 

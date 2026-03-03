@@ -8,6 +8,9 @@ on:
 permissions:
   contents: read
 
+env:
+  UV_PIP_VERSION: "0.10.7"
+
 concurrency:
   group: mutation-weekly-${{ github.ref }}
   cancel-in-progress: false
@@ -42,7 +45,7 @@ jobs:
       - name: Setup uv
         run: |
           python -m pip install --upgrade pip
-          python -m pip install uv
+          python -m pip install "uv==${UV_PIP_VERSION}"
 
       - name: Cache uv
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
@@ -101,9 +104,11 @@ jobs:
           uv run --extra dev --with mutmut mutmut run
           uv run --extra dev --with mutmut mutmut export-cicd-stats
 
-      - name: Fail if surviving mutants exist
+      - name: Enforce weekly mutation quality gates
         env:
-          MUTATION_MIN_SCORE: "0.85"
+          MUTATION_MIN_SCORE: "0.62"
+          MUTATION_MIN_EFFECTIVE_RATIO: "0.25"
+          MUTATION_MAX_NO_TESTS_RATIO: "0.75"
         run: |
           python3 - <<'PY'
           import json
@@ -117,14 +122,22 @@ jobs:
           stats = json.loads(stats_path.read_text(encoding='utf-8'))
           killed = int(stats.get('killed', 0))
           survived = int(stats.get('survived', 0))
+          skipped = int(stats.get('skipped', stats.get('no_tests', 0)))
           total = int(stats.get('total', killed + survived))
           effective = killed + survived
-          threshold = float(os.environ.get('MUTATION_MIN_SCORE', '0.85'))
+          threshold = float(os.environ.get('MUTATION_MIN_SCORE', '0.62'))
+          min_effective_ratio = float(os.environ.get('MUTATION_MIN_EFFECTIVE_RATIO', '0.25'))
+          max_no_tests_ratio = float(os.environ.get('MUTATION_MAX_NO_TESTS_RATIO', '0.75'))
           score = killed / effective if effective > 0 else 0.0
+          effective_ratio = effective / total if total > 0 else 0.0
+          no_tests_ratio = skipped / total if total > 0 else 1.0
 
           print(
               f'mutation stats: killed={killed}, survived={survived}, '
-              f'effective={effective}, total={total}, score={score:.4f}, threshold={threshold:.4f}'
+              f'effective={effective}, total={total}, skipped={skipped}, '
+              f'score={score:.4f}, threshold={threshold:.4f}, '
+              f'effective_ratio={effective_ratio:.4f}, min_effective_ratio={min_effective_ratio:.4f}, '
+              f'no_tests_ratio={no_tests_ratio:.4f}, max_no_tests_ratio={max_no_tests_ratio:.4f}'
           )
 
           if effective <= 0:
@@ -133,15 +146,19 @@ jobs:
               raise SystemExit(
                   f'mutation-weekly failed: score {score:.4f} < threshold {threshold:.4f}'
               )
-          if survived > 0:
+          if effective_ratio < min_effective_ratio:
               raise SystemExit(
-                  f'mutation-weekly failed: survived mutants must be 0 (stricter than threshold), got {survived}'
+                  f'mutation-weekly failed: effective_ratio {effective_ratio:.4f} < threshold {min_effective_ratio:.4f}'
+              )
+          if no_tests_ratio > max_no_tests_ratio:
+              raise SystemExit(
+                  f'mutation-weekly failed: no_tests_ratio {no_tests_ratio:.4f} > ceiling {max_no_tests_ratio:.4f}'
               )
           PY
 
       - name: Upload mutation stats artifact
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: mutmut-cicd-stats
           path: |

@@ -113,3 +113,21 @@
   - `scripts/cleanup_workspace.sh`
 - 触发后必须同步更新：`docs/reference/cache.md`
 - 校验脚本：`scripts/ci_or_local_gate_doc_drift.sh`
+
+## Delivery Retry Claim 窗口说明（2026-03）
+
+通知重试链路新增了“超时 queued 回收”能力后，领取条件已收紧，避免误回收非重试中的记录：
+
+- 仅回收满足以下条件的 queued 记录：
+  - `next_retry_at <= NOW()`
+  - `updated_at` 超过 `claim_timeout`
+  - `attempt_count > 0`
+
+设计意图：
+
+- 保留“领取后异常退出”的恢复能力，避免永久卡在 queued。
+- 降低长耗时发送任务被过早回收导致重复执行的概率。
+
+补充：
+
+- 该机制属于“重试状态恢复”，不改变本页已有 cache 路径/保留策略。

@@ -38,8 +38,8 @@
 ## Runner 标签策略（维护约定）
 
 - `e2-core`：通用池标签。默认 CI 作业落到该池，保证可用性与兼容性。
-- `spot-safe`：弹性池标签。用于可中断、可重试、对抢占容忍的作业，优先吃 Spot 扩容容量。
-- 路由建议：重任务若可容忍抢占，优先使用 `runs-on: [self-hosted, e2-core, spot-safe]`；关键不可中断链路继续使用 `runs-on: e2-core`。
+- `spot` + `shared-pool`：当前弹性池组合标签。多数 CI 作业使用 `runs-on: [self-hosted, e2-core, spot, shared-pool]` 路由到可扩缩的共享 Spot 池。
+- 路由建议：可中断/可重试作业优先沿用上述组合；关键兜底链路可保留 `runs-on: e2-core`（例如 hosted 失败后的 fallback 作业）。
 - 禁止硬编码 runner 实例名（例如 `github-runner-spot-02`）；统一用标签路由，避免扩缩容后工作流失效。
 
 ## D1~D5 决议与执行命令
@@ -60,15 +60,18 @@ scripts/e2e_live_smoke.sh \
 - D2 mutation 硬门禁阈值 `0.62`（并新增结构质量约束）：
 
 ```bash
-  ./scripts/quality_gate.sh \
+./scripts/quality_gate.sh \
   --mode pre-push \
-  --profile ci \
-  --profile live-smoke \
-  --heartbeat-seconds 25 \
+  --heartbeat-seconds 20 \
   --mutation-min-score 0.62 \
   --mutation-min-effective-ratio 0.25 \
-  --mutation-max-no-tests-ratio 0.75
+  --mutation-max-no-tests-ratio 0.75 \
+  --profile ci \
+  --profile live-smoke \
+  --ci-dedupe 0
 ```
+
+说明：上面是本地 pre-push 口径；远端 `.github/workflows/ci.yml` 的 `quality-gate-pre-push` 为避免重复重型检查，使用 `--ci-dedupe 1 --skip-mutation 1`，mutation 由独立 job 执行。
 
 - D3 Web 覆盖硬门禁 `global >=85` 且 `core >=95`：
 
@@ -98,11 +101,13 @@ python3 scripts/check_web_coverage_threshold.py \
 `pr-llm-real-smoke` 触发条件（PR 真实 LLM）：
 
 - 仅 `pull_request` 事件。
+- 仅在 `backend_changed == 'true'` 时运行（由 `changes` job 输出判定）。
 - 仅同仓 PR（`head.repo.full_name == github.repository`），fork PR 不触发。
-- 且仓库配置了 `GEMINI_API_KEY` secret；缺失即失败，不允许通过 `skipped` 放行。
+- `GEMINI_API_KEY` 不参与触发表达式；它是运行期必需 secret。触发后若缺失，作业失败（不是 `skipped`）。
 
 CI `live-smoke` 必需 secrets（main/release/nightly）：
 
+- `LIVE_SMOKE_API_BASE_URL`
 - `GEMINI_API_KEY`
 - `RESEND_API_KEY`
 - `RESEND_FROM_EMAIL`
@@ -112,15 +117,16 @@ CI `live-smoke` 必需 secrets（main/release/nightly）：
 
 - `pr-llm-real-smoke` 仅在以下条件同时满足时触发：
   - `github.event_name == 'pull_request'`
+  - `needs.changes.outputs.backend_changed == 'true'`
   - `github.event.pull_request.head.repo.full_name == github.repository`（同仓 PR，fork PR 不触发）
-  - `secrets.GEMINI_API_KEY != ''`
 - `external-playwright-smoke` 仅在 `push(main)` 与 nightly `schedule` 执行；默认参数：
   - `--url https://example.com`
   - `--browser chromium`
   - `--expect-text "Example Domain"`
   - `--timeout-ms 45000`
   - `--output-dir .runtime-cache/external-playwright-smoke`
-  - `--retries` 未显式传入时使用脚本默认值 `2`，且 live 策略强制最大值 `2`
+- `--retries` 由 CI 显式传入 `vars.EXTERNAL_SMOKE_RETRIES || '2'`（默认 `2`，且脚本内部会做上限约束）
+- `aggregate-gate` 对 `external-playwright-smoke` 的通过口径为 `success|skipped`（PR 下通常为 `skipped`）。
 
 Live 诊断与执行策略（本地/CI 一致）：
 
@@ -164,7 +170,7 @@ export TEMPORAL_TASK_QUEUE='video-analysis-worker'
 export SQLITE_STATE_PATH='/tmp/video-digestor-pr-llm-real-state.db'
 export NOTIFICATION_ENABLED='0'
 export UI_AUDIT_GEMINI_ENABLED='false'
-export VD_ALLOW_UNAUTH_WRITE='1'
+export VD_API_KEY='local-dev-token'
 
 mkdir -p .runtime-cache
 uv run --with uvicorn uvicorn apps.api.app.main:app --host 127.0.0.1 --port 18081 > .runtime-cache/pr-llm-real-smoke.log 2>&1 &
@@ -243,7 +249,7 @@ bash scripts/env/final_governance_check.sh --skip-prepush
 - 文档漂移门禁强制执行（staged/push）。
 - 覆盖率阈值：总覆盖率 `>=85%`，核心模块覆盖率 `>=95%`（worker pipeline + api 核心 router/service）。
 - Web 覆盖率硬门禁：`global >=85%` 且 `core >=95%`（默认读取 `apps/web/coverage/coverage-summary.json`）。
-- 变异测试门禁强制执行（Python 核心模块）：CI/Hook 执行口径为 mutation score `>=0.62`，并要求 `effective_ratio>=0.25`、`no_tests_ratio<=0.75`；`quality_gate.sh` 裸跑默认阈值为 `0.85`，可通过参数覆盖。
+- 变异测试门禁强制执行（Python 核心模块）：CI/Hook 执行口径为 mutation score `>=0.62`，并要求 `effective_ratio>=0.25`、`no_tests_ratio<=0.75`；`quality_gate.sh` 裸跑默认阈值为 `0.62`，可通过参数覆盖。
 - `pre-push` 采用 fail-fast：先短检查，再长测试；长测试并行执行并输出 heartbeat。
 - `pre-push` 后端链路新增硬门禁：`api cors preflight smoke (OPTIONS DELETE)` 与 `contract diff local gate (base vs head)`。
 - `pre-push` 与远端 CI `preflight-fast`/`web-test-build` 关键阻断项对齐：`check_ci_docs_parity`、`docs env canonical guard`、`provider residual guard`、`worker line limits guard`、`schema parity gate`、`web design token guard`、`web build`、`web button coverage`。
@@ -359,7 +365,7 @@ echo "feat(api): add ingest health guard" > /tmp/commit-msg-ok.txt
   - `python3 scripts/check_web_button_coverage.py --threshold 1.0`
   - `DATABASE_URL='sqlite+pysqlite:///:memory:' uv run --extra dev --with mutmut mutmut run`
   - `uv run --extra dev --with mutmut mutmut export-cicd-stats`
-  - `python3 -c '...读取 mutants/mutmut-cicd-stats.json 并校验 score/effective_ratio/no_tests_ratio 阈值...'`（CI/Hook 常用阈值 `score>=0.62`；脚本裸跑默认 `0.85`）
+  - `python3 -c '...读取 mutants/mutmut-cicd-stats.json 并校验 score/effective_ratio/no_tests_ratio 阈值...'`（CI/Hook 常用阈值 `score>=0.62`；脚本裸跑默认 `0.62`）
 
 变异测试工具不可用策略（阻断）：
 
@@ -443,8 +449,23 @@ createdb video_analysis 2>/dev/null || true
 for migration in $(ls infra/migrations/*.sql | sort); do
   psql "${DATABASE_URL}" -v ON_ERROR_STOP=1 -f "${migration}"
 done
-curl -sSfL https://temporal.download/cli.sh | sh
-export PATH="$HOME/.temporalio/bin:$PATH"
+export TEMPORAL_CLI_VERSION='1.5.1'
+export TEMPORAL_CLI_SHA256_LINUX_AMD64='ddc95e08b0b076efd4ea9733a3f488eb7d2be875f8834e616cd2a37358b4852d'
+export TEMPORAL_CLI_SHA256_LINUX_ARM64='bd1b0db9f18b051026de8bf6cc1505f2510f14bbb7a8b9a4a91fff46c77454f5'
+arch="$(uname -m)"
+case "$arch" in
+  x86_64|amd64) temporal_arch="amd64"; expected_sha="$TEMPORAL_CLI_SHA256_LINUX_AMD64" ;;
+  aarch64|arm64) temporal_arch="arm64"; expected_sha="$TEMPORAL_CLI_SHA256_LINUX_ARM64" ;;
+  *) echo "Unsupported architecture: $arch" >&2; exit 1 ;;
+esac
+archive="temporal_cli_${TEMPORAL_CLI_VERSION}_linux_${temporal_arch}.tar.gz"
+url="https://github.com/temporalio/cli/releases/download/v${TEMPORAL_CLI_VERSION}/${archive}"
+curl -fsSL "$url" -o "/tmp/${archive}"
+echo "${expected_sha}  /tmp/${archive}" | sha256sum -c -
+tar -xzf "/tmp/${archive}" -C /tmp temporal
+mkdir -p "$HOME/.local/bin"
+install -m 0755 /tmp/temporal "$HOME/.local/bin/temporal"
+export PATH="$HOME/.local/bin:$PATH"
 temporal server start-dev --ip 127.0.0.1 --port 7233 > .runtime-cache/web-e2e-temporal.log 2>&1 &
 uv run --with uvicorn uvicorn apps.api.app.main:app --host 127.0.0.1 --port 18081 \
   > .runtime-cache/web-e2e-real-api.log 2>&1 &

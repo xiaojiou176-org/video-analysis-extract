@@ -4,7 +4,7 @@ set -euo pipefail
 export PATH="$HOME/.local/bin:$PATH"
 
 if ! command -v uv >/dev/null 2>&1; then
-  curl -LsSf https://astral.sh/uv/install.sh | sh
+  python3 -m pip install --user --upgrade "uv>=0.10,<1.0"
 fi
 
 uv sync --frozen --extra dev --extra e2e

@@ -18,7 +18,7 @@
 10. **大型模块（`apps/api`、`apps/worker`、`apps/mcp`、`apps/web`）必须同时维护 `AGENTS.md` 与 `CLAUDE.md`，且内容一致。**
 11. **Live 测试在链路涉及外部依赖时必须使用真实 Key、真实浏览器、真实外部 API/网页。**
 12. **Pre-Commit 必须拦截所有 Linter Error 与安慰剂断言。**
-13. **覆盖率与变异测试门禁必须满足：总覆盖率 `>=85%`、重要模块覆盖率 `>=95%`、Python 核心模块 mutation score `>=0.60`。**
+13. **覆盖率与变异测试门禁必须满足：总覆盖率 `>=85%`、重要模块覆盖率 `>=95%`、Python 核心模块 mutation score `>=0.62`。**
 14. **长测试必须输出 heartbeat，且必须先短测后长测；可并发任务必须并发执行。**
 15. **远程 CI（含 GitHub Actions 重跑）必须以后端/前端本地 pre-push 门禁全绿为前提；若远程失败，必须先完成本地复现与修复再触发下一次远程运行。**
 
@@ -225,15 +225,15 @@ curl -sS -X POST http://127.0.0.1:8000/api/v1/ingest/poll \
 - `.githooks/pre-commit` → `./scripts/quality_gate.sh --mode pre-commit --profile local`
   - 包含：`scripts/ci_or_local_gate_doc_drift.sh --scope staged`
   - 包含：`check_test_assertions`、`web lint`、`ruff critical`、`secrets scan`、`gitleaks fast scan`、`structured log guard`、`env budget guard`、`IaC entrypoint guard`
-- `.githooks/pre-push` → `./scripts/quality_gate.sh --mode pre-push --heartbeat-seconds 20 --mutation-min-score 0.62 --mutation-min-effective-ratio 0.25 --mutation-max-no-tests-ratio 0.75 --profile ci --profile live-smoke --ci-dedupe 1`
+- `.githooks/pre-push` → `./scripts/quality_gate.sh --mode pre-push --heartbeat-seconds 20 --mutation-min-score 0.62 --mutation-min-effective-ratio 0.25 --mutation-max-no-tests-ratio 0.75 --profile ci --profile live-smoke --ci-dedupe 0`
   - 包含：`scripts/ci_or_local_gate_doc_drift.sh --scope push`
-  - 包含：`mutmut` 变异测试门禁（工具不可用或无有效突变体一律阻断）、`coverage>=85`、`core coverage>=95`、`web unit tests`、`python tests(no-silent-skip)`、`api cors preflight smoke`、`contract diff local gate`
+  - 包含：`coverage>=85`、`core coverage>=95`、`web unit tests`、`python tests(no-silent-skip)`、`api cors preflight smoke`、`contract diff local gate`
   - 包含：与 `preflight-fast`/`web-test-build` 对齐的本地硬门禁：`check_ci_docs_parity`、`docs env canonical guard`、`provider residual guard`、`worker line limits guard`、`schema parity gate`、`web design token guard`、`web build`、`web button coverage`
-  - 门禁解释：AI 与自动化提交默认基于标准环境（DevContainer 或等价隔离环境）执行上述检查；启用变更感知，后端变更命中时强制 mutation，无后端变更时跳过 mutation 以避免无效本地消耗。
+  - 分层解释：本地 pre-push 比 pre-commit 更严格；启用变更感知，后端变更命中时强制 mutation，无后端变更时跳过 mutation 以避免无效本地消耗。
 
 ### 5.2 远程 CI 成本治理（必须遵守）
 
-- 触发或重跑任意远程 CI 前，必须先本地执行并通过：`./scripts/quality_gate.sh --mode pre-push --heartbeat-seconds 20 --mutation-min-score 0.62 --mutation-min-effective-ratio 0.25 --mutation-max-no-tests-ratio 0.75 --profile ci --profile live-smoke --ci-dedupe 1`。
+- 触发或重跑任意远程 CI 前，必须先本地执行并通过：`./scripts/quality_gate.sh --mode pre-push --heartbeat-seconds 20 --mutation-min-score 0.62 --mutation-min-effective-ratio 0.25 --mutation-max-no-tests-ratio 0.75 --profile ci --profile live-smoke --ci-dedupe 0`。
 - 上述本地 pre-push 必须覆盖与远程 CI 同级的核心阻断检查（至少包括 `preflight-fast` + `web-test-build` 关键门禁）；远程 CI 仅作为 double-check，不得替代本地验收。
 - 远程 CI 失败后，必须先在本地复现并修复，再执行下一次远程触发；禁止“连续重跑碰运气”。
 - 同一分支存在被新提交覆盖的 in-progress 远程运行时，必须主动取消旧运行，避免重复计费。
@@ -251,7 +251,7 @@ curl -sS -X POST http://127.0.0.1:8000/api/v1/ingest/poll \
 5. 前端 lint 通过：`npm --prefix apps/web run lint`。
 6. 假断言门禁通过：`python3 scripts/check_test_assertions.py`。
 7. 改动启动或链路逻辑时至少执行一次 smoke：`./scripts/smoke_full_stack.sh`。
-8. 变异测试门禁通过：`DATABASE_URL='sqlite+pysqlite:///:memory:' uv run --extra dev --with mutmut mutmut run` 且 score `>=0.60`。
+8. 变异测试门禁通过：`DATABASE_URL='sqlite+pysqlite:///:memory:' uv run --extra dev --with mutmut mutmut run`，并满足 `score>=0.62`、`effective_ratio>=0.25`、`no_tests_ratio<=0.75`。
 
 ## 7. 交付格式（提交结果必须包含）
 

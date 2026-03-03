@@ -14,6 +14,6 @@ echo "[pre-push] quality gate (mode=pre-push)"
   --mutation-min-score 0.62 \
   --mutation-min-effective-ratio 0.25 \
   --mutation-max-no-tests-ratio 0.75 \
-  --ci-dedupe 1
+  --ci-dedupe 0
 
 echo "[pre-push] passed"

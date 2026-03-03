@@ -1,0 +1,8 @@
+{
+  "release_tag": "v0.1.0",
+  "generated_at": "2026-03-03T08:27:21.597261+00:00",
+  "mode": "dry-run",
+  "script": "scripts/deploy/canary_rollout.sh",
+  "command": "scripts/deploy/canary_rollout.sh --target 10 --step 5 --settle-seconds 1 --routing-snippet <tmp> --dry-run 1",
+  "log_file": "reports/releases/v0.1.0/canary/canary-rollout-dryrun.log"
+}

@@ -129,3 +129,15 @@ rg -n "thought_signatures|thought_signature_digest|thought_metadata|llm_meta" lo
 ## Doc Drift Trigger
 
 如修改日志格式、脱敏规则或日志落盘策略，必须同步更新本文件与 `docs/runbook-local.md`。
+
+## Notification Retry Idempotency 日志要点（2026-03）
+
+失败投递重试链路新增了外发幂等键透传（`Idempotency-Key`），用于降低重复领取窗口下的重复发送概率。
+
+- 关键链路：
+  - `activities_delivery_retry` 生成稳定重试键：`delivery-retry:{delivery_id}:attempt-{n}`
+  - `activities_email.send_with_resend` 将该键写入请求头 `Idempotency-Key`
+- 日志建议：
+  - 允许记录幂等键摘要（如 hash/前缀），用于定位重复发送问题
+  - 禁止完整输出敏感 token/authorization 头值
+  - 失败排查时优先关联：`delivery_id`、`attempt_count`、`Idempotency-Key` 摘要、`provider_message_id`

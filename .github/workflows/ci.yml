@@ -19,6 +19,12 @@ permissions:
   contents: read
   pull-requests: read
 
+env:
+  UV_PIP_VERSION: "0.10.7"
+  TEMPORAL_CLI_VERSION: "1.5.1"
+  TEMPORAL_CLI_SHA256_LINUX_AMD64: "ddc95e08b0b076efd4ea9733a3f488eb7d2be875f8834e616cd2a37358b4852d"
+  TEMPORAL_CLI_SHA256_LINUX_ARM64: "bd1b0db9f18b051026de8bf6cc1505f2510f14bbb7a8b9a4a91fff46c77454f5"
+
 jobs:
   required-ci-secrets:
     runs-on: [self-hosted, e2-core, spot, shared-pool]
@@ -28,7 +34,6 @@ jobs:
       RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
       RESEND_FROM_EMAIL: ${{ secrets.RESEND_FROM_EMAIL }}
       YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
-      LIVE_SMOKE_API_BASE_URL: ${{ secrets.LIVE_SMOKE_API_BASE_URL }}
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -38,8 +43,7 @@ jobs:
             --required GEMINI_API_KEY \
             --required RESEND_API_KEY \
             --required RESEND_FROM_EMAIL \
-            --required YOUTUBE_API_KEY \
-            --required LIVE_SMOKE_API_BASE_URL
+            --required YOUTUBE_API_KEY
 
   changes-hosted:
     runs-on: ubuntu-latest
@@ -61,7 +65,7 @@ jobs:
       - name: Detect changed paths (PR only)
         if: ${{ github.event_name == 'pull_request' }}
         id: filter
-        uses: dorny/paths-filter@v3
+        uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
         with:
           filters: |
             backend_changed:
@@ -116,7 +120,7 @@ jobs:
       - name: Detect changed paths (PR only)
         if: ${{ github.event_name == 'pull_request' }}
         id: filter
-        uses: dorny/paths-filter@v3
+        uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
         with:
           filters: |
             backend_changed:
@@ -213,7 +217,7 @@ jobs:
       - name: Setup uv
         run: |
           python -m pip install --upgrade pip
-          python -m pip install uv
+          python -m pip install "uv==${UV_PIP_VERSION}"
 
       - name: Cache uv
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
@@ -277,7 +281,7 @@ jobs:
       - name: Setup uv
         run: |
           python -m pip install --upgrade pip
-          python -m pip install uv
+          python -m pip install "uv==${UV_PIP_VERSION}"
 
       - name: Cache uv
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
@@ -384,7 +388,7 @@ jobs:
       - name: Setup uv
         run: |
           python -m pip install --upgrade pip
-          python -m pip install uv
+          python -m pip install "uv==${UV_PIP_VERSION}"
 
       - name: Cache uv
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
@@ -468,7 +472,7 @@ jobs:
 
       - name: Upload mutation stats artifact
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: mutmut-cicd-stats
           path: |
@@ -506,7 +510,7 @@ jobs:
       - name: Setup uv
         run: |
           python -m pip install --upgrade pip
-          python -m pip install uv
+          python -m pip install "uv==${UV_PIP_VERSION}"
 
       - name: Cache uv
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
@@ -651,7 +655,7 @@ jobs:
       - name: Setup uv
         run: |
           python -m pip install --upgrade pip
-          python -m pip install uv
+          python -m pip install "uv==${UV_PIP_VERSION}"
 
       - name: Cache uv
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
@@ -855,7 +859,7 @@ jobs:
       - name: Setup uv
         run: |
           python -m pip install --upgrade pip
-          python -m pip install uv
+          python -m pip install "uv==${UV_PIP_VERSION}"
 
       - name: Cache uv
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
@@ -1011,7 +1015,7 @@ jobs:
       - name: Setup uv
         run: |
           python -m pip install --upgrade pip
-          python -m pip install uv
+          python -m pip install "uv==${UV_PIP_VERSION}"
 
       - name: Cache uv
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
@@ -1049,8 +1053,29 @@ jobs:
 
       - name: Install Temporal CLI
         run: |
-          curl -sSfL https://temporal.download/cli.sh | sh
-          echo "$HOME/.temporalio/bin" >> "$GITHUB_PATH"
+          arch="$(uname -m)"
+          case "$arch" in
+            x86_64|amd64)
+              temporal_arch="amd64"
+              expected_sha="${TEMPORAL_CLI_SHA256_LINUX_AMD64}"
+              ;;
+            aarch64|arm64)
+              temporal_arch="arm64"
+              expected_sha="${TEMPORAL_CLI_SHA256_LINUX_ARM64}"
+              ;;
+            *)
+              echo "Unsupported architecture for Temporal CLI: ${arch}" >&2
+              exit 1
+              ;;
+          esac
+          archive="temporal_cli_${TEMPORAL_CLI_VERSION}_linux_${temporal_arch}.tar.gz"
+          url="https://github.com/temporalio/cli/releases/download/v${TEMPORAL_CLI_VERSION}/${archive}"
+          curl -fsSL "$url" -o "/tmp/${archive}"
+          echo "${expected_sha}  /tmp/${archive}" | sha256sum -c -
+          tar -xzf "/tmp/${archive}" -C /tmp temporal
+          mkdir -p "$HOME/.local/bin"
+          install -m 0755 /tmp/temporal "$HOME/.local/bin/temporal"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
       - name: Allocate isolated web e2e runtime resources
         run: |
@@ -1138,6 +1163,7 @@ jobs:
           UI_AUDIT_GEMINI_ENABLED: "false"
           NOTIFICATION_ENABLED: "0"
           VD_ALLOW_UNAUTH_WRITE: "1"
+          VD_CI_ALLOW_UNAUTH_WRITE: "1"
         run: |
           mkdir -p .runtime-cache
           start_web_e2e_api() {
@@ -1331,7 +1357,7 @@ jobs:
       - name: Setup uv
         run: |
           python -m pip install --upgrade pip
-          python -m pip install uv
+          python -m pip install "uv==${UV_PIP_VERSION}"
 
       - name: Cache uv
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
@@ -1408,7 +1434,7 @@ jobs:
       - name: Setup uv
         run: |
           python -m pip install --upgrade pip
-          python -m pip install uv
+          python -m pip install "uv==${UV_PIP_VERSION}"
 
       - name: Cache uv
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
@@ -1502,6 +1528,7 @@ jobs:
           migrations_changed="${{ needs.changes.outputs.migrations_changed }}"
 
           declare -A results
+          results[required_ci_secrets]="${{ needs.required-ci-secrets.result }}"
           results[changes]="${{ needs.changes.result }}"
           results[preflight_fast]="${{ needs.preflight-fast.result }}"
           results[preflight_heavy]="${{ needs.preflight-heavy.result }}"
@@ -1527,7 +1554,7 @@ jobs:
           echo "event=$event_name ref=$ref is_pr=$is_pr require_main_schedule_release_only=$require_main_schedule_release_only"
           echo "changes: backend=$backend_changed web=$web_changed deps=$deps_changed migrations=$migrations_changed"
 
-          for job in changes preflight_fast preflight_heavy; do
+          for job in required_ci_secrets changes preflight_fast preflight_heavy; do
             result="${results[$job]}"
             echo "$job=$result"
             if [[ "$result" != "success" ]]; then
@@ -1637,7 +1664,7 @@ jobs:
       - name: Setup uv
         run: |
           python -m pip install --upgrade pip
-          python -m pip install uv
+          python -m pip install "uv==${UV_PIP_VERSION}"
 
       - name: Cache uv
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
@@ -1703,7 +1730,7 @@ jobs:
       - name: Setup uv
         run: |
           python -m pip install --upgrade pip
-          python -m pip install uv
+          python -m pip install "uv==${UV_PIP_VERSION}"
 
       - name: Cache uv
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
@@ -1821,9 +1848,9 @@ jobs:
           python-version: "3.11"
 
       - name: Setup uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@e58605a9b6da7c637471fab8847a5e5a6b8df081 # v5
         with:
-          version: "0.6.17"
+          version: ${{ env.UV_PIP_VERSION }}
 
       - name: Cache uv
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
@@ -1852,8 +1879,29 @@ jobs:
 
       - name: Install Temporal CLI
         run: |
-          curl -sSfL https://temporal.download/cli.sh | sh
-          echo "$HOME/.temporalio/bin" >> "$GITHUB_PATH"
+          arch="$(uname -m)"
+          case "$arch" in
+            x86_64|amd64)
+              temporal_arch="amd64"
+              expected_sha="${TEMPORAL_CLI_SHA256_LINUX_AMD64}"
+              ;;
+            aarch64|arm64)
+              temporal_arch="arm64"
+              expected_sha="${TEMPORAL_CLI_SHA256_LINUX_ARM64}"
+              ;;
+            *)
+              echo "Unsupported architecture for Temporal CLI: ${arch}" >&2
+              exit 1
+              ;;
+          esac
+          archive="temporal_cli_${TEMPORAL_CLI_VERSION}_linux_${temporal_arch}.tar.gz"
+          url="https://github.com/temporalio/cli/releases/download/v${TEMPORAL_CLI_VERSION}/${archive}"
+          curl -fsSL "$url" -o "/tmp/${archive}"
+          echo "${expected_sha}  /tmp/${archive}" | sha256sum -c -
+          tar -xzf "/tmp/${archive}" -C /tmp temporal
+          mkdir -p "$HOME/.local/bin"
+          install -m 0755 /tmp/temporal "$HOME/.local/bin/temporal"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
       - name: Run migrations for live smoke DB
         env:
@@ -1901,22 +1949,54 @@ jobs:
 
       - name: Validate required live smoke secrets
         env:
+          HAS_LIVE_SMOKE_API_BASE_URL: ${{ secrets.LIVE_SMOKE_API_BASE_URL != '' }}
           HAS_GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY != '' }}
           HAS_RESEND_API_KEY: ${{ secrets.RESEND_API_KEY != '' }}
           HAS_RESEND_FROM_EMAIL: ${{ secrets.RESEND_FROM_EMAIL != '' }}
           HAS_YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY != '' }}
-          HAS_LIVE_SMOKE_API_BASE_URL: ${{ secrets.LIVE_SMOKE_API_BASE_URL != '' }}
         run: |
           missing=()
+          [[ "$HAS_LIVE_SMOKE_API_BASE_URL" != "true" ]] && missing+=("LIVE_SMOKE_API_BASE_URL")
           [[ "$HAS_GEMINI_API_KEY" != "true" ]] && missing+=("GEMINI_API_KEY")
           [[ "$HAS_RESEND_API_KEY" != "true" ]] && missing+=("RESEND_API_KEY")
           [[ "$HAS_RESEND_FROM_EMAIL" != "true" ]] && missing+=("RESEND_FROM_EMAIL")
           [[ "$HAS_YOUTUBE_API_KEY" != "true" ]] && missing+=("YOUTUBE_API_KEY")
-          [[ "$HAS_LIVE_SMOKE_API_BASE_URL" != "true" ]] && missing+=("LIVE_SMOKE_API_BASE_URL")
           if [[ "${#missing[@]}" -gt 0 ]]; then
             echo "live smoke is required on main/release/schedule but missing secrets: ${missing[*]}"
             exit 1
           fi
+
+      - name: Start local API and Worker for live smoke target
+        env:
+          DATABASE_URL: "postgresql+psycopg://postgres:postgres@127.0.0.1:${{ job.services.postgres.ports['5432'] }}/video_analysis_live_smoke"
+          TEMPORAL_TARGET_HOST: 127.0.0.1:7233
+          TEMPORAL_NAMESPACE: default
+          TEMPORAL_TASK_QUEUE: video-analysis-worker
+          SQLITE_STATE_PATH: /tmp/video-digestor-api-live-smoke-${{ github.run_id }}-${{ github.run_attempt }}.db
+          SQLITE_PATH: /tmp/video-digestor-live-smoke-${{ github.run_id }}-${{ github.run_attempt }}.db
+          PIPELINE_WORKSPACE_DIR: /tmp/video-digestor-live-smoke-workspace-${{ github.run_id }}-${{ github.run_attempt }}
+          PIPELINE_ARTIFACT_ROOT: /tmp/video-digestor-live-smoke-artifacts-${{ github.run_id }}-${{ github.run_attempt }}
+          VD_ALLOW_UNAUTH_WRITE: "true"
+          VD_CI_ALLOW_UNAUTH_WRITE: "true"
+        run: |
+          mkdir -p .runtime-cache
+          scripts/dev_api.sh --host 127.0.0.1 --port 18080 --no-reload > .runtime-cache/live-smoke-api.log 2>&1 &
+          echo "LIVE_SMOKE_API_PID=$!" >> "$GITHUB_ENV"
+          scripts/dev_worker.sh --no-show-hints > .runtime-cache/live-smoke-worker.log 2>&1 &
+          echo "LIVE_SMOKE_WORKER_PID=$!" >> "$GITHUB_ENV"
+
+          for _ in $(seq 1 60); do
+            if curl -fsS "http://127.0.0.1:18080/healthz" >/dev/null 2>&1; then
+              echo "local live smoke API is ready"
+              exit 0
+            fi
+            sleep 1
+          done
+
+          echo "local live smoke API failed to become ready"
+          tail -n 120 .runtime-cache/live-smoke-api.log || true
+          tail -n 120 .runtime-cache/live-smoke-worker.log || true
+          exit 1
 
       - name: Run live smoke
         env:
@@ -1946,10 +2026,18 @@ jobs:
           path: |
             .runtime-cache/e2e-live-smoke-result.json
             .runtime-cache/live-smoke-temporal.log
+            .runtime-cache/live-smoke-api.log
+            .runtime-cache/live-smoke-worker.log
 
-      - name: Stop live smoke Temporal dev server
+      - name: Stop live smoke services
         if: always()
         run: |
+          if [[ -n "${LIVE_SMOKE_API_PID:-}" ]]; then
+            kill "${LIVE_SMOKE_API_PID}" >/dev/null 2>&1 || true
+          fi
+          if [[ -n "${LIVE_SMOKE_WORKER_PID:-}" ]]; then
+            kill "${LIVE_SMOKE_WORKER_PID}" >/dev/null 2>&1 || true
+          fi
           if [[ -n "${LIVE_SMOKE_TEMPORAL_PID:-}" ]]; then
             kill "${LIVE_SMOKE_TEMPORAL_PID}" >/dev/null 2>&1 || true
           fi
@@ -2034,7 +2122,7 @@ jobs:
       - name: Setup uv
         run: |
           python -m pip install --upgrade pip
-          python -m pip install uv
+          python -m pip install "uv==${UV_PIP_VERSION}"
 
       - name: Cache uv
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
@@ -2073,7 +2161,7 @@ jobs:
       - name: Setup uv
         run: |
           python -m pip install --upgrade pip
-          python -m pip install uv
+          python -m pip install "uv==${UV_PIP_VERSION}"
 
       - name: Cache uv
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4

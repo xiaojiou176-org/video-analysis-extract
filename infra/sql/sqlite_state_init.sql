@@ -9,11 +9,18 @@ CREATE TABLE IF NOT EXISTS step_runs (
     started_at TEXT NOT NULL,
     finished_at TEXT,
     error_json TEXT,
+    error_kind TEXT,
+    retry_meta_json TEXT,
+    result_json TEXT,
+    cache_key TEXT,
     UNIQUE(job_id, step_name, attempt)
 );
 
 CREATE INDEX IF NOT EXISTS idx_step_runs_job_id_step_name
     ON step_runs(job_id, step_name);
+
+CREATE INDEX IF NOT EXISTS idx_step_runs_job_id_step_name_cache_key
+    ON step_runs(job_id, step_name, cache_key);
 
 CREATE TABLE IF NOT EXISTS locks (
     lock_key TEXT PRIMARY KEY,
@@ -27,5 +34,6 @@ CREATE INDEX IF NOT EXISTS idx_locks_expires_at
 CREATE TABLE IF NOT EXISTS checkpoints (
     job_id TEXT PRIMARY KEY,
     last_completed_step TEXT NOT NULL,
-    updated_at TEXT NOT NULL
+    updated_at TEXT NOT NULL,
+    payload_json TEXT
 );

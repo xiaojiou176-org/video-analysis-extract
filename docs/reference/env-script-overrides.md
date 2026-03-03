@@ -90,6 +90,7 @@
 迁移示例：
 
 ```bash
+export VD_API_KEY='local-dev-token'
 ./scripts/smoke_llm_real_local.sh --api-base-url http://127.0.0.1:18081 --heartbeat-seconds 20
 ```
 
@@ -222,6 +223,7 @@ workflow 管理参数：
 - `--disk-size`
 - `--image-family`
 - `--image-project`
+- `--scopes`（默认最小权限 scopes；如需旧行为可显式设为 `https://www.googleapis.com/auth/cloud-platform`）
 - `--repo`
 - `--force-delete-instance`
 - `--force-replace-app-dir`

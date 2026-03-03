@@ -1,0 +1,9 @@
+{
+  "release_tag": "v0.1.0",
+  "executed_at": "",
+  "executor": "",
+  "strategy": "sql_down_or_n_minus_1_restore",
+  "result": "pending",
+  "migrations_checked": [],
+  "notes": "Fill this file after rollback drill execution."
+}

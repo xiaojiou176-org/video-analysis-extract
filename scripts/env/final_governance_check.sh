@@ -3,7 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 HEARTBEAT_SECONDS="25"
-MUTATION_MIN_SCORE="0.60"
+MUTATION_MIN_SCORE="0.62"
 SKIP_PREPUSH="0"
 
 usage() {

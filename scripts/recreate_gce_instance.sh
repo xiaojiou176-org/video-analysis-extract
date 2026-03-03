@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # recreate_gce_instance.sh — 一键在 GCE 上重建全栈实例
-# 用法: ./scripts/recreate_gce_instance.sh [--project PROJECT_ID] [--zone ZONE] [--instance INSTANCE_NAME] [--force-delete-instance] [--force-replace-app-dir]
+# 用法: ./scripts/recreate_gce_instance.sh [--project PROJECT_ID] [--zone ZONE] [--instance INSTANCE_NAME] [--scopes SCOPE1,SCOPE2] [--force-delete-instance] [--force-replace-app-dir]
 # 依赖: gcloud CLI 已安装并已 auth login
 set -euo pipefail
 
@@ -15,6 +15,8 @@ IMAGE_PROJECT="debian-cloud"
 GITHUB_REPO_URL=""  # e.g. git@github.com:your-org/your-repo.git
 FORCE_DELETE_INSTANCE="0"
 FORCE_REPLACE_APP_DIR="0"
+DEFAULT_INSTANCE_SCOPES="https://www.googleapis.com/auth/devstorage.read_only,https://www.googleapis.com/auth/logging.write,https://www.googleapis.com/auth/monitoring.write,https://www.googleapis.com/auth/service.management.readonly,https://www.googleapis.com/auth/servicecontrol,https://www.googleapis.com/auth/trace.append"
+INSTANCE_SCOPES="$DEFAULT_INSTANCE_SCOPES"
 
 log() { printf '\033[1;36m[gce-recreate]\033[0m %s\n' "$*" >&2; }
 fail() { printf '\033[1;31m[gce-recreate] ERROR:\033[0m %s\n' "$*" >&2; exit 1; }
@@ -29,6 +31,7 @@ while [[ $# -gt 0 ]]; do
     --disk-size) DISK_SIZE="$2"; shift 2 ;;
     --image-family) IMAGE_FAMILY="$2"; shift 2 ;;
     --image-project) IMAGE_PROJECT="$2"; shift 2 ;;
+    --scopes)   INSTANCE_SCOPES="$2"; shift 2 ;;
     --repo)     GITHUB_REPO_URL="$2"; shift 2 ;;
     --force-delete-instance) FORCE_DELETE_INSTANCE=1; shift ;;
     --force-replace-app-dir) FORCE_REPLACE_APP_DIR=1; shift ;;
@@ -42,6 +45,7 @@ Usage: scripts/recreate_gce_instance.sh [options]
   --disk-size <size>
   --image-family <family>
   --image-project <project>
+  --scopes <scope_csv>   # Default: minimal GCE runtime scopes. Set cloud-platform to keep legacy behavior.
   --repo <github-url>
   --force-delete-instance
   --force-replace-app-dir
@@ -59,6 +63,7 @@ log "Project : $GCP_PROJECT"
 log "Zone    : $GCP_ZONE"
 log "Instance: $INSTANCE_NAME"
 log "Machine : $MACHINE_TYPE"
+log "Scopes  : $INSTANCE_SCOPES"
 
 validate_repo_url() {
   local value="$1"
@@ -98,7 +103,7 @@ gcloud compute instances create "$INSTANCE_NAME" \
   --image-family="$IMAGE_FAMILY" \
   --image-project="$IMAGE_PROJECT" \
   --tags="http-server,https-server,vd-api" \
-  --scopes="https://www.googleapis.com/auth/cloud-platform"
+  --scopes="$INSTANCE_SCOPES"
 
 # ── Step 3: Open firewall (idempotent) ────────────────────────────────────────
 log "Ensuring firewall rules …"
@@ -137,8 +142,32 @@ export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
 apt-get install -y -qq git curl nginx postgresql postgresql-contrib redis-server python3-pip python3-venv docker.io docker-compose
 
-# Install uv (Python package manager)
-curl -LsSf https://astral.sh/uv/install.sh | sh
+# Install uv (Python package manager) with pinned version + checksum validation.
+UV_VERSION="0.10.7"
+case "$(uname -m)" in
+  x86_64|amd64)
+    UV_TARGET="uv-x86_64-unknown-linux-gnu"
+    UV_SHA256="9ac6cee4e379a5abfca06e78a777b26b7ba1f81cb7935b97054d80d85ac00774"
+    ;;
+  aarch64|arm64)
+    UV_TARGET="uv-aarch64-unknown-linux-gnu"
+    UV_SHA256="20efc27d946860093650bcf26096a016b10fdaf03b13c33b75fbde02962beea9"
+    ;;
+  *)
+    echo "unsupported architecture for uv: $(uname -m)" >&2
+    exit 1
+    ;;
+esac
+UV_ARCHIVE="${UV_TARGET}.tar.gz"
+UV_URL="https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/${UV_ARCHIVE}"
+curl -fsSL "${UV_URL}" -o "/tmp/${UV_ARCHIVE}"
+echo "${UV_SHA256}  /tmp/${UV_ARCHIVE}" | sha256sum -c -
+tar -xzf "/tmp/${UV_ARCHIVE}" -C /tmp
+mkdir -p "$HOME/.local/bin"
+install -m 0755 "/tmp/${UV_TARGET}/uv" "$HOME/.local/bin/uv"
+if [[ -f "/tmp/${UV_TARGET}/uvx" ]]; then
+  install -m 0755 "/tmp/${UV_TARGET}/uvx" "$HOME/.local/bin/uvx"
+fi
 export PATH="$HOME/.local/bin:$PATH"
 
 # Enable & start services

@@ -24,6 +24,7 @@ IGNORE_REFS = {
     "HOME",
     "PATH",
     "PWD",
+    "PYTEST_CURRENT_TEST",
     "PYTHONPATH",
 }
 

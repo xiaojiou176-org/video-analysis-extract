@@ -19,6 +19,7 @@ apps/web/.next/
 apps/web/.next-e2e-*/
 apps/web/out/
 apps/web/coverage/
+apps/web/tsconfig.tsbuildinfo
 build/
 dist/
 

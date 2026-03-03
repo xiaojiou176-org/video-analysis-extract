@@ -1,0 +1,7 @@
+{
+  "version": 1,
+  "owner": "platform",
+  "updated_at": "2026-03-03T12:00:00Z",
+  "policy": "Each up migration must have either a .down.sql rollback path or an explicit blocker entry. Blockers are release-gating and must be retired by adding real down migrations.",
+  "migrations": {}
+}

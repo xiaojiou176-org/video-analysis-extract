@@ -8,6 +8,7 @@
 - 锁文件：`uv.lock`
 - 安装命令：`uv sync --frozen --extra dev --extra e2e`
 - 测试重试基线：默认 `pytest reruns=0`（仅在专门 flaky/nightly 任务中显式开启重试）
+- 测试标记治理：`pyproject.toml` 统一声明 `allow_unauth_write` marker，用于显式标注需要写入白名单的测试。
 
 ### Web (Node)
 
@@ -61,6 +62,7 @@ npm --prefix apps/web run build
 - 禁止提交与清单不一致的锁文件。
 - 禁止绕过 `--frozen` 流程在 CI 中安装 Python 依赖。
 - 禁止在 CI 中使用“临时 mutmut 参数”覆盖 `pyproject.toml` 的核心范围配置。
+- 使用 `allow_unauth_write` marker 的测试必须显式启用开关环境变量：`VD_ALLOW_UNAUTH_WRITE=true`（必要时在 CI 额外设置 `VD_CI_ALLOW_UNAUTH_WRITE=true`）。
 - 依赖升级若影响运行命令或环境变量，必须同步更新：
   - `README.md`
   - `docs/runbook-local.md`

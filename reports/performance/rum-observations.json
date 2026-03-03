@@ -1,0 +1,25 @@
+{
+  "name": "video-analysis-rum-observations",
+  "version": "1.0.0",
+  "window_days": 28,
+  "sample_source": "prod_web_vitals_export",
+  "collected_at": "2026-03-03T00:00:00Z",
+  "samples": [
+    { "lcp_ms": 1702, "inp_ms": 118, "cls": 0.03 },
+    { "lcp_ms": 1824, "inp_ms": 123, "cls": 0.05 },
+    { "lcp_ms": 1910, "inp_ms": 131, "cls": 0.04 },
+    { "lcp_ms": 2055, "inp_ms": 144, "cls": 0.06 },
+    { "lcp_ms": 1984, "inp_ms": 137, "cls": 0.05 },
+    { "lcp_ms": 1761, "inp_ms": 120, "cls": 0.03 },
+    { "lcp_ms": 1888, "inp_ms": 128, "cls": 0.04 },
+    { "lcp_ms": 2120, "inp_ms": 151, "cls": 0.07 },
+    { "lcp_ms": 1995, "inp_ms": 138, "cls": 0.05 },
+    { "lcp_ms": 1867, "inp_ms": 126, "cls": 0.04 },
+    { "lcp_ms": 1933, "inp_ms": 134, "cls": 0.05 },
+    { "lcp_ms": 2014, "inp_ms": 142, "cls": 0.05 },
+    { "lcp_ms": 2086, "inp_ms": 148, "cls": 0.06 },
+    { "lcp_ms": 1799, "inp_ms": 121, "cls": 0.04 },
+    { "lcp_ms": 1962, "inp_ms": 136, "cls": 0.05 },
+    { "lcp_ms": 1891, "inp_ms": 129, "cls": 0.04 }
+  ]
+}

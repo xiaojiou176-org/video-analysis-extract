@@ -100,7 +100,8 @@ devcontainer up --workspace-folder .
   - 翻译回退路径关闭 function calling。
 - Computer Use（函数调用回合）安全闸：
   - 仅允许 `select_supporting_frames` 与 `build_evidence_citations` 两个工具；非白名单调用会被标记 `blocked`。
-  - `computer_use` 入口由 `GEMINI_COMPUTER_USE_*` 与 `overrides.llm*.enable_computer_use` 控制；当 `enable_computer_use=true` 且未显式提供 handler 时，pipeline 会默认注入 `build_default_computer_use_handler`。
+  - `computer_use` 入口由 `GEMINI_COMPUTER_USE_*` 与 `overrides.llm*.enable_computer_use` 控制；当 `GEMINI_COMPUTER_USE_ENABLED=false` 时，请求级 override 不能强行开启。
+  - 当 `enable_computer_use=true` 且未显式提供 handler 时，pipeline 会默认注入 `build_default_computer_use_handler`。
   - `computer_use_require_confirmation` 默认 `true`；即使未来接入 handler，未确认也会返回 `computer_use_confirmation_required`。
   - 最大调用回合由 `max_function_call_rounds` 控制（默认 `2`，可由 `overrides.llm.max_function_call_rounds` / `overrides.llm_outline.max_function_call_rounds` / `overrides.llm_digest.max_function_call_rounds` 覆盖）。
   - 达到上限后以 `termination_reason=max_function_call_rounds_reached` 结束当前轮。
@@ -172,6 +173,8 @@ done
 sqlite3 "$SQLITE_PATH" < infra/sql/sqlite_state_init.sql
 ```
 
+说明：`20260222_000010_phase4_status_contract.sql` 已包含历史脏状态防御性归一化，老库迁移时不会因为旧状态值直接失败。
+
 ### 5) 启动应用进程
 
 分别在 3 个终端启动：
@@ -226,10 +229,10 @@ uv run --with pytest --with playwright pytest apps/web/tests/e2e -q
 
 测试与门禁口径更新（2026-02）：
 
-- 远程 CI 成本治理：触发或重跑 GitHub Actions 前，必须先本地跑通 `./scripts/quality_gate.sh --mode pre-push --heartbeat-seconds 20 --mutation-min-score 0.62 --mutation-min-effective-ratio 0.25 --mutation-max-no-tests-ratio 0.75 --profile ci --profile live-smoke --ci-dedupe 1 --strict-full-run 1`。
+- 远程 CI 成本治理：触发或重跑 GitHub Actions 前，必须先本地跑通 `./scripts/quality_gate.sh --mode pre-push --heartbeat-seconds 20 --mutation-min-score 0.62 --mutation-min-effective-ratio 0.25 --mutation-max-no-tests-ratio 0.75 --profile ci --profile live-smoke --ci-dedupe 0`。
 - 远程失败后必须先本地复现与修复，再触发下一次远程运行；禁止连续重跑碰运气。
 - CI 预检拆分为 `preflight-fast` + `preflight-heavy`，多数 job 先依赖 fast 以减少起跑阻塞，最终由 aggregate gate 同时约束两者成功。
-- `quality-gate-pre-push` 在 CI 全事件（PR/push/schedule）执行并透传 `--changed-*` 标记，作为远端最重门禁（含 mutation）；独立 lint/unit/coverage 作业提供并行交叉验证。
+- `quality-gate-pre-push` 在 CI 全事件（PR/push/schedule）执行并透传 `--changed-*` 标记，作为远端最重门禁（该作业显式 `--skip-mutation 1`）；mutation 由独立 `mutation-testing` job 执行，并与 lint/unit/coverage 作业形成并行交叉验证。
 - 本地 `pre-push` 新增硬门禁：`api cors preflight smoke (OPTIONS DELETE)` 与 `contract diff local gate (base vs head)`，先于远程 CI 拦截跨端链路与契约回归。
 - 本地 `pre-push` 进一步对齐远端 `preflight-fast` + `web-test-build`：`check_ci_docs_parity`、`docs env canonical guard`、`provider residual guard`、`worker line limits`、`schema parity`、`web design token guard`、`web build`、`web button coverage`。
 - Web E2E 默认轻量化：trace 默认 `off`、video 默认 `retain-on-failure`，并仅在失败时上传重工件。
@@ -281,11 +284,13 @@ pre-commit run --all-files
 - `web-e2e` 在 CI 主路径是 Playwright + real API（不是 mock API，也不是“真实外部网站 smoke”）。
 - `external-playwright-smoke` 是独立作业，会在 CI 里真实访问外部站点（当前为 `https://example.com`），用于验证浏览器外网可达性。
   默认参数：`browser=chromium`、`expect_text="Example Domain"`、`timeout_ms=45000`、`retries=2`。
-- `pr-llm-real-smoke` 只在 PR 场景按条件运行：同仓 PR 且配置了 `GEMINI_API_KEY`；否则允许 `skipped` 不阻塞 aggregate gate。
-  触发表达式与 CI 一致：`pull_request && same-repo-pr && GEMINI_API_KEY != ''`。
+- `pr-llm-real-smoke` 仅在 PR 场景按条件运行：`pull_request && same-repo-pr && backend_changed`；不满足条件时可 `skipped` 且不阻塞 aggregate gate。
+- `GEMINI_API_KEY` 属于该作业运行期必需 secret（用于真实 Gemini 调用），不参与 job `if` 触发表达式；作业被触发后若缺失会失败。
+- `external-playwright-smoke` 仅在 `push` 到 `main` 或 nightly `schedule` 触发；PR 下该作业通常为 `skipped`，aggregate gate 接受 `success|skipped`。
+- `web-e2e` 默认注入 real API：`NEXT_PUBLIC_API_BASE_URL` 由 `--web-e2e-api-base-url`（默认 `http://127.0.0.1:18080`）提供；仅在显式开启 `--web-e2e-use-mock-api=1`（或 `WEB_E2E_USE_MOCK_API=1`）时切换 mock API。
 - 若要复用外部 Web 实例，可用：`uv run --with pytest --with playwright pytest apps/web/tests/e2e -q --web-e2e-base-url 'http://127.0.0.1:3000'`。
 - PR 不强制 `live-smoke`；`main` push 与 nightly schedule 强制 `live-smoke=success`。
-- `live-smoke` 为真实 LLM/provider 链路，CI 需要：`GEMINI_API_KEY`、`RESEND_API_KEY`、`RESEND_FROM_EMAIL`、`YOUTUBE_API_KEY`，并通过 `--api-base-url` 传入目标 API 地址。
+- `live-smoke` 为真实 LLM/provider 链路，CI 需要：`LIVE_SMOKE_API_BASE_URL`、`GEMINI_API_KEY`、`RESEND_API_KEY`、`RESEND_FROM_EMAIL`、`YOUTUBE_API_KEY`；工作流会拉起本地 API/Worker，并通过 `LIVE_SMOKE_API_BASE_URL` 作为 smoke 目标。
 - `scripts/smoke_full_stack.sh` 是本地联调用 smoke，不等同于 CI 强制 `live-smoke` 门禁。
 - 两类真实 smoke 的本地复现命令见 `docs/testing.md` 的“本地复现两类真实 Smoke（CI 同口径）”。
 
@@ -294,6 +299,8 @@ pre-commit run --all-files
 系统与业务路由（FastAPI）：
 
 - `GET /healthz`
+- `GET /readyz`
+- `GET /metrics`
 - `GET /api/v1/subscriptions`
 - `POST /api/v1/subscriptions`
 - `POST /api/v1/subscriptions/batch-update-category`
@@ -324,7 +331,7 @@ pre-commit run --all-files
 管理端点鉴权（由 `VD_API_KEY` + `VD_ALLOW_UNAUTH_WRITE` 控制）：
 
 - 默认安全模式：即使 `VD_API_KEY` 为空或未设置，写操作也要求令牌。
-- 仅当 `VD_ALLOW_UNAUTH_WRITE=true` 且 `VD_API_KEY` 为空时，才允许无令牌写操作（本地兼容开关）。
+- 仅在以下两类测试场景允许无令牌写操作（且 `VD_API_KEY` 为空）：`PYTEST_CURRENT_TEST` 存在，或 GitHub Actions CI 同时满足 `VD_ALLOW_UNAUTH_WRITE=true`、`CI=true`、`GITHUB_ACTIONS=true`、`VD_CI_ALLOW_UNAUTH_WRITE=true`。
 - 以下端点必须携带令牌，否则返回 `401/403`：
   - `POST /api/v1/subscriptions`
   - `POST /api/v1/subscriptions/batch-update-category`
@@ -409,6 +416,28 @@ pre-commit run --all-files
 ```
 
 完整参数说明见 `docs/runbook-local.md`。
+
+## 发布前巡检（Release Readiness）
+
+```bash
+# 1) 生成发布预检证据（tag / changelog / perf / rum / rollback / canary）
+python3 scripts/release/generate_release_prechecks.py
+
+# 2) 合并到发布 readiness 报告
+python3 scripts/build_release_readiness_report.py \
+  --kpi-json reports/release-readiness/ci-kpi-summary.json \
+  --check-json .runtime-cache/temp/release-readiness/prechecks.json \
+  --json-out reports/release-readiness/release-readiness.json \
+  --md-out reports/release-readiness/release-readiness.md
+
+# 3) 生成 N-1 回滚制品清单（发版前执行）
+scripts/release/capture_release_manifest.sh <release-tag>
+
+# 4) DB 回滚链路门禁（缺失 down / 无效 down / blocker 未清零都会阻断发版）
+python3 scripts/release/verify_db_rollback_readiness.py \
+  --release-tag <release-tag> \
+  --output reports/releases/<release-tag>/rollback/db-rollback-readiness.json
+```
 
 ## 文档导航
 

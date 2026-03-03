@@ -1,0 +1,14 @@
+{
+  "name": "video-analysis-rum-baseline",
+  "version": "1.0.0",
+  "source": "crux_or_internal_rum",
+  "window_days": 28,
+  "generated_at": "2026-03-02T00:00:00Z",
+  "metrics": {
+    "lcp_ms_p75": null,
+    "inp_ms_p75": null,
+    "cls_p75": null,
+    "sample_size": null
+  },
+  "notes": "Populate from real user traffic data before release decision."
+}
