@@ -176,6 +176,20 @@ def test_api_config_from_env_reads_values(monkeypatch: pytest.MonkeyPatch) -> No
     assert config.max_base64_bytes == 1
 
 
+def test_api_config_from_env_falls_back_for_invalid_numeric_values(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("VD_API_BASE_URL", raising=False)
+    monkeypatch.setenv("VD_API_TIMEOUT_SEC", "oops")
+    monkeypatch.setenv("VD_MCP_MAX_BASE64_BYTES", "invalid")
+
+    config = ApiConfig.from_env()
+
+    assert config.base_url == "http://127.0.0.1:8000"
+    assert config.timeout_sec == 20.0
+    assert config.max_base64_bytes == 2 * 1024 * 1024
+
+
 def test_create_server_registers_tools_and_normalizes_error_payloads(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

@@ -2,15 +2,19 @@ type QueryValue = string | number | boolean | null | undefined;
 
 type ResolveOptions = {
 	allowFallback?: boolean;
+	strict?: boolean;
 };
 
+const DEFAULT_LOCAL_API_BASE_URL = "http://127.0.0.1:8000";
+
 export function resolveApiBaseUrl(options: ResolveOptions = {}): string {
-	const { allowFallback = false } = options;
+	const strict = options.strict === true;
+	const allowFallback = strict ? false : options.allowFallback ?? true;
 	const rawBase = process.env.NEXT_PUBLIC_API_BASE_URL;
 	const base = rawBase?.trim();
 	if (!base) {
 		if (allowFallback) {
-			return "http://127.0.0.1:8000";
+			return DEFAULT_LOCAL_API_BASE_URL;
 		}
 		throw new Error("API base URL is not configured. Set NEXT_PUBLIC_API_BASE_URL.");
 	}
@@ -28,7 +32,19 @@ export function resolveApiBaseUrl(options: ResolveOptions = {}): string {
 		throw new Error(`Invalid API base URL protocol '${parsed.protocol}'. Use http:// or https://.`);
 	}
 
-	return base.replace(/\/$/, "");
+	if (parsed.username || parsed.password) {
+		throw new Error("Invalid API base URL credentials. Do not include username/password.");
+	}
+
+	if (parsed.search || parsed.hash) {
+		throw new Error("Invalid API base URL suffix. Query/hash is not allowed.");
+	}
+
+	if (parsed.pathname !== "/" && parsed.pathname !== "") {
+		throw new Error("Invalid API base URL path. Use bare origin like https://api.example.com.");
+	}
+
+	return parsed.origin;
 }
 
 const SENSITIVE_QUERY_SEGMENTS = new Set([
@@ -53,7 +69,20 @@ export function isSensitiveQueryKey(key: string): boolean {
 }
 
 export function buildApiUrl(path: string, query?: Record<string, QueryValue>): string {
-	const target = new URL(path, resolveApiBaseUrl({ allowFallback: true }));
+	return buildApiUrlWithOptions(path, query);
+}
+
+export function buildApiUrlWithOptions(
+	path: string,
+	query?: Record<string, QueryValue>,
+	resolveOptions: ResolveOptions = {},
+): string {
+	const normalizedPath = path.trim();
+	if (!normalizedPath.startsWith("/") || normalizedPath.startsWith("//")) {
+		throw new Error("ERR_INVALID_API_PATH");
+	}
+
+	const target = new URL(normalizedPath, resolveApiBaseUrl(resolveOptions));
 	if (!query) {
 		return target.toString();
 	}
@@ -70,7 +99,7 @@ export function buildApiUrl(path: string, query?: Record<string, QueryValue>): s
 }
 
 export function buildArtifactAssetUrl(jobId: string, path: string): string {
-	return buildApiUrl("/api/v1/artifacts/assets", { job_id: jobId, path });
+	return buildApiUrlWithOptions("/api/v1/artifacts/assets", { job_id: jobId, path });
 }
 
 const ALLOWED_EXTERNAL_PROTOCOLS = new Set(["http:", "https:"]);
@@ -87,6 +116,9 @@ export function sanitizeExternalUrl(rawUrl: string): string | null {
 		return null;
 	}
 	if (!ALLOWED_EXTERNAL_PROTOCOLS.has(parsed.protocol)) {
+		return null;
+	}
+	if (parsed.username || parsed.password) {
 		return null;
 	}
 	return parsed.toString();

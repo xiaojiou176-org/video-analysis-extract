@@ -4,7 +4,14 @@ from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
-from apps.mcp.tools._common import ApiCall, is_error_payload, to_int, to_optional_str
+from apps.mcp.tools._common import (
+    ApiCall,
+    invalid_argument,
+    is_error_payload,
+    parse_bounded_int,
+    to_int,
+    to_optional_str,
+)
 
 
 def _normalize_provider_item(item: Any) -> dict[str, Any]:
@@ -33,6 +40,21 @@ def register_health_tools(mcp: FastMCP, api_call: ApiCall) -> None:
         normalized_scope = str(scope or "all").strip().lower()
         if normalized_scope not in {"system", "providers", "all"}:
             normalized_scope = "all"
+        normalized_window_hours, window_hours_error = parse_bounded_int(
+            window_hours,
+            field="window_hours",
+            min_value=1,
+            max_value=24 * 30,
+            required=True,
+        )
+        if window_hours_error is not None or normalized_window_hours is None:
+            return invalid_argument(
+                window_hours_error or "window_hours is invalid",
+                method="GET",
+                path="vd.health.get",
+                field="window_hours",
+                value=window_hours,
+            )
 
         payload: dict[str, Any] = {"scope": normalized_scope}
         if normalized_scope in {"system", "all"}:
@@ -47,7 +69,7 @@ def register_health_tools(mcp: FastMCP, api_call: ApiCall) -> None:
             providers_response = api_call(
                 "GET",
                 "/api/v1/health/providers",
-                params={"window_hours": window_hours},
+                params={"window_hours": normalized_window_hours},
             )
             if is_error_payload(providers_response):
                 return providers_response

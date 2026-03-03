@@ -1,9 +1,16 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { apiClient } from "@/lib/api/client";
 
 describe("apiClient identifier hardening", () => {
+	const envSnapshot = { ...process.env };
+
+	beforeEach(() => {
+		process.env = { ...envSnapshot, NEXT_PUBLIC_API_BASE_URL: "https://api.example.com" };
+	});
+
 	afterEach(() => {
+		process.env = { ...envSnapshot };
 		vi.restoreAllMocks();
 	});
 
@@ -27,6 +34,15 @@ describe("apiClient identifier hardening", () => {
 		expect(() =>
 			apiClient.getArtifactMarkdown({
 				video_url: "javascript:alert(1)",
+				include_meta: true,
+			}),
+		).toThrow("ERR_INVALID_INPUT");
+	});
+
+	it("rejects artifact lookup video_url with embedded credentials", () => {
+		expect(() =>
+			apiClient.getArtifactMarkdown({
+				video_url: "https://user:pass@example.com/watch?v=1",
 				include_meta: true,
 			}),
 		).toThrow("ERR_INVALID_INPUT");

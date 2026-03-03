@@ -1,7 +1,8 @@
-export type Platform = string;
-export type SourceType = string;
+type ExtensibleString = string & {};
+export type Platform = "youtube" | "bilibili" | ExtensibleString;
+export type SourceType = "url" | "youtube_channel_id" | "bilibili_uid" | ExtensibleString;
 export type SubscriptionCategory = "tech" | "creator" | "macro" | "ops" | "misc";
-export type SubscriptionAdapterType = string;
+export type SubscriptionAdapterType = "rsshub_route" | "rss_generic" | ExtensibleString;
 export type JobStatus = "queued" | "running" | "succeeded" | "failed";
 export type PipelineFinalStatus = "succeeded" | "degraded" | "failed";
 export type VideoProcessMode = "full" | "text_only" | "refresh_comments" | "refresh_llm";
@@ -112,6 +113,7 @@ export type JobStepDetail = JobStepSummary & {
 	error_kind: string | null;
 	retry_meta: Record<string, unknown> | null;
 	result: Record<string, unknown> | null;
+	thought_metadata: Record<string, unknown>;
 	cache_key: string | null;
 };
 
@@ -145,6 +147,15 @@ export type Job = {
 	pipeline_final_status: PipelineFinalStatus | null;
 	artifacts_index: Record<string, string>;
 	mode: VideoProcessMode | null;
+	notification_retry: NotificationRetrySummary | null;
+};
+
+export type NotificationRetrySummary = {
+	delivery_id: string;
+	status: string;
+	attempt_count: number;
+	next_retry_at: string | null;
+	last_error_kind: string | null;
 };
 
 export type ArtifactMarkdownWithMeta = {

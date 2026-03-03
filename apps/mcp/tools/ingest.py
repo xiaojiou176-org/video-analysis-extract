@@ -5,7 +5,7 @@ from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
-from apps.mcp.tools._common import invalid_argument, parse_uuid
+from apps.mcp.tools._common import invalid_argument, parse_bounded_int, parse_uuid
 
 ApiCall = Callable[..., dict[str, Any]]
 
@@ -28,12 +28,26 @@ def register_ingest_tools(mcp: FastMCP, api_call: ApiCall) -> None:
                     field="subscription_id",
                     value=subscription_id,
                 )
+        normalized_max_new_videos, max_new_videos_error = parse_bounded_int(
+            max_new_videos,
+            field="max_new_videos",
+            min_value=1,
+            max_value=500,
+        )
+        if max_new_videos_error is not None:
+            return invalid_argument(
+                max_new_videos_error,
+                method="POST",
+                path="/api/v1/ingest/poll",
+                field="max_new_videos",
+                value=max_new_videos,
+            )
         return api_call(
             "POST",
             "/api/v1/ingest/poll",
             json_body={
                 "subscription_id": normalized_subscription_id,
                 "platform": platform,
-                "max_new_videos": max_new_videos,
+                "max_new_videos": normalized_max_new_videos,
             },
         )

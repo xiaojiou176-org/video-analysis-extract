@@ -63,6 +63,25 @@ def test_api_client_returns_json_dict(monkeypatch: pytest.MonkeyPatch) -> None:
     assert payload["ok"] is True
 
 
+def test_api_config_from_env_clamps_retry_settings(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("VD_API_BASE_URL", "http://api")
+    monkeypatch.setenv("VD_API_RETRY_ATTEMPTS", "999")
+    monkeypatch.setenv("VD_API_RETRY_BACKOFF_SEC", "9")
+
+    config = ApiConfig.from_env()
+
+    assert config.retry_attempts == 5
+    assert config.retry_backoff_sec == 5.0
+
+    monkeypatch.setenv("VD_API_RETRY_ATTEMPTS", "0")
+    config = ApiConfig.from_env()
+    assert config.retry_attempts == 1
+
+    monkeypatch.setenv("VD_API_RETRY_ATTEMPTS", "not-a-number")
+    config = ApiConfig.from_env()
+    assert config.retry_attempts == 1
+
+
 def test_api_client_wraps_non_json_as_text(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         "apps.mcp.server.httpx.Client",
@@ -114,6 +133,140 @@ def test_api_client_maps_timeout_to_upstream_timeout(monkeypatch: pytest.MonkeyP
     assert err.details["path"] == "/slow"
 
 
+def test_api_client_retries_idempotent_get_timeout_then_succeeds(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[int] = []
+    outcomes: list[httpx.Response | Exception] = [
+        httpx.TimeoutException("first timeout"),
+        _response(json_body={"ok": True}),
+    ]
+
+    class _ClientWithOutcomes:
+        def __enter__(self) -> Self:
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> bool:
+            return False
+
+        def request(self, **kwargs: Any) -> httpx.Response:
+            calls.append(1)
+            outcome = outcomes.pop(0)
+            if isinstance(outcome, Exception):
+                raise outcome
+            return outcome
+
+    monkeypatch.setattr("apps.mcp.server.time.sleep", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        "apps.mcp.server.httpx.Client",
+        lambda timeout: _ClientWithOutcomes(),
+    )
+    client = ApiClient(ApiConfig(base_url="http://api", timeout_sec=2, api_key=None, retry_attempts=2))
+
+    payload = client.request("GET", "/healthz")
+
+    assert payload["ok"] is True
+    assert len(calls) == 2
+
+
+def test_api_client_retries_idempotent_get_retryable_status_then_succeeds(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[int] = []
+    outcomes: list[httpx.Response] = [
+        _response(status_code=503, json_body={"message": "temporarily unavailable"}),
+        _response(json_body={"ok": True}),
+    ]
+
+    class _ClientWithRetryableStatus:
+        def __enter__(self) -> Self:
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> bool:
+            return False
+
+        def request(self, **kwargs: Any) -> httpx.Response:
+            calls.append(1)
+            return outcomes.pop(0)
+
+    monkeypatch.setattr("apps.mcp.server.time.sleep", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        "apps.mcp.server.httpx.Client",
+        lambda timeout: _ClientWithRetryableStatus(),
+    )
+    client = ApiClient(ApiConfig(base_url="http://api", timeout_sec=2, api_key=None, retry_attempts=2))
+
+    payload = client.request("GET", "/healthz")
+
+    assert payload["ok"] is True
+    assert len(calls) == 2
+
+
+def test_api_client_does_not_retry_non_retryable_status_even_for_get(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[int] = []
+    outcomes: list[httpx.Response] = [
+        _response(status_code=500, json_body={"message": "boom"}),
+        _response(json_body={"ok": True}),
+    ]
+
+    class _ClientWithNonRetryableStatus:
+        def __enter__(self) -> Self:
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> bool:
+            return False
+
+        def request(self, **kwargs: Any) -> httpx.Response:
+            calls.append(1)
+            return outcomes.pop(0)
+
+    monkeypatch.setattr("apps.mcp.server.time.sleep", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        "apps.mcp.server.httpx.Client",
+        lambda timeout: _ClientWithNonRetryableStatus(),
+    )
+    client = ApiClient(ApiConfig(base_url="http://api", timeout_sec=2, api_key=None, retry_attempts=3))
+
+    with pytest.raises(ApiError) as exc_info:
+        client.request("GET", "/boom")
+
+    assert exc_info.value.code == "UPSTREAM_HTTP_ERROR"
+    assert len(calls) == 1
+
+
+def test_api_client_does_not_retry_post_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[int] = []
+    timeout_exc = httpx.TimeoutException("timed out")
+
+    class _AlwaysTimeoutClient:
+        def __enter__(self) -> Self:
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> bool:
+            return False
+
+        def request(self, **kwargs: Any) -> httpx.Response:
+            calls.append(1)
+            raise timeout_exc
+
+    monkeypatch.setattr("apps.mcp.server.time.sleep", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        "apps.mcp.server.httpx.Client",
+        lambda timeout: _AlwaysTimeoutClient(),
+    )
+    client = ApiClient(ApiConfig(base_url="http://api", timeout_sec=2, api_key=None, retry_attempts=3))
+
+    with pytest.raises(ApiError) as exc_info:
+        client.request("POST", "/slow")
+
+    err = exc_info.value
+    assert err.code == "UPSTREAM_TIMEOUT"
+    assert err.details["attempts"] == 1
+    assert len(calls) == 1
+
+
 def test_normalize_error_details_keeps_expected_fields_only() -> None:
     normalized = _normalize_error_details(
         {
@@ -124,6 +277,7 @@ def test_normalize_error_details_keeps_expected_fields_only() -> None:
             "body_preview": {"detail": "bad"},
             "size_bytes": 1024,
             "max_size_bytes": 256,
+            "attempts": 2,
             "ignored": "x",
         }
     )
@@ -134,6 +288,7 @@ def test_normalize_error_details_keeps_expected_fields_only() -> None:
     assert "bad" in normalized["body_preview"]
     assert normalized["size_bytes"] == 1024
     assert normalized["max_size_bytes"] == 256
+    assert normalized["attempts"] == 2
     assert "ignored" not in normalized
 
 
@@ -142,8 +297,14 @@ def test_normalize_error_details_redacts_secrets() -> None:
         {
             "method": "GET",
             "path": "/x",
-            "error": "Authorization: Bearer super-secret-token",
-            "body_preview": '{"token":"abc","api_key=secret-key"}',
+            "error": (
+                "Authorization: Bearer super-secret-token "
+                "ASIA_TEST_TOKEN_12345 access_token=abc123 refresh_token=def456"
+            ),
+            "body_preview": (
+                '{"token":"abc","api_key=secret-key","access_token":"abc123",'
+                '"refresh_token":"def456","aws":"ASIA_TEST_TOKEN_12345"}'
+            ),
         }
     )
 
@@ -151,6 +312,12 @@ def test_normalize_error_details_redacts_secrets() -> None:
     assert "[REDACTED]" in normalized["error"]
     assert "secret-key" not in normalized["body_preview"]
     assert "[REDACTED]" in normalized["body_preview"]
+    assert "abc123" not in normalized["error"]
+    assert "def456" not in normalized["error"]
+    assert "abc123" not in normalized["body_preview"]
+    assert "def456" not in normalized["body_preview"]
+    assert "ASIA_TEST_TOKEN_12345" not in normalized["error"]
+    assert "ASIA_TEST_TOKEN_12345" not in normalized["body_preview"]
 
 
 def test_api_error_to_payload_redacts_message_and_json_style_secret() -> None:

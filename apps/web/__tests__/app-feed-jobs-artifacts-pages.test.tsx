@@ -232,8 +232,33 @@ describe("feed/jobs/artifacts pages", () => {
 				"href",
 				"http://127.0.0.1:8000/api/v1/artifacts/assets?job_id=job-2&path=frame-1.png",
 			);
-			expect(screen.getByLabelText("Screenshot 1: frame-1.png")).toBeInTheDocument();
+			expect(screen.getByAltText("Screenshot 1: frame-1.png")).toBeInTheDocument();
 			expect(screen.getByTestId("markdown-preview")).toHaveTextContent("# artifact");
+		},
+		PAGE_TEST_TIMEOUT_MS,
+	);
+
+	it(
+		"does not embed preview for non-image artifact extensions",
+		async () => {
+			mockGetArtifactMarkdown.mockResolvedValue({
+				markdown: "# artifact",
+				meta: {
+					frame_files: ["frame-1.html"],
+					job: { id: "job-2" },
+				},
+			});
+
+			render(await ArtifactsPage({ searchParams: { job_id: "job-2" } }));
+
+			expect(screen.getByRole("link", { name: "查看截图 1" })).toHaveAttribute(
+				"href",
+				"http://127.0.0.1:8000/api/v1/artifacts/assets?job_id=job-2&path=frame-1.html",
+			);
+			expect(screen.queryByAltText("Screenshot 1: frame-1.html")).not.toBeInTheDocument();
+			expect(
+				screen.getByText("截图文件格式不支持内嵌预览，请通过链接打开：", { exact: false }),
+			).toBeInTheDocument();
 		},
 		PAGE_TEST_TIMEOUT_MS,
 	);

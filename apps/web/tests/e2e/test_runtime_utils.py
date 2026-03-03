@@ -5,7 +5,12 @@ import threading
 
 from support.assertions import wait_for_call_count, wait_for_http_call
 from support.mock_api import MockApiState
-from support.runtime_utils import is_port_in_use_error, with_free_port_retry
+from support.runtime_utils import (
+    is_port_in_use_error,
+    resolve_worker_id,
+    with_free_port_retry,
+    worker_dist_dir,
+)
 
 
 def test_with_free_port_retry_recovers_from_port_contention() -> None:
@@ -69,3 +74,34 @@ def test_wait_helpers_resume_on_state_notification() -> None:
     timer.join(timeout=1)
 
     assert call["method"] == "POST"
+
+
+def test_resolve_worker_id_prefers_xdist_worker() -> None:
+    resolved = resolve_worker_id(
+        "gw9",
+        xdist_worker_id="gw2",
+        browser_name="chromium",
+        process_id=123,
+    )
+    assert resolved == "gw2"
+
+
+def test_resolve_worker_id_falls_back_to_cli_worker() -> None:
+    resolved = resolve_worker_id(
+        "gw1",
+        xdist_worker_id="",
+        browser_name="firefox",
+        process_id=456,
+    )
+    assert resolved == "gw1"
+
+
+def test_resolve_worker_id_generates_process_scoped_default() -> None:
+    resolved = resolve_worker_id(
+        "",
+        xdist_worker_id=None,
+        browser_name="webkit stable",
+        process_id=789,
+    )
+    assert resolved == "webkit-stable-p789"
+    assert worker_dist_dir(resolved) == ".next-e2e-webkit-stable-p789"

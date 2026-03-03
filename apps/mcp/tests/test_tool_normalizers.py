@@ -1,17 +1,20 @@
 from __future__ import annotations
 
 import base64
+import importlib
 from collections.abc import Callable
 from typing import Any
 
 from apps.mcp.tools._common import (
     DEFAULT_MAX_BASE64_BYTES,
+    invalid_argument,
     is_error_payload,
     to_int,
     to_optional_bool,
     to_optional_dict,
     to_optional_int,
     to_optional_str,
+    validate_base64_size,
 )
 from apps.mcp.tools.artifacts import _normalize_markdown_payload, register_artifact_tools
 from apps.mcp.tools.computer_use import register_computer_use_tools
@@ -38,12 +41,48 @@ def test_common_normalizers_handle_basic_types() -> None:
     assert to_optional_str(1) is None
     assert to_int("7", default=0) == 7
     assert to_int("x", default=3) == 3
+    assert to_int(True, default=3) == 3
     assert to_optional_dict({"x": 1}) == {"x": 1}
     assert to_optional_dict("x") is None
     assert to_optional_bool(True) is True
     assert to_optional_bool(1) is None
     assert to_optional_int(5) == 5
+    assert to_optional_int(True) is None
     assert to_optional_int("5") is None
+
+
+def test_invalid_argument_masks_value_without_plaintext_leakage() -> None:
+    raw_value = "sk-super-secret-token-value-1234567890"
+    payload = invalid_argument(
+        "bad input",
+        method="POST",
+        path="/api/v1/example",
+        field="token",
+        value=raw_value,
+    )
+
+    masked = payload["details"]["value"]
+    assert isinstance(masked, str)
+    assert masked.startswith("<redacted type=str len=")
+    assert "sha256=" in masked
+    assert raw_value not in masked
+
+
+def test_default_max_base64_bytes_falls_back_when_env_invalid(monkeypatch) -> None:
+    import apps.mcp.tools._common as common_module
+
+    monkeypatch.setenv("VD_MCP_MAX_BASE64_BYTES", "not-a-number")
+    reloaded = importlib.reload(common_module)
+    assert reloaded.DEFAULT_MAX_BASE64_BYTES == 2 * 1024 * 1024
+
+    monkeypatch.delenv("VD_MCP_MAX_BASE64_BYTES", raising=False)
+    importlib.reload(common_module)
+
+
+def test_validate_base64_size_fast_rejects_oversized_encoded_input() -> None:
+    ok, message = validate_base64_size("A" * 9, max_bytes=4)
+    assert ok is False
+    assert message == "decoded payload exceeds 4 bytes"
 
 
 def test_artifact_normalizer_marks_payload_found_when_markdown_present() -> None:
@@ -288,6 +327,191 @@ def test_retrieval_search_tool_normalizes_payload() -> None:
     payload = mcp.tools["vd.retrieval.search"](query="timeout", top_k=2)
     assert payload["top_k"] == 2
     assert payload["items"][0]["source"] == "digest"
+
+
+def test_retrieval_search_supports_mode_parameter() -> None:
+    mcp = _FakeMCP()
+
+    def fake_api_call(method: str, path: str, **kwargs: Any) -> dict[str, Any]:
+        assert method == "POST"
+        assert path == "/api/v1/retrieval/search"
+        assert kwargs["json_body"]["mode"] == "semantic"
+        return {
+            "query": "timeout",
+            "top_k": 3,
+            "filters": {},
+            "items": [{"job_id": "job-1", "source": "digest", "mode": "semantic", "score": 1.2}],
+        }
+
+    register_retrieval_tools(mcp, fake_api_call)
+    payload = mcp.tools["vd.retrieval.search"](query="timeout", top_k=3, mode="semantic")
+    assert payload["top_k"] == 3
+    assert payload["items"][0]["mode"] == "semantic"
+
+
+def test_retrieval_search_rejects_invalid_top_k() -> None:
+    mcp = _FakeMCP()
+    register_retrieval_tools(mcp, lambda *_args, **_kwargs: {"ok": True})
+    payload = mcp.tools["vd.retrieval.search"](query="x", top_k=0)
+    assert payload["code"] == "INVALID_ARGUMENT"
+    assert payload["details"]["field"] == "top_k"
+
+
+def test_retrieval_search_rejects_top_k_above_schema_limit() -> None:
+    mcp = _FakeMCP()
+    register_retrieval_tools(mcp, lambda *_args, **_kwargs: {"ok": True})
+    payload = mcp.tools["vd.retrieval.search"](query="x", top_k=51)
+    assert payload["code"] == "INVALID_ARGUMENT"
+    assert payload["details"]["field"] == "top_k"
+
+
+def test_retrieval_search_rejects_invalid_mode() -> None:
+    mcp = _FakeMCP()
+    register_retrieval_tools(mcp, lambda *_args, **_kwargs: {"ok": True})
+    payload = mcp.tools["vd.retrieval.search"](query="x", top_k=10, mode="vector")
+    assert payload["code"] == "INVALID_ARGUMENT"
+    assert payload["details"]["field"] == "mode"
+
+
+def test_retrieval_search_rejects_empty_query() -> None:
+    mcp = _FakeMCP()
+    call_count = 0
+
+    def fake_api_call(_method: str, _path: str, **_kwargs: Any) -> dict[str, Any]:
+        nonlocal call_count
+        call_count += 1
+        return {"ok": True}
+
+    register_retrieval_tools(mcp, fake_api_call)
+    payload = mcp.tools["vd.retrieval.search"](query="   ", top_k=10)
+
+    assert payload["code"] == "INVALID_ARGUMENT"
+    assert payload["details"]["field"] == "query"
+    assert call_count == 0
+
+
+def test_retrieval_search_normalizes_out_of_schema_upstream_values() -> None:
+    mcp = _FakeMCP()
+
+    def fake_api_call(method: str, path: str, **kwargs: Any) -> dict[str, Any]:
+        assert method == "POST"
+        assert path == "/api/v1/retrieval/search"
+        assert kwargs["json_body"]["query"] == "timeout"
+        return {
+            "query": "   ",
+            "top_k": 999,
+            "filters": "invalid",
+            "items": [
+                {
+                    "job_id": "job-1",
+                    "platform": "vimeo",
+                    "source": "raw",
+                    "score": True,
+                }
+            ],
+        }
+
+    register_retrieval_tools(mcp, fake_api_call)
+    payload = mcp.tools["vd.retrieval.search"](query=" timeout ", top_k=10)
+
+    assert payload["query"] == "timeout"
+    assert payload["top_k"] == 10
+    assert payload["filters"] == {}
+    assert payload["items"][0]["platform"] is None
+    assert payload["items"][0]["source"] is None
+    assert payload["items"][0]["score"] == 0.0
+
+
+def test_retrieval_search_sanitizes_upstream_error_payload() -> None:
+    mcp = _FakeMCP()
+
+    def fake_api_call(_method: str, _path: str, **_kwargs: Any) -> dict[str, Any]:
+        return {
+            "code": "UPSTREAM_HTTP_ERROR",
+            "message": "Authorization: Bearer super-secret-token",
+            "details": {
+                "method": "POST",
+                "path": "/api/v1/retrieval/search",
+                "status_code": 500,
+                "value": "sk-top-secret-token-value-1234567890",
+                "error": "api_key=very-secret-value",
+            },
+        }
+
+    register_retrieval_tools(mcp, fake_api_call)
+    payload = mcp.tools["vd.retrieval.search"](query="timeout", top_k=10)
+
+    assert payload["code"] == "UPSTREAM_HTTP_ERROR"
+    assert "super-secret-token" not in payload["message"]
+    assert payload["details"]["value"].startswith("<redacted type=str len=")
+    assert "very-secret-value" not in payload["details"]["error"]
+    assert "[REDACTED]" in payload["details"]["error"]
+
+
+def test_notifications_manage_rejects_out_of_range_daily_digest_hour_utc() -> None:
+    mcp = _FakeMCP()
+    call_count = 0
+
+    def fake_api_call(_method: str, _path: str, **_kwargs: Any) -> dict[str, Any]:
+        nonlocal call_count
+        call_count += 1
+        return {"ok": True}
+
+    register_notification_tools(mcp, fake_api_call)
+    payload = mcp.tools["vd.notifications.manage"](
+        action="set_config",
+        daily_digest_hour_utc=24,
+    )
+    assert payload["code"] == "INVALID_ARGUMENT"
+    assert payload["details"]["field"] == "daily_digest_hour_utc"
+    assert call_count == 0
+
+
+def test_notifications_manage_rejects_out_of_range_priority() -> None:
+    mcp = _FakeMCP()
+    call_count = 0
+
+    def fake_api_call(_method: str, _path: str, **_kwargs: Any) -> dict[str, Any]:
+        nonlocal call_count
+        call_count += 1
+        return {"ok": True}
+
+    register_notification_tools(mcp, fake_api_call)
+    payload = mcp.tools["vd.notifications.manage"](
+        action="category_send",
+        category="tech",
+        priority=101,
+    )
+    assert payload["code"] == "INVALID_ARGUMENT"
+    assert payload["details"]["field"] == "priority"
+    assert call_count == 0
+
+
+def test_notifications_manage_sanitizes_upstream_error_payload() -> None:
+    mcp = _FakeMCP()
+
+    def fake_api_call(_method: str, path: str, **_kwargs: Any) -> dict[str, Any]:
+        if path == "/api/v1/reports/daily/send":
+            return {
+                "code": "UPSTREAM_HTTP_ERROR",
+                "message": "token=daily-send-secret",
+                "details": {
+                    "method": "POST",
+                    "path": "/api/v1/reports/daily/send",
+                    "value": {"token": "json-secret-value"},
+                    "error": "Authorization: Bearer another-secret",
+                },
+            }
+        raise AssertionError(path)
+
+    register_notification_tools(mcp, fake_api_call)
+    payload = mcp.tools["vd.notifications.manage"](action="daily_send")
+
+    assert payload["code"] == "UPSTREAM_HTTP_ERROR"
+    assert "daily-send-secret" not in payload["message"]
+    assert payload["details"]["value"].startswith("<redacted type=dict len=")
+    assert "another-secret" not in payload["details"]["error"]
+    assert "[REDACTED]" in payload["details"]["error"]
 
 
 def test_workflows_run_tool_posts_expected_body() -> None:
@@ -538,3 +762,64 @@ def test_computer_use_rejects_unknown_safety_fields() -> None:
         safety={"confirm_before_execute": True, "bad_field": True},
     )
     assert payload["code"] == "INVALID_ARGUMENT"
+
+
+def test_health_get_rejects_invalid_window_hours() -> None:
+    mcp = _FakeMCP()
+    register_health_tools(mcp, lambda *_args, **_kwargs: {"ok": True})
+    payload = mcp.tools["vd.health.get"](scope="providers", window_hours=0)
+    assert payload["code"] == "INVALID_ARGUMENT"
+    assert payload["details"]["field"] == "window_hours"
+
+
+def test_ui_audit_read_autofix_rejects_invalid_limits() -> None:
+    mcp = _FakeMCP()
+    register_ui_audit_tools(mcp, lambda *_args, **_kwargs: {"ok": True})
+    payload = mcp.tools["vd.ui_audit.read"](
+        action="autofix",
+        run_id=UUID_1,
+        max_files=0,
+    )
+    assert payload["code"] == "INVALID_ARGUMENT"
+    assert payload["details"]["field"] == "max_files"
+
+
+def test_jobs_list_videos_rejects_invalid_limit() -> None:
+    mcp = _FakeMCP()
+    register_job_tools(mcp, lambda *_args, **_kwargs: {"ok": True})
+    payload = mcp.tools["vd.videos.list"](limit=0)
+    assert payload["code"] == "INVALID_ARGUMENT"
+    assert payload["details"]["field"] == "limit"
+
+
+def test_computer_use_rejects_invalid_screenshot_and_safety_values() -> None:
+    mcp = _FakeMCP()
+    register_computer_use_tools(mcp, lambda *_args, **_kwargs: {"ok": True})
+    invalid_screenshot = mcp.tools["vd.computer_use.run"](
+        instruction="click",
+        screenshot_base64="not-base64",
+    )
+    invalid_safety_max_actions = mcp.tools["vd.computer_use.run"](
+        instruction="click",
+        screenshot_base64="ZmFrZQ==",
+        safety={"max_actions": 0},
+    )
+
+    assert invalid_screenshot["code"] == "INVALID_ARGUMENT"
+    assert invalid_screenshot["details"]["field"] == "screenshot_base64"
+    assert invalid_safety_max_actions["code"] == "INVALID_ARGUMENT"
+    assert invalid_safety_max_actions["details"]["field"] == "safety.max_actions"
+
+
+def test_computer_use_rejects_invalid_blocked_actions_shape() -> None:
+    mcp = _FakeMCP()
+    register_computer_use_tools(mcp, lambda *_args, **_kwargs: {"ok": True})
+
+    invalid_blocked_actions = mcp.tools["vd.computer_use.run"](
+        instruction="click",
+        screenshot_base64="ZmFrZQ==",
+        safety={"blocked_actions": ["click", "", 1]},  # type: ignore[list-item]
+    )
+
+    assert invalid_blocked_actions["code"] == "INVALID_ARGUMENT"
+    assert invalid_blocked_actions["details"]["field"] == "safety.blocked_actions"

@@ -4,6 +4,7 @@ import base64
 import json
 import os
 import re
+import time
 from dataclasses import dataclass
 from typing import Any
 
@@ -45,14 +46,76 @@ class ApiConfig:
     timeout_sec: float
     api_key: str | None
     max_base64_bytes: int = 2 * 1024 * 1024
+    retry_attempts: int = 1
+    retry_backoff_sec: float = 0.2
 
     @classmethod
     def from_env(cls) -> ApiConfig:
+        def _env_float(name: str, default: float) -> float:
+            raw = os.getenv(name)
+            if raw is None:
+                return default
+            try:
+                return float(raw.strip())
+            except (TypeError, ValueError):
+                return default
+
+        def _env_positive_int(
+            name: str,
+            default: int,
+            *,
+            min_value: int = 1,
+            max_value: int | None = None,
+        ) -> int:
+            raw = os.getenv(name)
+            if raw is None:
+                return default
+            try:
+                value = int(raw.strip())
+            except (TypeError, ValueError):
+                return default
+            bounded = value if value >= min_value else min_value
+            if max_value is not None and bounded > max_value:
+                return max_value
+            return bounded
+
+        def _env_bounded_float(
+            name: str,
+            default: float,
+            *,
+            min_value: float,
+            max_value: float,
+        ) -> float:
+            raw = os.getenv(name)
+            if raw is None:
+                return default
+            try:
+                value = float(raw.strip())
+            except (TypeError, ValueError):
+                return default
+            if value < min_value:
+                return min_value
+            if value > max_value:
+                return max_value
+            return value
+
         return cls(
             base_url=os.getenv("VD_API_BASE_URL", "http://127.0.0.1:8000").rstrip("/"),
-            timeout_sec=float(os.getenv("VD_API_TIMEOUT_SEC", "20")),
+            timeout_sec=_env_float("VD_API_TIMEOUT_SEC", 20.0),
             api_key=os.getenv("VD_API_KEY"),
-            max_base64_bytes=max(1, int(os.getenv("VD_MCP_MAX_BASE64_BYTES", "2097152"))),
+            max_base64_bytes=_env_positive_int("VD_MCP_MAX_BASE64_BYTES", 2 * 1024 * 1024),
+            retry_attempts=_env_positive_int(
+                "VD_API_RETRY_ATTEMPTS",
+                1,
+                min_value=1,
+                max_value=5,
+            ),
+            retry_backoff_sec=_env_bounded_float(
+                "VD_API_RETRY_BACKOFF_SEC",
+                0.2,
+                min_value=0.0,
+                max_value=5.0,
+            ),
         )
 
 
@@ -70,46 +133,91 @@ class ApiClient:
         return_bytes_base64: bool = False,
     ) -> dict[str, Any]:
         normalized_path = _normalize_upstream_path(path)
+        normalized_method = str(method or "").upper()
         headers: dict[str, str] = {"Accept": "application/json"}
         if self._config.api_key:
             headers["Authorization"] = f"Bearer {self._config.api_key}"
 
         url = f"{self._config.base_url}{normalized_path}"
-        try:
-            with httpx.Client(timeout=self._config.timeout_sec) as http_client:
-                response = http_client.request(
-                    method=method,
-                    url=url,
-                    params=params,
-                    json=json_body,
-                    headers=headers,
-                )
-        except httpx.TimeoutException as exc:
-            raise ApiError(
-                "UPSTREAM_TIMEOUT",
-                "Upstream API request timed out.",
-                {"method": method, "path": normalized_path, "error": str(exc)},
-            ) from exc
-        except httpx.HTTPError as exc:
+        attempts = max(self._config.retry_attempts, 1)
+        is_retryable_method = normalized_method in {"GET", "HEAD", "OPTIONS"}
+        last_exception: httpx.HTTPError | None = None
+        response: httpx.Response | None = None
+        for attempt in range(1, attempts + 1):
+            try:
+                with httpx.Client(timeout=self._config.timeout_sec) as http_client:
+                    response = http_client.request(
+                        method=normalized_method,
+                        url=url,
+                        params=params,
+                        json=json_body,
+                        headers=headers,
+                    )
+                if response.status_code >= 400:
+                    error_body = _read_response_body(response)
+                    should_retry = (
+                        is_retryable_method
+                        and attempt < attempts
+                        and response.status_code in {429, 502, 503, 504}
+                    )
+                    if should_retry:
+                        _sleep_with_backoff(self._config.retry_backoff_sec, attempt)
+                        continue
+                    raise ApiError(
+                        "UPSTREAM_HTTP_ERROR",
+                        _extract_error_message(
+                            error_body,
+                            fallback=f"{normalized_method} {normalized_path} failed with status {response.status_code}.",
+                        ),
+                        {
+                            "method": normalized_method,
+                            "path": normalized_path,
+                            "status_code": response.status_code,
+                            "body_preview": _safe_body_preview(error_body),
+                            "attempts": attempt,
+                        },
+                    )
+                break
+            except httpx.TimeoutException as exc:
+                last_exception = exc
+                if is_retryable_method and attempt < attempts:
+                    _sleep_with_backoff(self._config.retry_backoff_sec, attempt)
+                    continue
+                raise ApiError(
+                    "UPSTREAM_TIMEOUT",
+                    "Upstream API request timed out.",
+                    {
+                        "method": normalized_method,
+                        "path": normalized_path,
+                        "error": str(exc),
+                        "attempts": attempt,
+                    },
+                ) from exc
+            except httpx.HTTPError as exc:
+                last_exception = exc
+                if is_retryable_method and attempt < attempts:
+                    _sleep_with_backoff(self._config.retry_backoff_sec, attempt)
+                    continue
+                raise ApiError(
+                    "UPSTREAM_NETWORK_ERROR",
+                    "Failed to reach upstream API.",
+                    {
+                        "method": normalized_method,
+                        "path": normalized_path,
+                        "error": str(exc),
+                        "attempts": attempt,
+                    },
+                ) from exc
+
+        if response is None:
             raise ApiError(
                 "UPSTREAM_NETWORK_ERROR",
                 "Failed to reach upstream API.",
-                {"method": method, "path": normalized_path, "error": str(exc)},
-            ) from exc
-
-        if response.status_code >= 400:
-            error_body = _read_response_body(response)
-            raise ApiError(
-                "UPSTREAM_HTTP_ERROR",
-                _extract_error_message(
-                    error_body,
-                    fallback=f"{method} {normalized_path} failed with status {response.status_code}.",
-                ),
                 {
-                    "method": method,
+                    "method": normalized_method,
                     "path": normalized_path,
-                    "status_code": response.status_code,
-                    "body_preview": _safe_body_preview(error_body),
+                    "error": str(last_exception) if last_exception else "unknown error",
+                    "attempts": attempts,
                 },
             )
 
@@ -146,6 +254,12 @@ class ApiClient:
         if isinstance(data, dict):
             return data
         return {"items": data}
+
+
+def _sleep_with_backoff(base_delay_sec: float, attempt: int) -> None:
+    delay = max(base_delay_sec, 0.0) * attempt
+    if delay > 0:
+        time.sleep(delay)
 
 
 def _drop_none_values(data: dict[str, Any]) -> dict[str, Any]:
@@ -216,6 +330,9 @@ def _normalize_error_details(details: dict[str, Any]) -> dict[str, Any]:
     max_size_bytes = details.get("max_size_bytes")
     if isinstance(max_size_bytes, int):
         normalized["max_size_bytes"] = max_size_bytes
+    attempts = details.get("attempts")
+    if isinstance(attempts, int) and attempts > 0:
+        normalized["attempts"] = attempts
 
     return normalized
 
@@ -223,11 +340,16 @@ def _normalize_error_details(details: dict[str, Any]) -> dict[str, Any]:
 _PATH_SCHEME_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*://")
 _SENSITIVE_PATTERNS = [
     re.compile(r"(?i)\b(authorization\s*:\s*bearer\s+)[^\s,;]+"),
-    re.compile(r"(?i)\b((?:api[_-]?key|token|secret|password)\s*[=:]\s*)[^\s,;]+"),
-    re.compile(r'(?i)(["\'](?:api[_-]?key|token|secret|password)["\']\s*:\s*["\'])[^"\']+'),
+    re.compile(
+        r"(?i)\b((?:api[_-]?key|apikey|key|token|access[_-]?token|refresh[_-]?token|id[_-]?token|oauth[_-]?token|jwt|secret|client[_-]?secret|password|passwd|session(?:id)?|auth(?:orization)?|signature)\s*[=:]\s*)[^\s,;]+"
+    ),
+    re.compile(
+        r'(?i)(["\'](?:api[_-]?key|apikey|key|token|access[_-]?token|refresh[_-]?token|id[_-]?token|oauth[_-]?token|jwt|secret|client[_-]?secret|password|passwd|session(?:id)?|auth(?:orization)?|signature)["\']\s*:\s*["\'])[^"\']+'
+    ),
     re.compile(r"\bsk-[A-Za-z0-9]{20,}\b"),
     re.compile(r"\bghp_[A-Za-z0-9]{20,}\b"),
     re.compile(r"\bAKIA[0-9A-Z]{16}\b"),
+    re.compile(r"\bASIA[0-9A-Z]{16}\b"),
 ]
 
 

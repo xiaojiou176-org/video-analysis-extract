@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
 	buildApiUrl,
 	buildArtifactAssetUrl,
+	buildApiUrlWithOptions,
 	resolveApiBaseUrl,
 	sanitizeExternalUrl,
 } from "@/lib/api/url";
@@ -24,14 +25,20 @@ describe("api url core", () => {
 	it("throws when base url is missing without fallback", () => {
 		delete process.env.NEXT_PUBLIC_API_BASE_URL;
 
-		expect(() => resolveApiBaseUrl()).toThrow("API base URL is not configured");
+		expect(() => resolveApiBaseUrl({ strict: true })).toThrow("API base URL is not configured");
 	});
 
 	it("does not fallback to VD_API_BASE_URL", () => {
 		delete process.env.NEXT_PUBLIC_API_BASE_URL;
 		process.env.VD_API_BASE_URL = "https://fallback.example.com";
 
-		expect(() => resolveApiBaseUrl()).toThrow("Set NEXT_PUBLIC_API_BASE_URL");
+		expect(() => resolveApiBaseUrl({ strict: true })).toThrow("Set NEXT_PUBLIC_API_BASE_URL");
+	});
+
+	it("falls back to localhost when allowed", () => {
+		delete process.env.NEXT_PUBLIC_API_BASE_URL;
+
+		expect(resolveApiBaseUrl()).toBe("http://127.0.0.1:8000");
 	});
 
 	it("rejects invalid or non-http base urls", () => {
@@ -40,6 +47,20 @@ describe("api url core", () => {
 
 		process.env.NEXT_PUBLIC_API_BASE_URL = "ftp://api.example.com";
 		expect(() => resolveApiBaseUrl()).toThrow("Invalid API base URL protocol");
+	});
+
+	it("rejects base url with path/search/hash/credentials", () => {
+		process.env.NEXT_PUBLIC_API_BASE_URL = "https://user:pass@api.example.com";
+		expect(() => resolveApiBaseUrl()).toThrow("Invalid API base URL credentials");
+
+		process.env.NEXT_PUBLIC_API_BASE_URL = "https://api.example.com/v1";
+		expect(() => resolveApiBaseUrl()).toThrow("Invalid API base URL path");
+
+		process.env.NEXT_PUBLIC_API_BASE_URL = "https://api.example.com?x=1";
+		expect(() => resolveApiBaseUrl()).toThrow("Invalid API base URL suffix");
+
+		process.env.NEXT_PUBLIC_API_BASE_URL = "https://api.example.com#frag";
+		expect(() => resolveApiBaseUrl()).toThrow("Invalid API base URL suffix");
 	});
 
 	it("builds url and skips nullish/empty query values", () => {
@@ -61,6 +82,14 @@ describe("api url core", () => {
 		expect(parsed.searchParams.has("source")).toBe(false);
 	});
 
+	it("throws when buildApiUrl is called without NEXT_PUBLIC_API_BASE_URL", () => {
+		delete process.env.NEXT_PUBLIC_API_BASE_URL;
+
+		expect(() => buildApiUrlWithOptions("/api/v1/feed", undefined, { strict: true })).toThrow(
+			"API base URL is not configured",
+		);
+	});
+
 	it("builds artifact asset url with required query keys", () => {
 		process.env.NEXT_PUBLIC_API_BASE_URL = "https://api.example.com";
 
@@ -76,6 +105,7 @@ describe("api url core", () => {
 		expect(sanitizeExternalUrl("http://example.com")).toBe("http://example.com/");
 		expect(sanitizeExternalUrl("javascript:alert(1)")).toBeNull();
 		expect(sanitizeExternalUrl("/relative/path")).toBeNull();
+		expect(sanitizeExternalUrl("https://user:pass@example.com/x")).toBeNull();
 		expect(sanitizeExternalUrl("   ")).toBeNull();
 	});
 });

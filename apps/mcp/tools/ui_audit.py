@@ -10,6 +10,7 @@ from apps.mcp.tools._common import (
     invalid_argument,
     is_error_payload,
     parse_artifact_relative_path,
+    parse_bounded_int,
     parse_uuid,
     to_int,
     to_optional_bool,
@@ -218,13 +219,43 @@ def register_ui_audit_tools(mcp: FastMCP, api_call: ApiCall) -> None:
             return payload
 
         if normalized_action == "autofix":
+            normalized_max_files, max_files_error = parse_bounded_int(
+                max_files,
+                field="max_files",
+                min_value=1,
+                max_value=20,
+                required=True,
+            )
+            if max_files_error is not None or normalized_max_files is None:
+                return invalid_argument(
+                    max_files_error or "max_files is invalid",
+                    method="POST",
+                    path=f"/api/v1/ui-audit/{encoded_run_id}/autofix",
+                    field="max_files",
+                    value=max_files,
+                )
+            normalized_max_changed_lines, max_changed_lines_error = parse_bounded_int(
+                max_changed_lines,
+                field="max_changed_lines",
+                min_value=1,
+                max_value=2000,
+                required=True,
+            )
+            if max_changed_lines_error is not None or normalized_max_changed_lines is None:
+                return invalid_argument(
+                    max_changed_lines_error or "max_changed_lines is invalid",
+                    method="POST",
+                    path=f"/api/v1/ui-audit/{encoded_run_id}/autofix",
+                    field="max_changed_lines",
+                    value=max_changed_lines,
+                )
             response = api_call(
                 "POST",
                 f"/api/v1/ui-audit/{encoded_run_id}/autofix",
                 json_body={
                     "mode": mode,
-                    "max_files": max_files,
-                    "max_changed_lines": max_changed_lines,
+                    "max_files": normalized_max_files,
+                    "max_changed_lines": normalized_max_changed_lines,
                 },
             )
             return _normalize_autofix_payload(response)

@@ -94,4 +94,46 @@ describe("FormValidationController", () => {
 		expect(email.disabled).toBe(false);
 		expect(email).toHaveAttribute("aria-disabled", "false");
 	});
+
+	it("ignores forms without a submit control", () => {
+		render(
+			<>
+				<FormValidationController />
+				<form data-auto-disable-required="true">
+					<input aria-label="standalone-required" name="name" required defaultValue="" />
+				</form>
+			</>,
+		);
+
+		const input = screen.getByLabelText("standalone-required");
+		fireEvent.input(input, { target: { value: "ok" } });
+		expect(input).toHaveValue("ok");
+	});
+
+	it("ignores non-element input events and empty dependent controller names", () => {
+		render(
+			<>
+				<FormValidationController />
+				<form>
+					<input
+						name="email"
+						aria-label="email-with-empty-controller"
+						data-disabled-unless-checked=""
+						defaultValue="a@example.com"
+					/>
+					<button type="submit">保存</button>
+				</form>
+			</>,
+		);
+
+		const email = screen.getByLabelText("email-with-empty-controller");
+		fireEvent(
+			document,
+			new Event("input", {
+				bubbles: true,
+				cancelable: true,
+			}),
+		);
+		expect(email).toHaveValue("a@example.com");
+	});
 });

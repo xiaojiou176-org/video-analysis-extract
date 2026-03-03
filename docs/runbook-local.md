@@ -396,3 +396,6 @@ curl -sS -X POST http://127.0.0.1:8000/api/v1/videos/process \
 
 
 <!-- doc-sync: api/worker reliability + auth guard update (2026-03-03) -->
+
+
+<!-- doc-sync: mcp/web contract and schema alignment (2026-03-03) -->

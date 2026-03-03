@@ -8,6 +8,8 @@ from apps.mcp.tools._common import (
     ApiCall,
     invalid_argument,
     is_error_payload,
+    parse_bounded_int,
+    sanitize_error_payload,
     to_optional_bool,
     to_optional_int,
     to_optional_str,
@@ -16,7 +18,7 @@ from apps.mcp.tools._common import (
 
 def _normalize_send_test_payload(payload: dict[str, Any]) -> dict[str, Any]:
     if is_error_payload(payload):
-        return payload
+        return sanitize_error_payload(payload)
     return {
         "delivery_id": to_optional_str(payload.get("delivery_id")),
         "status": to_optional_str(payload.get("status")),
@@ -31,7 +33,7 @@ def _normalize_send_test_payload(payload: dict[str, Any]) -> dict[str, Any]:
 
 def _normalize_set_config_payload(payload: dict[str, Any]) -> dict[str, Any]:
     if is_error_payload(payload):
-        return payload
+        return sanitize_error_payload(payload)
     return {
         "enabled": to_optional_bool(payload.get("enabled")),
         "to_email": to_optional_str(payload.get("to_email")),
@@ -66,6 +68,38 @@ def register_notification_tools(mcp: FastMCP, api_call: ApiCall) -> None:
         failure_alert_enabled: bool = True,
         category_rules: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
+        normalized_daily_digest_hour_utc, digest_hour_error = parse_bounded_int(
+            daily_digest_hour_utc,
+            field="daily_digest_hour_utc",
+            min_value=0,
+            max_value=23,
+            required=False,
+        )
+        if digest_hour_error is not None:
+            return invalid_argument(
+                digest_hour_error,
+                method="POST",
+                path="vd.notifications.manage",
+                field="daily_digest_hour_utc",
+                value=daily_digest_hour_utc,
+            )
+
+        normalized_priority, priority_error = parse_bounded_int(
+            priority,
+            field="priority",
+            min_value=0,
+            max_value=100,
+            required=False,
+        )
+        if priority_error is not None:
+            return invalid_argument(
+                priority_error,
+                method="POST",
+                path="vd.notifications.manage",
+                field="priority",
+                value=priority,
+            )
+
         normalized_action = str(action or "").strip().lower()
         if normalized_action == "get_config":
             response = api_call("GET", "/api/v1/notifications/config")
@@ -79,7 +113,7 @@ def register_notification_tools(mcp: FastMCP, api_call: ApiCall) -> None:
                     "enabled": enabled,
                     "to_email": to_email,
                     "daily_digest_enabled": daily_digest_enabled,
-                    "daily_digest_hour_utc": daily_digest_hour_utc,
+                    "daily_digest_hour_utc": normalized_daily_digest_hour_utc,
                     "failure_alert_enabled": failure_alert_enabled,
                     "category_rules": category_rules,
                 },
@@ -110,7 +144,7 @@ def register_notification_tools(mcp: FastMCP, api_call: ApiCall) -> None:
                 },
             )
             if is_error_payload(response):
-                return response
+                return sanitize_error_payload(response)
             return {
                 "sent": bool(response.get("sent", False)),
                 "status": to_optional_str(response.get("status")),
@@ -132,7 +166,7 @@ def register_notification_tools(mcp: FastMCP, api_call: ApiCall) -> None:
                     "body": body,
                     "to_email": to_email,
                     "subject": subject,
-                    "priority": priority,
+                    "priority": normalized_priority,
                     "dispatch_key": dispatch_key,
                 },
             )

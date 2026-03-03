@@ -3,7 +3,6 @@ from __future__ import annotations
 import base64
 import json
 import threading
-import time
 import uuid
 from dataclasses import dataclass, field
 from http import HTTPStatus
@@ -16,6 +15,7 @@ from support.runtime_utils import utc_now, wait_http_ok
 PING_IMAGE_BYTES = base64.b64decode(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9sYfA8kAAAAASUVORK5CYII="
 )
+_HEALTH_DELAY_WAIT = threading.Event()
 
 MOCK_JOB_ID = "00000000-0000-4000-8000-000000000001"
 MOCK_VIDEO_ID = "00000000-0000-4000-8000-000000000002"
@@ -277,7 +277,7 @@ def _mock_handler(state: MockApiState) -> type[BaseHTTPRequestHandler]:
                     delay_seconds = state.health_delay_seconds
                     status_code = state.health_status
                 if delay_seconds > 0:
-                    time.sleep(delay_seconds)
+                    _HEALTH_DELAY_WAIT.wait(delay_seconds)
                 status = HTTPStatus(status_code)
                 self._record_http(
                     method="GET",

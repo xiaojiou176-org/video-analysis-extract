@@ -1,22 +1,52 @@
 from __future__ import annotations
 
 import errno
+import os
 import re
 import socket
 import time
 from collections.abc import Callable
 from datetime import UTC, datetime
 from http import HTTPStatus
+from threading import Event
 from typing import TypeVar
 from urllib.parse import urlparse
 from urllib.request import urlopen
 
 T = TypeVar("T")
+_PAUSE_EVENT = Event()
 
 
 def slugify_nodeid(nodeid: str) -> str:
     value = re.sub(r"[^A-Za-z0-9._-]+", "-", nodeid).strip("-")
     return value or "unknown-test"
+
+
+def sanitize_worker_id(raw: str) -> str:
+    value = re.sub(r"[^A-Za-z0-9_-]+", "-", raw).strip("-")
+    return value or "gw0"
+
+
+def resolve_worker_id(
+    cli_worker_id: str | None,
+    *,
+    xdist_worker_id: str | None = None,
+    browser_name: str | None = None,
+    process_id: int | None = None,
+) -> str:
+    """Return a stable worker id, unique by process when xdist/cli ids are missing."""
+    if xdist_worker_id is not None and xdist_worker_id.strip():
+        return sanitize_worker_id(xdist_worker_id)
+    if cli_worker_id is not None and cli_worker_id.strip():
+        return sanitize_worker_id(cli_worker_id)
+
+    browser = sanitize_worker_id(browser_name or "browser")
+    pid = int(process_id) if process_id is not None else os.getpid()
+    return sanitize_worker_id(f"{browser}-p{pid}")
+
+
+def worker_dist_dir(worker_id: str) -> str:
+    return f".next-e2e-{sanitize_worker_id(worker_id)}"
 
 
 def free_port() -> int:
@@ -73,7 +103,7 @@ def wait_http_ok(url: str, timeout_sec: float = 90.0) -> None:
             last_error = exc
         remaining = deadline - time.monotonic()
         if remaining > 0:
-            time.sleep(min(backoff_sec, remaining))
+            _PAUSE_EVENT.wait(min(backoff_sec, remaining))
             backoff_sec = min(backoff_sec * 2, 0.5)
     raise RuntimeError(f"Timeout waiting for server readiness: {url}. Last error: {last_error}")
 

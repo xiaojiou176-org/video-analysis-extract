@@ -54,6 +54,11 @@ def test_common_tail_branches() -> None:
     assert parse_artifact_relative_path("bad\x00path") is None
     assert parse_artifact_relative_path("C:\\temp\\a.png") is None
     assert parse_artifact_relative_path(".") is None
+    assert parse_artifact_relative_path("frames%2Fa.png") == "frames/a.png"
+    assert parse_artifact_relative_path("%2e%2e/secret.txt") is None
+    assert parse_artifact_relative_path("%2fetc/passwd") is None
+    assert parse_artifact_relative_path("%5cwindows\\system.ini") is None
+    assert parse_artifact_relative_path("%252e%252e%252fsecret.txt") is None
 
     parsed, error = validate_object_keys("x", allowed_keys={"a"})
     assert parsed is None

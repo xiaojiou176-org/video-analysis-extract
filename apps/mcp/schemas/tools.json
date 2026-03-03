@@ -28,6 +28,12 @@
             "path": {
               "type": "string"
             },
+            "field": {
+              "type": "string"
+            },
+            "value": {
+              "type": "string"
+            },
             "status_code": {
               "type": "integer"
             },
@@ -1181,6 +1187,15 @@
             "maximum": 50,
             "default": 10
           },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "keyword",
+              "semantic",
+              "hybrid"
+            ],
+            "default": "keyword"
+          },
           "filters": {
             "type": "object",
             "additionalProperties": true,
@@ -1205,7 +1220,8 @@
               },
               "top_k": {
                 "type": "integer",
-                "minimum": 1
+                "minimum": 1,
+                "maximum": 50
               },
               "filters": {
                 "type": "object",

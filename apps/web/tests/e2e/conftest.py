@@ -17,9 +17,11 @@ from support.mock_api import (
 )
 from support.runtime_utils import (
     parse_external_web_base_url,
+    resolve_worker_id,
     slugify_nodeid,
     wait_http_ok,
     with_free_port_retry,
+    worker_dist_dir,
 )
 
 PROJECT_ROOT = Path(__file__).resolve().parents[4]
@@ -101,8 +103,8 @@ def pytest_addoption(parser: pytest.Parser) -> None:
     parser.addoption(
         "--web-e2e-worker-id",
         action="store",
-        default="gw0",
-        help="Worker id suffix for isolated Next.js dist dir",
+        default="",
+        help="Optional worker id suffix for isolated Next.js dist dir",
     )
     parser.addoption(
         "--web-e2e-api-base-url",
@@ -184,6 +186,14 @@ def web_base_url(pytestconfig: pytest.Config, request: pytest.FixtureRequest) ->
     output_thread: threading.Thread | None = None
     output_lines: list[str] = []
     mock_api_server: MockApiServer | None = None
+    browser_name = str(pytestconfig.getoption("--web-e2e-browser")).strip().lower()
+    configured_worker_id = str(pytestconfig.getoption("--web-e2e-worker-id")).strip()
+    worker_id = resolve_worker_id(
+        configured_worker_id,
+        xdist_worker_id=os.environ.get("PYTEST_XDIST_WORKER"),
+        browser_name=browser_name,
+    )
+    next_dist_dir = worker_dist_dir(worker_id)
 
     if use_mock_api:
         mock_api_server = request.getfixturevalue("mock_api_server")
@@ -202,6 +212,7 @@ def web_base_url(pytestconfig: pytest.Config, request: pytest.FixtureRequest) ->
         env["PORT"] = str(web_port)
         env["HOSTNAME"] = "127.0.0.1"
         env["CI"] = "1"
+        env["WEB_E2E_NEXT_DIST_DIR"] = next_dist_dir
 
         local_process = subprocess.Popen(
             ["npm", "run", "dev", "--", "--hostname", "127.0.0.1", "--port", str(web_port)],

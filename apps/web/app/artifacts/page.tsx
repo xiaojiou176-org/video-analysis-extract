@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Image from "next/image";
 
 import { getFlashMessage, toErrorCode } from "@/app/flash-message";
 import { MarkdownPreview } from "@/components/markdown-preview";
@@ -42,7 +43,7 @@ function extractArtifactJobId(jobId: string, meta: Record<string, unknown> | nul
 	return typeof rawJobId === "string" ? rawJobId : "";
 }
 
-function inferImageMime(path: string): string {
+function inferImageMime(path: string): string | null {
 	const lower = path.toLowerCase();
 	if (lower.endsWith(".png")) {
 		return "image/png";
@@ -53,7 +54,7 @@ function inferImageMime(path: string): string {
 	if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) {
 		return "image/jpeg";
 	}
-	return "application/octet-stream";
+	return null;
 }
 
 export default async function ArtifactsPage({ searchParams }: ArtifactsPageProps) {
@@ -156,23 +157,29 @@ export default async function ArtifactsPage({ searchParams }: ArtifactsPageProps
 												>
 													查看截图 {index + 1}
 												</a>
-												<object
-													aria-label={`Screenshot ${index + 1}: ${item.path}`}
-													data={item.assetUrl}
-													type={item.mimeType}
-													style={{
-														width: "100%",
-														minHeight: "120px",
-														maxHeight: "320px",
-														borderRadius: "8px",
-														border: "1px solid var(--color-border)",
-														background: "var(--color-surface-hover)",
-													}}
-												>
+												{item.mimeType ? (
+													<Image
+														alt={`Screenshot ${index + 1}: ${item.path}`}
+														src={item.assetUrl}
+														unoptimized
+														width={1280}
+														height={720}
+														loading="lazy"
+														style={{
+															width: "100%",
+															minHeight: "120px",
+															maxHeight: "320px",
+															borderRadius: "8px",
+															border: "1px solid var(--color-border)",
+															background: "var(--color-surface-hover)",
+															objectFit: "contain",
+														}}
+													/>
+												) : (
 													<p className="small">
-														Unable to load screenshot, fallback path: <code>{item.path}</code>
+														截图文件格式不支持内嵌预览，请通过链接打开：<code>{item.path}</code>
 													</p>
-												</object>
+												)}
 											</>
 										) : (
 											<p className="small">

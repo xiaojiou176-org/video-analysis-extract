@@ -8,6 +8,7 @@ from apps.mcp.tools._common import (
     ApiCall,
     invalid_argument,
     is_error_payload,
+    parse_bounded_int,
     parse_uuid,
     to_int,
     to_optional_bool,
@@ -137,13 +138,27 @@ def register_job_tools(mcp: FastMCP, api_call: ApiCall) -> None:
         status: str | None = None,
         limit: int | None = None,
     ) -> dict[str, Any]:
+        normalized_limit, limit_error = parse_bounded_int(
+            limit,
+            field="limit",
+            min_value=1,
+            max_value=500,
+        )
+        if limit_error is not None:
+            return invalid_argument(
+                limit_error,
+                method="GET",
+                path="/api/v1/videos",
+                field="limit",
+                value=limit,
+            )
         return api_call(
             "GET",
             "/api/v1/videos",
             params={
                 "platform": platform,
                 "status": status,
-                "limit": limit,
+                "limit": normalized_limit,
             },
         )
 

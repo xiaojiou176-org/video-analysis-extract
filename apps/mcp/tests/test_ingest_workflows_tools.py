@@ -32,6 +32,16 @@ def test_ingest_poll_rejects_invalid_subscription_id() -> None:
     assert payload["details"]["path"] == "/api/v1/ingest/poll"
 
 
+def test_ingest_poll_rejects_invalid_max_new_videos() -> None:
+    mcp = _FakeMCP()
+    register_ingest_tools(mcp, lambda *_args, **_kwargs: {"ok": True})
+
+    payload = mcp.tools["vd.ingest.poll"](max_new_videos=0)
+
+    assert payload["code"] == "INVALID_ARGUMENT"
+    assert payload["details"]["field"] == "max_new_videos"
+
+
 def test_ingest_poll_posts_expected_payload_with_normalized_uuid() -> None:
     mcp = _FakeMCP()
     calls: list[dict[str, Any]] = []
@@ -104,3 +114,43 @@ def test_workflows_run_passes_through_error_payload_from_upstream() -> None:
 
     assert payload["code"] == "UPSTREAM_HTTP_ERROR"
     assert payload["details"]["status_code"] == 503
+
+
+def test_workflows_run_rejects_invalid_boolean_flags() -> None:
+    mcp = _FakeMCP()
+    calls = 0
+
+    def fake_api_call(*_args: Any, **_kwargs: Any) -> dict[str, Any]:
+        nonlocal calls
+        calls += 1
+        return {"ok": True}
+
+    register_workflow_tools(mcp, fake_api_call)
+
+    bad_run_once = mcp.tools["vd.workflows.run"](
+        workflow="daily_digest",
+        run_once="true",  # type: ignore[arg-type]
+    )
+    bad_wait_for_result = mcp.tools["vd.workflows.run"](
+        workflow="daily_digest",
+        wait_for_result="false",  # type: ignore[arg-type]
+    )
+
+    assert bad_run_once["code"] == "INVALID_ARGUMENT"
+    assert bad_run_once["details"]["field"] == "run_once"
+    assert bad_wait_for_result["code"] == "INVALID_ARGUMENT"
+    assert bad_wait_for_result["details"]["field"] == "wait_for_result"
+    assert calls == 0
+
+
+def test_workflows_run_rejects_invalid_payload_value_ranges() -> None:
+    mcp = _FakeMCP()
+    register_workflow_tools(mcp, lambda *_args, **_kwargs: {"ok": True})
+
+    payload = mcp.tools["vd.workflows.run"](
+        workflow="daily_digest",
+        payload={"local_hour": 30},
+    )
+
+    assert payload["code"] == "INVALID_ARGUMENT"
+    assert payload["details"]["field"] == "payload.local_hour"

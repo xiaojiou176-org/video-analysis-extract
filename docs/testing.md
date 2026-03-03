@@ -515,3 +515,6 @@ npm run lint
 
 
 <!-- doc-sync: api/worker reliability + auth guard update (2026-03-03) -->
+
+
+<!-- doc-sync: mcp/web contract and schema alignment (2026-03-03) -->

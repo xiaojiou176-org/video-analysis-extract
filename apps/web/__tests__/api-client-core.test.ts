@@ -1,9 +1,16 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { apiClient } from "@/lib/api/client";
 
 describe("apiClient core behavior", () => {
+	const envSnapshot = { ...process.env };
+
+	beforeEach(() => {
+		process.env = { ...envSnapshot, NEXT_PUBLIC_API_BASE_URL: "https://api.example.com" };
+	});
+
 	afterEach(() => {
+		process.env = { ...envSnapshot };
 		vi.restoreAllMocks();
 	});
 
@@ -21,6 +28,16 @@ describe("apiClient core behavior", () => {
 		);
 	});
 
+	it("maps unprocessable entity to ERR_INVALID_INPUT", async () => {
+		vi.spyOn(globalThis, "fetch").mockResolvedValue(
+			new Response(JSON.stringify({ detail: "validation failed" }), { status: 422 }),
+		);
+
+		await expect(apiClient.sendNotificationTest({ subject: "x" })).rejects.toThrow(
+			"ERR_INVALID_INPUT",
+		);
+	});
+
 	it("maps server errors and not found to ERR_REQUEST_FAILED", async () => {
 		const fetchSpy = vi
 			.spyOn(globalThis, "fetch")
@@ -30,6 +47,12 @@ describe("apiClient core behavior", () => {
 		await expect(apiClient.getNotificationConfig()).rejects.toThrow("ERR_REQUEST_FAILED");
 		await expect(apiClient.getNotificationConfig()).rejects.toThrow("ERR_REQUEST_FAILED");
 		expect(fetchSpy).toHaveBeenCalledTimes(2);
+	});
+
+	it("throws ERR_PROTOCOL_EMPTY_BODY for 200 responses with empty body", async () => {
+		vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 200 }));
+
+		await expect(apiClient.getNotificationConfig()).rejects.toThrow("ERR_PROTOCOL_EMPTY_BODY");
 	});
 
 	it("sends JSON payload with no-store caching", async () => {
@@ -73,6 +96,7 @@ describe("apiClient core behavior", () => {
 					pipeline_final_status: null,
 					artifacts_index: { digest: "a.md", bad: 123 },
 					mode: undefined,
+					notification_retry: undefined,
 				}),
 				{ status: 200 },
 			),
@@ -84,6 +108,7 @@ describe("apiClient core behavior", () => {
 		expect(job.degradations).toEqual([]);
 		expect(job.artifacts_index).toEqual({ digest: "a.md" });
 		expect(job.mode).toBeNull();
+		expect(job.notification_retry).toBeNull();
 	});
 
 	it("supports plain text artifact markdown endpoint", async () => {
@@ -95,6 +120,85 @@ describe("apiClient core behavior", () => {
 		const [url] = fetchSpy.mock.calls[0];
 		expect(String(url)).toContain("/api/v1/artifacts/markdown");
 		expect(String(url)).toContain("job_id=job-1");
+	});
+
+	it("maps network errors to ERR_REQUEST_FAILED for text endpoints", async () => {
+		vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("network down"));
+
+		await expect(apiClient.getArtifactMarkdown({ job_id: "job-1" })).rejects.toThrow(
+			"ERR_REQUEST_FAILED",
+		);
+	});
+
+	it("preserves local query validation error code from buildApiUrl", async () => {
+		const fetchSpy = vi.spyOn(globalThis, "fetch");
+
+		await expect(
+			apiClient.getDigestFeed({
+				limit: 20,
+				session_token: "abc",
+			} as unknown as Parameters<typeof apiClient.getDigestFeed>[0]),
+		).rejects.toThrow("ERR_SENSITIVE_QUERY_KEY:session_token");
+		expect(fetchSpy).not.toHaveBeenCalled();
+	});
+
+	it("normalizes malformed feed payload to keep page rendering safe", async () => {
+		vi.spyOn(globalThis, "fetch").mockResolvedValue(
+			new Response(
+				JSON.stringify({
+					items: [
+						null,
+						{
+							feed_id: "feed-1",
+							job_id: "job-1",
+							video_url: 1,
+							title: null,
+							source: "youtube",
+							source_name: null,
+							category: "",
+							published_at: 123,
+							summary_md: { x: 1 },
+							artifact_type: "unknown",
+						},
+						{ feed_id: "", job_id: "missing" },
+					],
+						has_more: "unknown",
+					next_cursor: 123,
+				}),
+				{ status: 200 },
+			),
+		);
+
+		const feed = await apiClient.getDigestFeed();
+		expect(feed.has_more).toBe(false);
+		expect(feed.next_cursor).toBeNull();
+		expect(feed.items).toEqual([
+			{
+				feed_id: "feed-1",
+				job_id: "job-1",
+				video_url: "",
+				title: "",
+				source: "youtube",
+				source_name: "",
+				category: "misc",
+				published_at: "",
+				summary_md: "",
+				artifact_type: "digest",
+			},
+		]);
+	});
+
+	it("normalizes artifact markdown meta response shape", async () => {
+		vi.spyOn(globalThis, "fetch").mockResolvedValue(
+			new Response(JSON.stringify({ markdown: 1, meta: [] }), { status: 200 }),
+		);
+
+		await expect(
+			apiClient.getArtifactMarkdown({ job_id: "job-1", include_meta: true }),
+		).resolves.toEqual({
+			markdown: "",
+			meta: null,
+		});
 	});
 
 	it("covers additional client endpoints with query/body wiring", async () => {

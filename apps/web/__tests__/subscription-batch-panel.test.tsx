@@ -37,6 +37,7 @@ const MOCK_SUBS: Subscription[] = [
 		tags: ["ai"],
 		priority: 80,
 		enabled: true,
+		created_at: "2026-02-23T00:00:00Z",
 		updated_at: "2026-02-23T00:00:00Z",
 	},
 	{
@@ -52,6 +53,7 @@ const MOCK_SUBS: Subscription[] = [
 		tags: [],
 		priority: 50,
 		enabled: true,
+		created_at: "2026-02-22T00:00:00Z",
 		updated_at: "2026-02-22T00:00:00Z",
 	},
 ];
@@ -94,6 +96,19 @@ describe("SubscriptionBatchPanel", () => {
 			rowCheckboxes.forEach((cb) => {
 				expect(cb).toBeChecked();
 			});
+		},
+		PANEL_TEST_TIMEOUT_MS,
+	);
+
+	it(
+		"select-all checkbox clears selection on second toggle",
+		() => {
+			render(<SubscriptionBatchPanel subscriptions={MOCK_SUBS} />);
+			const allCheckbox = screen.getByLabelText("全选");
+			fireEvent.click(allCheckbox);
+			expect(screen.getByText(/已选/)).toBeInTheDocument();
+			fireEvent.click(allCheckbox);
+			expect(screen.queryByText(/已选/)).not.toBeInTheDocument();
 		},
 		PANEL_TEST_TIMEOUT_MS,
 	);

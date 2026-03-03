@@ -8,6 +8,8 @@ from apps.mcp.tools._common import (
     ApiCall,
     invalid_argument,
     is_error_payload,
+    parse_bool,
+    parse_bounded_int,
     parse_workflow_id,
     to_optional_dict,
     to_optional_str,
@@ -29,6 +31,52 @@ _WORKFLOW_PAYLOAD_ALLOWLIST: dict[str, set[str]] = {
     },
     "provider_canary": {"run_once", "interval_hours", "timeout_seconds"},
 }
+
+
+def _normalize_workflow_payload(
+    workflow: str,
+    payload: dict[str, Any],
+) -> tuple[dict[str, Any] | None, str | None, str | None]:
+    normalized = dict(payload)
+    for bool_key in ("run_once",):
+        if bool_key in normalized:
+            value, error = parse_bool(normalized.get(bool_key), field=f"payload.{bool_key}")
+            if error is not None:
+                return None, bool_key, error
+            normalized[bool_key] = value
+
+    int_ranges: dict[str, tuple[int, int]] = {}
+    if workflow == "poll_feeds":
+        int_ranges["max_new_videos"] = (1, 500)
+    elif workflow == "daily_digest":
+        int_ranges["timezone_offset_minutes"] = (-720, 840)
+        int_ranges["local_hour"] = (0, 23)
+    elif workflow == "notification_retry":
+        int_ranges["interval_minutes"] = (1, 1440)
+        int_ranges["retry_batch_limit"] = (1, 500)
+    elif workflow == "cleanup":
+        int_ranges["interval_hours"] = (1, 24 * 30)
+        int_ranges["older_than_hours"] = (1, 24 * 365)
+        int_ranges["cache_older_than_hours"] = (1, 24 * 365)
+        int_ranges["cache_max_size_mb"] = (1, 1024 * 50)
+    elif workflow == "provider_canary":
+        int_ranges["interval_hours"] = (1, 24 * 30)
+        int_ranges["timeout_seconds"] = (1, 1800)
+
+    for key, (min_value, max_value) in int_ranges.items():
+        if key not in normalized:
+            continue
+        parsed_value, error = parse_bounded_int(
+            normalized.get(key),
+            field=f"payload.{key}",
+            min_value=min_value,
+            max_value=max_value,
+            required=True,
+        )
+        if error is not None or parsed_value is None:
+            return None, key, error or f"payload.{key} is invalid"
+        normalized[key] = parsed_value
+    return normalized, None, None
 
 
 def register_workflow_tools(mcp: FastMCP, api_call: ApiCall) -> None:
@@ -75,13 +123,49 @@ def register_workflow_tools(mcp: FastMCP, api_call: ApiCall) -> None:
                 path="/api/v1/workflows/run",
                 field="payload",
             )
+        normalized_run_once, run_once_error = parse_bool(run_once, field="run_once", required=True)
+        if run_once_error is not None or normalized_run_once is None:
+            return invalid_argument(
+                run_once_error or "run_once is invalid",
+                method="POST",
+                path="/api/v1/workflows/run",
+                field="run_once",
+                value=run_once,
+            )
+        normalized_wait_for_result, wait_error = parse_bool(
+            wait_for_result, field="wait_for_result", required=True
+        )
+        if wait_error is not None or normalized_wait_for_result is None:
+            return invalid_argument(
+                wait_error or "wait_for_result is invalid",
+                method="POST",
+                path="/api/v1/workflows/run",
+                field="wait_for_result",
+                value=wait_for_result,
+            )
+        normalized_payload, invalid_payload_field, invalid_payload_error = _normalize_workflow_payload(
+            normalized_workflow,
+            normalized_payload,
+        )
+        if (
+            invalid_payload_error is not None
+            or invalid_payload_field is not None
+            or normalized_payload is None
+        ):
+            return invalid_argument(
+                invalid_payload_error or "payload is invalid",
+                method="POST",
+                path="/api/v1/workflows/run",
+                field=f"payload.{invalid_payload_field}" if invalid_payload_field else "payload",
+                value=payload.get(invalid_payload_field) if isinstance(payload, dict) and invalid_payload_field else None,
+            )
         response = api_call(
             "POST",
             "/api/v1/workflows/run",
             json_body={
                 "workflow": normalized_workflow,
-                "run_once": run_once,
-                "wait_for_result": wait_for_result,
+                "run_once": normalized_run_once,
+                "wait_for_result": normalized_wait_for_result,
                 "workflow_id": normalized_workflow_id,
                 "payload": normalized_payload,
             },
