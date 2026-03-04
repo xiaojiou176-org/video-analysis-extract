@@ -93,7 +93,7 @@ jobs:
             sleep 10
           done
 
-          echo "Waiting for all 9 self-hosted runners to become online..."
+          echo "Waiting for self-hosted runners to become online..."
           for attempt in $(seq 1 40); do
             online_count="$(gh api "orgs/${GH_ORG}/actions/runners" --jq "[.runners[] | select((.name|test(\"${RUNNER_NAME_REGEX}\")) and .status==\"online\")] | length")"
             echo "  online runners: ${online_count}/9"
@@ -102,9 +102,10 @@ jobs:
               exit 0
             fi
             if [[ "$attempt" -eq 40 ]]; then
-              echo "Timed out waiting for 9 runners online. Current statuses:"
+              echo "Timed out waiting for 9 runners online; continuing with currently available runners."
+              echo "Current runner statuses:"
               gh api "orgs/${GH_ORG}/actions/runners" --jq ".runners[] | select(.name|test(\"${RUNNER_NAME_REGEX}\")) | \"\\(.name)=\\(.status), busy=\\(.busy)\""
-              exit 1
+              exit 0
             fi
             sleep 15
           done
