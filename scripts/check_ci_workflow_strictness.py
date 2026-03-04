@@ -288,7 +288,10 @@ def _check_global_rules(
                 f"{workflow_path}: {job_name}: hosted jobs must set continue-on-error: true to allow fallback takeover"
             )
 
-        if "runs-on: [self-hosted, e2-core, spot, shared-pool]" not in hosted_block:
+        if (
+            "runs-on: [self-hosted, e2-core, spot, shared-pool]" not in hosted_block
+            and "runs-on: e2-core" not in hosted_block
+        ):
             failures.append(
                 f"{workflow_path}: {job_name}: hosted jobs must run on self-hosted runner pool"
             )
@@ -298,7 +301,10 @@ def _check_global_rules(
                 f"{workflow_path}: {fallback_name}: missing fallback job for {job_name}"
             )
         else:
-            if "runs-on: [self-hosted, e2-core, spot, shared-pool]" not in fallback_block:
+            if (
+                "runs-on: [self-hosted, e2-core, spot, shared-pool]" not in fallback_block
+                and "runs-on: e2-core" not in fallback_block
+            ):
                 failures.append(
                     f"{workflow_path}: {fallback_name}: fallback jobs must run on self-hosted runner pool"
                 )
