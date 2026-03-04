@@ -57,6 +57,17 @@ jobs:
         with:
           project_id: ${{ env.GCP_PROJECT_ID }}
 
+      - name: Ensure GitHub CLI is available
+        run: |
+          set -euo pipefail
+          if command -v gh >/dev/null 2>&1; then
+            gh --version
+            exit 0
+          fi
+          sudo apt-get update
+          sudo apt-get install -y gh
+          gh --version
+
       - name: Start offline runner instances and wait for online
         run: |
           set -euo pipefail
