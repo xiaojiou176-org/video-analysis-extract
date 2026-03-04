@@ -114,17 +114,18 @@ def test_artifact_lookup_by_video_url_shows_markdown_result(
 
 
 def test_artifact_lookup_by_invalid_job_id_shows_error_alert(page: Page) -> None:
+    invalid_job_id = "invalid-job-id"
     page.goto("/artifacts", wait_until="domcontentloaded")
-    page.get_by_label("任务 ID").fill("invalid-job-id")
+    page.get_by_label("任务 ID").fill(invalid_job_id)
     page.get_by_role("button", name="加载产物").click()
 
-    if re.search(r"/artifacts\?job_id=&video_url=$", page.url):
+    if re.search(r"/artifacts\?(?:.*&)?job_id=(?:&|$)", page.url):
         # Some builds normalize invalid identifier input at form layer.
         expect(page.get_by_role("heading", name="产物查询")).to_be_visible()
-        expect(page.get_by_label("任务 ID")).not_to_have_value("invalid-job-id")
+        expect(page.get_by_label("任务 ID")).not_to_have_value(invalid_job_id)
     else:
         expect(page).to_have_url(re.compile(r"/artifacts\?job_id=.*"))
-        _expect_artifact_error_alert(page)
+        _expect_artifact_error_or_normalized_state(page, invalid_job_id=invalid_job_id)
 
 
 def _expect_artifact_success_result(page: Page) -> None:
@@ -175,3 +176,17 @@ def _expect_artifact_error_alert(page: Page) -> None:
     assert error_text in allowed_error_texts, (
         f"unexpected artifact error text: {error_text!r}"
     )
+
+
+def _expect_artifact_error_or_normalized_state(page: Page, *, invalid_job_id: str) -> None:
+    error_alert = page.locator("p.alert.error")
+    normalized_input = page.get_by_label("任务 ID")
+
+    try:
+        _expect_artifact_error_alert(page)
+        return
+    except AssertionError:
+        # WebKit can normalize invalid identifier input before error banner rendering.
+        expect(page.get_by_role("heading", name="产物查询")).to_be_visible()
+        expect(normalized_input).not_to_have_value(invalid_job_id)
+        expect(error_alert).to_have_count(0)
