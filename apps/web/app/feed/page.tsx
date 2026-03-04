@@ -19,9 +19,27 @@ const CATEGORY_LABELS: Record<string, string> = {
 	tech: "科技",
 	creator: "创作者",
 	macro: "宏观",
-	ops: "运营",
+	ops: "运维",
 	misc: "其他",
 };
+
+const SOURCE_OPTIONS = [
+	{ value: "", label: "全部来源" },
+	{ value: "youtube", label: "YouTube" },
+	{ value: "bilibili", label: "Bilibili" },
+	{ value: "rss", label: "RSS" },
+] as const;
+
+function toSourceSelectValue(source: string): (typeof SOURCE_OPTIONS)[number]["value"] {
+	const normalized = source.trim().toLowerCase();
+	if (normalized === "youtube" || normalized === "bilibili" || normalized === "rss") {
+		return normalized;
+	}
+	if (normalized === "rss_generic") {
+		return "rss";
+	}
+	return "";
+}
 
 function toSourceLabel(source: string): string {
 	const normalized = source.trim().toLowerCase();
@@ -30,6 +48,9 @@ function toSourceLabel(source: string): string {
 	}
 	if (normalized === "bilibili") {
 		return "Bilibili";
+	}
+	if (normalized === "rss" || normalized === "rss_generic") {
+		return "RSS";
 	}
 	return source || "未知";
 }
@@ -44,24 +65,43 @@ function renderSourceName(source: string, sourceName: string): string {
 }
 
 export default async function FeedPage({ searchParams }: FeedPageProps) {
-	const { source, category, limit, cursor } = await resolveSearchParams(searchParams, [
+	const { source, category, limit, cursor, prev_cursor, page } = await resolveSearchParams(searchParams, [
 		"source",
 		"category",
 		"limit",
 		"cursor",
+		"prev_cursor",
+		"page",
 	] as const);
 
 	const parsedLimit = Number.parseInt(limit, 10);
 	const safeLimit =
 		Number.isFinite(parsedLimit) && parsedLimit > 0 ? Math.min(parsedLimit, 100) : 20;
 	const safeCursor = cursor.trim() || undefined;
-	const isFiltered = Boolean(source.trim() || category);
+	const safePrevCursor = prev_cursor.trim() || undefined;
+	const parsedPage = Number.parseInt(page, 10);
+	const inferredPage = safeCursor ? 2 : 1;
+	const safePage =
+		Number.isFinite(parsedPage) && parsedPage > 0 ? parsedPage : inferredPage;
+	const normalizedSource = source.trim().toLowerCase();
+	const safeSource = normalizedSource || undefined;
+	const sourceSelectValue = toSourceSelectValue(source);
+	const isFiltered = Boolean(safeSource || category);
+	const hasVisibleFilterLabel = Boolean(safeSource || category);
+	const filterSummaryParts = [
+		safeSource ? `来源 ${toSourceLabel(safeSource)}` : null,
+		category ? `分类 ${CATEGORY_LABELS[category] ?? category}` : null,
+	].filter((part): part is string => Boolean(part));
+	const filterSummaryText =
+		filterSummaryParts.length > 0
+			? `，当前筛选：${filterSummaryParts.join("，")}`
+			: "，当前为全部内容";
 
 	let feed: Awaited<ReturnType<typeof apiClient.getDigestFeed>> | null = null;
 	let errorCode: string | null = null;
 	try {
 		feed = await apiClient.getDigestFeed({
-			source: source.trim() || undefined,
+			source: safeSource,
 			category:
 				category === "tech" ||
 				category === "creator" ||
@@ -82,10 +122,18 @@ export default async function FeedPage({ searchParams }: FeedPageProps) {
 	const isFirstPage = !safeCursor;
 
 	// 构建分页链接
-	const buildPageUrl = (cur: string | null) => {
+	const buildPageUrl = ({
+		cursorValue,
+		prevCursorValue,
+		pageValue,
+	}: {
+		cursorValue?: string;
+		prevCursorValue?: string;
+		pageValue: number;
+	}) => {
 		const params = new URLSearchParams();
-		if (source.trim()) {
-			params.set("source", source.trim());
+		if (safeSource) {
+			params.set("source", safeSource);
 		}
 		if (category) {
 			params.set("category", category);
@@ -93,12 +141,23 @@ export default async function FeedPage({ searchParams }: FeedPageProps) {
 		if (safeLimit !== 20) {
 			params.set("limit", String(safeLimit));
 		}
-		if (cur) {
-			params.set("cursor", cur);
+		if (pageValue > 1) {
+			params.set("page", String(pageValue));
+		}
+		if (cursorValue) {
+			params.set("cursor", cursorValue);
+		}
+		if (prevCursorValue) {
+			params.set("prev_cursor", prevCursorValue);
 		}
 		const qs = params.toString();
 		return `/feed${qs ? `?${qs}` : ""}`;
 	};
+	const retryHref = buildPageUrl({
+		cursorValue: safeCursor,
+		prevCursorValue: safePrevCursor,
+		pageValue: safePage,
+	});
 
 	return (
 		<div className="stack">
@@ -114,11 +173,13 @@ export default async function FeedPage({ searchParams }: FeedPageProps) {
 				<form method="GET" className="inline">
 					<label>
 						来源平台
-						<input
-							name="source"
-							defaultValue={source}
-							placeholder="youtube / bilibili / rss_generic"
-						/>
+						<select name="source" defaultValue={sourceSelectValue}>
+							{SOURCE_OPTIONS.map((option) => (
+								<option key={option.value || "all"} value={option.value}>
+									{option.label}
+								</option>
+							))}
+						</select>
 					</label>
 					<label>
 						分类
@@ -127,7 +188,7 @@ export default async function FeedPage({ searchParams }: FeedPageProps) {
 							<option value="tech">科技</option>
 							<option value="creator">创作者</option>
 							<option value="macro">宏观</option>
-							<option value="ops">运营</option>
+							<option value="ops">运维</option>
 							<option value="misc">其他</option>
 						</select>
 					</label>
@@ -139,7 +200,7 @@ export default async function FeedPage({ searchParams }: FeedPageProps) {
 						筛选
 					</button>
 					{isFiltered && (
-						<Link href="/feed" className="btn-link">
+						<Link href="/feed" className="btn-link" data-interaction="link-muted">
 							清除筛选
 						</Link>
 					)}
@@ -147,8 +208,18 @@ export default async function FeedPage({ searchParams }: FeedPageProps) {
 			</section>
 
 			{errorCode ? (
-				<p className="alert error" role="alert" aria-live="assertive">
-					{getFlashMessage(errorCode)}
+				<>
+					<p className="alert alert-enter error" role="alert" aria-live="assertive">
+						{getFlashMessage(errorCode)}
+					</p>
+					<Link href={retryHref} className="btn-link" data-interaction="link-muted">
+						重试当前页面
+					</Link>
+				</>
+			) : null}
+			{!errorCode ? (
+				<p className="small" role="status" aria-live="polite">
+					已加载 {items.length} 条摘要{filterSummaryText}。
 				</p>
 			) : null}
 
@@ -162,7 +233,7 @@ export default async function FeedPage({ searchParams }: FeedPageProps) {
 							: "还没有处理过的视频或文章。请先去添加订阅并触发采集。"}
 					</p>
 					{!isFiltered && (
-						<div className="inline" style={{ marginTop: "8px" }}>
+						<div className="inline mt-8">
 							<Link href="/subscriptions" className="btn-cta">
 								→ 前往订阅管理
 							</Link>
@@ -195,13 +266,19 @@ export default async function FeedPage({ searchParams }: FeedPageProps) {
 
 						<div className="feed-item-footer">
 							<div className="inline">
-								<Link href={`/artifacts?job_id=${encodeURIComponent(item.job_id)}`}>查看产物</Link>
+								<Link
+									href={`/artifacts?job_id=${encodeURIComponent(item.job_id)}`}
+									data-interaction="link-primary"
+								>
+									查看产物
+								</Link>
 								{safeVideoUrl ? (
 									<a
 										href={safeVideoUrl}
 										target="_blank"
 										rel="noreferrer noopener"
 										aria-label="打开原始链接（在新标签页打开）"
+										data-interaction="link-muted"
 									>
 										打开原始链接（在新标签页打开）
 									</a>
@@ -215,6 +292,7 @@ export default async function FeedPage({ searchParams }: FeedPageProps) {
 								<Link
 									href={`/jobs?job_id=${encodeURIComponent(item.job_id)}`}
 									className="job-id-link"
+									data-interaction="link-muted"
 								>
 									{item.job_id.slice(0, 8)}…
 								</Link>
@@ -229,29 +307,49 @@ export default async function FeedPage({ searchParams }: FeedPageProps) {
 				<nav className="card feed-pagination" aria-label="分页">
 					<div className="inline">
 						{!isFirstPage && (
-							<Link href="/feed" className="btn-page">
-								← 首页
+							<Link
+								href={buildPageUrl({
+									cursorValue: safePrevCursor,
+									pageValue: Math.max(1, safePage - 1),
+								})}
+								className="btn-page"
+							>
+								← 上一页
 							</Link>
 						)}
-						{isFiltered && (
+						{isFiltered && hasVisibleFilterLabel && (
 							<span className="small">
-								{source.trim() && `来源：${source}`}
-								{source.trim() && category && " · "}
+								{safeSource && `来源：${toSourceLabel(safeSource)}`}
+								{safeSource && category && " · "}
 								{category && `分类：${CATEGORY_LABELS[category] ?? category}`}
 							</span>
 						)}
 					</div>
 					<div className="inline">
 						<span className="small pagination-info">
-							{isFirstPage ? "第 1 页" : "已翻页"}
+							{`第 ${safePage} 页`}
 							{nextCursor === null ? "  · 已到末页" : ""}
 						</span>
 						{nextCursor !== null ? (
-							<Link href={buildPageUrl(nextCursor)} className="btn-page btn-page-primary">
+							<Link
+								href={buildPageUrl({
+									cursorValue: nextCursor,
+									prevCursorValue: safeCursor,
+									pageValue: safePage + 1,
+								})}
+								className="btn-page btn-page-primary"
+							>
 								下一页 →
 							</Link>
 						) : (
-							<span className="btn-page btn-page-disabled">已到末页</span>
+							<button
+								type="button"
+								className="btn-page btn-page-disabled"
+								disabled
+								aria-disabled="true"
+							>
+								已到末页
+							</button>
 						)}
 					</div>
 				</nav>

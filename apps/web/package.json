@@ -9,7 +9,9 @@
 		"lint": "eslint . --ext .ts,.tsx",
 		"test": "vitest run",
 		"test:a11y": "vitest run __tests__/a11y-smoke.test.tsx",
-		"test:watch": "vitest"
+		"test:e2e:perceived": "cd tests/e2e && uv run --with pytest --with playwright pytest test_mobile_breakpoints.py test_reduced_motion.py test_perceived_latency.py -q -rA --web-e2e-browser chromium --web-e2e-api-base-url ${WEB_E2E_API_BASE_URL:-http://127.0.0.1:18080} --web-e2e-device-profile mobile --web-e2e-reduced-motion reduce --web-e2e-cpu-throttle 4",
+		"test:watch": "vitest",
+		"lighthouse:check": "lighthouse http://127.0.0.1:3000 --only-categories=accessibility,best-practices --quiet --chrome-flags='--headless'"
 	},
 	"dependencies": {
 		"next": "16.1.6",

@@ -3,6 +3,8 @@ from __future__ import annotations
 import socket
 import threading
 
+import conftest as e2e_conftest
+import pytest
 from support.assertions import wait_for_call_count, wait_for_http_call
 from support.mock_api import MockApiState
 from support.runtime_utils import (
@@ -105,3 +107,46 @@ def test_resolve_worker_id_generates_process_scoped_default() -> None:
     )
     assert resolved == "webkit-stable-p789"
     assert worker_dist_dir(resolved) == ".next-e2e-webkit-stable-p789"
+
+
+class _StubConfig:
+    def __init__(self, options: dict[str, str]) -> None:
+        self._options = options
+
+    def getoption(self, key: str) -> str:
+        return self._options[key]
+
+
+def test_e2e_runtime_options_parse_valid_values() -> None:
+    config = _StubConfig(
+        {
+            "--web-e2e-device-profile": "mobile",
+            "--web-e2e-reduced-motion": "reduce",
+            "--web-e2e-cpu-throttle": "3",
+        }
+    )
+    assert e2e_conftest._read_device_profile(config) == "mobile"
+    assert e2e_conftest._read_reduced_motion(config) == "reduce"
+    assert e2e_conftest._read_cpu_throttle(config) == 3
+
+
+def test_e2e_runtime_options_reject_invalid_device_profile() -> None:
+    config = _StubConfig({"--web-e2e-device-profile": "watch"})
+    with pytest.raises(RuntimeError, match="--web-e2e-device-profile"):
+        e2e_conftest._read_device_profile(config)
+
+
+def test_e2e_runtime_options_reject_invalid_reduced_motion() -> None:
+    config = _StubConfig({"--web-e2e-reduced-motion": "fast"})
+    with pytest.raises(RuntimeError, match="--web-e2e-reduced-motion"):
+        e2e_conftest._read_reduced_motion(config)
+
+
+def test_e2e_runtime_options_reject_invalid_cpu_throttle() -> None:
+    non_int = _StubConfig({"--web-e2e-cpu-throttle": "bad"})
+    with pytest.raises(RuntimeError, match="--web-e2e-cpu-throttle"):
+        e2e_conftest._read_cpu_throttle(non_int)
+
+    too_small = _StubConfig({"--web-e2e-cpu-throttle": "0"})
+    with pytest.raises(RuntimeError, match=">=1"):
+        e2e_conftest._read_cpu_throttle(too_small)

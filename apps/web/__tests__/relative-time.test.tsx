@@ -45,6 +45,35 @@ describe("RelativeTime", () => {
 		expect(screen.getByText("1 年前")).toBeInTheDocument();
 	});
 
+	it("formats future minute/hour/tomorrow/day/week/month/year buckets", () => {
+		const minute = render(<RelativeTime dateTime="2026-02-26T12:00:30Z" />);
+		expect(screen.getByText("马上")).toBeInTheDocument();
+		minute.unmount();
+
+		const hour = render(<RelativeTime dateTime="2026-02-26T14:00:00Z" />);
+		expect(screen.getByText("2 小时后")).toBeInTheDocument();
+		hour.unmount();
+
+		const tomorrow = render(<RelativeTime dateTime="2026-02-27T12:00:00Z" />);
+		expect(screen.getByText("明天")).toBeInTheDocument();
+		tomorrow.unmount();
+
+		const day = render(<RelativeTime dateTime="2026-03-02T12:00:00Z" />);
+		expect(screen.getByText("4 天后")).toBeInTheDocument();
+		day.unmount();
+
+		const week = render(<RelativeTime dateTime="2026-03-12T12:00:00Z" />);
+		expect(screen.getByText("2 周后")).toBeInTheDocument();
+		week.unmount();
+
+		const month = render(<RelativeTime dateTime="2026-04-26T12:00:00Z" />);
+		expect(screen.getByText("1 个月后")).toBeInTheDocument();
+		month.unmount();
+
+		render(<RelativeTime dateTime="2027-02-26T12:00:00Z" />);
+		expect(screen.getByText("1 年后")).toBeInTheDocument();
+	});
+
 	it("recomputes text on interval ticks", () => {
 		render(<RelativeTime dateTime="2026-02-26T11:59:30Z" />);
 		expect(screen.getByText("刚刚")).toBeInTheDocument();

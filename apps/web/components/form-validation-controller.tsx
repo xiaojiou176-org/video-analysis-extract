@@ -3,30 +3,107 @@
 import { usePathname } from "next/navigation";
 import { useEffect } from "react";
 
+const FORM_VALIDATION_MESSAGE_NODE_ATTR = "data-form-validation-message";
+const SUBMIT_REASON_BASE_DESCRIBED_BY = "data-submit-base-describedby";
+const FORM_VALIDATION_HINT_BASE_CLASS = "form-validation-hint";
+const FORM_VALIDATION_HINT_ACTIVE_CLASS = "form-validation-hint-active";
+
+const DISABLE_REASON_MESSAGES = {
+	required: "请先填写并修正必填项后再提交。",
+	requireOne: "请至少填写一项必填来源后再提交。",
+	requireOneExclusive: "当前只能填写一项来源，请清空多余输入后再提交。",
+} as const;
+
+let formValidationMessageCounter = 0;
+
 function isBlank(value: string | null | undefined): boolean {
 	return !value || value.trim().length === 0;
 }
 
+function getOrCreateValidationMessageNode(
+	form: HTMLFormElement,
+): HTMLOutputElement {
+	const existing = form.querySelector<HTMLOutputElement>(
+		`output[${FORM_VALIDATION_MESSAGE_NODE_ATTR}="true"]`,
+	);
+	if (existing) {
+		return existing;
+	}
+
+	const output = document.createElement("output");
+	formValidationMessageCounter += 1;
+	output.id = `form-validation-message-${formValidationMessageCounter}`;
+	output.setAttribute(FORM_VALIDATION_MESSAGE_NODE_ATTR, "true");
+	output.setAttribute("aria-live", "polite");
+	output.setAttribute("aria-atomic", "true");
+	output.setAttribute("role", "status");
+	output.className = FORM_VALIDATION_HINT_BASE_CLASS;
+	output.setAttribute("data-state", "idle");
+	output.hidden = true;
+	form.prepend(output);
+	return output;
+}
+
+function updateSubmitReasonA11y(
+	submit: HTMLButtonElement | HTMLInputElement,
+	reasonNode: HTMLOutputElement,
+	reason: string | null,
+): void {
+	if (!submit.hasAttribute(SUBMIT_REASON_BASE_DESCRIBED_BY)) {
+		submit.setAttribute(SUBMIT_REASON_BASE_DESCRIBED_BY, submit.getAttribute("aria-describedby") ?? "");
+	}
+	const baseDescribedBy = (submit.getAttribute(SUBMIT_REASON_BASE_DESCRIBED_BY) ?? "")
+		.split(/\s+/)
+		.filter((token) => token.length > 0 && token !== reasonNode.id);
+
+	if (!reason) {
+		reasonNode.setAttribute("aria-live", "polite");
+		reasonNode.setAttribute("role", "status");
+		reasonNode.setAttribute("data-state", "idle");
+		reasonNode.className = FORM_VALIDATION_HINT_BASE_CLASS;
+		reasonNode.textContent = "";
+		reasonNode.hidden = true;
+		submit.removeAttribute("title");
+		if (baseDescribedBy.length > 0) {
+			submit.setAttribute("aria-describedby", baseDescribedBy.join(" "));
+		} else {
+			submit.removeAttribute("aria-describedby");
+		}
+		return;
+	}
+
+	reasonNode.setAttribute("aria-live", "assertive");
+	reasonNode.setAttribute("role", "alert");
+	reasonNode.setAttribute("data-state", "active");
+	reasonNode.className = `${FORM_VALIDATION_HINT_BASE_CLASS} ${FORM_VALIDATION_HINT_ACTIVE_CLASS}`;
+	reasonNode.hidden = false;
+	reasonNode.textContent = reason;
+	submit.setAttribute("title", reason);
+	submit.setAttribute("aria-describedby", [...baseDescribedBy, reasonNode.id].join(" "));
+}
+
 function evaluateForm(form: HTMLFormElement): void {
-	const submit = form.querySelector<HTMLButtonElement>(
+	const submit = form.querySelector<HTMLButtonElement | HTMLInputElement>(
 		'button[type="submit"], input[type="submit"]',
 	);
 	if (!submit) {
 		return;
 	}
 
-	let disabled = false;
+	let hasRequiredViolation = false;
 	if (form.dataset.autoDisableRequired === "true") {
 		const requiredFields = Array.from(
 			form.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>(
 				"[required]",
 			),
 		);
-		disabled = requiredFields.some(
+		hasRequiredViolation = requiredFields.some(
 			(field) => isBlank((field as HTMLInputElement).value) || !field.checkValidity(),
 		);
 	}
 
+	let hasRequireOneViolation = false;
+	let hasRequireOneExclusiveViolation = false;
 	const requireOne = form.dataset.requireOne;
 	const requireOneExclusive = form.dataset.requireOneExclusive === "true";
 	if (requireOne) {
@@ -41,15 +118,27 @@ function evaluateForm(form: HTMLFormElement): void {
 				>(`[name="${name}"]`);
 				return !isBlank(field?.value);
 			}).length;
-			disabled = disabled || filledCount < 1;
+			hasRequireOneViolation = filledCount < 1;
 			if (requireOneExclusive && filledCount > 1) {
-				disabled = true;
+				hasRequireOneExclusiveViolation = true;
 			}
 		}
 	}
 
+	const disabled = hasRequiredViolation || hasRequireOneViolation || hasRequireOneExclusiveViolation;
+	let disableReason: string | null = null;
+	if (hasRequireOneExclusiveViolation) {
+		disableReason = DISABLE_REASON_MESSAGES.requireOneExclusive;
+	} else if (hasRequireOneViolation) {
+		disableReason = DISABLE_REASON_MESSAGES.requireOne;
+	} else if (hasRequiredViolation) {
+		disableReason = DISABLE_REASON_MESSAGES.required;
+	}
+
 	submit.disabled = disabled;
 	submit.setAttribute("aria-disabled", disabled ? "true" : "false");
+	const reasonNode = getOrCreateValidationMessageNode(form);
+	updateSubmitReasonA11y(submit, reasonNode, disableReason);
 
 	const dependentFields = Array.from(
 		form.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>(

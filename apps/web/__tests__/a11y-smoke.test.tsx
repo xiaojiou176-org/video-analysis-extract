@@ -1,6 +1,8 @@
 import { render } from "@testing-library/react";
 import { axe } from "jest-axe";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import ArtifactsPage from "@/app/artifacts/page";
+import FeedPage from "@/app/feed/page";
 import JobsPage from "@/app/jobs/page";
 import DashboardPage from "@/app/page";
 import SettingsPage from "@/app/settings/page";
@@ -9,6 +11,8 @@ import SubscriptionsPage from "@/app/subscriptions/page";
 const mockListSubscriptions = vi.fn();
 const mockListVideos = vi.fn();
 const mockGetJob = vi.fn();
+const mockGetDigestFeed = vi.fn();
+const mockGetArtifactMarkdown = vi.fn();
 const mockGetNotificationConfig = vi.fn();
 
 vi.mock("next/link", () => ({
@@ -19,14 +23,12 @@ vi.mock("next/link", () => ({
 	),
 }));
 
-vi.mock("@/app/action-security", () => ({
-	getActionSessionTokenForForm: () => "test-session-token",
+vi.mock("next/navigation", () => ({
+	useRouter: () => ({ refresh: vi.fn(), replace: vi.fn() }),
 }));
 
-vi.mock("@/components/subscription-batch-panel", () => ({
-	SubscriptionBatchPanel: ({ subscriptions }: { subscriptions: Array<{ id: string }> }) => (
-		<div data-testid="subscription-batch-panel">count:{subscriptions.length}</div>
-	),
+vi.mock("@/app/action-security", () => ({
+	getActionSessionTokenForForm: () => "test-session-token",
 }));
 
 vi.mock("@/lib/api/client", () => ({
@@ -34,7 +36,12 @@ vi.mock("@/lib/api/client", () => ({
 		listSubscriptions: (...args: unknown[]) => mockListSubscriptions(...args),
 		listVideos: (...args: unknown[]) => mockListVideos(...args),
 		getJob: (...args: unknown[]) => mockGetJob(...args),
+		getDigestFeed: (...args: unknown[]) => mockGetDigestFeed(...args),
+		getArtifactMarkdown: (...args: unknown[]) => mockGetArtifactMarkdown(...args),
 		getNotificationConfig: (...args: unknown[]) => mockGetNotificationConfig(...args),
+		pollIngest: vi.fn(),
+		deleteSubscription: vi.fn(),
+		batchUpdateSubscriptionCategory: vi.fn(),
 	},
 }));
 
@@ -66,10 +73,35 @@ describe("a11y smoke", () => {
 			degradations: [],
 			artifacts_index: {},
 		});
+		mockGetDigestFeed.mockResolvedValue({
+			items: [
+				{
+					feed_id: "feed-1",
+					job_id: "job-1",
+					video_url: "https://www.youtube.com/watch?v=abc",
+					title: "AI Weekly",
+					source: "youtube",
+					source_name: "Tech Channel",
+					category: "tech",
+					published_at: "2026-02-01T00:00:00Z",
+					summary_md: "## summary",
+					artifact_type: "digest",
+				},
+			],
+			has_more: false,
+			next_cursor: null,
+		});
+		mockGetArtifactMarkdown.mockResolvedValue({
+			markdown: "# artifact",
+			meta: {
+				frame_files: [],
+				job: { id: "job-1" },
+			},
+		});
 	});
 
 	it(
-		"dashboard/subscriptions/settings/jobs pages have no critical accessibility violations",
+		"dashboard/subscriptions/settings/feed/jobs/artifacts pages have no critical accessibility violations",
 		async () => {
 			const dashboard = render(await DashboardPage({ searchParams: {} }));
 			const dashboardResults = await axe(dashboard.container);
@@ -86,6 +118,14 @@ describe("a11y smoke", () => {
 			const jobs = render(await JobsPage({ searchParams: { job_id: "job-1" } }));
 			const jobsResults = await axe(jobs.container);
 			expect(jobsResults.violations).toHaveLength(0);
+
+			const feed = render(await FeedPage({ searchParams: {} }));
+			const feedResults = await axe(feed.container);
+			expect(feedResults.violations).toHaveLength(0);
+
+			const artifacts = render(await ArtifactsPage({ searchParams: { job_id: "job-1" } }));
+			const artifactsResults = await axe(artifacts.container);
+			expect(artifactsResults.violations).toHaveLength(0);
 		},
 		A11Y_TIMEOUT_MS,
 	);

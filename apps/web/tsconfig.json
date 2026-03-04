@@ -36,7 +36,27 @@
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts",
     ".next-e2e-*/types/**/*.ts",
-    ".next-e2e-*/dev/types/**/*.ts"
+    ".next-e2e-*/dev/types/**/*.ts",
+    ".next-e2e-chromium-p7819/types/**/*.ts",
+    ".next-e2e-chromium-p7819/dev/types/**/*.ts",
+    ".next-e2e-chromium-p40025/types/**/*.ts",
+    ".next-e2e-chromium-p40025/dev/types/**/*.ts",
+    ".next-e2e-chromium-p42749/types/**/*.ts",
+    ".next-e2e-chromium-p42749/dev/types/**/*.ts",
+    ".next-e2e-chromium-p44169/types/**/*.ts",
+    ".next-e2e-chromium-p44169/dev/types/**/*.ts",
+    ".next-e2e-chromium-p47107/types/**/*.ts",
+    ".next-e2e-chromium-p47107/dev/types/**/*.ts",
+    ".next-e2e-chromium-p50684/types/**/*.ts",
+    ".next-e2e-chromium-p50684/dev/types/**/*.ts",
+    ".next-e2e-chromium-p53422/types/**/*.ts",
+    ".next-e2e-chromium-p53422/dev/types/**/*.ts",
+    ".next-e2e-chromium-p75466/types/**/*.ts",
+    ".next-e2e-chromium-p75466/dev/types/**/*.ts",
+    ".next-e2e-chromium-p77431/types/**/*.ts",
+    ".next-e2e-chromium-p77431/dev/types/**/*.ts",
+    ".next-e2e-chromium-p80881/types/**/*.ts",
+    ".next-e2e-chromium-p80881/dev/types/**/*.ts"
   ],
   "exclude": [
     "node_modules"

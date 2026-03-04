@@ -13,8 +13,20 @@ import { resolveSearchParams, type SearchParamsInput } from "@/lib/search-params
 
 type JobsPageProps = { searchParams?: SearchParamsInput };
 
+function getStatusChipFeedbackClass(status: string): string {
+	const normalized = status.trim().toLowerCase();
+	if (normalized === "running" || normalized === "queued" || normalized === "pending") {
+		return "status-chip-feedback status-chip-is-updating";
+	}
+	if (normalized === "succeeded" || normalized === "enabled") {
+		return "status-chip-feedback status-chip-is-confirmed";
+	}
+	return "status-chip-feedback";
+}
+
 export default async function JobsPage({ searchParams }: JobsPageProps) {
 	const { job_id: jobId } = await resolveSearchParams(searchParams, ["job_id"] as const);
+	const retryHref = jobId ? `/jobs?job_id=${encodeURIComponent(jobId)}` : "/jobs";
 
 	let error: string | null = null;
 	let job: Awaited<ReturnType<typeof apiClient.getJob>> | null = null;
@@ -57,13 +69,22 @@ export default async function JobsPage({ searchParams }: JobsPageProps) {
 			</section>
 
 			{error ? (
-				<p className="alert error" role="alert" aria-live="assertive">
-					{error}
-				</p>
+				<>
+					<p className="alert alert-enter error" role="alert" aria-live="assertive">
+						{error}
+					</p>
+					<Link href={retryHref} className="btn-link" data-interaction="link-muted">
+						重试当前页面
+					</Link>
+				</>
 			) : null}
 
 			{job ? (
 				<>
+					<p className="small" role="status" aria-live="polite">
+						当前任务状态：{jobStatus?.label ?? "-"}，流水线状态：{pipelineStatus?.label ?? "-"}，
+						共 {job.step_summary.length} 个步骤。
+					</p>
 					<section className="card stack">
 						<h2>任务概览</h2>
 						<div className="grid grid-cols-2">
@@ -77,14 +98,18 @@ export default async function JobsPage({ searchParams }: JobsPageProps) {
 							</div>
 							<div>
 								<div className="small">状态</div>
-								<span className={`status-chip status-${jobStatus?.css ?? "queued"}`}>
+								<span
+									className={`status-chip ${getStatusChipFeedbackClass(jobStatus?.css ?? "queued")} status-${jobStatus?.css ?? "queued"}`}
+								>
 									{jobStatus?.label ?? "-"}
 								</span>
 							</div>
 							<div>
 								<div className="small">流水线最终状态</div>
 								{pipelineStatus ? (
-									<span className={`status-chip status-${pipelineStatus.css}`}>
+									<span
+										className={`status-chip ${getStatusChipFeedbackClass(pipelineStatus.css)} status-${pipelineStatus.css}`}
+									>
 										{pipelineStatus.label}
 									</span>
 								) : (
@@ -101,7 +126,12 @@ export default async function JobsPage({ searchParams }: JobsPageProps) {
 							</div>
 						</div>
 						<div className="inline">
-							<Link href={`/artifacts?job_id=${encodeURIComponent(job.id)}`}>查看产物页</Link>
+							<Link
+								href={`/artifacts?job_id=${encodeURIComponent(job.id)}`}
+								data-interaction="link-primary"
+							>
+								查看产物页
+							</Link>
 						</div>
 					</section>
 
@@ -129,7 +159,9 @@ export default async function JobsPage({ searchParams }: JobsPageProps) {
 												<tr key={`${step.name}-${index}`}>
 													<td>{step.name}</td>
 													<td>
-														<span className={`status-chip status-${stepStatus.css}`}>
+														<span
+															className={`status-chip ${getStatusChipFeedbackClass(stepStatus.css)} status-${stepStatus.css}`}
+														>
 															{stepStatus.label}
 														</span>
 													</td>
@@ -179,6 +211,7 @@ export default async function JobsPage({ searchParams }: JobsPageProps) {
 												href={buildArtifactAssetUrl(job.id, value)}
 												target="_blank"
 												rel="noreferrer"
+												data-interaction="link-muted"
 											>
 												<code>{value}</code>（在新标签页打开）
 											</a>

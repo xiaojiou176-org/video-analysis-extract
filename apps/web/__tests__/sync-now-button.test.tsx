@@ -61,7 +61,7 @@ describe("SyncNowButton", () => {
 			fireEvent.click(screen.getByRole("button", { name: "立即同步" }));
 		});
 
-		await waitFor(() => expect(screen.getByRole("button", { name: "完成 ✓" })).toBeInTheDocument());
+		await waitFor(() => expect(screen.getByRole("button", { name: "同步完成" })).toBeInTheDocument());
 		expect(mockPollIngest).toHaveBeenCalledTimes(1);
 
 		await waitFor(
@@ -75,8 +75,28 @@ describe("SyncNowButton", () => {
 		);
 	});
 
-	it("shows error state, uses destructive style, then recovers to idle", async () => {
+	it("uses atomic status output and switches to assertive announcements on error", async () => {
 		mockPollIngest.mockRejectedValue(new Error("Network error"));
+		render(<SyncNowButton />);
+		const status = document.getElementById("sync-now-status");
+
+		expect(status).not.toBeNull();
+		expect(status).toHaveAttribute("aria-atomic", "true");
+		expect(status).toHaveAttribute("aria-live", "polite");
+
+		await act(async () => {
+			fireEvent.click(screen.getByRole("button", { name: "立即同步" }));
+		});
+
+		await waitFor(() =>
+			expect(screen.getByRole("button", { name: "同步失败，重试" })).toBeInTheDocument(),
+		);
+		expect(status).toHaveAttribute("aria-live", "assertive");
+	});
+
+	it("keeps error state until user retries and can recover on next success", async () => {
+		mockPollIngest.mockRejectedValueOnce(new Error("Network error"));
+		mockPollIngest.mockResolvedValueOnce(undefined);
 		render(<SyncNowButton />);
 
 		await act(async () => {
@@ -84,19 +104,34 @@ describe("SyncNowButton", () => {
 		});
 
 		await waitFor(() =>
-			expect(screen.getByRole("button", { name: "出错，重试？" })).toBeInTheDocument(),
+			expect(screen.getByRole("button", { name: "同步失败，重试" })).toBeInTheDocument(),
 		);
-		expect(screen.getByRole("button", { name: "出错，重试？" })).toHaveClass("destructive");
+		expect(screen.getByRole("button", { name: "同步失败，重试" })).toHaveClass("destructive");
 		expect(mockPollIngest).toHaveBeenCalledTimes(1);
+		expect(mockRefresh).not.toHaveBeenCalled();
 
 		await waitFor(
 			() => {
-				expect(screen.getByRole("button", { name: "立即同步" })).toBeInTheDocument();
+				expect(screen.getByRole("button", { name: "同步失败，重试" })).toBeInTheDocument();
 			},
 			{
 				timeout: 3500,
 			},
 		);
-		expect(mockRefresh).not.toHaveBeenCalled();
+
+		await act(async () => {
+			fireEvent.click(screen.getByRole("button", { name: "同步失败，重试" }));
+		});
+
+		await waitFor(() => expect(screen.getByRole("button", { name: "同步完成" })).toBeInTheDocument());
+		await waitFor(
+			() => {
+				expect(screen.getByRole("button", { name: "立即同步" })).toBeInTheDocument();
+				expect(mockRefresh).toHaveBeenCalledTimes(1);
+			},
+			{
+				timeout: 2500,
+			},
+		);
 	});
 });

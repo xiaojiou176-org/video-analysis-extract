@@ -5,6 +5,7 @@ import { getActionSessionTokenForForm } from "@/app/action-security";
 import { pollIngestAction, processVideoAction } from "@/app/actions";
 import { getFlashMessage } from "@/app/flash-message";
 import { toDisplayStatus } from "@/app/status";
+import { SubmitButton } from "@/components/submit-button";
 import { apiClient } from "@/lib/api/client";
 import { resolveSearchParams, type SearchParamsInput } from "@/lib/search-params";
 
@@ -19,7 +20,7 @@ function renderAlert(status: string, code: string) {
 		return null;
 	}
 	const isError = status === "error";
-	const className = status === "error" ? "alert error" : "alert success";
+	const className = status === "error" ? "alert alert-enter error" : "alert alert-enter success";
 	return (
 		<p
 			className={className}
@@ -40,6 +41,17 @@ function toPlatformLabel(platform: string): string {
 		return "Bilibili";
 	}
 	return platform;
+}
+
+function getStatusChipFeedbackClass(status: string): string {
+	const normalized = status.trim().toLowerCase();
+	if (normalized === "running" || normalized === "queued" || normalized === "pending") {
+		return "status-chip-feedback status-chip-is-updating";
+	}
+	if (normalized === "succeeded" || normalized === "enabled") {
+		return "status-chip-feedback status-chip-is-confirmed";
+	}
+	return "status-chip-feedback";
 }
 
 export default async function DashboardPage({ searchParams }: DashboardPageProps) {
@@ -66,6 +78,8 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
 	const subscriptions = subscriptionsResult.data;
 	const videos = videosResult.data;
 	const loadErrorCode = subscriptionsResult.errorCode ?? videosResult.errorCode;
+	const subscriptionsUnavailable = subscriptionsResult.errorCode !== null;
+	const videosUnavailable = videosResult.errorCode !== null;
 	const runningJobs = videos.filter(
 		(video) => video.status === "running" || video.status === "queued",
 	).length;
@@ -75,20 +89,36 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
 		<div className="stack">
 			{renderAlert(status, code)}
 			{loadErrorCode ? (
-				<p className="alert error" role="alert" aria-live="assertive">
-					{getFlashMessage(loadErrorCode)}
-				</p>
+				<>
+					<p className="alert alert-enter error" role="alert" aria-live="assertive">
+						{getFlashMessage(loadErrorCode)}
+					</p>
+					<Link href="/" className="btn-link" data-interaction="link-muted">
+						重试当前页面
+					</Link>
+				</>
 			) : null}
 
 			<section className="grid grid-cols-2">
 				<div className="card metric">
 					<span className="metric-label">订阅数</span>
-					<span className="metric-value">{subscriptions.length}</span>
-					{subscriptions.length === 0 && !loadErrorCode ? (
+					<span
+						className="metric-value"
+						aria-label={subscriptionsUnavailable ? "订阅数数据暂不可用" : undefined}
+					>
+						{subscriptionsUnavailable ? "--" : subscriptions.length}
+					</span>
+					{subscriptionsUnavailable ? (
+						<span className="small" role="status" aria-live="polite">
+							数据暂不可用
+						</span>
+					) : null}
+					{subscriptions.length === 0 && !subscriptionsUnavailable ? (
 						<Link
 							href="/subscriptions"
 							className="metric-cta"
 							aria-label="添加第一个订阅，前往订阅管理"
+							data-interaction="cta"
 						>
 							添加第一个订阅 →
 						</Link>
@@ -96,20 +126,48 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
 				</div>
 				<div className="card metric">
 					<span className="metric-label">已发现视频</span>
-					<span className="metric-value">{videos.length}</span>
+					<span className="metric-value" aria-label={videosUnavailable ? "已发现视频数据暂不可用" : undefined}>
+						{videosUnavailable ? "--" : videos.length}
+					</span>
+					{videosUnavailable ? (
+						<span className="small" role="status" aria-live="polite">
+							数据暂不可用
+						</span>
+					) : null}
 				</div>
-				<div className="card metric" data-accent={runningJobs > 0 ? "warning" : undefined}>
+				<div
+					className="card metric"
+					data-accent={!videosUnavailable && runningJobs > 0 ? "warning" : undefined}
+				>
 					<span className="metric-label">运行中/排队</span>
-					<span className="metric-value">{runningJobs}</span>
+					<span className="metric-value" aria-label={videosUnavailable ? "运行中/排队数据暂不可用" : undefined}>
+						{videosUnavailable ? "--" : runningJobs}
+					</span>
+					{videosUnavailable ? (
+						<span className="small" role="status" aria-live="polite">
+							数据暂不可用
+						</span>
+					) : null}
 				</div>
-				<div className="card metric" data-accent={failedJobs > 0 ? "error" : undefined}>
+				<div
+					className="card metric"
+					data-accent={!videosUnavailable && failedJobs > 0 ? "error" : undefined}
+				>
 					<span className="metric-label">失败任务</span>
-					<span className="metric-value">{failedJobs}</span>
-					{failedJobs > 0 ? (
+					<span className="metric-value" aria-label={videosUnavailable ? "失败任务数据暂不可用" : undefined}>
+						{videosUnavailable ? "--" : failedJobs}
+					</span>
+					{videosUnavailable ? (
+						<span className="small" role="status" aria-live="polite">
+							数据暂不可用
+						</span>
+					) : null}
+					{!videosUnavailable && failedJobs > 0 ? (
 						<Link
 							href="/jobs"
 							className="metric-cta metric-cta-error"
 							aria-label="查看失败任务，前往任务列表"
+							data-interaction="cta"
 						>
 							查看失败任务 →
 						</Link>
@@ -120,6 +178,9 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
 			<section className="grid grid-cols-2">
 				<div className="card stack">
 					<h2>拉取采集</h2>
+					<p className="small" id="poll-ingest-help">
+						触发后会进入任务队列。可在任务页查看执行进度和失败原因。
+					</p>
 					<form action={pollIngestAction} className="stack form-fill">
 						<input type="hidden" name="session_token" value={sessionToken} />
 						<label>
@@ -135,15 +196,21 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
 							<input name="max_new_videos" type="number" min={1} max={500} defaultValue={50} />
 						</label>
 						<div className="submit-row">
-							<button className="primary" type="submit">
+							<SubmitButton pendingLabel="触发中…" statusText="正在触发采集任务">
 								触发采集
-							</button>
+							</SubmitButton>
 						</div>
+						<Link href="/jobs" className="small" data-interaction="link-muted">
+							查看任务队列 →
+						</Link>
 					</form>
 				</div>
 
 				<div className="card stack">
 					<h2>处理单个视频</h2>
+					<p className="small" id="process-video-help">
+						提交后将生成新任务。可在“最近视频”或任务页追踪状态。
+					</p>
 					<form
 						action={processVideoAction}
 						className="stack form-fill"
@@ -181,25 +248,34 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
 							<label htmlFor="force-run">强制执行</label>
 						</div>
 						<div className="submit-row">
-							<button className="primary" type="submit">
+							<SubmitButton pendingLabel="创建任务中…" statusText="正在创建视频处理任务">
 								开始处理
-							</button>
+							</SubmitButton>
 						</div>
+						<Link href="/jobs" className="small" data-interaction="link-muted">
+							查看任务详情 →
+						</Link>
 					</form>
 				</div>
 			</section>
 
 			<section className="card stack">
-				<h2>最近视频</h2>
+				<div className="flex-between">
+					<h2 className="m-0">最近视频</h2>
+					<Link href="/jobs" className="small" data-interaction="link-muted">
+						查看全部任务 →
+					</Link>
+				</div>
+				<p className="small">仅展示最近 10 条视频，点击任务 ID 可查看完整流水线详情。</p>
 				{videos.length === 0 && !loadErrorCode ? (
-					<output className="small empty-state" aria-live="polite">
+					<p className="small empty-state" role="status" aria-live="polite">
 						暂无视频。
-					</output>
+					</p>
 				) : null}
 				{videos.length === 0 && loadErrorCode ? (
-					<output className="small" aria-live="polite">
+					<p className="small" role="status" aria-live="polite">
 						当前无法加载视频列表。
-					</output>
+					</p>
 				) : null}
 				{videos.length > 0 ? (
 					<div className="table-scroll">
@@ -220,10 +296,12 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
 										<tr key={video.id}>
 											<td>{video.title ?? video.video_uid}</td>
 											<td>{toPlatformLabel(video.platform)}</td>
-											<td>
-												<span className={`status-chip status-${statusDisplay.css}`}>
-													{statusDisplay.label}
-												</span>
+										<td>
+											<span
+												className={`status-chip ${getStatusChipFeedbackClass(statusDisplay.css)} status-${statusDisplay.css}`}
+											>
+												{statusDisplay.label}
+											</span>
 											</td>
 											<td>
 												{video.last_job_id ? (

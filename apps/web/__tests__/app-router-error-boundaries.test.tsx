@@ -14,7 +14,7 @@ describe("App Router error boundaries", () => {
 		expect(screen.getByRole("alert")).toBeInTheDocument();
 		expect(screen.getByText("错误编号：")).toBeInTheDocument();
 
-		fireEvent.click(screen.getByRole("button", { name: "重试" }));
+		fireEvent.click(screen.getByRole("button", { name: "重试页面" }));
 		expect(reset).toHaveBeenCalledTimes(1);
 	});
 
@@ -28,7 +28,7 @@ describe("App Router error boundaries", () => {
 			expect(screen.getByRole("heading", { name: "应用发生错误" })).toBeInTheDocument();
 			expect(screen.getByRole("alert")).toBeInTheDocument();
 
-			fireEvent.click(screen.getByRole("button", { name: "重试" }));
+			fireEvent.click(screen.getByRole("button", { name: "重试页面" }));
 			expect(reset).toHaveBeenCalledTimes(1);
 		} finally {
 			consoleErrorSpy.mockRestore();

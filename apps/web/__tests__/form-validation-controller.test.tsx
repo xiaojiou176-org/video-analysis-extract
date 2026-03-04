@@ -30,12 +30,22 @@ describe("FormValidationController", () => {
 		const button = screen.getByRole("button", { name: "提交" });
 		expect(button).toBeDisabled();
 		expect(button).toHaveAttribute("aria-disabled", "true");
+		const requiredReason = screen.getByRole("alert");
+		expect(requiredReason).toHaveTextContent("请先填写并修正必填项后再提交。");
+		expect(requiredReason).toBeVisible();
+		expect(requiredReason).toHaveAttribute("aria-live", "assertive");
+		expect(button).toHaveAttribute("title", "请先填写并修正必填项后再提交。");
+		expect(button).toHaveAttribute("aria-describedby", requiredReason.id);
 
 		const input = screen.getByLabelText("name");
 		fireEvent.input(input, { target: { value: "Alice" } });
 
 		expect(button).not.toBeDisabled();
 		expect(button).toHaveAttribute("aria-disabled", "false");
+		expect(requiredReason).toBeEmptyDOMElement();
+		expect(requiredReason).not.toBeVisible();
+		expect(button).not.toHaveAttribute("aria-describedby");
+		expect(button).not.toHaveAttribute("title");
 	});
 
 	it("enforces require-one and exclusive mode", () => {
@@ -53,14 +63,28 @@ describe("FormValidationController", () => {
 		const submit = screen.getByRole("button", { name: "运行" });
 		const url = screen.getByLabelText("url");
 		const video = screen.getByLabelText("video");
+		const reason = screen.getByRole("alert");
 
 		expect(submit).toBeDisabled();
+		expect(reason).toHaveTextContent("请至少填写一项必填来源后再提交。");
+		expect(reason).toBeVisible();
+		expect(submit).toHaveAttribute("aria-describedby", reason.id);
+		expect(reason).toHaveAttribute("aria-live", "assertive");
+		expect(submit).toHaveAttribute("title", "请至少填写一项必填来源后再提交。");
 
 		fireEvent.input(url, { target: { value: "https://example.com/video" } });
 		expect(submit).not.toBeDisabled();
+		expect(reason).toBeEmptyDOMElement();
+		expect(reason).not.toBeVisible();
+		expect(submit).not.toHaveAttribute("aria-describedby");
+		expect(submit).not.toHaveAttribute("title");
 
 		fireEvent.input(video, { target: { value: "abc" } });
 		expect(submit).toBeDisabled();
+		expect(reason).toHaveTextContent("当前只能填写一项来源，请清空多余输入后再提交。");
+		expect(reason).toBeVisible();
+		expect(submit).toHaveAttribute("aria-describedby", reason.id);
+		expect(submit).toHaveAttribute("title", "当前只能填写一项来源，请清空多余输入后再提交。");
 	});
 
 	it("toggles dependent fields by checkbox controller", () => {

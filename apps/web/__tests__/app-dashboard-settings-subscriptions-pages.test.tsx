@@ -124,10 +124,19 @@ describe("dashboard/settings/subscriptions pages", () => {
 			mockListSubscriptions.mockRejectedValue(new Error("network failed"));
 			mockListVideos.mockRejectedValue(new Error("network failed"));
 
-			render(await DashboardPage({ searchParams: {} }));
+			const { container } = render(await DashboardPage({ searchParams: {} }));
 
 			expect(screen.getByRole("alert")).toHaveTextContent("请求失败，请稍后重试。");
+			expect(screen.getByRole("link", { name: "重试当前页面" })).toHaveAttribute("href", "/");
 			expect(screen.getByText("当前无法加载视频列表。")).toBeInTheDocument();
+			expect(screen.getAllByText("数据暂不可用")).toHaveLength(4);
+
+			const metrics = Array.from(container.querySelectorAll(".card.metric"));
+			expect(metrics).toHaveLength(4);
+			for (const metric of metrics) {
+				expect(within(metric as HTMLElement).getByText("--")).toBeInTheDocument();
+				expect(within(metric as HTMLElement).queryByText("0")).not.toBeInTheDocument();
+			}
 		},
 		PAGE_TEST_TIMEOUT_MS,
 	);
@@ -179,6 +188,10 @@ describe("dashboard/settings/subscriptions pages", () => {
 			expect(screen.getByRole("alert")).toHaveTextContent("输入参数不合法，请检查后重试。");
 			expect(screen.getByTestId("subscription-batch-panel")).toHaveTextContent("count:1");
 			expect(screen.getByRole("button", { name: "保存订阅" })).toBeInTheDocument();
+			expect(screen.getByRole("option", { name: "YouTube" })).toHaveValue("youtube");
+			expect(screen.getByRole("option", { name: "来源链接（URL）" })).toHaveValue("url");
+			expect(screen.getByRole("option", { name: "RSSHub 路由" })).toHaveValue("rsshub_route");
+			expect(screen.getByRole("option", { name: "科技" })).toHaveValue("tech");
 		},
 		PAGE_TEST_TIMEOUT_MS,
 	);
@@ -203,9 +216,15 @@ describe("dashboard/settings/subscriptions pages", () => {
 				}),
 			);
 
-			expect(screen.getByRole("status")).toHaveTextContent("通知配置已保存。");
+			expect(screen.getByText("通知配置已保存。")).toBeInTheDocument();
 			expect(screen.getByDisplayValue("ops@example.com")).toBeInTheDocument();
 			expect(screen.getByDisplayValue("8")).toBeInTheDocument();
+			expect(
+				screen.getByText(
+					/本地时间预览：本字段使用 UTC 小时。换算公式为「本地时间 = UTC 时间 \+ 时区偏移」。\s*例如 UTC\+8 用户可将本地目标小时减 8 后填写（如本地 09:00 → UTC 01:00）。/,
+				),
+			).toBeInTheDocument();
+			expect(screen.getByText("当前默认收件人：ops@example.com")).toBeInTheDocument();
 			expect(screen.getByRole("button", { name: "发送测试邮件" })).toBeInTheDocument();
 		},
 		PAGE_TEST_TIMEOUT_MS,
@@ -219,7 +238,28 @@ describe("dashboard/settings/subscriptions pages", () => {
 			render(await SettingsPage({ searchParams: {} }));
 
 			expect(screen.getByRole("alert")).toHaveTextContent("请求失败，请稍后重试。");
+			expect(screen.getByRole("link", { name: "重试当前页面" })).toHaveAttribute(
+				"href",
+				"/settings",
+			);
 			expect(screen.getByRole("button", { name: "保存配置" })).toBeInTheDocument();
+		},
+		PAGE_TEST_TIMEOUT_MS,
+	);
+
+	it(
+		"renders subscriptions load error with retry link when API fails",
+		async () => {
+			mockListSubscriptions.mockRejectedValue(new Error("boom"));
+
+			render(await SubscriptionsPage({ searchParams: {} }));
+
+			expect(screen.getByRole("alert")).toHaveTextContent("请求失败，请稍后重试。");
+			expect(screen.getByRole("link", { name: "重试当前页面" })).toHaveAttribute(
+				"href",
+				"/subscriptions",
+			);
+			expect(screen.getByRole("button", { name: "保存订阅" })).toBeInTheDocument();
 		},
 		PAGE_TEST_TIMEOUT_MS,
 	);

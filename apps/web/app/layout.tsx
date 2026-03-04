@@ -3,6 +3,7 @@ import Link from "next/link";
 
 import { FormValidationController } from "@/components/form-validation-controller";
 import { AppNav } from "@/components/nav";
+import { RouteTransition } from "@/components/route-transition";
 import { buildApiUrl } from "@/lib/api/url";
 
 import "./globals.css";
@@ -15,9 +16,9 @@ export const metadata: Metadata = {
 	description: "订阅、任务、产物与通知管理后台",
 };
 
-type ApiHealthState = "healthy" | "unhealthy" | "unknown";
+type ApiHealthState = "healthy" | "unhealthy" | "timeout_or_unknown";
 
-const HEALTH_TIMEOUT_MS = 450;
+const HEALTH_TIMEOUT_MS = 2000;
 const HEALTH_REVALIDATE_SECONDS = 30;
 
 async function fetchApiHealthState(): Promise<ApiHealthState> {
@@ -31,7 +32,7 @@ async function fetchApiHealthState(): Promise<ApiHealthState> {
 		});
 		return response.ok ? "healthy" : "unhealthy";
 	} catch {
-		return "unknown";
+		return "timeout_or_unknown";
 	} finally {
 		clearTimeout(timeout);
 	}
@@ -41,7 +42,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
 	const healthUrl = buildApiUrl("/healthz");
 	const healthState = await fetchApiHealthState();
 	const healthLabel =
-		healthState === "healthy" ? "正常" : healthState === "unhealthy" ? "异常" : "未知";
+		healthState === "healthy" ? "正常" : healthState === "unhealthy" ? "异常" : "超时/未知";
 	return (
 		<html lang="zh-Hans">
 			<head>
@@ -79,7 +80,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
 					<AppNav />
 
 					<main id="main-content" className="main-content" tabIndex={-1}>
-						{children}
+						<RouteTransition>{children}</RouteTransition>
 					</main>
 				</div>
 			</body>

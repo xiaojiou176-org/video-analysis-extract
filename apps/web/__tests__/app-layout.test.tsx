@@ -45,12 +45,14 @@ describe("RootLayout", () => {
 		expect(html).toContain("API 状态：异常");
 	});
 
-	it("shows unknown api state chip when fetch throws", async () => {
+	it("shows timeout/unknown api state chip when fetch throws", async () => {
 		vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("offline")));
 
 		const html = renderToStaticMarkup(await RootLayout({ children: <div>content</div> }));
 
-		expect(html).toContain("API 状态：未知");
+		expect(html).toContain("api-health-dot-timeout_or_unknown");
+		expect(html).toContain("API 状态：超时/未知");
+		expect(html).toContain('aria-live="polite"');
 		expect(html).toContain("跳至主内容");
 		expect(html).toContain('id="main-content"');
 		expect(html).toContain('tabindex="-1"');

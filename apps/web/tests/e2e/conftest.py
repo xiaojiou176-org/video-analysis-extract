@@ -118,6 +118,24 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         default="",
         help="Enable mock API wiring for local debug only (1/true/yes/on); CI defaults to real API.",
     )
+    parser.addoption(
+        "--web-e2e-device-profile",
+        action="store",
+        default="desktop",
+        help="Device profile for Playwright context: desktop|tablet|mobile",
+    )
+    parser.addoption(
+        "--web-e2e-reduced-motion",
+        action="store",
+        default="no-preference",
+        help="reduced motion preference: no-preference|reduce",
+    )
+    parser.addoption(
+        "--web-e2e-cpu-throttle",
+        action="store",
+        default="1",
+        help="Chromium-only CPU throttle rate (integer >=1)",
+    )
 
 
 def _read_trace_mode(config: pytest.Config) -> str:
@@ -138,6 +156,63 @@ def _read_video_mode(config: pytest.Config) -> str:
             f"unsupported --web-e2e-video-mode={mode!r}; expected one of {sorted(allowed)}"
         )
     return mode
+
+
+def _read_device_profile(config: pytest.Config) -> str:
+    profile = str(config.getoption("--web-e2e-device-profile")).strip().lower()
+    allowed = {"desktop", "tablet", "mobile"}
+    if profile not in allowed:
+        raise RuntimeError(
+            f"unsupported --web-e2e-device-profile={profile!r}; expected one of {sorted(allowed)}"
+        )
+    return profile
+
+
+def _read_reduced_motion(config: pytest.Config) -> str:
+    value = str(config.getoption("--web-e2e-reduced-motion")).strip().lower()
+    allowed = {"no-preference", "reduce"}
+    if value not in allowed:
+        raise RuntimeError(
+            f"unsupported --web-e2e-reduced-motion={value!r}; expected one of {sorted(allowed)}"
+        )
+    return value
+
+
+def _read_cpu_throttle(config: pytest.Config) -> int:
+    raw = str(config.getoption("--web-e2e-cpu-throttle")).strip()
+    try:
+        throttle = int(raw)
+    except ValueError as exc:
+        raise RuntimeError(
+            f"--web-e2e-cpu-throttle must be an integer >=1, got: {raw!r}"
+        ) from exc
+    if throttle < 1:
+        raise RuntimeError(f"--web-e2e-cpu-throttle must be >=1, got: {throttle}")
+    return throttle
+
+
+def _device_profile_context_kwargs(profile: str) -> dict[str, object]:
+    presets: dict[str, dict[str, object]] = {
+        "desktop": {
+            "viewport": {"width": 1280, "height": 720},
+            "is_mobile": False,
+            "has_touch": False,
+            "device_scale_factor": 1,
+        },
+        "tablet": {
+            "viewport": {"width": 820, "height": 1180},
+            "is_mobile": True,
+            "has_touch": True,
+            "device_scale_factor": 2,
+        },
+        "mobile": {
+            "viewport": {"width": 390, "height": 844},
+            "is_mobile": True,
+            "has_touch": True,
+            "device_scale_factor": 3,
+        },
+    }
+    return presets[profile]
 
 
 @pytest.hookimpl(hookwrapper=True)
@@ -294,8 +369,12 @@ def page(browser: Browser, web_base_url: str, request: pytest.FixtureRequest) ->
     artifact_slug = slugify_nodeid(request.node.nodeid)
     trace_mode = _read_trace_mode(request.config)
     video_mode = _read_video_mode(request.config)
+    device_profile = _read_device_profile(request.config)
+    reduced_motion = _read_reduced_motion(request.config)
+    cpu_throttle = _read_cpu_throttle(request.config)
 
-    new_context_kwargs: dict[str, str] = {"base_url": web_base_url}
+    new_context_kwargs: dict[str, object] = {"base_url": web_base_url}
+    new_context_kwargs.update(_device_profile_context_kwargs(device_profile))
     video_test_dir = WEB_E2E_VIDEO_DIR / artifact_slug
     if video_mode != "off":
         video_test_dir.mkdir(parents=True, exist_ok=True)
@@ -305,6 +384,13 @@ def page(browser: Browser, web_base_url: str, request: pytest.FixtureRequest) ->
     if trace_mode != "off":
         context.tracing.start(screenshots=True, snapshots=True, sources=False)
     page = context.new_page()
+    page.emulate_media(reduced_motion=reduced_motion)
+    if browser.browser_type.name == "chromium" and cpu_throttle > 1:
+        try:
+            cdp_session = context.new_cdp_session(page)
+            cdp_session.send("Emulation.setCPUThrottlingRate", {"rate": cpu_throttle})
+        except Exception as exc:
+            print(f"[web-e2e] cpu throttle setup skipped for {artifact_slug}: {exc}")
     if browser.browser_type.name == "webkit":
         page.set_default_timeout(30_000)
         page.set_default_navigation_timeout(45_000)

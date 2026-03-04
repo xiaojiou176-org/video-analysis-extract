@@ -13,6 +13,36 @@ function formatRelative(dateTime: string): string {
 	}
 
 	const diffMs = Date.now() - date.getTime();
+	if (diffMs < 0) {
+		const futureSec = Math.floor(Math.abs(diffMs) / 1000);
+		const futureMin = Math.floor(futureSec / 60);
+		const futureHour = Math.floor(futureMin / 60);
+		const futureDay = Math.floor(futureHour / 24);
+
+		if (futureSec < 60) {
+			return "马上";
+		}
+		if (futureMin < 60) {
+			return `${Math.max(1, futureMin)} 分钟后`;
+		}
+		if (futureHour < 24) {
+			return `${Math.max(1, futureHour)} 小时后`;
+		}
+		if (futureDay < 2) {
+			return "明天";
+		}
+		if (futureDay < 7) {
+			return `${futureDay} 天后`;
+		}
+		if (futureDay < 30) {
+			return `${Math.floor(futureDay / 7)} 周后`;
+		}
+		if (futureDay < 365) {
+			return `${Math.floor(futureDay / 30)} 个月后`;
+		}
+		return `${Math.floor(futureDay / 365)} 年后`;
+	}
+
 	const diffSec = Math.floor(diffMs / 1000);
 	const diffMin = Math.floor(diffSec / 60);
 	const diffHour = Math.floor(diffMin / 60);

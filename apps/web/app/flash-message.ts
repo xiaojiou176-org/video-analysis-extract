@@ -10,7 +10,11 @@ const FLASH_MESSAGES: Record<string, string> = {
 	NOTIFICATION_TEST_SENT: "测试通知已发送。",
 	ERR_AUTH_REQUIRED: "会话已失效，请刷新页面后重试。",
 	ERR_INVALID_INPUT: "输入参数不合法，请检查后重试。",
+	ERR_INVALID_URL: "URL 格式不合法，请输入以 http:// 或 https:// 开头的地址。",
+	ERR_INVALID_EMAIL: "邮箱格式不合法，请输入有效的邮箱地址。",
 	ERR_INVALID_IDENTIFIER: "标识符格式不合法。",
+	ERR_NOTIFICATION_EMAIL_REQUIRED: "启用通知时必须填写收件邮箱。",
+	ERR_DAILY_DIGEST_HOUR_REQUIRED: "启用每日摘要时必须设置 UTC 小时。",
 	ERR_SENSITIVE_QUERY_KEY: "请求参数包含敏感字段，已被客户端阻止。",
 	ERR_REQUEST_FAILED: "请求失败，请稍后重试。",
 };

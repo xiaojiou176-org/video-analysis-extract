@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { z } from "zod";
 
 const { cookiesMock } = vi.hoisted(() => ({
 	cookiesMock: vi.fn(),
@@ -13,12 +14,20 @@ import {
 	getActionSessionTokenForForm,
 	isNextRedirectError,
 	schemas,
+	toActionErrorCode,
 } from "@/app/action-security";
 
 function buildEmptyCookieStore() {
 	return {
 		get: vi.fn(() => undefined),
 	};
+}
+
+function expectParseFailure<T>(result: z.SafeParseReturnType<unknown, T>): z.ZodError {
+	if (result.success) {
+		throw new Error("Expected parse failure");
+	}
+	return result.error;
 }
 
 describe("action security session token", () => {
@@ -87,5 +96,93 @@ describe("action security URL schema hardening", () => {
 				enabled: true,
 			}),
 		).toThrow();
+	});
+});
+
+describe("toActionErrorCode field-level mapping", () => {
+	it("maps url field issue to ERR_INVALID_URL", () => {
+		const result = schemas.processVideo.safeParse({
+			platform: "youtube",
+			url: "not-a-url",
+			mode: "full",
+			force: false,
+		});
+
+		const error = expectParseFailure(result);
+		expect(toActionErrorCode(error)).toBe("ERR_INVALID_URL");
+	});
+
+	it("maps email field issue to ERR_INVALID_EMAIL", () => {
+		const result = schemas.notificationTest.safeParse({
+			to_email: "not-an-email",
+			subject: "subject",
+			body: "body",
+		});
+
+		const error = expectParseFailure(result);
+		expect(toActionErrorCode(error)).toBe("ERR_INVALID_EMAIL");
+	});
+
+	it("maps identifier field issue to ERR_INVALID_IDENTIFIER", () => {
+		const schema = z.object({
+			identifier: z.string().regex(/^[A-Z]+$/),
+		});
+		const result = schema.safeParse({
+			identifier: "123",
+		});
+
+		const error = expectParseFailure(result);
+		expect(toActionErrorCode(error)).toBe("ERR_INVALID_IDENTIFIER");
+	});
+
+	it("falls back to ERR_INVALID_INPUT when path is not recognized", () => {
+		const result = schemas.pollIngest.safeParse({
+			platform: "youtube",
+			max_new_videos: "invalid-number",
+		});
+
+		const error = expectParseFailure(result);
+		expect(toActionErrorCode(error)).toBe("ERR_INVALID_INPUT");
+	});
+});
+
+describe("notificationConfig semantic validation", () => {
+	it("parses empty daily_digest_hour_utc as null instead of 0", () => {
+		const parsed = schemas.notificationConfig.parse({
+			enabled: false,
+			to_email: "",
+			daily_digest_enabled: false,
+			daily_digest_hour_utc: "",
+			failure_alert_enabled: false,
+		});
+
+		expect(parsed.daily_digest_hour_utc).toBeNull();
+		expect(parsed.to_email).toBeNull();
+	});
+
+	it("requires daily_digest_hour_utc when daily_digest_enabled=true", () => {
+		const result = schemas.notificationConfig.safeParse({
+			enabled: false,
+			to_email: null,
+			daily_digest_enabled: true,
+			daily_digest_hour_utc: "",
+			failure_alert_enabled: false,
+		});
+
+		const error = expectParseFailure(result);
+		expect(toActionErrorCode(error)).toBe("ERR_DAILY_DIGEST_HOUR_REQUIRED");
+	});
+
+	it("requires to_email when enabled=true", () => {
+		const result = schemas.notificationConfig.safeParse({
+			enabled: true,
+			to_email: "",
+			daily_digest_enabled: false,
+			daily_digest_hour_utc: null,
+			failure_alert_enabled: false,
+		});
+
+		const error = expectParseFailure(result);
+		expect(toActionErrorCode(error)).toBe("ERR_NOTIFICATION_EMAIL_REQUIRED");
 	});
 });

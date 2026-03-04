@@ -99,9 +99,103 @@ describe("feed/jobs/artifacts pages", () => {
 			);
 			expect(screen.getByRole("link", { name: "下一页 →" })).toHaveAttribute(
 				"href",
-				"/feed?source=youtube&category=tech&limit=50&cursor=cursor-2",
+				"/feed?source=youtube&category=tech&limit=50&page=2&cursor=cursor-2",
 			);
+			expect(screen.getByText("第 1 页")).toBeInTheDocument();
 			expect(screen.getByRole("button", { name: "筛选" })).toBeInTheDocument();
+			const sourceSelect = screen.getByRole("combobox", { name: "来源平台" });
+			expect(sourceSelect).toHaveValue("youtube");
+			expect(within(sourceSelect).getByRole("option", { name: "全部来源" })).toHaveValue("");
+			expect(within(sourceSelect).getByRole("option", { name: "YouTube" })).toHaveValue("youtube");
+			expect(within(sourceSelect).getByRole("option", { name: "Bilibili" })).toHaveValue("bilibili");
+			expect(within(sourceSelect).getByRole("option", { name: "RSS" })).toHaveValue("rss");
+		},
+		PAGE_TEST_TIMEOUT_MS,
+	);
+
+	it(
+		"renders feed previous page link and explicit page state on non-first page",
+		async () => {
+			mockGetDigestFeed.mockResolvedValue({
+				items: [
+					{
+						feed_id: "feed-2",
+						job_id: "job-zxyw9876",
+						video_url: "https://www.youtube.com/watch?v=def",
+						title: "AI Deep Dive",
+						source: "youtube",
+						source_name: "Tech Channel",
+						category: "tech",
+						published_at: "2026-02-02T00:00:00Z",
+						summary_md: "## summary 2",
+						artifact_type: "digest",
+					},
+				],
+				has_more: true,
+				next_cursor: "cursor-3",
+			});
+
+			render(
+				await FeedPage({
+					searchParams: {
+						source: "youtube",
+						category: "tech",
+						cursor: "cursor-2",
+						prev_cursor: "cursor-1",
+						page: "3",
+					},
+				}),
+			);
+
+			expect(screen.getByRole("link", { name: "← 上一页" })).toHaveAttribute(
+				"href",
+				"/feed?source=youtube&category=tech&page=2&cursor=cursor-1",
+			);
+			expect(screen.getByText("第 3 页")).toBeInTheDocument();
+			expect(screen.getByRole("link", { name: "下一页 →" })).toHaveAttribute(
+				"href",
+				"/feed?source=youtube&category=tech&page=4&cursor=cursor-3&prev_cursor=cursor-2",
+			);
+		},
+		PAGE_TEST_TIMEOUT_MS,
+	);
+
+	it(
+		"keeps legacy source query executable and falls back source selector safely",
+		async () => {
+			mockGetDigestFeed.mockResolvedValue({
+				items: [
+					{
+						feed_id: "feed-legacy",
+						job_id: "job-legacy",
+						video_url: "https://example.com/video",
+						title: "Legacy Source Digest",
+						source: "legacy_platform",
+						source_name: "",
+						category: "misc",
+						published_at: "2026-02-01T00:00:00Z",
+						summary_md: "legacy",
+						artifact_type: "digest",
+					},
+				],
+				has_more: true,
+				next_cursor: "cursor-legacy",
+			});
+
+			render(await FeedPage({ searchParams: { source: " legacy_platform " } }));
+
+			expect(mockGetDigestFeed).toHaveBeenCalledWith({
+				source: "legacy_platform",
+				category: undefined,
+				limit: 20,
+				cursor: undefined,
+			});
+			expect(screen.getByRole("combobox", { name: "来源平台" })).toHaveValue("");
+			expect(screen.getByText("来源：legacy_platform")).toBeInTheDocument();
+			expect(screen.getByRole("link", { name: "下一页 →" })).toHaveAttribute(
+				"href",
+				"/feed?source=legacy_platform&page=2&cursor=cursor-legacy",
+			);
 		},
 		PAGE_TEST_TIMEOUT_MS,
 	);
@@ -120,6 +214,38 @@ describe("feed/jobs/artifacts pages", () => {
 	);
 
 	it(
+		"renders semantic disabled end-page control on last page",
+		async () => {
+			mockGetDigestFeed.mockResolvedValue({
+				items: [
+					{
+						feed_id: "feed-last",
+						job_id: "job-last",
+						video_url: "https://www.youtube.com/watch?v=last",
+						title: "Last Page Digest",
+						source: "youtube",
+						source_name: "Channel",
+						category: "tech",
+						published_at: "2026-02-03T00:00:00Z",
+						summary_md: "last",
+						artifact_type: "digest",
+					},
+				],
+				has_more: false,
+				next_cursor: null,
+			});
+
+			render(await FeedPage({ searchParams: { page: "2", cursor: "cursor-last" } }));
+
+			const disabledEndControl = screen.getByRole("button", { name: "已到末页" });
+			expect(disabledEndControl).toBeDisabled();
+			expect(disabledEndControl).toHaveAttribute("aria-disabled", "true");
+			expect(screen.getByText("第 2 页 · 已到末页")).toBeInTheDocument();
+		},
+		PAGE_TEST_TIMEOUT_MS,
+	);
+
+	it(
 		"renders feed error message when api fails",
 		async () => {
 			mockGetDigestFeed.mockRejectedValue(new Error("ERR_INVALID_INPUT:bad"));
@@ -127,6 +253,7 @@ describe("feed/jobs/artifacts pages", () => {
 			render(await FeedPage({ searchParams: {} }));
 
 			expect(screen.getByRole("alert")).toHaveTextContent("输入参数不合法，请检查后重试。");
+			expect(screen.getByRole("link", { name: "重试当前页面" })).toHaveAttribute("href", "/feed");
 		},
 		PAGE_TEST_TIMEOUT_MS,
 	);
@@ -204,6 +331,10 @@ describe("feed/jobs/artifacts pages", () => {
 			render(await JobsPage({ searchParams: { job_id: "job-missing" } }));
 
 			expect(screen.getByRole("alert")).toHaveTextContent("请求失败，请稍后重试。");
+			expect(screen.getByRole("link", { name: "重试当前页面" })).toHaveAttribute(
+				"href",
+				"/jobs?job_id=job-missing",
+			);
 		},
 		PAGE_TEST_TIMEOUT_MS,
 	);
@@ -232,7 +363,7 @@ describe("feed/jobs/artifacts pages", () => {
 				"href",
 				"http://127.0.0.1:8000/api/v1/artifacts/assets?job_id=job-2&path=frame-1.png",
 			);
-			expect(screen.getByAltText("Screenshot 1: frame-1.png")).toBeInTheDocument();
+			expect(screen.getByAltText("截图 1：frame-1.png")).toBeInTheDocument();
 			expect(screen.getByTestId("markdown-preview")).toHaveTextContent("# artifact");
 		},
 		PAGE_TEST_TIMEOUT_MS,
@@ -255,7 +386,7 @@ describe("feed/jobs/artifacts pages", () => {
 				"href",
 				"http://127.0.0.1:8000/api/v1/artifacts/assets?job_id=job-2&path=frame-1.html",
 			);
-			expect(screen.queryByAltText("Screenshot 1: frame-1.html")).not.toBeInTheDocument();
+			expect(screen.queryByAltText("截图 1：frame-1.html")).not.toBeInTheDocument();
 			expect(
 				screen.getByText("截图文件格式不支持内嵌预览，请通过链接打开：", { exact: false }),
 			).toBeInTheDocument();
@@ -283,6 +414,10 @@ describe("feed/jobs/artifacts pages", () => {
 			render(await ArtifactsPage({ searchParams: { job_id: "job-err" } }));
 
 			expect(screen.getByRole("alert")).toHaveTextContent("请求失败，请稍后重试。");
+			expect(screen.getByRole("link", { name: "重试当前页面" })).toHaveAttribute(
+				"href",
+				"/artifacts?job_id=job-err",
+			);
 		},
 		PAGE_TEST_TIMEOUT_MS,
 	);

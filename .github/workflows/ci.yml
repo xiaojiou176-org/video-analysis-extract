@@ -18,6 +18,7 @@ concurrency:
 permissions:
   contents: read
   pull-requests: read
+  id-token: write
 
 env:
   UV_PIP_VERSION: "0.10.7"
@@ -26,9 +27,92 @@ env:
   TEMPORAL_CLI_SHA256_LINUX_ARM64: "bd1b0db9f18b051026de8bf6cc1505f2510f14bbb7a8b9a4a91fff46c77454f5"
 
 jobs:
+  runner-bootstrap:
+    runs-on: [self-hosted, e2-core, spot, shared-pool]
+    timeout-minutes: 15
+    env:
+      GH_ORG: xiaojiou176-org
+      GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+      GCP_ZONE: ${{ vars.GCP_ZONE }}
+      GCP_WIF_PROVIDER: ${{ vars.GCP_WIF_PROVIDER }}
+      GCP_WIF_SERVICE_ACCOUNT: ${{ vars.GCP_WIF_SERVICE_ACCOUNT }}
+      GH_TOKEN: ${{ secrets.ORG_RUNNER_TOKEN }}
+    steps:
+      - name: Validate bootstrap secrets and vars
+        run: |
+          set -euo pipefail
+          [[ -n "${GH_TOKEN:-}" ]] || { echo "Missing secret ORG_RUNNER_TOKEN"; exit 1; }
+          [[ -n "${GCP_PROJECT_ID:-}" ]] || { echo "Missing repo var GCP_PROJECT_ID"; exit 1; }
+          [[ -n "${GCP_WIF_PROVIDER:-}" ]] || { echo "Missing repo var GCP_WIF_PROVIDER"; exit 1; }
+          [[ -n "${GCP_WIF_SERVICE_ACCOUNT:-}" ]] || { echo "Missing repo var GCP_WIF_SERVICE_ACCOUNT"; exit 1; }
+
+      - name: Auth to Google Cloud
+        uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed # v2
+        with:
+          workload_identity_provider: ${{ env.GCP_WIF_PROVIDER }}
+          service_account: ${{ env.GCP_WIF_SERVICE_ACCOUNT }}
+
+      - name: Setup gcloud
+        uses: google-github-actions/setup-gcloud@e427ad8a34f8676edf47cf7d7925499adf3eb74f # v2
+        with:
+          project_id: ${{ env.GCP_PROJECT_ID }}
+
+      - name: Start offline runner instances and wait for online
+        run: |
+          set -euo pipefail
+
+          GCP_ZONE="${GCP_ZONE:-us-central1-a}"
+          INSTANCES=("github-runner-core-01" "github-runner-spot-01" "github-runner-spot-02")
+          RUNNER_NAME_REGEX='^(pool-core01|pool-spot01|pool-spot02)-0[1-3]$'
+
+          echo "Checking GCE instances in ${GCP_PROJECT_ID}/${GCP_ZONE}..."
+          for instance in "${INSTANCES[@]}"; do
+            status="$(gcloud compute instances describe "$instance" --project="$GCP_PROJECT_ID" --zone="$GCP_ZONE" --format='value(status)' || true)"
+            echo "Instance ${instance}: ${status:-UNKNOWN}"
+            if [[ "$status" == "TERMINATED" ]]; then
+              echo "Starting ${instance}..."
+              gcloud compute instances start "$instance" --project="$GCP_PROJECT_ID" --zone="$GCP_ZONE"
+            fi
+          done
+
+          echo "Waiting for all 3 instances to reach RUNNING..."
+          for attempt in $(seq 1 30); do
+            not_running=0
+            for instance in "${INSTANCES[@]}"; do
+              status="$(gcloud compute instances describe "$instance" --project="$GCP_PROJECT_ID" --zone="$GCP_ZONE" --format='value(status)' || true)"
+              [[ "$status" == "RUNNING" ]] || not_running=$((not_running + 1))
+              echo "  ${instance}: ${status:-UNKNOWN}"
+            done
+            if [[ "$not_running" -eq 0 ]]; then
+              break
+            fi
+            if [[ "$attempt" -eq 30 ]]; then
+              echo "Timed out waiting for GCE instances to become RUNNING"
+              exit 1
+            fi
+            sleep 10
+          done
+
+          echo "Waiting for all 9 self-hosted runners to become online..."
+          for attempt in $(seq 1 40); do
+            online_count="$(gh api "orgs/${GH_ORG}/actions/runners" --jq "[.runners[] | select((.name|test(\"${RUNNER_NAME_REGEX}\")) and .status==\"online\")] | length")"
+            echo "  online runners: ${online_count}/9"
+            if [[ "$online_count" == "9" ]]; then
+              echo "All self-hosted runners are online."
+              exit 0
+            fi
+            if [[ "$attempt" -eq 40 ]]; then
+              echo "Timed out waiting for 9 runners online. Current statuses:"
+              gh api "orgs/${GH_ORG}/actions/runners" --jq ".runners[] | select(.name|test(\"${RUNNER_NAME_REGEX}\")) | \"\\(.name)=\\(.status), busy=\\(.busy)\""
+              exit 1
+            fi
+            sleep 15
+          done
+
   required-ci-secrets:
-    runs-on: e2-core
+    runs-on: [self-hosted, e2-core, spot, shared-pool]
     timeout-minutes: 5
+    needs: [runner-bootstrap]
     env:
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
@@ -46,7 +130,7 @@ jobs:
             --required YOUTUBE_API_KEY
 
   changes-hosted:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, e2-core, spot, shared-pool]
     continue-on-error: true
     timeout-minutes: 5
     needs: [required-ci-secrets]
@@ -112,7 +196,7 @@ jobs:
           fi
 
   changes-fallback:
-    runs-on: e2-core
+    runs-on: [self-hosted, e2-core, spot, shared-pool]
     timeout-minutes: 8
     needs: [required-ci-secrets, changes-hosted]
     if: ${{ always() && (needs['changes-hosted'].result != 'success' || needs['changes-hosted'].outputs.hosted_ok != 'true') }}
@@ -167,7 +251,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
   changes:
-    runs-on: e2-core
+    runs-on: [self-hosted, e2-core, spot, shared-pool]
     timeout-minutes: 3
     needs: [changes-hosted, changes-fallback]
     if: ${{ always() && (needs['changes-hosted'].result == 'success' || needs['changes-fallback'].result == 'success') }}
@@ -189,16 +273,16 @@ jobs:
     uses: ./.github/workflows/_preflight-fast-steps.yml
     needs: [required-ci-secrets]
     with:
-      runs-on: ubuntu-latest
+      runs-on: [self-hosted, e2-core, spot, shared-pool]
 
   preflight-fast-fallback:
     uses: ./.github/workflows/_preflight-fast-steps.yml
     needs: [required-ci-secrets, preflight-fast-hosted]
     if: ${{ always() && needs['preflight-fast-hosted'].result != 'success' }}
     with:
-      runs-on: e2-core
+      runs-on: [self-hosted, e2-core, spot, shared-pool]
   preflight-fast:
-    runs-on: e2-core
+    runs-on: [self-hosted, e2-core, spot, shared-pool]
     timeout-minutes: 3
     needs: [preflight-fast-hosted, preflight-fast-fallback]
     if: ${{ always() && (needs['preflight-fast-hosted'].result == 'success' || needs['preflight-fast-fallback'].result == 'success') }}
@@ -212,7 +296,7 @@ jobs:
           fi
 
   preflight-heavy:
-    runs-on: e2-core
+    runs-on: [self-hosted, e2-core, spot, shared-pool]
     timeout-minutes: 20
     needs: preflight-fast
     if: ${{ always() && needs.preflight-fast.result == 'success' }}
@@ -1428,6 +1512,295 @@ jobs:
             .runtime-cache/external-playwright-smoke
             .runtime-cache/external-playwright-smoke-result.json
 
+  web-e2e-perceived:
+    runs-on: [self-hosted, e2-core, spot, shared-pool]
+    timeout-minutes: 40
+    env:
+      PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.runtime-cache/ms-playwright
+    needs: [preflight-fast, changes]
+    if: ${{ always() && needs.preflight-fast.result == 'success' && needs.changes.result == 'success' && (github.event_name != 'pull_request' || needs.changes.outputs.backend_changed == 'true' || needs.changes.outputs.web_changed == 'true' || needs.changes.outputs.deps_changed == 'true') }}
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_DB: video_analysis_web_e2e_perceived
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432/tcp
+        options: >-
+          --health-cmd "pg_isready -U postgres -d video_analysis_web_e2e_perceived"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: apps/web/package-lock.json
+
+      - name: Setup Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+
+      - name: Setup uv
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install "uv==${UV_PIP_VERSION}"
+
+      - name: Cache uv
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ~/.cache/uv
+          key: ${{ runner.os }}-uv-${{ hashFiles('uv.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-uv-
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ${{ env.PLAYWRIGHT_BROWSERS_PATH }}
+          key: ${{ runner.os }}-playwright-perceived-${{ hashFiles('uv.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-playwright-perceived-
+
+      - name: Sync Python deps (locked)
+        run: uv sync --frozen --extra dev --extra e2e
+
+      - name: Install web deps
+        run: npm --prefix apps/web ci
+
+      - name: Install PostgreSQL client
+        run: |
+          for attempt in $(seq 1 20); do
+            if sudo apt-get update && sudo apt-get install -y postgresql-client; then
+              exit 0
+            fi
+            echo "apt install attempt ${attempt}/20 failed, retrying..."
+            sleep 5
+          done
+          echo "apt install failed after retries"
+          exit 1
+
+      - name: Install Temporal CLI
+        run: |
+          arch="$(uname -m)"
+          case "$arch" in
+            x86_64|amd64)
+              temporal_arch="amd64"
+              expected_sha="${TEMPORAL_CLI_SHA256_LINUX_AMD64}"
+              ;;
+            aarch64|arm64)
+              temporal_arch="arm64"
+              expected_sha="${TEMPORAL_CLI_SHA256_LINUX_ARM64}"
+              ;;
+            *)
+              echo "Unsupported architecture for Temporal CLI: ${arch}" >&2
+              exit 1
+              ;;
+          esac
+          archive="temporal_cli_${TEMPORAL_CLI_VERSION}_linux_${temporal_arch}.tar.gz"
+          url="https://github.com/temporalio/cli/releases/download/v${TEMPORAL_CLI_VERSION}/${archive}"
+          curl -fsSL "$url" -o "/tmp/${archive}"
+          echo "${expected_sha}  /tmp/${archive}" | sha256sum -c -
+          tar -xzf "/tmp/${archive}" -C /tmp temporal
+          mkdir -p "$HOME/.local/bin"
+          install -m 0755 /tmp/temporal "$HOME/.local/bin/temporal"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Allocate isolated perceived e2e runtime resources
+        run: |
+          python - <<'PY'
+          import os
+          import socket
+          import uuid
+
+          run_id = "${{ github.run_id }}"
+          attempt = "${{ github.run_attempt }}"
+          suffix = f"perceived-{run_id}-{attempt}-{uuid.uuid4().hex[:8]}"
+
+          def pick_port() -> int:
+              with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+                  sock.bind(("127.0.0.1", 0))
+                  return int(sock.getsockname()[1])
+
+          api_port = pick_port()
+          temporal_port = pick_port()
+
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as fh:
+              fh.write(f"WEB_E2E_PERCEIVED_API_PORT={api_port}\n")
+              fh.write(f"WEB_E2E_PERCEIVED_TEMPORAL_PORT={temporal_port}\n")
+              fh.write(f"WEB_E2E_PERCEIVED_SQLITE_STATE_PATH=/tmp/video-digestor-api-web-e2e-{suffix}.db\n")
+              fh.write(f"WEB_E2E_PERCEIVED_SQLITE_PATH=/tmp/video-digestor-worker-web-e2e-{suffix}.db\n")
+              fh.write(f"WEB_E2E_PERCEIVED_WORKSPACE_DIR=/tmp/video-digestor-worker-web-e2e-workspace-{suffix}\n")
+              fh.write(f"WEB_E2E_PERCEIVED_ARTIFACT_ROOT=/tmp/video-digestor-worker-web-e2e-artifacts-{suffix}\n")
+
+          print(f"allocated web-e2e-perceived ports: api={api_port}, temporal={temporal_port}")
+          PY
+
+      - name: Run migrations for perceived e2e DB
+        env:
+          PGPASSWORD: postgres
+          PGPORT: ${{ job.services.postgres.ports['5432'] }}
+        run: |
+          for _ in $(seq 1 30); do
+            if pg_isready -h 127.0.0.1 -p "$PGPORT" -U postgres -d video_analysis_web_e2e_perceived >/dev/null 2>&1; then
+              break
+            fi
+            sleep 1
+          done
+          for migration in $(find infra/migrations -maxdepth 1 -type f -name '*.sql' | sort); do
+            psql "postgresql://postgres:postgres@127.0.0.1:${PGPORT}/video_analysis_web_e2e_perceived" -v ON_ERROR_STOP=1 -f "$migration"
+          done
+
+      - name: Start Temporal dev server for perceived e2e
+        run: |
+          mkdir -p .runtime-cache
+          temporal server start-dev --ip 127.0.0.1 --port "${WEB_E2E_PERCEIVED_TEMPORAL_PORT}" > .runtime-cache/web-e2e-perceived-temporal.log 2>&1 &
+          echo "WEB_E2E_PERCEIVED_TEMPORAL_PID=$!" >> "$GITHUB_ENV"
+          python - <<'PY'
+          import os
+          import socket
+          import sys
+          import time
+
+          port = int(os.environ["WEB_E2E_PERCEIVED_TEMPORAL_PORT"])
+          for _ in range(60):
+              sock = socket.socket()
+              sock.settimeout(1)
+              try:
+                  sock.connect(("127.0.0.1", port))
+                  sock.close()
+                  print(f"temporal web-e2e-perceived ready on 127.0.0.1:{port}")
+                  sys.exit(0)
+              except OSError:
+                  time.sleep(1)
+              finally:
+                  sock.close()
+
+          print(f"temporal web-e2e-perceived failed to become ready on 127.0.0.1:{port}", file=sys.stderr)
+          sys.exit(1)
+          PY
+
+      - name: Start real API for perceived e2e
+        env:
+          DATABASE_URL: "postgresql+psycopg://postgres:postgres@127.0.0.1:${{ job.services.postgres.ports['5432'] }}/video_analysis_web_e2e_perceived"
+          TEMPORAL_TARGET_HOST: 127.0.0.1:${{ env.WEB_E2E_PERCEIVED_TEMPORAL_PORT }}
+          TEMPORAL_NAMESPACE: default
+          TEMPORAL_TASK_QUEUE: video-analysis-worker
+          SQLITE_STATE_PATH: ${{ env.WEB_E2E_PERCEIVED_SQLITE_STATE_PATH }}
+          UI_AUDIT_GEMINI_ENABLED: "false"
+          NOTIFICATION_ENABLED: "0"
+          VD_ALLOW_UNAUTH_WRITE: "1"
+          VD_CI_ALLOW_UNAUTH_WRITE: "1"
+        run: |
+          mkdir -p .runtime-cache
+          uv run --with uvicorn uvicorn apps.api.app.main:app --host 127.0.0.1 --port "${WEB_E2E_PERCEIVED_API_PORT}" > .runtime-cache/web-e2e-perceived-api.log 2>&1 &
+          echo "WEB_E2E_PERCEIVED_API_PID=$!" >> "$GITHUB_ENV"
+          for _ in $(seq 1 45); do
+            if curl -fsS "http://127.0.0.1:${WEB_E2E_PERCEIVED_API_PORT}/healthz" >/dev/null; then
+              echo "web-e2e-perceived api ready on port ${WEB_E2E_PERCEIVED_API_PORT}"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "web-e2e-perceived api failed readiness probe"
+          tail -n 120 .runtime-cache/web-e2e-perceived-api.log || true
+          exit 1
+
+      - name: Start worker for perceived e2e
+        env:
+          DATABASE_URL: "postgresql+psycopg://postgres:postgres@127.0.0.1:${{ job.services.postgres.ports['5432'] }}/video_analysis_web_e2e_perceived"
+          TEMPORAL_TARGET_HOST: 127.0.0.1:${{ env.WEB_E2E_PERCEIVED_TEMPORAL_PORT }}
+          TEMPORAL_NAMESPACE: default
+          TEMPORAL_TASK_QUEUE: video-analysis-worker
+          SQLITE_PATH: ${{ env.WEB_E2E_PERCEIVED_SQLITE_PATH }}
+          PIPELINE_WORKSPACE_DIR: ${{ env.WEB_E2E_PERCEIVED_WORKSPACE_DIR }}
+          PIPELINE_ARTIFACT_ROOT: ${{ env.WEB_E2E_PERCEIVED_ARTIFACT_ROOT }}
+          UI_AUDIT_GEMINI_ENABLED: "false"
+          NOTIFICATION_ENABLED: "0"
+        run: |
+          mkdir -p .runtime-cache
+          ./scripts/dev_worker.sh --no-show-hints > .runtime-cache/web-e2e-perceived-worker.log 2>&1 &
+          echo "WEB_E2E_PERCEIVED_WORKER_PID=$!" >> "$GITHUB_ENV"
+          for _ in $(seq 1 30); do
+            if ! kill -0 "${WEB_E2E_PERCEIVED_WORKER_PID:-$!}" >/dev/null 2>&1; then
+              echo "web-e2e-perceived worker exited unexpectedly"
+              tail -n 80 .runtime-cache/web-e2e-perceived-worker.log || true
+              exit 1
+            fi
+            if [[ -s .runtime-cache/web-e2e-perceived-worker.log ]]; then
+              echo "web-e2e-perceived worker process is up and producing logs"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "web-e2e-perceived worker failed readiness probe (no log output within 30s)"
+          exit 1
+
+      - name: Install Playwright browser (chromium)
+        run: |
+          for attempt in $(seq 1 8); do
+            if uv run --with playwright python -m playwright install --with-deps chromium; then
+              exit 0
+            fi
+            if sudo fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 || sudo fuser /var/lib/apt/lists/lock >/dev/null 2>&1 || sudo fuser /var/cache/apt/archives/lock >/dev/null 2>&1; then
+              echo "playwright dependency install hit apt/dpkg lock, retrying (${attempt}/8)..."
+              sleep 8
+              continue
+            fi
+            echo "playwright install failed without apt lock contention"
+            exit 1
+          done
+          echo "playwright install failed after retries"
+          exit 1
+
+      - name: Perceived UX E2E gate (mobile + reduced-motion + perceived-latency)
+        env:
+          WEB_E2E_API_BASE_URL: http://127.0.0.1:${{ env.WEB_E2E_PERCEIVED_API_PORT }}
+        run: |
+          # Keep this as a dedicated long-term perceptual regression gate in CI.
+          npm --prefix apps/web run test:e2e:perceived 2>&1 | tee .runtime-cache/web-e2e-perceived.log
+
+      - name: Upload CI failure diagnostics (web-e2e-perceived)
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ci-failure-diagnostics-web-e2e-perceived-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: ignore
+          path: |
+            .runtime-cache/web-e2e-perceived.log
+            .runtime-cache/web-e2e-perceived-api.log
+            .runtime-cache/web-e2e-perceived-temporal.log
+            .runtime-cache/web-e2e-perceived-worker.log
+
+      - name: Stop perceived e2e API
+        if: always()
+        run: |
+          if [[ -n "${WEB_E2E_PERCEIVED_API_PID:-}" ]]; then
+            kill "${WEB_E2E_PERCEIVED_API_PID}" >/dev/null 2>&1 || true
+          fi
+
+      - name: Stop perceived e2e worker
+        if: always()
+        run: |
+          if [[ -n "${WEB_E2E_PERCEIVED_WORKER_PID:-}" ]]; then
+            kill "${WEB_E2E_PERCEIVED_WORKER_PID}" >/dev/null 2>&1 || true
+          fi
+
+      - name: Stop perceived e2e Temporal dev server
+        if: always()
+        run: |
+          if [[ -n "${WEB_E2E_PERCEIVED_TEMPORAL_PID:-}" ]]; then
+            kill "${WEB_E2E_PERCEIVED_TEMPORAL_PID}" >/dev/null 2>&1 || true
+          fi
+
   dependency-vuln-scan:
     runs-on: [self-hosted, e2-core, spot, shared-pool]
     timeout-minutes: 25
@@ -1521,6 +1894,7 @@ jobs:
       - frontend-lint
       - web-test-build
       - web-e2e
+      - web-e2e-perceived
       - external-playwright-smoke
       - dependency-vuln-scan
     steps:
@@ -1554,6 +1928,7 @@ jobs:
           results[frontend_lint]="${{ needs.frontend-lint.result }}"
           results[web_test_build]="${{ needs.web-test-build.result }}"
           results[web_e2e]="${{ needs.web-e2e.result }}"
+          results[web_e2e_perceived]="${{ needs.web-e2e-perceived.result }}"
           results[external_playwright_smoke]="${{ needs.external-playwright-smoke.result }}"
           results[dependency_vuln_scan]="${{ needs.dependency-vuln-scan.result }}"
 
@@ -1595,6 +1970,7 @@ jobs:
           required_api_real_smoke=1
           required_web_test_build=1
           required_web_e2e=1
+          required_web_e2e_perceived=1
           required_deps_scan=1
           required_profile_governance="$require_main_schedule_release_only"
           if [[ "$is_pr" -eq 1 ]]; then
@@ -1609,8 +1985,10 @@ jobs:
             fi
             if [[ "$backend_changed" == "true" || "$web_changed" == "true" || "$deps_changed" == "true" ]]; then
               required_web_e2e=1
+              required_web_e2e_perceived=1
             else
               required_web_e2e=0
+              required_web_e2e_perceived=0
             fi
             [[ "$deps_changed" == "true" ]] && required_deps_scan=1 || required_deps_scan=0
           fi
@@ -1623,6 +2001,7 @@ jobs:
           check_required_job frontend_lint "$required_web_group"
           check_required_job web_test_build "$required_web_test_build"
           check_required_job web_e2e "$required_web_e2e"
+          check_required_job web_e2e_perceived "$required_web_e2e_perceived"
           check_required_job dependency_vuln_scan "$required_deps_scan"
 
           profile_governance_result="${results[profile_governance]}"
@@ -2133,7 +2512,7 @@ jobs:
 
           echo "final gate passed"
   backend-lint-hosted:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, e2-core, spot, shared-pool]
     continue-on-error: true
     timeout-minutes: 20
     needs: [preflight-fast, changes]
@@ -2173,7 +2552,7 @@ jobs:
         run: uv run --with ruff ruff check apps scripts
 
   backend-lint-fallback:
-    runs-on: e2-core
+    runs-on: [self-hosted, e2-core, spot, shared-pool]
     timeout-minutes: 25
     needs: [preflight-fast, changes, backend-lint-hosted]
     if: ${{ (github.event_name != 'pull_request' || needs.changes.outputs.backend_changed == 'true') && always() && needs['backend-lint-hosted'].result != 'success' }}
@@ -2228,7 +2607,7 @@ jobs:
           fi
 
   frontend-lint-hosted:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, e2-core, spot, shared-pool]
     continue-on-error: true
     timeout-minutes: 20
     needs: [preflight-fast, changes]
@@ -2254,7 +2633,7 @@ jobs:
         run: python3 scripts/check_test_assertions.py --path apps/web
 
   frontend-lint-fallback:
-    runs-on: e2-core
+    runs-on: [self-hosted, e2-core, spot, shared-pool]
     timeout-minutes: 25
     needs: [preflight-fast, changes, frontend-lint-hosted]
     if: ${{ (github.event_name != 'pull_request' || needs.changes.outputs.web_changed == 'true') && always() && needs['frontend-lint-hosted'].result != 'success' }}

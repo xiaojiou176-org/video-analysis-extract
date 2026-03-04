@@ -22,6 +22,30 @@ const httpUrlSchema = z
 	.refine((value) => sanitizeExternalUrl(value) !== null, {
 		message: "ERR_INVALID_INPUT",
 	});
+const nullableEmailSchema = z.preprocess(
+	(value) => {
+		if (value === null || value === undefined) {
+			return null;
+		}
+		if (typeof value === "string" && value.trim().length === 0) {
+			return null;
+		}
+		return value;
+	},
+	z.string().trim().email().max(MAX_TEXT_LENGTH).nullable(),
+);
+const nullableHourSchema = z.preprocess(
+	(value) => {
+		if (value === null || value === undefined) {
+			return null;
+		}
+		if (typeof value === "string" && value.trim().length === 0) {
+			return null;
+		}
+		return value;
+	},
+	z.coerce.number().int().min(0).max(23).nullable(),
+);
 
 function getSessionSecret(): string {
 	return getWebActionSessionToken();
@@ -119,6 +143,25 @@ export function safeEncodeIdentifier(raw: unknown): string {
 
 export function toActionErrorCode(error: unknown): string {
 	if (error instanceof z.ZodError) {
+		for (const issue of error.issues) {
+			const normalizedMessage = issue.message.trim().toUpperCase().split(":")[0] ?? "";
+			if (normalizedMessage.startsWith("ERR_")) {
+				return normalizedMessage;
+			}
+
+			const path = issue.path
+				.filter((segment): segment is string => typeof segment === "string")
+				.map((segment) => segment.toLowerCase());
+			if (path.some((segment) => segment === "url" || segment.endsWith("_url"))) {
+				return "ERR_INVALID_URL";
+			}
+			if (path.some((segment) => segment === "email" || segment.endsWith("_email"))) {
+				return "ERR_INVALID_EMAIL";
+			}
+			if (path.some((segment) => segment === "identifier" || segment.endsWith("_id"))) {
+				return "ERR_INVALID_IDENTIFIER";
+			}
+		}
 		return "ERR_INVALID_INPUT";
 	}
 	if (error instanceof Error) {
@@ -161,13 +204,30 @@ export const schemas = {
 		priority: z.coerce.number().int().min(0).max(100).default(50),
 		enabled: z.boolean().default(false),
 	}),
-	notificationConfig: z.object({
-		enabled: z.boolean().default(false),
-		to_email: z.string().trim().email().max(MAX_TEXT_LENGTH).nullable(),
-		daily_digest_enabled: z.boolean().default(false),
-		daily_digest_hour_utc: z.coerce.number().int().min(0).max(23).nullable(),
-		failure_alert_enabled: z.boolean().default(false),
-	}),
+	notificationConfig: z
+		.object({
+			enabled: z.boolean().default(false),
+			to_email: nullableEmailSchema,
+			daily_digest_enabled: z.boolean().default(false),
+			daily_digest_hour_utc: nullableHourSchema,
+			failure_alert_enabled: z.boolean().default(false),
+		})
+		.superRefine((value, context) => {
+			if (value.enabled && value.to_email === null) {
+				context.addIssue({
+					code: z.ZodIssueCode.custom,
+					path: ["to_email"],
+					message: "ERR_NOTIFICATION_EMAIL_REQUIRED",
+				});
+			}
+			if (value.daily_digest_enabled && value.daily_digest_hour_utc === null) {
+				context.addIssue({
+					code: z.ZodIssueCode.custom,
+					path: ["daily_digest_hour_utc"],
+					message: "ERR_DAILY_DIGEST_HOUR_REQUIRED",
+				});
+			}
+		}),
 	notificationTest: z.object({
 		to_email: z.string().trim().email().max(MAX_TEXT_LENGTH).nullable(),
 		subject: z.string().trim().max(MAX_TEXT_LENGTH).nullable(),

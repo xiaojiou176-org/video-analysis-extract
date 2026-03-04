@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Image from "next/image";
+import Link from "next/link";
 
 import { getFlashMessage, toErrorCode } from "@/app/flash-message";
 import { MarkdownPreview } from "@/components/markdown-preview";
@@ -63,6 +64,14 @@ export default async function ArtifactsPage({ searchParams }: ArtifactsPageProps
 		"video_url",
 	] as const);
 	const hasLookupParams = Boolean(jobId || videoUrl);
+	const retryParams = new URLSearchParams();
+	if (jobId) {
+		retryParams.set("job_id", jobId);
+	}
+	if (videoUrl) {
+		retryParams.set("video_url", videoUrl);
+	}
+	const retryHref = retryParams.toString() ? `/artifacts?${retryParams.toString()}` : "/artifacts";
 
 	let errorCode: string | null = null;
 	let payload: ArtifactMarkdownWithMeta | null = null;
@@ -132,9 +141,14 @@ export default async function ArtifactsPage({ searchParams }: ArtifactsPageProps
 			</section>
 
 			{errorCode ? (
-				<p className="alert error" role="alert" aria-live="assertive">
-					{getFlashMessage(errorCode)}
-				</p>
+				<>
+					<p className="alert alert-enter error" role="alert" aria-live="assertive">
+						{getFlashMessage(errorCode)}
+					</p>
+					<Link href={retryHref} className="btn-link" data-interaction="link-muted">
+						重试当前页面
+					</Link>
+				</>
 			) : null}
 
 			{payload ? (
@@ -154,26 +168,19 @@ export default async function ArtifactsPage({ searchParams }: ArtifactsPageProps
 													href={item.assetUrl}
 													target="_blank"
 													rel="noreferrer"
+													data-interaction="link-primary"
 												>
 													查看截图 {index + 1}
 												</a>
 												{item.mimeType ? (
 													<Image
-														alt={`Screenshot ${index + 1}: ${item.path}`}
+														alt={`截图 ${index + 1}：${item.path}`}
 														src={item.assetUrl}
 														unoptimized
 														width={1280}
 														height={720}
 														loading="lazy"
-														style={{
-															width: "100%",
-															minHeight: "120px",
-															maxHeight: "320px",
-															borderRadius: "8px",
-															border: "1px solid var(--color-border)",
-															background: "var(--color-surface-hover)",
-															objectFit: "contain",
-														}}
+														className="artifacts-screenshot-image"
 													/>
 												) : (
 													<p className="small">
@@ -183,8 +190,7 @@ export default async function ArtifactsPage({ searchParams }: ArtifactsPageProps
 											</>
 										) : (
 											<p className="small">
-												Missing job_id for screenshot preview, fallback path:{" "}
-												<code>{item.path}</code>
+												缺少 job_id，无法预览截图，回退路径：<code>{item.path}</code>
 											</p>
 										)}
 									</li>
@@ -207,8 +213,9 @@ export default async function ArtifactsPage({ searchParams }: ArtifactsPageProps
 												href={buildArtifactAssetUrl(artifactJobId, path)}
 												target="_blank"
 												rel="noreferrer"
+												data-interaction="link-muted"
 											>
-												Open <code>{path}</code>
+												打开 <code>{path}</code>
 											</a>
 										) : (
 											<code>{path}</code>
@@ -225,9 +232,9 @@ export default async function ArtifactsPage({ searchParams }: ArtifactsPageProps
 					</section>
 				</>
 			) : !hasLookupParams ? null : !errorCode ? (
-				<output className="small" aria-live="polite">
+				<p className="small" role="status" aria-live="polite">
 					产物请求已完成，但未返回 Markdown 内容。
-				</output>
+				</p>
 			) : null}
 		</div>
 	);

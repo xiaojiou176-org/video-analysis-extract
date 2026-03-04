@@ -99,14 +99,22 @@ describe("FormValidationController", () => {
 		);
 
 		const submit = screen.getByRole("button", { name: "提交" });
+		const reason = screen.getByRole("alert");
 		expect(submit).toBeDisabled();
 		expect(submit).toHaveAttribute("aria-disabled", "true");
+		expect(reason).toHaveTextContent("请先填写并修正必填项后再提交。");
+		expect(reason).toBeVisible();
+		expect(reason).toHaveAttribute("aria-live", "assertive");
+		expect(submit).toHaveAttribute("title", "请先填写并修正必填项后再提交。");
 
 		const input = screen.getByRole("textbox");
 		fireEvent.input(input, { target: { value: "https://example.com" } });
 
 		expect(submit).not.toBeDisabled();
 		expect(submit).toHaveAttribute("aria-disabled", "false");
+		expect(reason).toBeEmptyDOMElement();
+		expect(reason).not.toBeVisible();
+		expect(submit).not.toHaveAttribute("title");
 	});
 
 	it("enforces require-one and require-one-exclusive rules", () => {
@@ -123,17 +131,29 @@ describe("FormValidationController", () => {
 
 		const submit = screen.getByRole("button", { name: "加载" });
 		const [jobId, videoUrl] = screen.getAllByRole("textbox");
+		const reason = screen.getByRole("alert");
 
 		expect(submit).toBeDisabled();
+		expect(reason).toHaveTextContent("请至少填写一项必填来源后再提交。");
+		expect(reason).toBeVisible();
+		expect(submit).toHaveAttribute("title", "请至少填写一项必填来源后再提交。");
 
 		fireEvent.input(jobId, { target: { value: "job-1" } });
 		expect(submit).not.toBeDisabled();
+		expect(reason).toBeEmptyDOMElement();
+		expect(reason).not.toBeVisible();
+		expect(submit).not.toHaveAttribute("title");
 
 		fireEvent.input(videoUrl, { target: { value: "https://example.com/v" } });
 		expect(submit).toBeDisabled();
+		expect(reason).toHaveTextContent("当前只能填写一项来源，请清空多余输入后再提交。");
+		expect(reason).toBeVisible();
+		expect(submit).toHaveAttribute("title", "当前只能填写一项来源，请清空多余输入后再提交。");
 
 		fireEvent.input(videoUrl, { target: { value: "" } });
 		expect(submit).not.toBeDisabled();
+		expect(reason).toBeEmptyDOMElement();
+		expect(reason).not.toBeVisible();
 	});
 
 	it("toggles dependent field based on checkbox state", () => {
