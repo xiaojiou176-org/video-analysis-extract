@@ -170,8 +170,8 @@ def _mark_delivery_state(
                       OR status = CAST(:expected_status AS TEXT)
                   )
                   AND (
-                      :expected_attempt_count IS NULL
-                      OR attempt_count = :expected_attempt_count
+                      CAST(:expected_attempt_count AS INTEGER) IS NULL
+                      OR attempt_count = CAST(:expected_attempt_count AS INTEGER)
                   )
                 RETURNING
                     id::text AS delivery_id,
