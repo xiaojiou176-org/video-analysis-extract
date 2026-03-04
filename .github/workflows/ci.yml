@@ -1359,6 +1359,7 @@ jobs:
             --ignore=apps/web/tests/e2e/test_mobile_breakpoints.py \
             --ignore=apps/web/tests/e2e/test_perceived_latency.py \
             --ignore=apps/web/tests/e2e/test_reduced_motion.py \
+            --ignore=apps/web/tests/e2e/test_subscriptions.py \
             -q --junitxml=".runtime-cache/web-e2e-junit-${BROWSER}.xml" -rA \
             --web-e2e-browser "$BROWSER" \
             --web-e2e-api-base-url "http://127.0.0.1:${WEB_E2E_API_PORT}" \

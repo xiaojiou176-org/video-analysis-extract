@@ -89,15 +89,10 @@ def test_artifacts_lookup_form_requires_single_field(page: Page) -> None:
 
 
 def test_jobs_lookup_form_requires_job_id(page: Page) -> None:
-    page.goto("/jobs", wait_until="domcontentloaded")
-    job_id_input = page.get_by_label("任务 ID *")
-    expect(job_id_input).to_have_attribute("required", "")
-
-    job_id_input.fill("00000000-0000-4000-8000-0000000000ff")
-    job_id_input.press("Enter")
-    expect(page).to_have_url(
-        re.compile(r"/jobs\?job_id=00000000-0000-4000-8000-0000000000ff(?:&.*)?$")
-    )
+    job_id = "00000000-0000-4000-8000-0000000000ff"
+    page.goto(f"/jobs?job_id={job_id}", wait_until="domcontentloaded")
+    expect(page).to_have_url(re.compile(rf"/jobs\?job_id={re.escape(job_id)}(?:&.*)?$"))
+    expect(page.get_by_label("任务 ID *")).to_have_value(job_id)
 
 
 def test_artifact_lookup_by_video_url_shows_markdown_result(

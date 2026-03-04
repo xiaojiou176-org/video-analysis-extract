@@ -17,7 +17,6 @@ def _create_subscription_form(page: Page) -> Locator:
 
 def _create_subscription_via_form(page: Page, source_value: str) -> None:
     create_form = _create_subscription_form(page)
-    create_form.locator('[name="source_type"]').select_option("youtube_channel_id")
     create_form.locator('[name="source_value"]').fill(source_value)
     create_form.locator('[name="adapter_type"]').select_option("rsshub_route")
     create_form.locator('[name="rsshub_route"]').fill("/youtube/channel/vd-e2e")
@@ -27,7 +26,7 @@ def _create_subscription_via_form(page: Page, source_value: str) -> None:
 
 
 def test_subscriptions_save_subscription_button(page: Page) -> None:
-    source_value = f"UC{uuid4().hex[:22]}"
+    source_value = f"https://www.youtube.com/@vd-e2e-{uuid4().hex[:8]}"
     page.goto("/subscriptions", wait_until="domcontentloaded")
     _create_subscription_via_form(page, source_value)
 
@@ -42,7 +41,7 @@ def test_subscriptions_save_subscription_button(page: Page) -> None:
 
 
 def test_subscriptions_delete_button(page: Page) -> None:
-    source_value = f"UC{uuid4().hex[:22]}"
+    source_value = f"https://www.youtube.com/@vd-delete-{uuid4().hex[:8]}"
     page.goto("/subscriptions", wait_until="domcontentloaded")
     _create_subscription_via_form(page, source_value)
 
@@ -55,7 +54,7 @@ def test_subscriptions_delete_button(page: Page) -> None:
 
 
 def test_subscriptions_batch_update_category(page: Page) -> None:
-    source_value = f"UC{uuid4().hex[:22]}"
+    source_value = f"https://www.youtube.com/@vd-batch-{uuid4().hex[:8]}"
     page.goto("/subscriptions", wait_until="domcontentloaded")
     _create_subscription_via_form(page, source_value)
 
