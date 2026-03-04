@@ -165,7 +165,10 @@ def _mark_delivery_state(
                         ELSE CAST(:next_retry_at AS TIMESTAMPTZ)
                     END
                 WHERE id = CAST(:delivery_id AS UUID)
-                  AND (:expected_status IS NULL OR status = :expected_status)
+                  AND (
+                      CAST(:expected_status AS TEXT) IS NULL
+                      OR status = CAST(:expected_status AS TEXT)
+                  )
                   AND (
                       :expected_attempt_count IS NULL
                       OR attempt_count = :expected_attempt_count
