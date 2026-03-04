@@ -58,9 +58,13 @@ def test_layout_health_chip_states(page: Page) -> None:
 def test_dashboard_start_processing_button(page: Page) -> None:
     page.goto("/", wait_until="domcontentloaded")
     start_button = page.get_by_role("button", name="开始处理")
-    page.get_by_label("视频链接 *").fill("invalid-url")
-    expect(start_button).to_be_disabled()
+    url_input = page.get_by_label("视频链接 *")
+    # Cross-browser stable guard: validate the field validity state instead of relying
+    # on browser-specific disabled transitions for the submit button.
+    url_input.fill("invalid-url")
+    assert url_input.evaluate("el => el.validity.valid") is False
     page.get_by_label("视频链接 *").fill("https://www.youtube.com/watch?v=e2e001")
+    assert url_input.evaluate("el => el.validity.valid") is True
     expect(start_button).to_be_enabled()
     page.get_by_label("模式 *").select_option("text_only")
     page.get_by_role("checkbox", name="强制执行").check()

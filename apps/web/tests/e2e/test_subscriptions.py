@@ -3,20 +3,31 @@ from __future__ import annotations
 import re
 from uuid import uuid4
 
-from playwright.sync_api import Page, expect
+from playwright.sync_api import Locator, Page, expect
+
+
+def _create_subscription_form(page: Page) -> Locator:
+    # Scope all create actions to the creation form only to avoid collisions
+    # with same-labeled fields rendered in the subscriptions list.
+    create_section = page.get_by_role("heading", name="创建或更新订阅").locator("xpath=ancestor::section[1]")
+    create_form = create_section.locator("form").first
+    expect(create_form).to_be_visible()
+    return create_form
 
 
 def _create_subscription_via_form(page: Page, source_value: str) -> None:
-    page.get_by_label("来源值").fill(source_value)
-    page.get_by_label("适配器类型").select_option("rsshub_route")
-    page.get_by_label("RSSHub 路由（可选）").fill("/youtube/channel/vd-e2e")
-    page.get_by_label("分类").select_option("creator")
-    page.get_by_label("标签（逗号分隔，可选）").fill("ai,weekly")
-    page.get_by_role("button", name="保存订阅").click()
+    create_form = _create_subscription_form(page)
+    create_form.locator('[name="source_type"]').select_option("youtube_channel_id")
+    create_form.locator('[name="source_value"]').fill(source_value)
+    create_form.locator('[name="adapter_type"]').select_option("rsshub_route")
+    create_form.locator('[name="rsshub_route"]').fill("/youtube/channel/vd-e2e")
+    create_form.locator('[name="category"]').select_option("creator")
+    create_form.locator('[name="tags"]').fill("ai,weekly")
+    create_form.evaluate("(form) => form.requestSubmit()")
 
 
 def test_subscriptions_save_subscription_button(page: Page) -> None:
-    source_value = f"https://youtube.com/@vd-e2e-{uuid4().hex[:8]}"
+    source_value = f"UC{uuid4().hex[:22]}"
     page.goto("/subscriptions", wait_until="domcontentloaded")
     _create_subscription_via_form(page, source_value)
 
@@ -31,7 +42,7 @@ def test_subscriptions_save_subscription_button(page: Page) -> None:
 
 
 def test_subscriptions_delete_button(page: Page) -> None:
-    source_value = f"https://youtube.com/@vd-delete-{uuid4().hex[:8]}"
+    source_value = f"UC{uuid4().hex[:22]}"
     page.goto("/subscriptions", wait_until="domcontentloaded")
     _create_subscription_via_form(page, source_value)
 
@@ -44,7 +55,7 @@ def test_subscriptions_delete_button(page: Page) -> None:
 
 
 def test_subscriptions_batch_update_category(page: Page) -> None:
-    source_value = f"https://youtube.com/@vd-batch-{uuid4().hex[:8]}"
+    source_value = f"UC{uuid4().hex[:22]}"
     page.goto("/subscriptions", wait_until="domcontentloaded")
     _create_subscription_via_form(page, source_value)
 

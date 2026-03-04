@@ -1353,8 +1353,13 @@ jobs:
           BROWSER="${{ matrix.browser }}"
 
           set -o pipefail
+          # 专项用例由 web-e2e-perceived 独立执行
           uv run --with pytest --with playwright \
-            pytest apps/web/tests/e2e -q --junitxml=".runtime-cache/web-e2e-junit-${BROWSER}.xml" -rA \
+            pytest apps/web/tests/e2e \
+            --ignore=apps/web/tests/e2e/test_mobile_breakpoints.py \
+            --ignore=apps/web/tests/e2e/test_perceived_latency.py \
+            --ignore=apps/web/tests/e2e/test_reduced_motion.py \
+            -q --junitxml=".runtime-cache/web-e2e-junit-${BROWSER}.xml" -rA \
             --web-e2e-browser "$BROWSER" \
             --web-e2e-api-base-url "http://127.0.0.1:${WEB_E2E_API_PORT}" \
             2>&1 | tee ".runtime-cache/web-e2e-${BROWSER}.log"
