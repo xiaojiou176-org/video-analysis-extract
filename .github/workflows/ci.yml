@@ -1304,7 +1304,7 @@ jobs:
             tail -n 120 .runtime-cache/web-e2e-api.log || true
 
             if [[ "${attempt}" -lt 3 ]]; then
-              api_port="$(python -c 'import socket; sock=socket.socket(socket.AF_INET, socket.SOCK_STREAM); sock.bind(("'"'"'127.0.0.1'"'"', 0)); print(sock.getsockname()[1]); sock.close()')"
+              api_port="$(python3 -c "import socket; sock=socket.socket(socket.AF_INET, socket.SOCK_STREAM); sock.bind(('127.0.0.1', 0)); print(sock.getsockname()[1]); sock.close()")"
               echo "retrying web-e2e api startup with new port ${api_port}"
             fi
           done
