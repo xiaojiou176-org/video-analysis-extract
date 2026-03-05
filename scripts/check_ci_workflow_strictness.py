@@ -209,6 +209,10 @@ def _check_global_rules(
             failures.append(
                 f"{workflow_path.name}:{lineno}: forbidden pipe-to-shell command detected (`curl|sh` or `wget|sh`)"
             )
+        if re.search(r"(?:^|\s)(?:\./)?(?:config\.sh|run\.sh|remove\.sh)(?:\s|$)", stripped):
+            failures.append(
+                f"{workflow_path.name}:{lineno}: forbidden runner registration command detected (config.sh/run.sh/remove.sh)"
+            )
 
     # Skip reusable workflows (workflow_call).
     is_reusable = "on:\n  workflow_call:" in text or "on:\n    workflow_call:" in text
@@ -289,11 +293,11 @@ def _check_global_rules(
             )
 
         if (
-            "runs-on: [self-hosted, e2-core, spot, shared-pool]" not in hosted_block
-            and "runs-on: '[\"self-hosted\",\"e2-core\",\"spot\",\"shared-pool\"]'" not in hosted_block
+            "runs-on: [self-hosted, shared-pool]" not in hosted_block
+            and "runs-on: '[\"self-hosted\",\"shared-pool\"]'" not in hosted_block
         ):
             failures.append(
-                f"{workflow_path}: {job_name}: hosted jobs must run on self-hosted runner pool"
+                f"{workflow_path}: {job_name}: hosted jobs must run on [self-hosted, shared-pool]"
             )
 
         if not fallback_block:
@@ -302,11 +306,11 @@ def _check_global_rules(
             )
         else:
             if (
-                "runs-on: [self-hosted, e2-core, spot, shared-pool]" not in fallback_block
-                and "runs-on: '[\"self-hosted\",\"e2-core\",\"spot\",\"shared-pool\"]'" not in fallback_block
+                "runs-on: [self-hosted, shared-pool]" not in fallback_block
+                and "runs-on: '[\"self-hosted\",\"shared-pool\"]'" not in fallback_block
             ):
                 failures.append(
-                    f"{workflow_path}: {fallback_name}: fallback jobs must run on self-hosted runner pool"
+                    f"{workflow_path}: {fallback_name}: fallback jobs must run on [self-hosted, shared-pool]"
                 )
             if not re.search(
                 rf"^\s+if:\s+\$\{{\{{.*always\(\).*(needs\['{re.escape(job_name)}'\]\.result\s*!=\s*['\"]success['\"]|needs\.{re.escape(job_name)}\.result\s*!=\s*['\"]success['\"]).*\}}\}}\s*$",

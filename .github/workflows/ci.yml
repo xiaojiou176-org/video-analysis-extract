@@ -28,7 +28,7 @@ env:
 
 jobs:
   runner-bootstrap:
-    runs-on: [self-hosted, e2-core, spot, shared-pool]
+    runs-on: [self-hosted, shared-pool]
     timeout-minutes: 30
     env:
       GH_ORG: xiaojiou176-org
@@ -74,7 +74,7 @@ jobs:
 
           GCP_ZONE="${GCP_ZONE:-us-central1-a}"
           INSTANCES=("github-runner-core-01" "github-runner-spot-01" "github-runner-spot-02")
-          RUNNER_NAME_REGEX='^(pool-core01|pool-spot01|pool-spot02)-0[1-3]$'
+          EXPECTED_RUNNERS_JSON='["pool-core01-01","pool-core01-02","pool-core01-03","pool-spot01-01","pool-spot01-02","pool-spot01-03","pool-spot02-01","pool-spot02-02","pool-spot02-03"]'
 
           echo "Checking GCE instances in ${GCP_PROJECT_ID}/${GCP_ZONE}..."
           for instance in "${INSTANCES[@]}"; do
@@ -104,25 +104,56 @@ jobs:
             sleep 10
           done
 
-          echo "Waiting for self-hosted runners to become online..."
+          echo "Waiting for organization runner set to exactly match expected 9 names and be online..."
           for attempt in $(seq 1 40); do
-            online_count="$(gh api "orgs/${GH_ORG}/actions/runners" --jq "[.runners[] | select((.name|test(\"${RUNNER_NAME_REGEX}\")) and .status==\"online\")] | length")"
-            echo "  online runners: ${online_count}/9"
-            if [[ "$online_count" == "9" ]]; then
-              echo "All self-hosted runners are online."
+            runners_json="$(gh api "orgs/${GH_ORG}/actions/runners")"
+            check_result="$(
+              RUNNERS_JSON="${runners_json}" EXPECTED_RUNNERS_JSON="${EXPECTED_RUNNERS_JSON}" python3 - <<'PY'
+              import json
+              import os
+
+              payload = json.loads(os.environ["RUNNERS_JSON"])
+              expected = json.loads(os.environ["EXPECTED_RUNNERS_JSON"])
+              expected_set = set(expected)
+
+              actual_names = [runner["name"] for runner in payload.get("runners", [])]
+              actual_set = set(actual_names)
+
+              if actual_set != expected_set or len(actual_names) != len(expected):
+                  print("mismatch")
+                  raise SystemExit(0)
+
+              online_expected = sum(
+                  1
+                  for runner in payload.get("runners", [])
+                  if runner.get("name") in expected_set and runner.get("status") == "online"
+              )
+              print("ok" if online_expected == len(expected) else "pending")
+              PY
+            )"
+            echo "  runner set status: ${check_result} (attempt ${attempt}/40)"
+            if [[ "$check_result" == "ok" ]]; then
+              echo "Organization runners exactly match expected names and all are online."
               exit 0
             fi
             if [[ "$attempt" -eq 40 ]]; then
-              echo "Timed out waiting for 9 runners online; continuing with currently available runners."
-              echo "Current runner statuses:"
-              gh api "orgs/${GH_ORG}/actions/runners" --jq ".runners[] | select(.name|test(\"${RUNNER_NAME_REGEX}\")) | \"\\(.name)=\\(.status), busy=\\(.busy)\""
-              exit 0
+              echo "Runner bootstrap failed: org runner list must be exactly the expected 9 names and all online."
+              echo "Expected runner names:"
+              EXPECTED_RUNNERS_JSON="${EXPECTED_RUNNERS_JSON}" python3 - <<'PY'
+              import json
+              import os
+              for item in json.loads(os.environ["EXPECTED_RUNNERS_JSON"]):
+                  print(item)
+              PY
+              echo "Actual org runner names and status:"
+              gh api "orgs/${GH_ORG}/actions/runners" --jq '.runners[] | "\(.name)=\(.status), busy=\(.busy)"'
+              exit 1
             fi
             sleep 15
           done
 
   required-ci-secrets:
-    runs-on: [self-hosted, e2-core, spot, shared-pool]
+    runs-on: [self-hosted, shared-pool]
     timeout-minutes: 5
     needs: [runner-bootstrap]
     env:
@@ -142,7 +173,7 @@ jobs:
             --required YOUTUBE_API_KEY
 
   changes-hosted:
-    runs-on: [self-hosted, e2-core, spot, shared-pool]
+    runs-on: [self-hosted, shared-pool]
     continue-on-error: true
     timeout-minutes: 5
     needs: [required-ci-secrets]
@@ -208,7 +239,7 @@ jobs:
           fi
 
   changes-fallback:
-    runs-on: [self-hosted, e2-core, spot, shared-pool]
+    runs-on: [self-hosted, shared-pool]
     timeout-minutes: 8
     needs: [required-ci-secrets, changes-hosted]
     if: ${{ always() && (needs['changes-hosted'].result != 'success' || needs['changes-hosted'].outputs.hosted_ok != 'true') }}
@@ -263,7 +294,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
   changes:
-    runs-on: [self-hosted, e2-core, spot, shared-pool]
+    runs-on: [self-hosted, shared-pool]
     timeout-minutes: 3
     needs: [changes-hosted, changes-fallback]
     if: ${{ always() && (needs['changes-hosted'].result == 'success' || needs['changes-fallback'].result == 'success') }}
@@ -278,23 +309,23 @@ jobs:
           if [[ "${{ needs['changes-hosted'].result }}" == "success" ]]; then
             echo "changes source: hosted"
           else
-            echo "changes source: e2-core fallback"
+            echo "changes source: shared-pool fallback"
           fi
 
   preflight-fast-hosted:
     uses: ./.github/workflows/_preflight-fast-steps.yml
     needs: [required-ci-secrets]
     with:
-      runs-on: '["self-hosted","e2-core","spot","shared-pool"]'
+      runs-on: '["self-hosted","shared-pool"]'
 
   preflight-fast-fallback:
     uses: ./.github/workflows/_preflight-fast-steps.yml
     needs: [required-ci-secrets, preflight-fast-hosted]
     if: ${{ always() && needs['preflight-fast-hosted'].result != 'success' }}
     with:
-      runs-on: '["self-hosted","e2-core","spot","shared-pool"]'
+      runs-on: '["self-hosted","shared-pool"]'
   preflight-fast:
-    runs-on: [self-hosted, e2-core, spot, shared-pool]
+    runs-on: [self-hosted, shared-pool]
     timeout-minutes: 3
     needs: [preflight-fast-hosted, preflight-fast-fallback]
     if: ${{ always() && (needs['preflight-fast-hosted'].result == 'success' || needs['preflight-fast-fallback'].result == 'success') }}
@@ -304,11 +335,11 @@ jobs:
           if [[ "${{ needs['preflight-fast-hosted'].result }}" == "success" ]]; then
             echo "preflight-fast source: hosted"
           else
-            echo "preflight-fast source: e2-core fallback"
+            echo "preflight-fast source: shared-pool fallback"
           fi
 
   preflight-heavy:
-    runs-on: [self-hosted, e2-core, spot, shared-pool]
+    runs-on: [self-hosted, shared-pool]
     timeout-minutes: 20
     needs: preflight-fast
     if: ${{ always() && needs.preflight-fast.result == 'success' }}
@@ -341,7 +372,7 @@ jobs:
         run: python3 scripts/check_structured_logs.py
 
   profile-governance:
-    runs-on: [self-hosted, e2-core, spot, shared-pool]
+    runs-on: [self-hosted, shared-pool]
     timeout-minutes: 20
     if: ${{ always() && needs.preflight-heavy.result == 'success' && (github.event_name == 'schedule' || (github.event_name == 'push' && github.ref == 'refs/heads/main')) }}
     needs: preflight-heavy
@@ -373,7 +404,7 @@ jobs:
           fi
 
   quality-gate-pre-push:
-    runs-on: [self-hosted, e2-core, spot, shared-pool]
+    runs-on: [self-hosted, shared-pool]
     timeout-minutes: 90
     needs: [preflight-heavy, changes]
     steps:
@@ -429,7 +460,7 @@ jobs:
               --mutation-max-no-tests-ratio 0.75
 
   db-migration-smoke:
-    runs-on: [self-hosted, e2-core, spot, shared-pool]
+    runs-on: [self-hosted, shared-pool]
     timeout-minutes: 20
     needs: [preflight-fast, changes]
     if: ${{ always() && needs.preflight-fast.result == 'success' && needs.changes.result == 'success' && (github.event_name != 'pull_request' || needs.changes.outputs.migrations_changed == 'true') }}
@@ -479,7 +510,7 @@ jobs:
           done
 
   mutation-testing:
-    runs-on: [self-hosted, e2-core, spot, shared-pool]
+    runs-on: [self-hosted, shared-pool]
     timeout-minutes: 120
     needs: [preflight-fast, changes]
     if: ${{ always() && needs.preflight-fast.result == 'success' && needs.changes.result == 'success' && (github.event_name != 'pull_request' || needs.changes.outputs.backend_changed == 'true') }}
@@ -587,7 +618,7 @@ jobs:
           if-no-files-found: warn
 
   python-tests:
-    runs-on: [self-hosted, e2-core, spot, shared-pool]
+    runs-on: [self-hosted, shared-pool]
     timeout-minutes: 45
     needs: [preflight-fast, changes]
     if: ${{ always() && needs.preflight-fast.result == 'success' && needs.changes.result == 'success' && (github.event_name != 'pull_request' || needs.changes.outputs.backend_changed == 'true') }}
@@ -732,7 +763,7 @@ jobs:
             .runtime-cache/python-coverage.xml
 
   api-real-smoke:
-    runs-on: [self-hosted, e2-core, spot, shared-pool]
+    runs-on: [self-hosted, shared-pool]
     timeout-minutes: 25
     needs: [preflight-fast, changes]
     if: ${{ always() && needs.preflight-fast.result == 'success' && needs.changes.result == 'success' && (github.event_name != 'pull_request' || needs.changes.outputs.backend_changed == 'true') }}
@@ -947,7 +978,7 @@ jobs:
             .runtime-cache/api-real-smoke.log
 
   pr-llm-real-smoke:
-    runs-on: [self-hosted, e2-core, spot, shared-pool]
+    runs-on: [self-hosted, shared-pool]
     timeout-minutes: 35
     needs: [preflight-fast, changes]
     if: >-
@@ -1022,7 +1053,7 @@ jobs:
             .runtime-cache/pr-llm-real-smoke-result.json
 
   web-test-build:
-    runs-on: [self-hosted, e2-core, spot, shared-pool]
+    runs-on: [self-hosted, shared-pool]
     timeout-minutes: 25
     needs: [preflight-fast, changes]
     if: ${{ always() && needs.preflight-fast.result == 'success' && needs.changes.result == 'success' && (github.event_name != 'pull_request' || needs.changes.outputs.web_changed == 'true' || needs.changes.outputs.deps_changed == 'true') }}
@@ -1079,7 +1110,7 @@ jobs:
         run: python3 scripts/check_web_button_coverage.py --threshold 1.0
 
   web-e2e:
-    runs-on: [self-hosted, e2-core, spot, shared-pool]
+    runs-on: [self-hosted, shared-pool]
     timeout-minutes: 45
     env:
       PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.runtime-cache/ms-playwright
@@ -1452,7 +1483,7 @@ jobs:
           fi
 
   external-playwright-smoke:
-    runs-on: [self-hosted, e2-core, spot, shared-pool]
+    runs-on: [self-hosted, shared-pool]
     timeout-minutes: 20
     env:
       PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.runtime-cache/ms-playwright
@@ -1531,7 +1562,7 @@ jobs:
             .runtime-cache/external-playwright-smoke-result.json
 
   web-e2e-perceived:
-    runs-on: [self-hosted, e2-core, spot, shared-pool]
+    runs-on: [self-hosted, shared-pool]
     timeout-minutes: 40
     env:
       PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.runtime-cache/ms-playwright
@@ -1820,7 +1851,7 @@ jobs:
           fi
 
   dependency-vuln-scan:
-    runs-on: [self-hosted, e2-core, spot, shared-pool]
+    runs-on: [self-hosted, shared-pool]
     timeout-minutes: 25
     needs: [preflight-fast, changes]
     if: ${{ always() && needs.preflight-fast.result == 'success' && needs.changes.result == 'success' && (github.event_name != 'pull_request' || needs.changes.outputs.deps_changed == 'true') }}
@@ -1893,7 +1924,7 @@ jobs:
         run: npm --prefix apps/web audit --omit=dev --audit-level=high
 
   aggregate-gate:
-    runs-on: [self-hosted, e2-core, spot, shared-pool]
+    runs-on: [self-hosted, shared-pool]
     timeout-minutes: 10
     if: always()
     needs:
@@ -2056,7 +2087,7 @@ jobs:
           echo "aggregate gate passed"
 
   nightly-flaky-python:
-    runs-on: [self-hosted, e2-core, spot, shared-pool]
+    runs-on: [self-hosted, shared-pool]
     timeout-minutes: 40
     if: ${{ github.event_name == 'schedule' }}
     needs: preflight-fast
@@ -2109,7 +2140,7 @@ jobs:
           done
 
   nightly-flaky-web-e2e:
-    runs-on: [self-hosted, e2-core, spot, shared-pool]
+    runs-on: [self-hosted, shared-pool]
     timeout-minutes: 60
     env:
       PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.runtime-cache/ms-playwright
@@ -2191,7 +2222,7 @@ jobs:
 
   autofix-dry-run:
     name: autofix-dry-run
-    runs-on: [self-hosted, e2-core, spot, shared-pool]
+    runs-on: [self-hosted, shared-pool]
     timeout-minutes: 15
     needs: [python-tests, web-e2e]
     if: ${{ always() && (needs.python-tests.result == 'failure' || needs.web-e2e.result == 'failure') }}
@@ -2221,7 +2252,7 @@ jobs:
 
   live-smoke:
     needs: aggregate-gate
-    runs-on: [self-hosted, e2-core, spot, shared-pool]
+    runs-on: [self-hosted, shared-pool]
     timeout-minutes: 40
     if: >-
       always() &&
@@ -2468,7 +2499,7 @@ jobs:
           fi
 
   ci-final-gate:
-    runs-on: [self-hosted, e2-core, spot, shared-pool]
+    runs-on: [self-hosted, shared-pool]
     timeout-minutes: 10
     if: always()
     needs:
@@ -2530,7 +2561,7 @@ jobs:
 
           echo "final gate passed"
   backend-lint-hosted:
-    runs-on: [self-hosted, e2-core, spot, shared-pool]
+    runs-on: [self-hosted, shared-pool]
     continue-on-error: true
     timeout-minutes: 20
     needs: [preflight-fast, changes]
@@ -2570,7 +2601,7 @@ jobs:
         run: uv run --with ruff ruff check apps scripts
 
   backend-lint-fallback:
-    runs-on: [self-hosted, e2-core, spot, shared-pool]
+    runs-on: [self-hosted, shared-pool]
     timeout-minutes: 25
     needs: [preflight-fast, changes, backend-lint-hosted]
     if: ${{ (github.event_name != 'pull_request' || needs.changes.outputs.backend_changed == 'true') && always() && needs['backend-lint-hosted'].result != 'success' }}
@@ -2609,7 +2640,7 @@ jobs:
         run: uv run --with ruff ruff check apps scripts
 
   backend-lint:
-    runs-on: [self-hosted, e2-core, spot, shared-pool]
+    runs-on: [self-hosted, shared-pool]
     timeout-minutes: 3
     needs: [backend-lint-hosted, backend-lint-fallback]
     if: ${{ always() && (needs['backend-lint-hosted'].result == 'success' || needs['backend-lint-fallback'].result == 'success' || (needs['backend-lint-hosted'].result == 'skipped' && needs['backend-lint-fallback'].result == 'skipped')) }}
@@ -2619,13 +2650,13 @@ jobs:
           if [[ "${{ needs['backend-lint-hosted'].result }}" == "success" ]]; then
             echo "backend-lint source: hosted"
           elif [[ "${{ needs['backend-lint-fallback'].result }}" == "success" ]]; then
-            echo "backend-lint source: e2-core fallback"
+            echo "backend-lint source: shared-pool fallback"
           else
             echo "backend-lint source: skipped"
           fi
 
   frontend-lint-hosted:
-    runs-on: [self-hosted, e2-core, spot, shared-pool]
+    runs-on: [self-hosted, shared-pool]
     continue-on-error: true
     timeout-minutes: 20
     needs: [preflight-fast, changes]
@@ -2651,7 +2682,7 @@ jobs:
         run: python3 scripts/check_test_assertions.py --path apps/web
 
   frontend-lint-fallback:
-    runs-on: [self-hosted, e2-core, spot, shared-pool]
+    runs-on: [self-hosted, shared-pool]
     timeout-minutes: 25
     needs: [preflight-fast, changes, frontend-lint-hosted]
     if: ${{ (github.event_name != 'pull_request' || needs.changes.outputs.web_changed == 'true') && always() && needs['frontend-lint-hosted'].result != 'success' }}
@@ -2676,7 +2707,7 @@ jobs:
         run: python3 scripts/check_test_assertions.py --path apps/web
 
   frontend-lint:
-    runs-on: [self-hosted, e2-core, spot, shared-pool]
+    runs-on: [self-hosted, shared-pool]
     timeout-minutes: 3
     needs: [frontend-lint-hosted, frontend-lint-fallback]
     if: ${{ always() && (needs['frontend-lint-hosted'].result == 'success' || needs['frontend-lint-fallback'].result == 'success' || (needs['frontend-lint-hosted'].result == 'skipped' && needs['frontend-lint-fallback'].result == 'skipped')) }}
@@ -2686,7 +2717,7 @@ jobs:
           if [[ "${{ needs['frontend-lint-hosted'].result }}" == "success" ]]; then
             echo "frontend-lint source: hosted"
           elif [[ "${{ needs['frontend-lint-fallback'].result }}" == "success" ]]; then
-            echo "frontend-lint source: e2-core fallback"
+            echo "frontend-lint source: shared-pool fallback"
           else
             echo "frontend-lint source: skipped"
           fi

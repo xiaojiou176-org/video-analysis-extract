@@ -37,9 +37,9 @@
 
 ## Runner 标签策略（维护约定）
 
-- `e2-core`：通用池标签。默认 CI 作业落到该池，保证可用性与兼容性。
-- `spot` + `shared-pool`：当前弹性池组合标签。多数 CI 作业使用 `runs-on: [self-hosted, e2-core, spot, shared-pool]` 路由到可扩缩的共享 Spot 池。
-- 路由建议：可中断/可重试作业优先沿用上述组合；关键兜底链路可保留 `runs-on: e2-core`（例如 hosted 失败后的 fallback 作业）。
+- 统一路由标签：所有 CI 作业固定使用 `runs-on: [self-hosted, shared-pool]`。
+- 允许精细调度：如需额外分流，只能追加标签，不允许使用 runner 名称直绑。
+- 关键约束：组织共享 runner 名称由治理侧统一维护，仓库 workflow 仅通过 label 调度。
 - 禁止硬编码 runner 实例名（例如 `github-runner-spot-02`）；统一用标签路由，避免扩缩容后工作流失效。
 
 ## D1~D5 决议与执行命令
