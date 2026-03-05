@@ -24,6 +24,7 @@ SENSITIVE_PATTERNS: list[re.Pattern[str]] = [
 MAX_EXAMPLE_CHARS = 240
 DEFAULT_MAX_JUNIT_FILE_BYTES = 5 * 1024 * 1024
 DEFAULT_MAX_LOG_FILE_BYTES = 5 * 1024 * 1024
+UTC = getattr(dt, "UTC", dt.timezone(dt.timedelta(0)))
 
 LOG_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     ("pytest-assertion", re.compile(r"AssertionError[:\s].+")),
@@ -309,7 +310,7 @@ def main() -> int:
     fingerprints, fix_plan = _aggregate(findings)
     report = {
         "mode": "dry-run",
-        "generated_at": dt.datetime.now(dt.UTC).isoformat(),
+        "generated_at": dt.datetime.now(UTC).isoformat(),
         "inputs": {
             "junit_files": [str(path) for path in junit_files],
             "log_files": [str(path) for path in log_files],
