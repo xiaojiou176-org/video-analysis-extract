@@ -11,7 +11,7 @@ env:
 
 jobs:
   required-ci-secrets:
-    runs-on: e2-core
+    runs-on: [self-hosted, e2-core, spot, shared-pool]
     timeout-minutes: 5
     env:
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
@@ -32,7 +32,7 @@ jobs:
             --required LIVE_SMOKE_API_BASE_URL
 
   contract-diff-hosted:
-    runs-on: e2-core
+    runs-on: [self-hosted, e2-core, spot, shared-pool]
     continue-on-error: true
     timeout-minutes: 25
     needs: [required-ci-secrets]
@@ -118,7 +118,7 @@ jobs:
           exit 1
 
   contract-diff-fallback:
-    runs-on: e2-core
+    runs-on: [self-hosted, e2-core, spot, shared-pool]
     timeout-minutes: 30
     needs: [required-ci-secrets, contract-diff-hosted]
     if: ${{ always() && needs['contract-diff-hosted'].result != 'success' }}
@@ -204,7 +204,7 @@ jobs:
           exit 1
 
   contract-diff:
-    runs-on: e2-core
+    runs-on: [self-hosted, e2-core, spot, shared-pool]
     timeout-minutes: 3
     needs: [contract-diff-hosted, contract-diff-fallback]
     if: ${{ always() && (needs['contract-diff-hosted'].result == 'success' || needs['contract-diff-fallback'].result == 'success') }}
