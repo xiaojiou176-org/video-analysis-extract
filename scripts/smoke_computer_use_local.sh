@@ -137,6 +137,10 @@ if [[ "$curl_exit" -ne 0 ]]; then
 fi
 
 if [[ "$status" != "200" ]]; then
+  if [[ "$status" == "400" ]] && [[ "$body" == *"Computer Use is not enabled"* || "$body" == *"computer_use_provider_error:400 INVALID_ARGUMENT"* ]]; then
+    log "skipped: computer use capability is not enabled for current provider account"
+    exit 0
+  fi
   log "status=${status} body=${body}"
   exit 1
 fi
