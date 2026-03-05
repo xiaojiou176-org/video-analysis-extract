@@ -105,32 +105,17 @@ jobs:
           done
 
           echo "Waiting for organization runner set to exactly match expected 9 names and be online..."
+          EXPECTED_RUNNERS_SORTED="pool-core01-01,pool-core01-02,pool-core01-03,pool-spot01-01,pool-spot01-02,pool-spot01-03,pool-spot02-01,pool-spot02-02,pool-spot02-03"
+          RUNNER_NAME_REGEX='^pool-(core01|spot01|spot02)-0[1-3]$'
           for attempt in $(seq 1 40); do
-            runners_json="$(gh api "orgs/${GH_ORG}/actions/runners")"
-            check_result="$(
-              RUNNERS_JSON="${runners_json}" EXPECTED_RUNNERS_JSON="${EXPECTED_RUNNERS_JSON}" python3 - <<'PY'
-              import json
-              import os
-
-              payload = json.loads(os.environ["RUNNERS_JSON"])
-              expected = json.loads(os.environ["EXPECTED_RUNNERS_JSON"])
-              expected_set = set(expected)
-
-              actual_names = [runner["name"] for runner in payload.get("runners", [])]
-              actual_set = set(actual_names)
-
-              if actual_set != expected_set or len(actual_names) != len(expected):
-                  print("mismatch")
-                  raise SystemExit(0)
-
-              online_expected = sum(
-                  1
-                  for runner in payload.get("runners", [])
-                  if runner.get("name") in expected_set and runner.get("status") == "online"
-              )
-              print("ok" if online_expected == len(expected) else "pending")
-              PY
-            )"
+            actual_sorted="$(gh api "orgs/${GH_ORG}/actions/runners" --jq '[.runners[].name] | sort | join(",")')"
+            online_count="$(gh api "orgs/${GH_ORG}/actions/runners" --jq "[.runners[] | select((.name|test(\"${RUNNER_NAME_REGEX}\")) and .status==\"online\")] | length")"
+            check_result="pending"
+            if [[ "${actual_sorted}" != "${EXPECTED_RUNNERS_SORTED}" ]]; then
+              check_result="mismatch"
+            elif [[ "${online_count}" == "9" ]]; then
+              check_result="ok"
+            fi
             echo "  runner set status: ${check_result} (attempt ${attempt}/40)"
             if [[ "$check_result" == "ok" ]]; then
               echo "Organization runners exactly match expected names and all are online."
@@ -139,12 +124,7 @@ jobs:
             if [[ "$attempt" -eq 40 ]]; then
               echo "Runner bootstrap failed: org runner list must be exactly the expected 9 names and all online."
               echo "Expected runner names:"
-              EXPECTED_RUNNERS_JSON="${EXPECTED_RUNNERS_JSON}" python3 - <<'PY'
-              import json
-              import os
-              for item in json.loads(os.environ["EXPECTED_RUNNERS_JSON"]):
-                  print(item)
-              PY
+              echo "${EXPECTED_RUNNERS_JSON}" | jq -r '.[]'
               echo "Actual org runner names and status:"
               gh api "orgs/${GH_ORG}/actions/runners" --jq '.runners[] | "\(.name)=\(.status), busy=\(.busy)"'
               exit 1
