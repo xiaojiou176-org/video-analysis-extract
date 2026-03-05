@@ -6,11 +6,11 @@ on:
       runs-on:
         required: true
         type: string
-        description: "Runner label to use (e.g. ubuntu-latest or e2-core)"
+        description: "JSON array of required self-hosted labels (e.g. [\"self-hosted\",\"e2-core\",\"spot\",\"shared-pool\"])"
 
 jobs:
   run:
-    runs-on: ${{ inputs.runs-on }}
+    runs-on: ${{ fromJSON(inputs.runs-on) }}
     timeout-minutes: 15
     steps:
       - name: Checkout

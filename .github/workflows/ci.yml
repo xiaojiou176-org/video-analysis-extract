@@ -285,14 +285,14 @@ jobs:
     uses: ./.github/workflows/_preflight-fast-steps.yml
     needs: [required-ci-secrets]
     with:
-      runs-on: e2-core
+      runs-on: '["self-hosted","e2-core","spot","shared-pool"]'
 
   preflight-fast-fallback:
     uses: ./.github/workflows/_preflight-fast-steps.yml
     needs: [required-ci-secrets, preflight-fast-hosted]
     if: ${{ always() && needs['preflight-fast-hosted'].result != 'success' }}
     with:
-      runs-on: e2-core
+      runs-on: '["self-hosted","e2-core","spot","shared-pool"]'
   preflight-fast:
     runs-on: [self-hosted, e2-core, spot, shared-pool]
     timeout-minutes: 3
