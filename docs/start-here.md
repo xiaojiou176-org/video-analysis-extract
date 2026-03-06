@@ -169,6 +169,7 @@ curl -sS -X POST http://127.0.0.1:8000/api/v1/ingest/poll -H 'Content-Type: appl
 - `core-services.compose.yml` 使用 `pgvector/pgvector:pg16` 镜像（支持向量检索扩展），`redis/temporal` 端口与 Postgres `DB/User` 已收口为固定默认（`6379` / `7233` / `video_analysis` / `postgres`）。
 - `miniflux-nextflux.compose.yml` 的 Miniflux 端口与 `DB/User/DB_NAME` 已收口为固定默认（`8080` / `miniflux` / `miniflux`）。
 - `full_stack.sh up` 会等待 API health(`GET /healthz`) 与 Web 端口可用；后台模式会调用 `./scripts/dev_api.sh --no-reload` 以避免 PID 漂移误判。
+- `scripts/dev_api.sh` 在检测到 `uv` 时会调用 `uv run python -m uvicorn ...`，避免某些 self-hosted/隔离环境缺少 `uvicorn` console entry 时启动失败。
 - `smoke_full_stack.sh` 会执行本地联调烟测并覆盖 reader 栈检查。
 
 边界说明：

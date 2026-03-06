@@ -43,6 +43,10 @@ touch logs/daily_digest.log logs/failure_alerts.log logs/ops/workflows.log
 - `./scripts/dev_worker.sh --worker-dir ... --entry ... --command ... --show-hints|--no-show-hints`
 - `./scripts/dev_mcp.sh --entry ... --mcp-dir ...`
 
+启动约束补充：
+
+- `scripts/dev_api.sh` 在检测到 `uv` 时通过 `uv run python -m uvicorn ...` 启动 API，不依赖 `uvicorn` console entry；日志排障时若看到 `Failed to spawn: uvicorn`，优先检查是否绕开了该脚本入口。
+
 ## Sensitive Data Rules
 
 `run_daily_digest.sh` 与 `run_failure_alerts.sh` 内置 `safe_body_preview`，会对以下模式脱敏：

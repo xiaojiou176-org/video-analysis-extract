@@ -192,6 +192,10 @@ sqlite3 "$SQLITE_PATH" < infra/sql/sqlite_state_init.sql
 - `./scripts/dev_mcp.sh --entry apps.mcp.server --mcp-dir "$PWD/apps/mcp"`
 - `./scripts/init_env_example.sh --output "$PWD/.env.generated.example" --force`
 
+补充说明：
+
+- `scripts/dev_api.sh` 在检测到 `uv` 时会使用 `uv run python -m uvicorn ...`，而不是依赖 `uvicorn` console entry；这样在 self-hosted runner 和最小化 Python 环境里更稳定。
+
 ### 6) 最小验收
 
 ```bash

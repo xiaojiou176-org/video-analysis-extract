@@ -147,6 +147,10 @@ sqlite3 "$SQLITE_PATH" < infra/sql/sqlite_state_init.sql
 ./scripts/dev_mcp.sh
 ```
 
+补充说明：
+
+- `scripts/dev_api.sh` 若检测到 `uv`，会使用 `uv run python -m uvicorn ...`；这是为了避免 self-hosted runner 或最小化环境中缺少 `uvicorn` console entry 时 API 无法拉起。
+
 ### 6) 最小验收
 
 ```bash
