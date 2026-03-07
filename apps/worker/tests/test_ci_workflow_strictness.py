@@ -288,6 +288,31 @@ jobs:
     )
 
 
+def test_global_rules_allow_ci_concurrency_group_with_manual_run_id() -> None:
+    module = _load_module()
+    workflow = """name: CI
+on:
+  workflow_dispatch:
+concurrency:
+  group: ${{ github.event_name == 'workflow_dispatch' && format('ci-{0}-{1}-{2}', github.workflow, github.ref, github.run_id) || format('ci-{0}-{1}-{2}', github.workflow, github.event_name, github.ref) }}
+  cancel-in-progress: true
+jobs:
+  required-ci-secrets:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - run: python3 scripts/check_required_ci_secrets.py --required GEMINI_API_KEY
+"""
+    failures: list[str] = []
+
+    module._check_global_rules(Path("ci.yml"), workflow, dict(module._job_blocks(workflow)), failures)
+
+    assert (
+        "ci.yml: top-level concurrency.group must not include github.sha; use a stable workflow/event/ref key"
+        not in failures
+    )
+
+
 def test_ci_specific_rules_aggregate_needs_must_not_be_satisfied_by_comment_text() -> None:
     module = _load_module()
     aggregate_block = """  aggregate-gate:
