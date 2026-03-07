@@ -8,9 +8,9 @@ permissions:
   contents: read
 
 env:
-  CI_CACHE_ROOT: ${{ runner.temp }}/ci-cache
+  CI_CACHE_ROOT: /tmp/ci-cache
   PRE_COMMIT_PIP_VERSION: "4.3.0"
-  PRE_COMMIT_HOME: ${{ runner.temp }}/ci-cache/pre-commit
+  PRE_COMMIT_HOME: /tmp/ci-cache/pre-commit
 
 jobs:
   required-ci-secrets:

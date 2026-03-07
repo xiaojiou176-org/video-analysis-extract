@@ -7,9 +7,9 @@ permissions:
   contents: read
 
 env:
-  CI_CACHE_ROOT: ${{ runner.temp }}/ci-cache
+  CI_CACHE_ROOT: /tmp/ci-cache
   UV_PIP_VERSION: "0.10.7"
-  UV_CACHE_DIR: ${{ runner.temp }}/ci-cache/uv
+  UV_CACHE_DIR: /tmp/ci-cache/uv
 
 jobs:
   required-ci-secrets:
