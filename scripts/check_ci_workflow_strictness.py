@@ -14,6 +14,7 @@ SAFE_CACHE_PATH_MARKERS = (
     "${{ env.PRE_COMMIT_HOME }}",
     "${{ env.UV_CACHE_DIR }}",
     "${{ env.PLAYWRIGHT_BROWSERS_PATH }}",
+    "/tmp/ci-cache",
 )
 TOOL_CACHE_ENV_VARS = (
     "PRE_COMMIT_HOME",

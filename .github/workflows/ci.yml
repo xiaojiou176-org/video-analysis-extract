@@ -21,10 +21,10 @@ permissions:
   id-token: write
 
 env:
-  CI_CACHE_ROOT: ${{ runner.temp }}/ci-cache
+  CI_CACHE_ROOT: /tmp/ci-cache
   UV_PIP_VERSION: "0.10.7"
-  UV_CACHE_DIR: ${{ runner.temp }}/ci-cache/uv
-  PLAYWRIGHT_BROWSERS_PATH: ${{ runner.temp }}/ci-cache/ms-playwright
+  UV_CACHE_DIR: /tmp/ci-cache/uv
+  PLAYWRIGHT_BROWSERS_PATH: /tmp/ci-cache/ms-playwright
   TEMPORAL_CLI_VERSION: "1.5.1"
   TEMPORAL_CLI_SHA256_LINUX_AMD64: "ddc95e08b0b076efd4ea9733a3f488eb7d2be875f8834e616cd2a37358b4852d"
   TEMPORAL_CLI_SHA256_LINUX_ARM64: "bd1b0db9f18b051026de8bf6cc1505f2510f14bbb7a8b9a4a91fff46c77454f5"
@@ -1117,8 +1117,6 @@ jobs:
   web-e2e:
     runs-on: [self-hosted, shared-pool]
     timeout-minutes: 45
-    env:
-      PLAYWRIGHT_BROWSERS_PATH: ${{ env.PLAYWRIGHT_BROWSERS_PATH }}
     needs: [preflight-fast, changes]
     if: ${{ always() && needs.preflight-fast.result == 'success' && needs.changes.result == 'success' && (github.event_name != 'pull_request' || needs.changes.outputs.backend_changed == 'true' || needs.changes.outputs.web_changed == 'true' || needs.changes.outputs.deps_changed == 'true') }}
     services:
@@ -1492,8 +1490,6 @@ jobs:
   external-playwright-smoke:
     runs-on: [self-hosted, shared-pool]
     timeout-minutes: 20
-    env:
-      PLAYWRIGHT_BROWSERS_PATH: ${{ env.PLAYWRIGHT_BROWSERS_PATH }}
     if: ${{ github.event_name == 'schedule' || (github.event_name == 'push' && github.ref == 'refs/heads/main') }}
     needs: preflight-fast
     steps:
@@ -1573,8 +1569,6 @@ jobs:
   web-e2e-perceived:
     runs-on: [self-hosted, shared-pool]
     timeout-minutes: 40
-    env:
-      PLAYWRIGHT_BROWSERS_PATH: ${{ env.PLAYWRIGHT_BROWSERS_PATH }}
     needs: [preflight-fast, changes]
     if: ${{ always() && needs.preflight-fast.result == 'success' && needs.changes.result == 'success' && (github.event_name != 'pull_request' || needs.changes.outputs.backend_changed == 'true' || needs.changes.outputs.web_changed == 'true' || needs.changes.outputs.deps_changed == 'true') }}
     services:
@@ -2157,8 +2151,6 @@ jobs:
   nightly-flaky-web-e2e:
     runs-on: [self-hosted, shared-pool]
     timeout-minutes: 60
-    env:
-      PLAYWRIGHT_BROWSERS_PATH: ${{ env.PLAYWRIGHT_BROWSERS_PATH }}
     if: ${{ github.event_name == 'schedule' }}
     needs: preflight-fast
     strategy:
