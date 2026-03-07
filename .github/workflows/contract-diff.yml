@@ -7,7 +7,9 @@ permissions:
   contents: read
 
 env:
+  CI_CACHE_ROOT: ${{ runner.temp }}/ci-cache
   UV_PIP_VERSION: "0.10.7"
+  UV_CACHE_DIR: ${{ runner.temp }}/ci-cache/uv
 
 jobs:
   required-ci-secrets:
@@ -22,6 +24,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          clean: true
       - name: Enforce required CI secrets/env vars
         run: |
           python3 scripts/check_required_ci_secrets.py \
@@ -40,6 +44,7 @@ jobs:
       - name: Checkout (head)
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
+          clean: true
           fetch-depth: 0
 
       - name: Setup Python
@@ -55,7 +60,7 @@ jobs:
       - name: Cache uv
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
-          path: ~/.cache/uv
+          path: ${{ env.UV_CACHE_DIR }}
           key: ${{ runner.os }}-uv-${{ hashFiles('uv.lock') }}
           restore-keys: |
             ${{ runner.os }}-uv-
@@ -126,6 +131,7 @@ jobs:
       - name: Checkout (head)
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
+          clean: true
           fetch-depth: 0
 
       - name: Setup Python
@@ -141,7 +147,7 @@ jobs:
       - name: Cache uv
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
-          path: ~/.cache/uv
+          path: ${{ env.UV_CACHE_DIR }}
           key: ${{ runner.os }}-uv-${{ hashFiles('uv.lock') }}
           restore-keys: |
             ${{ runner.os }}-uv-

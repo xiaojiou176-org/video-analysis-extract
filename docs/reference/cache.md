@@ -2,6 +2,24 @@
 
 ## Cache Layers
 
+## CI Tool Cache Governance
+
+- Repo 内允许：`.runtime-cache/` 仅用于日志、Junit/XML、coverage、诊断 JSON、artifact staging 等一次性运行产物。
+- Repo 内禁止：pre-commit 环境、uv/pip/npm 下载缓存、Playwright 浏览器二进制、其他可复用工具缓存。
+- Self-hosted CI 必须使用 `runner.temp` 作为工具缓存根目录，并通过统一变量收口：
+  - `CI_CACHE_ROOT=${{ runner.temp }}/ci-cache`
+  - `PRE_COMMIT_HOME=${{ runner.temp }}/ci-cache/pre-commit`
+  - `UV_CACHE_DIR=${{ runner.temp }}/ci-cache/uv`
+  - `PLAYWRIGHT_BROWSERS_PATH=${{ runner.temp }}/ci-cache/ms-playwright`
+- Forbidden 路径：
+  - `~/.cache/**`
+  - `${{ github.workspace }}/**`
+  - `.runtime-cache/**` 作为工具缓存根
+  - `.cache/**`
+  - `cache/**`
+  - `.venv` 作为 `actions/cache` 的持久缓存路径
+- 所有 workflow 中的 `actions/checkout` 必须显式声明 `with.clean: true`，避免 shared self-hosted runner 复用旧工作区时把脏残留带进新 job。
+
 ### 1) 业务幂等去重（PostgreSQL）
 
 - `videos(platform, video_uid)` 唯一

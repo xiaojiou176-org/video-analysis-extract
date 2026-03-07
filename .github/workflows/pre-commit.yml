@@ -8,7 +8,9 @@ permissions:
   contents: read
 
 env:
+  CI_CACHE_ROOT: ${{ runner.temp }}/ci-cache
   PRE_COMMIT_PIP_VERSION: "4.3.0"
+  PRE_COMMIT_HOME: ${{ runner.temp }}/ci-cache/pre-commit
 
 jobs:
   required-ci-secrets:
@@ -22,6 +24,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          clean: true
       - name: Enforce required CI secrets/env vars
         run: |
           python3 scripts/check_required_ci_secrets.py \
@@ -41,6 +45,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
+          clean: true
           fetch-depth: 1
 
       - name: Setup Python
@@ -57,7 +62,7 @@ jobs:
       - name: Cache pre-commit environments
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
-          path: ~/.cache/pre-commit
+          path: ${{ env.PRE_COMMIT_HOME }}
           key: >-
             ${{ runner.os }}-pre-commit-
             ${{ steps.setup-python.outputs.python-version }}-
@@ -137,6 +142,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
+          clean: true
           fetch-depth: 1
 
       - name: Setup Python
@@ -153,7 +159,7 @@ jobs:
       - name: Cache pre-commit environments
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
-          path: ~/.cache/pre-commit
+          path: ${{ env.PRE_COMMIT_HOME }}
           key: >-
             ${{ runner.os }}-pre-commit-
             ${{ steps.setup-python.outputs.python-version }}-
