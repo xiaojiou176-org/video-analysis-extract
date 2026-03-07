@@ -69,6 +69,39 @@ def test_global_rules_hosted_continue_on_error_uses_job_level_not_step_level() -
     assert expected in failures
 
 
+def test_global_rules_reject_hosted_jobs_on_self_hosted_pool() -> None:
+    module = _load_module()
+    hosted_block = """  preflight-fast-hosted:
+    runs-on: [self-hosted, shared-pool]
+    continue-on-error: true
+    timeout-minutes: 5
+    steps:
+      - run: echo preflight
+"""
+    required_ci_secrets_block = """  required-ci-secrets:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - run: python3 scripts/check_required_ci_secrets.py --required GEMINI_API_KEY
+"""
+    failures: list[str] = []
+
+    module._check_global_rules(
+        Path("ci.yml"),
+        "name: CI\non:\n  pull_request:\n",
+        {
+            "required-ci-secrets": required_ci_secrets_block,
+            "preflight-fast-hosted": hosted_block,
+        },
+        failures,
+    )
+
+    assert (
+        "ci.yml: preflight-fast-hosted: hosted jobs must run on ubuntu-latest (or reusable workflow input [\"ubuntu-latest\"])"
+        in failures
+    )
+
+
 def test_pre_push_hook_uses_local_safe_ci_dedupe() -> None:
     hook_path = Path(__file__).resolve().parents[3] / ".githooks" / "pre-push"
     content = hook_path.read_text(encoding="utf-8")

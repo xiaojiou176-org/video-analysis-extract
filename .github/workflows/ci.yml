@@ -31,7 +31,7 @@ env:
 
 jobs:
   runner-bootstrap:
-    runs-on: [self-hosted, shared-pool]
+    runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
       GH_ORG: xiaojiou176-org
@@ -136,7 +136,7 @@ jobs:
           done
 
   required-ci-secrets:
-    runs-on: [self-hosted, shared-pool]
+    runs-on: ubuntu-latest
     timeout-minutes: 5
     needs: [runner-bootstrap]
     env:
@@ -158,7 +158,7 @@ jobs:
             --required YOUTUBE_API_KEY
 
   changes-hosted:
-    runs-on: [self-hosted, shared-pool]
+    runs-on: ubuntu-latest
     continue-on-error: true
     timeout-minutes: 5
     needs: [required-ci-secrets]
@@ -281,7 +281,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
   changes:
-    runs-on: [self-hosted, shared-pool]
+    runs-on: ubuntu-latest
     timeout-minutes: 3
     needs: [changes-hosted, changes-fallback]
     if: ${{ always() && (needs['changes-hosted'].result == 'success' || needs['changes-fallback'].result == 'success') }}
@@ -303,7 +303,7 @@ jobs:
     uses: ./.github/workflows/_preflight-fast-steps.yml
     needs: [required-ci-secrets]
     with:
-      runs-on: '["self-hosted","shared-pool"]'
+      runs-on: '["ubuntu-latest"]'
 
   preflight-fast-fallback:
     uses: ./.github/workflows/_preflight-fast-steps.yml
@@ -312,7 +312,7 @@ jobs:
     with:
       runs-on: '["self-hosted","shared-pool"]'
   preflight-fast:
-    runs-on: [self-hosted, shared-pool]
+    runs-on: ubuntu-latest
     timeout-minutes: 3
     needs: [preflight-fast-hosted, preflight-fast-fallback]
     if: ${{ always() && (needs['preflight-fast-hosted'].result == 'success' || needs['preflight-fast-fallback'].result == 'success') }}
@@ -2572,7 +2572,7 @@ jobs:
 
           echo "final gate passed"
   backend-lint-hosted:
-    runs-on: [self-hosted, shared-pool]
+    runs-on: ubuntu-latest
     continue-on-error: true
     timeout-minutes: 20
     needs: [preflight-fast, changes]
@@ -2655,7 +2655,7 @@ jobs:
         run: uv run --with ruff ruff check apps scripts
 
   backend-lint:
-    runs-on: [self-hosted, shared-pool]
+    runs-on: ubuntu-latest
     timeout-minutes: 3
     needs: [backend-lint-hosted, backend-lint-fallback]
     if: ${{ always() && (needs['backend-lint-hosted'].result == 'success' || needs['backend-lint-fallback'].result == 'success' || (needs['backend-lint-hosted'].result == 'skipped' && needs['backend-lint-fallback'].result == 'skipped')) }}
@@ -2671,7 +2671,7 @@ jobs:
           fi
 
   frontend-lint-hosted:
-    runs-on: [self-hosted, shared-pool]
+    runs-on: ubuntu-latest
     continue-on-error: true
     timeout-minutes: 20
     needs: [preflight-fast, changes]
@@ -2726,7 +2726,7 @@ jobs:
         run: python3 scripts/check_test_assertions.py --path apps/web
 
   frontend-lint:
-    runs-on: [self-hosted, shared-pool]
+    runs-on: ubuntu-latest
     timeout-minutes: 3
     needs: [frontend-lint-hosted, frontend-lint-fallback]
     if: ${{ always() && (needs['frontend-lint-hosted'].result == 'success' || needs['frontend-lint-fallback'].result == 'success' || (needs['frontend-lint-hosted'].result == 'skipped' && needs['frontend-lint-fallback'].result == 'skipped')) }}
