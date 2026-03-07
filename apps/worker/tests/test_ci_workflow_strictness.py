@@ -159,6 +159,135 @@ def test_job_level_uses_target_accepts_trailing_comment() -> None:
     assert module._job_level_uses_target(block) == "./.github/workflows/no-timeout.yml"
 
 
+def test_global_rules_require_checkout_clean_true() -> None:
+    module = _load_module()
+    workflow = """name: CI
+on:
+  pull_request:
+jobs:
+      lint:
+        runs-on: ubuntu-latest
+        timeout-minutes: 5
+        steps:
+          - name: Checkout
+        uses: actions/checkout@1234567890abcdef1234567890abcdef12345678
+          - run: echo lint
+  required-ci-secrets:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - run: python3 scripts/check_required_ci_secrets.py --required GEMINI_API_KEY
+"""
+    failures: list[str] = []
+
+    module._check_global_rules(Path("ci.yml"), workflow, dict(module._job_blocks(workflow)), failures)
+
+    assert (
+        "ci.yml:10: actions/checkout must declare with.clean: true on shared self-hosted runners"
+        in failures
+    )
+
+
+def test_global_rules_forbid_checkout_workspace_tool_cache_paths() -> None:
+    module = _load_module()
+    workflow = """name: CI
+on:
+  pull_request:
+env:
+  CI_CACHE_ROOT: ${{ runner.temp }}/ci-cache
+  PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.runtime-cache/ms-playwright
+jobs:
+      lint:
+        runs-on: ubuntu-latest
+        timeout-minutes: 5
+        steps:
+          - name: Checkout
+        uses: actions/checkout@1234567890abcdef1234567890abcdef12345678
+        with:
+          clean: true
+      - name: Cache Playwright browsers
+        uses: actions/cache@1234567890abcdef1234567890abcdef12345678
+        with:
+          path: ${{ github.workspace }}/.runtime-cache/ms-playwright
+  required-ci-secrets:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - run: python3 scripts/check_required_ci_secrets.py --required GEMINI_API_KEY
+"""
+    failures: list[str] = []
+
+    module._check_global_rules(Path("ci.yml"), workflow, dict(module._job_blocks(workflow)), failures)
+
+    assert (
+        "ci.yml:6: PLAYWRIGHT_BROWSERS_PATH must resolve under runner.temp/CI_CACHE_ROOT, not repo paths or ~/.cache"
+        in failures
+    )
+    assert (
+        "ci.yml:17: actions/cache path `${{ github.workspace }}/.runtime-cache/ms-playwright` must resolve under runner.temp/CI_CACHE_ROOT"
+        in failures
+    )
+
+
+def test_global_rules_require_ci_cache_root_for_cached_workflows() -> None:
+    module = _load_module()
+    workflow = """name: CI
+on:
+  pull_request:
+jobs:
+      lint:
+        runs-on: ubuntu-latest
+        timeout-minutes: 5
+        steps:
+          - name: Checkout
+        uses: actions/checkout@1234567890abcdef1234567890abcdef12345678
+        with:
+          clean: true
+      - name: Cache uv
+        uses: actions/cache@1234567890abcdef1234567890abcdef12345678
+        with:
+          path: ${{ runner.temp }}/ci-cache/uv
+  required-ci-secrets:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - run: python3 scripts/check_required_ci_secrets.py --required GEMINI_API_KEY
+"""
+    failures: list[str] = []
+
+    module._check_global_rules(Path("ci.yml"), workflow, dict(module._job_blocks(workflow)), failures)
+
+    assert (
+        "ci.yml: workflows using actions/cache must declare CI_CACHE_ROOT under runner.temp"
+        in failures
+    )
+
+
+def test_global_rules_reject_ci_concurrency_group_with_github_sha() -> None:
+    module = _load_module()
+    workflow = """name: CI
+on:
+  workflow_dispatch:
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}-${{ github.sha }}
+  cancel-in-progress: true
+jobs:
+  required-ci-secrets:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - run: python3 scripts/check_required_ci_secrets.py --required GEMINI_API_KEY
+"""
+    failures: list[str] = []
+
+    module._check_global_rules(Path("ci.yml"), workflow, dict(module._job_blocks(workflow)), failures)
+
+    assert (
+        "ci.yml: top-level concurrency.group must not include github.sha; use a stable workflow/event/ref key"
+        in failures
+    )
+
+
 def test_ci_specific_rules_aggregate_needs_must_not_be_satisfied_by_comment_text() -> None:
     module = _load_module()
     aggregate_block = """  aggregate-gate:

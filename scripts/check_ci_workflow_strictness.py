@@ -6,6 +6,23 @@ from pathlib import Path
 
 WORKFLOW_DIR = Path(".github/workflows")
 WORKFLOW_PATH = WORKFLOW_DIR / "ci.yml"
+CHECKOUT_ACTION = "actions/checkout@"
+CACHE_ACTION = "actions/cache@"
+SAFE_CACHE_PATH_MARKERS = (
+    "${{ runner.temp }}",
+    "${{ env.CI_CACHE_ROOT }}",
+    "${{ env.PRE_COMMIT_HOME }}",
+    "${{ env.UV_CACHE_DIR }}",
+    "${{ env.PLAYWRIGHT_BROWSERS_PATH }}",
+)
+TOOL_CACHE_ENV_VARS = (
+    "PRE_COMMIT_HOME",
+    "UV_CACHE_DIR",
+    "PLAYWRIGHT_BROWSERS_PATH",
+    "PIP_CACHE_DIR",
+    "XDG_CACHE_HOME",
+    "npm_config_cache",
+)
 MIN_MUTATION_SCORE = 0.62
 MIN_MUTATION_EFFECTIVE_RATIO = 0.25
 MAX_MUTATION_NO_TESTS_RATIO = 0.75
@@ -181,6 +198,143 @@ def _aggregate_enforces_required_ci_success(block: str) -> bool:
     return has_required_in_for_loop and has_success_only_guard
 
 
+def _leading_spaces(line: str) -> int:
+    return len(line) - len(line.lstrip(" "))
+
+
+def _collect_step_block(lines: list[str], start_index: int) -> list[str]:
+    block = [lines[start_index]]
+    step_indent = _leading_spaces(lines[start_index])
+    index = start_index + 1
+    while index < len(lines):
+        line = lines[index]
+        stripped = line.lstrip()
+        if stripped.startswith("- ") and _leading_spaces(line) <= step_indent:
+            break
+        block.append(line)
+        index += 1
+    return block
+
+
+def _check_checkout_clean_rule(workflow_path: Path, text: str, failures: list[str]) -> None:
+    lines = text.splitlines()
+    for lineno, line in enumerate(lines, start=1):
+        if CHECKOUT_ACTION not in line:
+            continue
+        block = "\n".join(_collect_step_block(lines, lineno - 1))
+        if "clean: true" not in block:
+            failures.append(
+                f"{workflow_path.name}:{lineno}: actions/checkout must declare with.clean: true on shared self-hosted runners"
+            )
+
+
+def _is_forbidden_cache_value(value: str) -> bool:
+    normalized = value.strip()
+    if not normalized:
+        return True
+    if "~/.cache" in normalized or "${{ github.workspace }}" in normalized:
+        return True
+    if normalized.startswith((".", "cache/", ".venv")):
+        return True
+    return "/.runtime-cache" in normalized or "/.cache/" in normalized
+
+
+def _is_safe_cache_value(value: str) -> bool:
+    normalized = value.strip()
+    return any(marker in normalized for marker in SAFE_CACHE_PATH_MARKERS)
+
+
+def _extract_cache_paths_from_step(block_lines: list[str]) -> list[str]:
+    paths: list[str] = []
+    in_with = False
+    in_path = False
+    path_indent = 0
+    for line in block_lines[1:]:
+        stripped = line.strip()
+        indent = _leading_spaces(line)
+        if not stripped:
+            continue
+        if stripped == "with:":
+            in_with = True
+            in_path = False
+            continue
+        if not in_with:
+            continue
+        if re.match(r"^[A-Za-z0-9_-]+:\s*", stripped) and not stripped.startswith("path:"):
+            in_path = False
+        if stripped.startswith("path:"):
+            in_path = True
+            path_indent = indent
+            value = stripped.split("path:", 1)[1].strip()
+            if value and value != "|":
+                paths.append(value)
+            continue
+        if in_path:
+            if indent <= path_indent:
+                in_path = False
+                continue
+            paths.append(stripped)
+    return [item for item in paths if item and item != "|"]
+
+
+def _check_cache_path_rules(workflow_path: Path, text: str, failures: list[str]) -> None:
+    lines = text.splitlines()
+    uses_cache_action = False
+    for lineno, line in enumerate(lines, start=1):
+        env_match = re.match(
+            rf"^\s+({'|'.join(re.escape(name) for name in TOOL_CACHE_ENV_VARS)}):\s*(.+?)\s*$",
+            line,
+        )
+        if env_match:
+            env_name, env_value = env_match.groups()
+            if _is_forbidden_cache_value(env_value) or not _is_safe_cache_value(env_value):
+                failures.append(
+                    f"{workflow_path.name}:{lineno}: {env_name} must resolve under runner.temp/CI_CACHE_ROOT, not repo paths or ~/.cache"
+                )
+
+        if CACHE_ACTION not in line:
+            continue
+        uses_cache_action = True
+        block_lines = _collect_step_block(lines, lineno - 1)
+        for cache_path in _extract_cache_paths_from_step(block_lines):
+            if _is_forbidden_cache_value(cache_path) or not _is_safe_cache_value(cache_path):
+                failures.append(
+                    f"{workflow_path.name}:{lineno}: actions/cache path `{cache_path}` must resolve under runner.temp/CI_CACHE_ROOT"
+                )
+
+    if uses_cache_action and "CI_CACHE_ROOT:" not in text:
+        failures.append(
+            f"{workflow_path.name}: workflows using actions/cache must declare CI_CACHE_ROOT under runner.temp"
+        )
+
+
+def _check_ci_concurrency_rules(workflow_path: Path, text: str, failures: list[str]) -> None:
+    if workflow_path.name != WORKFLOW_PATH.name:
+        return
+    lines = text.splitlines()
+    in_concurrency = False
+    group_value: str | None = None
+    for line in lines:
+        if re.match(r"^concurrency:\s*$", line):
+            in_concurrency = True
+            continue
+        if not in_concurrency:
+            continue
+        if line and not line.startswith(" "):
+            break
+        match = re.match(r"^\s{2}group:\s*(.+?)\s*$", line)
+        if match:
+            group_value = match.group(1).strip()
+            break
+    if group_value is None:
+        failures.append(f"{workflow_path.name}: missing top-level concurrency.group")
+        return
+    if "github.sha" in group_value:
+        failures.append(
+            f"{workflow_path.name}: top-level concurrency.group must not include github.sha; use a stable workflow/event/ref key"
+        )
+
+
 def _check_global_rules(
     workflow_path: Path, text: str, blocks: dict[str, str], failures: list[str]
 ) -> None:
@@ -263,7 +417,12 @@ def _check_global_rules(
 
     # Reusable workflows (workflow_call) don't need required-ci-secrets job.
     if is_reusable:
+        _check_checkout_clean_rule(workflow_path, text, failures)
         return
+
+    _check_ci_concurrency_rules(workflow_path, text, failures)
+    _check_checkout_clean_rule(workflow_path, text, failures)
+    _check_cache_path_rules(workflow_path, text, failures)
 
     # Every workflow must hard-fail when required CI secrets are missing.
     required_ci_secrets = blocks.get("required-ci-secrets", "")

@@ -197,6 +197,10 @@ Exception detail sanitization contract:
 - Script entry controls for `dev_api/dev_worker/dev_mcp/init_env_example` are CLI-only after Batch C (see `docs/reference/env-script-overrides.md`)
 - `scripts/recreate_gce_instance.sh` now uses CLI flags only (no GCE recreate env contract vars)
 - `CORE_POSTGRES_PORT`, `CORE_POSTGRES_PASSWORD` (docker compose core-services overrides)
+- `GCP_PROJECT_ID`, `GCP_ZONE` are optional defaults for runner maintenance helpers:
+  - `scripts/audit_github_runner_host.sh`
+  - `scripts/apply_github_runner_startup_metadata.sh`
+  - CLI flags still take precedence over env defaults
 
 Live smoke includes strict computer-use controls via CLI flags in `scripts/e2e_live_smoke.sh`.
 
