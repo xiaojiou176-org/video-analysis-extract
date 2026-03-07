@@ -452,11 +452,12 @@ def _check_global_rules(
                 f"{workflow_path}: {job_name}: hosted jobs must set continue-on-error: true to allow fallback takeover"
             )
 
-        hosted_has_ubuntu = "runs-on: ubuntu-latest" in hosted_block
-        hosted_has_reusable_ubuntu = 'runs-on: \'["ubuntu-latest"]\'' in hosted_block
-        if not (hosted_has_ubuntu or hosted_has_reusable_ubuntu):
+        if (
+            "runs-on: [self-hosted, shared-pool]" not in hosted_block
+            and "runs-on: '[\"self-hosted\",\"shared-pool\"]'" not in hosted_block
+        ):
             failures.append(
-                f"{workflow_path}: {job_name}: hosted jobs must run on ubuntu-latest (or reusable workflow input [\"ubuntu-latest\"])"
+                f"{workflow_path}: {job_name}: hosted jobs must run on [self-hosted, shared-pool]"
             )
 
         if not fallback_block:

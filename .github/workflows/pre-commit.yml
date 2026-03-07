@@ -14,7 +14,7 @@ env:
 
 jobs:
   required-ci-secrets:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, shared-pool]
     timeout-minutes: 5
     env:
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
@@ -35,7 +35,7 @@ jobs:
             --required YOUTUBE_API_KEY
 
   pre-commit-hosted:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, shared-pool]
     continue-on-error: true
     timeout-minutes: 20
     needs: [required-ci-secrets]
@@ -213,7 +213,7 @@ jobs:
           done
 
   pre-commit:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, shared-pool]
     timeout-minutes: 3
     needs: [pre-commit-hosted, pre-commit-fallback]
     if: ${{ always() && (needs['pre-commit-hosted'].result == 'success' || needs['pre-commit-fallback'].result == 'success') }}

@@ -37,7 +37,7 @@
 
 ## Runner 标签策略（维护约定）
 
-- 统一路由标签：heavy job 与 fallback job 固定使用 `runs-on: [self-hosted, shared-pool]`；`*-hosted` 与 bootstrap 类轻量 job 允许使用 `ubuntu-latest`。
+- 统一路由标签：所有 CI 作业固定使用 `runs-on: [self-hosted, shared-pool]`。
 - 允许精细调度：如需额外分流，只能追加标签，不允许使用 runner 名称直绑。
 - 关键约束：组织共享 runner 名称由治理侧统一维护，仓库 workflow 仅通过 label 调度。
 - 禁止硬编码 runner 实例名（例如 `github-runner-core-03`）；统一用标签路由，避免扩缩容后工作流失效。
