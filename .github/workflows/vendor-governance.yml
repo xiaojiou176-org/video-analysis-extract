@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   required-ci-secrets:
-    runs-on: [self-hosted, shared-pool]
+    runs-on: [self-hosted, video-analysis-extract]
     timeout-minutes: 5
     env:
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
@@ -33,7 +33,7 @@ jobs:
             --required YOUTUBE_API_KEY
 
   upstream-lock-validation-hosted:
-    runs-on: [self-hosted, shared-pool]
+    runs-on: [self-hosted, video-analysis-extract]
     continue-on-error: true
     timeout-minutes: 10
     needs: [required-ci-secrets]
@@ -64,7 +64,7 @@ jobs:
           fi
 
   upstream-lock-validation-fallback:
-    runs-on: [self-hosted, shared-pool]
+    runs-on: [self-hosted, video-analysis-extract]
     timeout-minutes: 12
     needs: [required-ci-secrets, upstream-lock-validation-hosted]
     if: ${{ always() && (needs['upstream-lock-validation-hosted'].result != 'success' || needs['upstream-lock-validation-hosted'].outputs.hosted_ok != 'true') }}
@@ -83,7 +83,7 @@ jobs:
         run: bash scripts/vendor/validate_upstream_lock.sh --root .
 
   upstream-lock-validation:
-    runs-on: [self-hosted, shared-pool]
+    runs-on: [self-hosted, video-analysis-extract]
     timeout-minutes: 3
     needs: [upstream-lock-validation-hosted, upstream-lock-validation-fallback]
     if: ${{ always() && (needs['upstream-lock-validation-hosted'].result == 'success' || needs['upstream-lock-validation-fallback'].result == 'success') }}
@@ -93,5 +93,5 @@ jobs:
           if [[ "${{ needs['upstream-lock-validation-hosted'].result }}" == "success" ]]; then
             echo "upstream-lock-validation source: hosted"
           else
-            echo "upstream-lock-validation source: shared-pool fallback"
+            echo "upstream-lock-validation source: dedicated fallback"
           fi
