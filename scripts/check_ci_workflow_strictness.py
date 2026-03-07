@@ -453,11 +453,11 @@ def _check_global_rules(
             )
 
         if (
-            "runs-on: [self-hosted, shared-pool]" not in hosted_block
-            and "runs-on: '[\"self-hosted\",\"shared-pool\"]'" not in hosted_block
+            "runs-on: [self-hosted, video-analysis-extract]" not in hosted_block
+            and "runs-on: '[\"self-hosted\",\"video-analysis-extract\"]'" not in hosted_block
         ):
             failures.append(
-                f"{workflow_path}: {job_name}: hosted jobs must run on [self-hosted, shared-pool]"
+                f"{workflow_path}: {job_name}: hosted jobs must run on [self-hosted, video-analysis-extract]"
             )
 
         if not fallback_block:
@@ -466,11 +466,11 @@ def _check_global_rules(
             )
         else:
             if (
-                "runs-on: [self-hosted, shared-pool]" not in fallback_block
-                and "runs-on: '[\"self-hosted\",\"shared-pool\"]'" not in fallback_block
+                "runs-on: [self-hosted, video-analysis-extract]" not in fallback_block
+                and "runs-on: '[\"self-hosted\",\"video-analysis-extract\"]'" not in fallback_block
             ):
                 failures.append(
-                    f"{workflow_path}: {fallback_name}: fallback jobs must run on [self-hosted, shared-pool]"
+                    f"{workflow_path}: {fallback_name}: fallback jobs must run on [self-hosted, video-analysis-extract]"
                 )
             if not re.search(
                 rf"^\s+if:\s+\$\{{\{{.*always\(\).*(needs\['{re.escape(job_name)}'\]\.result\s*!=\s*['\"]success['\"]|needs\.{re.escape(job_name)}\.result\s*!=\s*['\"]success['\"]).*\}}\}}\s*$",

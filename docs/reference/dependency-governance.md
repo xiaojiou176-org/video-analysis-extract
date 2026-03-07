@@ -26,7 +26,7 @@
   - python tests
   - web lint/build/e2e
   - web a11y smoke（`npm --prefix apps/web run test:a11y`）
-  - runner 策略：所有 CI Job 必须运行在 self-hosted runner 池（`[self-hosted, shared-pool]`），禁止使用 GitHub 托管 runner
+  - runner 策略：所有 CI Job 必须运行在当前仓库专用 self-hosted runner 池（`[self-hosted, video-analysis-extract]`），避免被组织内其他仓库挤占
 - `env-governance.yml`：
   - `python scripts/check_env_contract.py --strict`
   - `gitleaks detect --source . --verbose --redact`
