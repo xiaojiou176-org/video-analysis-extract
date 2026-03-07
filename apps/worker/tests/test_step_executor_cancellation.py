@@ -68,6 +68,7 @@ def test_run_command_kills_subprocess_on_timeout(monkeypatch, tmp_path: Path) ->
         return fake_process
 
     monkeypatch.setattr(asyncio, "create_subprocess_exec", _fake_create_subprocess_exec)
+    monkeypatch.setattr(step_executor.os, "killpg", lambda *_args, **_kwargs: (_ for _ in ()).throw(ProcessLookupError()))
     ctx = _build_ctx(tmp_path, timeout=1)
 
     result = asyncio.run(step_executor.run_command(ctx, ["sleep", "30"]))
