@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   required-ci-secrets:
-    runs-on: [self-hosted, video-analysis-extract]
+    runs-on: [self-hosted, shared-pool]
     timeout-minutes: 5
     env:
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
@@ -33,7 +33,7 @@ jobs:
             --required YOUTUBE_API_KEY
 
   env-contract-hosted:
-    runs-on: [self-hosted, video-analysis-extract]
+    runs-on: [self-hosted, shared-pool]
     continue-on-error: true
     timeout-minutes: 20
     needs: [required-ci-secrets]
@@ -109,7 +109,7 @@ jobs:
           fi
 
   env-contract-fallback:
-    runs-on: [self-hosted, video-analysis-extract]
+    runs-on: [self-hosted, shared-pool]
     timeout-minutes: 25
     needs: [required-ci-secrets, env-contract-hosted]
     if: ${{ always() && (needs['env-contract-hosted'].result != 'success' || needs['env-contract-hosted'].outputs.hosted_ok != 'true') }}
@@ -173,7 +173,7 @@ jobs:
           PY
 
   env-contract:
-    runs-on: [self-hosted, video-analysis-extract]
+    runs-on: [self-hosted, shared-pool]
     timeout-minutes: 3
     needs: [env-contract-hosted, env-contract-fallback]
     if: ${{ always() && (needs['env-contract-hosted'].result == 'success' || needs['env-contract-fallback'].result == 'success') }}
@@ -183,11 +183,11 @@ jobs:
           if [[ "${{ needs['env-contract-hosted'].result }}" == "success" ]]; then
             echo "env-contract source: hosted"
           else
-            echo "env-contract source: dedicated fallback"
+            echo "env-contract source: shared-pool fallback"
           fi
 
   secret-scan-hosted:
-    runs-on: [self-hosted, video-analysis-extract]
+    runs-on: [self-hosted, shared-pool]
     continue-on-error: true
     timeout-minutes: 15
     needs: [required-ci-secrets]
@@ -233,7 +233,7 @@ jobs:
           fi
 
   secret-scan-fallback:
-    runs-on: [self-hosted, video-analysis-extract]
+    runs-on: [self-hosted, shared-pool]
     timeout-minutes: 20
     needs: [required-ci-secrets, secret-scan-hosted]
     if: ${{ always() && (needs['secret-scan-hosted'].result != 'success' || needs['secret-scan-hosted'].outputs.hosted_ok != 'true') }}
@@ -267,7 +267,7 @@ jobs:
           fi
 
   secret-scan:
-    runs-on: [self-hosted, video-analysis-extract]
+    runs-on: [self-hosted, shared-pool]
     timeout-minutes: 3
     needs: [secret-scan-hosted, secret-scan-fallback]
     if: ${{ always() && (needs['secret-scan-hosted'].result == 'success' || needs['secret-scan-fallback'].result == 'success') }}
@@ -277,5 +277,5 @@ jobs:
           if [[ "${{ needs['secret-scan-hosted'].result }}" == "success" ]]; then
             echo "secret-scan source: hosted"
           else
-            echo "secret-scan source: dedicated fallback"
+            echo "secret-scan source: shared-pool fallback"
           fi

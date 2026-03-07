@@ -6,7 +6,7 @@ on:
       runs-on:
         required: true
         type: string
-        description: "JSON array of required self-hosted labels (e.g. [\"self-hosted\",\"video-analysis-extract\"])"
+        description: "JSON array of required self-hosted labels (e.g. [\"self-hosted\",\"shared-pool\"])"
 
 jobs:
   run:
