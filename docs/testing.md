@@ -40,7 +40,40 @@
 - 统一路由标签：所有 CI 作业固定使用 `runs-on: [self-hosted, shared-pool]`。
 - 允许精细调度：如需额外分流，只能追加标签，不允许使用 runner 名称直绑。
 - 关键约束：组织共享 runner 名称由治理侧统一维护，仓库 workflow 仅通过 label 调度。
-- 禁止硬编码 runner 实例名（例如 `github-runner-spot-02`）；统一用标签路由，避免扩缩容后工作流失效。
+- 禁止硬编码 runner 实例名（例如 `github-runner-core-03`）；统一用标签路由，避免扩缩容后工作流失效。
+
+## Runner 宿主机健康巡检
+
+- 只读巡检脚本：`scripts/audit_github_runner_host.sh`
+- Startup script 真相源：`infra/gce/github-runner-org-startup.sh`
+- 同步 metadata 脚本：`scripts/apply_github_runner_startup_metadata.sh`
+
+只读巡检示例：
+
+```bash
+scripts/audit_github_runner_host.sh \
+  --project project-73ca1c4a-1270-4025-a65 \
+  --zone us-central1-a \
+  --instance github-runner-core-02 \
+  --runner-name pool-core02-03 \
+  --repo-name video-analysis-extract
+```
+
+作用：
+
+- 记录 instance metadata / serial port / SSH 巡检证据到 `.runtime-cache/temp/runner-health/<instance>/`
+- 检查 `_work` 下是否存在 `~/.cache`、`.cache`、异常 `.runtime-cache/ms-playwright`
+- 检查 `_work` 和目标 repo 下是否存在非 `ubuntu` owner 文件
+- 汇总串口里的 `left-over process` / `Runner listener exited with error code 143` 证据
+
+同步改良版 startup-script 到 runner 实例 metadata：
+
+```bash
+scripts/apply_github_runner_startup_metadata.sh \
+  --project project-73ca1c4a-1270-4025-a65 \
+  --zone us-central1-a \
+  --instance github-runner-core-02
+```
 
 ## D1~D5 决议与执行命令
 
@@ -511,7 +544,9 @@ npm run lint
 - 由于当前 Web 代码尚未完成 Next.js 16 `searchParams` 异步迁移，`jobs -> artifacts` 用例会先断言查询跳转与页面占位状态（`No artifact loaded yet.`）；迁移后可升级为 markdown/screenshot 区块可见性断言。
 - API 路由测试会通过 `monkeypatch` 隔离 Temporal/数据库外部依赖，验证路由层映射行为。
 - 需要访问真实依赖（Postgres/Temporal）的端到端链路，可在后续补专门的 integration 套件。
-- CI 缓存策略：`web-test-build`、`web-e2e`、`nightly-flaky-web-e2e`、`dependency-vuln-scan` 都使用 `setup-node` 的 npm 缓存（锁文件 `apps/web/package-lock.json`）；Python 使用 `actions/cache@v4` 缓存 `~/.cache/uv`，Playwright 浏览器二进制使用 `actions/cache@v4` 缓存 `~/.cache/ms-playwright`；测试与 e2e 产物统一写入 `.runtime-cache` 并作为 artifact 上传。
+- CI 缓存策略：工具缓存必须放在 `runner.temp` 下，并通过统一变量收口，例如 `CI_CACHE_ROOT=${{ runner.temp }}/ci-cache`、`UV_CACHE_DIR=${{ runner.temp }}/ci-cache/uv`、`PRE_COMMIT_HOME=${{ runner.temp }}/ci-cache/pre-commit`、`PLAYWRIGHT_BROWSERS_PATH=${{ runner.temp }}/ci-cache/ms-playwright`；测试与 e2e 产物统一写入 repo 内的 `.runtime-cache` 并作为 artifact 上传。
+- 禁止项：`actions/cache` 或工具缓存环境变量不得指向 `~/.cache/**`、`${{ github.workspace }}/**`、相对 repo 路径（如 `.runtime-cache/**`、`.cache/**`、`cache/**`、`.venv`）。这些路径会在 shared self-hosted runner 上制造工作区污染。
+- Checkout 规则：所有 workflow 中的 `actions/checkout` 必须显式声明 `with.clean: true`，不能依赖默认值。
 
 
 <!-- doc-sync: api/worker reliability + auth guard update (2026-03-03) -->

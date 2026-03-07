@@ -76,8 +76,8 @@ jobs:
           set -euo pipefail
 
           GCP_ZONE="${GCP_ZONE:-us-central1-a}"
-          INSTANCES=("github-runner-core-01" "github-runner-spot-01" "github-runner-spot-02")
-          EXPECTED_RUNNERS_JSON='["pool-core01-01","pool-core01-02","pool-core01-03","pool-spot01-01","pool-spot01-02","pool-spot01-03","pool-spot02-01","pool-spot02-02","pool-spot02-03"]'
+          INSTANCES=("github-runner-core-01" "github-runner-core-02" "github-runner-core-03")
+          EXPECTED_RUNNERS_JSON='["pool-core01-01","pool-core01-02","pool-core01-03","pool-core02-01","pool-core02-02","pool-core02-03","pool-core03-01","pool-core03-02","pool-core03-03"]'
 
           echo "Checking GCE instances in ${GCP_PROJECT_ID}/${GCP_ZONE}..."
           for instance in "${INSTANCES[@]}"; do
@@ -108,8 +108,8 @@ jobs:
           done
 
           echo "Waiting for organization runner set to exactly match expected 9 names and be online..."
-          EXPECTED_RUNNERS_SORTED="pool-core01-01,pool-core01-02,pool-core01-03,pool-spot01-01,pool-spot01-02,pool-spot01-03,pool-spot02-01,pool-spot02-02,pool-spot02-03"
-          RUNNER_NAME_REGEX='^pool-(core01|spot01|spot02)-0[1-3]$'
+          EXPECTED_RUNNERS_SORTED="pool-core01-01,pool-core01-02,pool-core01-03,pool-core02-01,pool-core02-02,pool-core02-03,pool-core03-01,pool-core03-02,pool-core03-03"
+          RUNNER_NAME_REGEX='^pool-(core01|core02|core03)-0[1-3]$'
           for attempt in $(seq 1 40); do
             actual_sorted="$(gh api "orgs/${GH_ORG}/actions/runners" --jq '[.runners[].name] | sort | join(",")')"
             online_count="$(gh api "orgs/${GH_ORG}/actions/runners" --jq "[.runners[] | select((.name|test(\"${RUNNER_NAME_REGEX}\")) and .status==\"online\")] | length")"
