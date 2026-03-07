@@ -1211,13 +1211,17 @@ jobs:
               exit 1
               ;;
           esac
+          tmpdir="$(mktemp -d "/tmp/temporal-cli-web-e2e-${{ matrix.browser }}-XXXXXX")"
           archive="temporal_cli_${TEMPORAL_CLI_VERSION}_linux_${temporal_arch}.tar.gz"
+          archive_path="${tmpdir}/${archive}"
           url="https://github.com/temporalio/cli/releases/download/v${TEMPORAL_CLI_VERSION}/${archive}"
-          curl -fsSL "$url" -o "/tmp/${archive}"
-          echo "${expected_sha}  /tmp/${archive}" | sha256sum -c -
-          tar -xzf "/tmp/${archive}" -C /tmp temporal
+          trap 'rm -rf "${tmpdir}"' EXIT
+          curl --retry 5 --retry-all-errors --retry-delay 2 --connect-timeout 15 -fL "$url" -o "${archive_path}"
+          echo "${expected_sha}  ${archive_path}" | sha256sum -c -
+          tar -tzf "${archive_path}" temporal >/dev/null
+          tar -xzf "${archive_path}" -C "${tmpdir}" temporal
           mkdir -p "$HOME/.local/bin"
-          install -m 0755 /tmp/temporal "$HOME/.local/bin/temporal"
+          install -m 0755 "${tmpdir}/temporal" "$HOME/.local/bin/temporal"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
       - name: Allocate isolated web e2e runtime resources
@@ -1659,13 +1663,17 @@ jobs:
               exit 1
               ;;
           esac
+          tmpdir="$(mktemp -d "/tmp/temporal-cli-web-e2e-perceived-XXXXXX")"
           archive="temporal_cli_${TEMPORAL_CLI_VERSION}_linux_${temporal_arch}.tar.gz"
+          archive_path="${tmpdir}/${archive}"
           url="https://github.com/temporalio/cli/releases/download/v${TEMPORAL_CLI_VERSION}/${archive}"
-          curl -fsSL "$url" -o "/tmp/${archive}"
-          echo "${expected_sha}  /tmp/${archive}" | sha256sum -c -
-          tar -xzf "/tmp/${archive}" -C /tmp temporal
+          trap 'rm -rf "${tmpdir}"' EXIT
+          curl --retry 5 --retry-all-errors --retry-delay 2 --connect-timeout 15 -fL "$url" -o "${archive_path}"
+          echo "${expected_sha}  ${archive_path}" | sha256sum -c -
+          tar -tzf "${archive_path}" temporal >/dev/null
+          tar -xzf "${archive_path}" -C "${tmpdir}" temporal
           mkdir -p "$HOME/.local/bin"
-          install -m 0755 /tmp/temporal "$HOME/.local/bin/temporal"
+          install -m 0755 "${tmpdir}/temporal" "$HOME/.local/bin/temporal"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
       - name: Allocate isolated perceived e2e runtime resources
@@ -2344,13 +2352,17 @@ jobs:
               exit 1
               ;;
           esac
+          tmpdir="$(mktemp -d "/tmp/temporal-cli-live-smoke-XXXXXX")"
           archive="temporal_cli_${TEMPORAL_CLI_VERSION}_linux_${temporal_arch}.tar.gz"
+          archive_path="${tmpdir}/${archive}"
           url="https://github.com/temporalio/cli/releases/download/v${TEMPORAL_CLI_VERSION}/${archive}"
-          curl -fsSL "$url" -o "/tmp/${archive}"
-          echo "${expected_sha}  /tmp/${archive}" | sha256sum -c -
-          tar -xzf "/tmp/${archive}" -C /tmp temporal
+          trap 'rm -rf "${tmpdir}"' EXIT
+          curl --retry 5 --retry-all-errors --retry-delay 2 --connect-timeout 15 -fL "$url" -o "${archive_path}"
+          echo "${expected_sha}  ${archive_path}" | sha256sum -c -
+          tar -tzf "${archive_path}" temporal >/dev/null
+          tar -xzf "${archive_path}" -C "${tmpdir}" temporal
           mkdir -p "$HOME/.local/bin"
-          install -m 0755 /tmp/temporal "$HOME/.local/bin/temporal"
+          install -m 0755 "${tmpdir}/temporal" "$HOME/.local/bin/temporal"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
       - name: Run migrations for live smoke DB
