@@ -13,6 +13,10 @@ import { toFlashQuery } from "@/app/flash-message";
 import { apiClient } from "@/lib/api/client";
 import type { Platform } from "@/lib/api/types";
 
+function getServerWriteToken(): string | null {
+	return process.env.VD_API_KEY?.trim() || null;
+}
+
 function statusUrl(pathname: string, status: "success" | "error", code: string): string {
 	return `${pathname}?${toFlashQuery(status, code)}`;
 }
@@ -24,10 +28,10 @@ export async function pollIngestAction(formData: FormData) {
 			platform: String(formData.get("platform") ?? "").trim() || undefined,
 			max_new_videos: String(formData.get("max_new_videos") ?? "50"),
 		});
-		const result = await apiClient.pollIngest({
-			platform: payload.platform as Platform | undefined,
-			max_new_videos: payload.max_new_videos,
-		});
+			const result = await apiClient.pollIngest({
+				platform: payload.platform as Platform | undefined,
+				max_new_videos: payload.max_new_videos,
+			}, { writeAccessToken: getServerWriteToken() });
 		revalidatePath("/");
 		revalidatePath("/jobs");
 		void result;
@@ -49,15 +53,15 @@ export async function processVideoAction(formData: FormData) {
 			mode: String(formData.get("mode") ?? "full").trim(),
 			force: formData.get("force") === "on",
 		});
-		await apiClient.processVideo({
-			video: { platform: payload.platform as Platform, url: payload.url },
-			mode: payload.mode,
-			force: payload.force,
-		});
+			await apiClient.processVideo({
+				video: { platform: payload.platform as Platform, url: payload.url },
+				mode: payload.mode,
+				force: payload.force,
+			}, { writeAccessToken: getServerWriteToken() });
 
 		revalidatePath("/");
 		revalidatePath("/jobs");
-		revalidatePath("/artifacts");
+		revalidatePath("/feed");
 		redirect(statusUrl("/", "success", "PROCESS_VIDEO_OK"));
 	} catch (error) {
 		if (isNextRedirectError(error)) {

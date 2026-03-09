@@ -37,8 +37,16 @@ describe("api url core", () => {
 
 	it("falls back to localhost when allowed", () => {
 		delete process.env.NEXT_PUBLIC_API_BASE_URL;
+		delete process.env.API_PORT;
 
-		expect(resolveApiBaseUrl()).toBe("http://127.0.0.1:8000");
+		expect(resolveApiBaseUrl()).toBe("http://127.0.0.1:9000");
+	});
+
+	it("uses API_PORT for local fallback when provided", () => {
+		delete process.env.NEXT_PUBLIC_API_BASE_URL;
+		process.env.API_PORT = "18000";
+
+		expect(resolveApiBaseUrl()).toBe("http://127.0.0.1:18000");
 	});
 
 	it("rejects invalid or non-http base urls", () => {

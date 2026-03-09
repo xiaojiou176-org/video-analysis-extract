@@ -30,6 +30,7 @@ WEB_E2E_ARTIFACT_ROOT = PROJECT_ROOT / ".runtime-cache" / "web-e2e-artifacts"
 WEB_E2E_VIDEO_DIR = WEB_E2E_ARTIFACT_ROOT / "videos"
 WEB_E2E_TRACE_DIR = WEB_E2E_ARTIFACT_ROOT / "traces"
 WEB_E2E_SCREENSHOT_DIR = WEB_E2E_ARTIFACT_ROOT / "screenshots"
+WEB_E2E_WRITE_TOKEN = "video-digestor-local-dev-token"
 
 for artifact_dir in (WEB_E2E_VIDEO_DIR, WEB_E2E_TRACE_DIR, WEB_E2E_SCREENSHOT_DIR):
     artifact_dir.mkdir(parents=True, exist_ok=True)
@@ -138,6 +139,21 @@ def pytest_addoption(parser: pytest.Parser) -> None:
     )
 
 
+def pytest_configure(config: pytest.Config) -> None:
+    config.addinivalue_line(
+        "markers",
+        "web_e2e_device(profile): override Playwright device profile for this test/file.",
+    )
+    config.addinivalue_line(
+        "markers",
+        "web_e2e_reduced_motion(value): override reduced-motion preference for this test/file.",
+    )
+    config.addinivalue_line(
+        "markers",
+        "web_e2e_cpu_throttle(rate): override CPU throttle rate for this test/file.",
+    )
+
+
 def _read_trace_mode(config: pytest.Config) -> str:
     mode = str(config.getoption("--web-e2e-trace-mode")).strip().lower()
     allowed = {"off", "on", "retain-on-failure"}
@@ -189,6 +205,40 @@ def _read_cpu_throttle(config: pytest.Config) -> int:
     if throttle < 1:
         raise RuntimeError(f"--web-e2e-cpu-throttle must be >=1, got: {throttle}")
     return throttle
+
+
+def _marker_override(request: pytest.FixtureRequest, name: str) -> object | None:
+    marker = request.node.get_closest_marker(name)
+    if marker is None or not marker.args:
+        return None
+    return marker.args[0]
+
+
+def _resolve_device_profile(request: pytest.FixtureRequest) -> str:
+    override = _marker_override(request, "web_e2e_device")
+    if isinstance(override, str):
+        profile = override.strip().lower()
+        if profile:
+            return profile
+    return _read_device_profile(request.config)
+
+
+def _resolve_reduced_motion(request: pytest.FixtureRequest) -> str:
+    override = _marker_override(request, "web_e2e_reduced_motion")
+    if isinstance(override, str):
+        value = override.strip().lower()
+        if value:
+            return value
+    return _read_reduced_motion(request.config)
+
+
+def _resolve_cpu_throttle(request: pytest.FixtureRequest) -> int:
+    override = _marker_override(request, "web_e2e_cpu_throttle")
+    if isinstance(override, int):
+        if override < 1:
+            raise RuntimeError(f"web_e2e_cpu_throttle marker must be >=1, got: {override}")
+        return override
+    return _read_cpu_throttle(request.config)
 
 
 def _device_profile_context_kwargs(profile: str) -> dict[str, object]:
@@ -284,6 +334,8 @@ def web_base_url(pytestconfig: pytest.Config, request: pytest.FixtureRequest) ->
             env["NEXT_PUBLIC_API_BASE_URL"] = mock_api_server.base_url
         else:
             env["NEXT_PUBLIC_API_BASE_URL"] = real_api_base_url
+        env.setdefault("VD_API_KEY", WEB_E2E_WRITE_TOKEN)
+        env.setdefault("WEB_ACTION_SESSION_TOKEN", WEB_E2E_WRITE_TOKEN)
         env["PORT"] = str(web_port)
         env["HOSTNAME"] = "127.0.0.1"
         env["CI"] = "1"
@@ -369,9 +421,9 @@ def page(browser: Browser, web_base_url: str, request: pytest.FixtureRequest) ->
     artifact_slug = slugify_nodeid(request.node.nodeid)
     trace_mode = _read_trace_mode(request.config)
     video_mode = _read_video_mode(request.config)
-    device_profile = _read_device_profile(request.config)
-    reduced_motion = _read_reduced_motion(request.config)
-    cpu_throttle = _read_cpu_throttle(request.config)
+    device_profile = _resolve_device_profile(request)
+    reduced_motion = _resolve_reduced_motion(request)
+    cpu_throttle = _resolve_cpu_throttle(request)
 
     new_context_kwargs: dict[str, object] = {"base_url": web_base_url}
     new_context_kwargs.update(_device_profile_context_kwargs(device_profile))

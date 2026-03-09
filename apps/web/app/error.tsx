@@ -1,5 +1,7 @@
 "use client";
 
+import { ErrorStateCard } from "@/components/error-state-card";
+
 type RouteErrorProps = {
 	error: Error & { digest?: string };
 	reset: () => void;
@@ -7,20 +9,15 @@ type RouteErrorProps = {
 
 export default function RouteError({ error, reset }: RouteErrorProps) {
 	return (
-		<section className="error-boundary-panel">
-			<p className="error-boundary-eyebrow">页面异常</p>
-			<h2 className="error-boundary-title">页面加载失败</h2>
-			<p className="error-boundary-description" role="alert" aria-live="assertive" aria-atomic="true">
-				出现了意外错误，请稍后重试或刷新页面。
-			</p>
-			{error.digest ? (
-				<p className="error-boundary-meta">
-					错误编号：<code>{error.digest}</code>
-				</p>
-			) : null}
-			<button type="button" className="primary" onClick={reset}>
-				重试页面
-			</button>
+		<section className="error-boundary-panel mx-auto flex min-h-[55vh] w-full max-w-xl items-center px-4 py-10">
+			<ErrorStateCard
+				eyebrow="页面异常"
+				title="页面加载失败"
+				titleAs="h2"
+				description="出现了意外错误，请稍后重试或刷新页面。"
+				digest={error.digest}
+				onRetry={reset}
+			/>
 		</section>
 	);
 }

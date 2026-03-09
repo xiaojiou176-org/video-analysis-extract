@@ -26,7 +26,7 @@ describe("RouteTransition", () => {
 		render(
 			<RouteTransition>
 				<div>
-					<h2 data-route-focus-target="true">旧标题</h2>
+					<h2>旧标题</h2>
 					<h1 data-route-heading>通知配置</h1>
 				</div>
 			</RouteTransition>,
@@ -35,11 +35,9 @@ describe("RouteTransition", () => {
 		const heading = screen.getByRole("heading", { name: "通知配置" });
 		expect(screen.getByRole("status")).toHaveTextContent("已切换到：设置");
 		expect(heading).toHaveAttribute("tabindex", "-1");
-		expect(heading).toHaveAttribute("data-route-focus-target", "true");
 		expect(document.activeElement).toBe(heading);
-		expect(screen.getByRole("heading", { name: "旧标题" })).not.toHaveAttribute(
-			"data-route-focus-target",
-		);
+		// data-route-focus-target 已改为 useRef 追踪，不再写入 DOM 属性
+		expect(heading).not.toHaveAttribute("data-route-focus-target");
 	});
 
 	it("maps root pathname to homepage label", () => {
@@ -73,5 +71,81 @@ describe("RouteTransition", () => {
 		);
 
 		expect(screen.getByRole("status")).toHaveTextContent("已切换到：AI 摘要");
+	});
+
+	it("falls back to h2 when no explicit route heading or h1 exists", () => {
+		usePathnameMock.mockReturnValue("/jobs/history");
+		render(
+			<RouteTransition>
+				<section>
+					<p>描述</p>
+					<h2>历史任务</h2>
+				</section>
+			</RouteTransition>,
+		);
+
+		const heading = screen.getByRole("heading", { name: "历史任务" });
+		expect(screen.getByRole("status")).toHaveTextContent("已切换到：任务");
+		expect(heading).toHaveAttribute("tabindex", "-1");
+		expect(document.activeElement).toBe(heading);
+	});
+
+	it("removes tabindex from previously focused heading when route updates", () => {
+		let pathname = "/feed";
+		usePathnameMock.mockImplementation(() => pathname);
+
+		const { rerender } = render(
+			<RouteTransition>
+				<h1 data-route-heading>摘要页</h1>
+			</RouteTransition>,
+		);
+
+		const firstHeading = screen.getByRole("heading", { name: "摘要页" });
+		expect(firstHeading).toHaveAttribute("tabindex", "-1");
+
+		pathname = "/jobs";
+		rerender(
+			<RouteTransition>
+				<h1 data-route-heading>任务页</h1>
+			</RouteTransition>,
+		);
+
+		const secondHeading = screen.getByRole("heading", { name: "任务页" });
+		expect(secondHeading).toHaveAttribute("tabindex", "-1");
+		expect(firstHeading).not.toHaveAttribute("tabindex");
+	});
+
+	it("cleans tabindex when unmounting", () => {
+		usePathnameMock.mockReturnValue("/settings");
+		const { unmount } = render(
+			<RouteTransition>
+				<h1 data-route-heading>设置页</h1>
+			</RouteTransition>,
+		);
+		const heading = screen.getByRole("heading", { name: "设置页" });
+		expect(heading).toHaveAttribute("tabindex", "-1");
+
+		unmount();
+		expect(heading).not.toHaveAttribute("tabindex");
+	});
+
+	it("keeps tabindex when the focused heading instance does not change", () => {
+		usePathnameMock.mockReturnValue("/feed");
+		const { rerender } = render(
+			<RouteTransition>
+				<h1 data-route-heading>同一标题</h1>
+			</RouteTransition>,
+		);
+
+		const heading = screen.getByRole("heading", { name: "同一标题" });
+		expect(heading).toHaveAttribute("tabindex", "-1");
+
+		rerender(
+			<RouteTransition>
+				<h1 data-route-heading>同一标题</h1>
+			</RouteTransition>,
+		);
+
+		expect(heading).toHaveAttribute("tabindex", "-1");
 	});
 });

@@ -50,9 +50,15 @@ def worker_dist_dir(worker_id: str) -> str:
 
 
 def free_port() -> int:
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-        sock.bind(("127.0.0.1", 0))
-        return int(sock.getsockname()[1])
+    # Chromium in this environment occasionally reports ERR_ADDRESS_INVALID for
+    # some very high ephemeral ports. Keep web-e2e ports in a safer range.
+    for _ in range(20):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.bind(("127.0.0.1", 0))
+            port = int(sock.getsockname()[1])
+            if port < 60_000:
+                return port
+    return port
 
 
 def is_port_in_use_error(exc: BaseException) -> bool:
@@ -90,13 +96,13 @@ def utc_now() -> str:
     return datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
-def wait_http_ok(url: str, timeout_sec: float = 90.0) -> None:
+def wait_http_ok(url: str, timeout_sec: float = 150.0) -> None:
     deadline = time.monotonic() + timeout_sec
     last_error: Exception | None = None
     backoff_sec = 0.05
     while time.monotonic() < deadline:
         try:
-            with urlopen(url, timeout=2) as response:
+            with urlopen(url, timeout=5) as response:
                 if response.status < HTTPStatus.INTERNAL_SERVER_ERROR:
                     return
         except Exception as exc:  # pragma: no cover - only for startup retries

@@ -3,7 +3,10 @@
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { apiClient } from "@/lib/api/client";
+import { cn } from "@/lib/utils";
 
 const SYNC_FEEDBACK = {
 	idle: {
@@ -11,47 +14,57 @@ const SYNC_FEEDBACK = {
 		badgeLabel: "待命",
 		statusLabel: "待命：点击后立即同步最新内容。",
 		liveMode: "polite" as const,
-		statusClass: "status-chip status-pending",
+		badgeVariant: "outline" as const,
 	},
 	loading: {
 		buttonLabel: "同步中…",
 		badgeLabel: "同步中",
 		statusLabel: "正在拉取与分析新内容，请稍候。",
 		liveMode: "polite" as const,
-		statusClass: "status-chip status-running",
+		badgeVariant: "secondary" as const,
 	},
 	done: {
 		buttonLabel: "同步完成",
 		badgeLabel: "已完成",
 		statusLabel: "同步完成，列表即将刷新。",
 		liveMode: "polite" as const,
-		statusClass: "status-chip status-succeeded",
+		badgeVariant: "secondary" as const,
 	},
 	error: {
 		buttonLabel: "同步失败，重试",
 		badgeLabel: "需重试",
 		statusLabel: "同步失败，请检查网络后重试。",
 		liveMode: "assertive" as const,
-		statusClass: "status-chip status-failed",
+		badgeVariant: "destructive" as const,
 	},
 };
 
-export function SyncNowButton() {
+type SyncNowButtonProps = {
+	sessionToken?: string;
+};
+
+export function SyncNowButton({ sessionToken }: SyncNowButtonProps) {
 	const [state, setState] = useState<"idle" | "loading" | "done" | "error">("idle");
 	const router = useRouter();
 	const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 	const isLoading = state === "loading";
 	const feedback = SYNC_FEEDBACK[state];
-	const stateFeedbackClass =
+	const buttonVariant =
+		state === "loading" ? "secondary" : state === "done" ? "success" : state === "error" ? "destructive" : "hero";
+	const liveStatusLabel =
 		state === "loading"
-			? "btn-feedback-pending"
+			? "正在同步，请稍候。"
 			: state === "done"
-				? "btn-feedback-success"
+				? "同步完成，列表正在刷新。"
 				: state === "error"
-					? "btn-feedback-error"
-					: "";
-	const statusChipFeedbackClass = state === "done" || state === "error" ? "status-chip-feedback" : "";
-
+						? "同步失败，请检查网络后重试。"
+						: "";
+	const hintClassName = cn(
+		"text-xs leading-5 text-muted-foreground transition-colors duration-200",
+		state === "loading" && "text-amber-700 dark:text-amber-300",
+		state === "done" && "text-emerald-700 dark:text-emerald-300",
+		state === "error" && "text-destructive",
+	);
 	const clearTimer = useCallback(() => {
 		if (!timerRef.current) {
 			return;
@@ -66,40 +79,53 @@ export function SyncNowButton() {
 		};
 	}, [clearTimer]);
 
-	async function handleSync() {
+	function handleSync() {
 		setState("loading");
 		clearTimer();
-		try {
-			await apiClient.pollIngest({});
-			setState("done");
-			timerRef.current = setTimeout(() => {
-				setState("idle");
-				router.refresh();
-			}, 1500);
-		} catch {
-			setState("error");
-		}
+		const request = sessionToken
+			? apiClient.pollIngest({}, { webSessionToken: sessionToken })
+			: apiClient.pollIngest({});
+		request
+			.then(() => {
+				timerRef.current = setTimeout(() => {
+					setState("done");
+					timerRef.current = setTimeout(() => {
+						setState("idle");
+						router.refresh();
+					}, 1500);
+				}, 0);
+			})
+			.catch(() => {
+				setState("error");
+			});
 	}
 
 	return (
 		<>
-			<button
-				type="button"
-				onClick={handleSync}
-				disabled={isLoading}
-				className={`${state === "error" ? "destructive" : "primary"} sync-now-button sync-now-button--${state} card-interactive ${stateFeedbackClass}`.trim()}
+				<Button
+					type="button"
+					onClick={handleSync}
+					disabled={isLoading}
+					variant={buttonVariant}
+					className={cn("min-w-[13rem] justify-between rounded-xl", !isLoading && "card-interactive")}
 				aria-describedby="sync-now-status"
-				aria-disabled={isLoading ? "true" : "false"}
-				aria-busy={isLoading ? "true" : "false"}
+				aria-disabled={isLoading}
+				aria-busy={isLoading}
 				data-state={state}
 				data-feedback-state={state}
 				data-interaction="cta"
 				title={state === "error" ? "同步失败，按 Enter 或空格可再次尝试。" : undefined}
 			>
-				<span className="inline" data-part="button-content" data-state={state}>
-					<span className={feedback.statusClass} data-part="state-badge" data-state={state} aria-hidden="true">
+				<span className="inline-flex items-center gap-2" data-part="button-content" data-state={state}>
+					<Badge
+						variant={feedback.badgeVariant}
+						className="rounded-full px-1.5 py-0 text-[10px] font-semibold"
+						data-part="state-badge"
+						data-state={state}
+						aria-hidden="true"
+					>
 						{feedback.badgeLabel}
-					</span>
+					</Badge>
 					<span data-part="button-label" data-state={state}>
 						{feedback.buttonLabel}
 					</span>
@@ -108,29 +134,29 @@ export function SyncNowButton() {
 							正在同步，请稍候。
 						</span>
 					) : null}
-				</span>
-			</button>
-			<span
-				className={`small ${feedback.statusClass} ${statusChipFeedbackClass}`.trim()}
-				data-part="status-hint"
-				data-state={state}
-				data-feedback-state={state}
-				aria-hidden="true"
-			>
-				{feedback.statusLabel}
-			</span>
-			<output
-				id="sync-now-status"
-				className="sr-only"
+					</span>
+				</Button>
+				<p
+					className={hintClassName}
+					data-part="status-hint"
+					data-state={state}
+					data-feedback-state={state}
+					aria-hidden="true"
+				>
+					{feedback.statusLabel}
+				</p>
+				<output
+					id="sync-now-status"
+					className="sr-only"
 				role={state === "error" ? "alert" : "status"}
-				aria-live={feedback.liveMode}
-				aria-atomic="true"
-				data-part="status-live"
-				data-state={state}
-				data-feedback-state={state}
-			>
-				{feedback.statusLabel}
-			</output>
-		</>
+					aria-live={feedback.liveMode}
+					aria-atomic="true"
+					data-part="status-live"
+					data-state={state}
+					data-feedback-state={state}
+				>
+					{liveStatusLabel}
+				</output>
+			</>
 	);
 }

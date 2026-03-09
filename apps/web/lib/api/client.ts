@@ -21,6 +21,8 @@ import { buildApiUrl, sanitizeExternalUrl } from "@/lib/api/url";
 
 type RequestOptions = Omit<RequestInit, "body"> & {
 	body?: unknown;
+	webSessionToken?: string | null;
+	writeAccessToken?: string | null;
 };
 
 function asObject(value: unknown): Record<string, unknown> | null {
@@ -124,8 +126,8 @@ function normalizeArtifactMarkdownWithMeta(payload: unknown): ArtifactMarkdownWi
 function normalizeDigestFeedResponse(payload: unknown): DigestFeedResponse {
 	const parsed = asObject(payload);
 	const rawItems = Array.isArray(parsed?.items) ? parsed.items : [];
-	const items: DigestFeedResponse["items"] = rawItems
-		.map((item) => {
+	const items = rawItems
+		.map((item): DigestFeedResponse["items"][number] | null => {
 			const record = asObject(item);
 			if (!record) {
 				return null;
@@ -139,6 +141,19 @@ function normalizeDigestFeedResponse(payload: unknown): DigestFeedResponse {
 
 			const category = asString(record.category).trim();
 			const artifactTypeRaw = asString(record.artifact_type).trim();
+			const sourceRaw = asString(record.source).trim().toLowerCase();
+			const contentTypeRaw = asString(record.content_type).trim().toLowerCase();
+			const contentType: "video" | "article" =
+				contentTypeRaw === "video" || contentTypeRaw === "article"
+					? contentTypeRaw
+					: sourceRaw === "youtube" || sourceRaw === "bilibili"
+						? "video"
+						: "article";
+			const cat = category || "misc";
+			const safeCategory: DigestFeedResponse["items"][number]["category"] =
+				cat === "tech" || cat === "creator" || cat === "macro" || cat === "ops"
+					? cat
+					: "misc";
 			return {
 				feed_id: feedId,
 				job_id: jobId,
@@ -146,10 +161,11 @@ function normalizeDigestFeedResponse(payload: unknown): DigestFeedResponse {
 				title: asString(record.title),
 				source: asString(record.source),
 				source_name: asString(record.source_name),
-				category: category || "misc",
+				category: safeCategory,
 				published_at: asString(record.published_at),
 				summary_md: asString(record.summary_md),
 				artifact_type: artifactTypeRaw === "outline" ? "outline" : "digest",
+				content_type: contentType,
 			};
 		})
 		.filter((item): item is DigestFeedResponse["items"][number] => item !== null);
@@ -223,6 +239,32 @@ async function parseError(response: Response): Promise<string> {
 	return "ERR_REQUEST_FAILED";
 }
 
+function isWriteMethod(method: string | undefined): boolean {
+	const normalized = method?.trim().toUpperCase() ?? "GET";
+	return normalized !== "GET" && normalized !== "HEAD";
+}
+
+function buildWriteAuthHeaders(options: RequestOptions): Headers | undefined {
+	if (!isWriteMethod(options.method)) {
+		return undefined;
+	}
+
+	const headers = new Headers(options.headers ?? {});
+	const writeAccessToken = options.writeAccessToken?.trim();
+	const webSessionToken = options.webSessionToken?.trim();
+	if (writeAccessToken) {
+		headers.set("X-API-Key", writeAccessToken);
+		headers.set("Authorization", `Bearer ${writeAccessToken}`);
+		return headers;
+	}
+	if (webSessionToken) {
+		headers.set("X-Web-Session", webSessionToken);
+		return headers;
+	}
+
+	return headers;
+}
+
 async function requestJson<T>(
 	path: string,
 	options: RequestOptions = {},
@@ -232,13 +274,15 @@ async function requestJson<T>(
 	const url = buildApiUrl(path, query);
 	let response: Response;
 	try {
+		const authHeaders = buildWriteAuthHeaders(options);
 		response = await fetch(url, {
 			...options,
 			cache: "no-store",
-			headers: {
-				"Content-Type": "application/json",
-				...(options.headers ?? {}),
-			},
+			headers: (() => {
+				const headers = authHeaders ?? new Headers(options.headers ?? {});
+				headers.set("Content-Type", "application/json");
+				return headers;
+			})(),
 			body: options.body === undefined ? undefined : JSON.stringify(options.body),
 		});
 	} catch {
@@ -325,31 +369,50 @@ export const apiClient = {
 		return requestJson<Subscription[]>("/api/v1/subscriptions", {}, params);
 	},
 
-	upsertSubscription(payload: SubscriptionUpsertRequest) {
+	upsertSubscription(
+		payload: SubscriptionUpsertRequest,
+		options?: { writeAccessToken?: string | null },
+	) {
 		return requestJson<SubscriptionUpsertResponse>("/api/v1/subscriptions", {
 			method: "POST",
 			body: payload,
+			writeAccessToken: options?.writeAccessToken,
 		});
 	},
 
-	batchUpdateSubscriptionCategory(payload: { ids: string[]; category: string }) {
+	batchUpdateSubscriptionCategory(
+		payload: { ids: string[]; category: string },
+		options?: { webSessionToken?: string | null; writeAccessToken?: string | null },
+	) {
 		return requestJson<{ updated: number }>("/api/v1/subscriptions/batch-update-category", {
 			method: "POST",
 			body: payload,
+			webSessionToken: options?.webSessionToken,
+			writeAccessToken: options?.writeAccessToken,
 		});
 	},
 
-	deleteSubscription(id: string) {
+	deleteSubscription(
+		id: string,
+		options?: { webSessionToken?: string | null; writeAccessToken?: string | null },
+	) {
 		const safeId = encodeURIComponent(assertSafeIdentifier(id));
 		return requestJson<void>(`/api/v1/subscriptions/${safeId}`, {
 			method: "DELETE",
+			webSessionToken: options?.webSessionToken,
+			writeAccessToken: options?.writeAccessToken,
 		});
 	},
 
-	pollIngest(payload: IngestPollRequest) {
+	pollIngest(
+		payload: IngestPollRequest,
+		options?: { webSessionToken?: string | null; writeAccessToken?: string | null },
+	) {
 		return requestJson<IngestPollResponse>("/api/v1/ingest/poll", {
 			method: "POST",
 			body: payload,
+			webSessionToken: options?.webSessionToken,
+			writeAccessToken: options?.writeAccessToken,
 		});
 	},
 
@@ -357,10 +420,11 @@ export const apiClient = {
 		return requestJson<Video[]>("/api/v1/videos", {}, params);
 	},
 
-	processVideo(payload: VideoProcessRequest) {
+	processVideo(payload: VideoProcessRequest, options?: { writeAccessToken?: string | null }) {
 		return requestJson<VideoProcessResponse>("/api/v1/videos/process", {
 			method: "POST",
 			body: payload,
+			writeAccessToken: options?.writeAccessToken,
 		});
 	},
 
@@ -375,31 +439,49 @@ export const apiClient = {
 		return requestJson<NotificationConfig>("/api/v1/notifications/config");
 	},
 
-	updateNotificationConfig(payload: NotificationConfigUpdateRequest) {
+	updateNotificationConfig(
+		payload: NotificationConfigUpdateRequest,
+		options?: { writeAccessToken?: string | null },
+	) {
 		return requestJson<NotificationConfig>("/api/v1/notifications/config", {
 			method: "PUT",
 			body: payload,
+			writeAccessToken: options?.writeAccessToken,
 		});
 	},
 
-	sendNotificationTest(payload: NotificationTestRequest) {
+	sendNotificationTest(
+		payload: NotificationTestRequest,
+		options?: { writeAccessToken?: string | null },
+	) {
 		return requestJson<NotificationSendResponse>("/api/v1/notifications/test", {
 			method: "POST",
 			body: payload,
+			writeAccessToken: options?.writeAccessToken,
 		});
 	},
 
 	getDigestFeed(params?: {
 		source?: Platform;
 		category?: "tech" | "creator" | "macro" | "ops" | "misc";
+		subscription_id?: string;
 		limit?: number;
 		cursor?: string;
 		since?: string;
 	}) {
+		const query = params
+			? {
+					...(params as Record<string, unknown>),
+					sub: params.subscription_id,
+				}
+			: undefined;
+		if (query && "subscription_id" in query) {
+			delete query.subscription_id;
+		}
 		return requestJson<DigestFeedResponse>(
 			"/api/v1/feed/digests",
 			{},
-			params,
+			query,
 			normalizeDigestFeedResponse,
 		);
 	},

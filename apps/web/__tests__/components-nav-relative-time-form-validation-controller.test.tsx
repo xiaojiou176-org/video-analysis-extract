@@ -1,40 +1,7 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { FormValidationController } from "@/components/form-validation-controller";
-import { AppNav } from "@/components/nav";
 import { RelativeTime } from "@/components/relative-time";
-
-let mockedPathname = "/";
-
-vi.mock("next/navigation", () => ({
-	usePathname: () => mockedPathname,
-}));
-
-vi.mock("next/link", () => ({
-	default: ({ href, children, ...rest }: { href: string; children: React.ReactNode }) => (
-		<a href={href} {...rest}>
-			{children}
-		</a>
-	),
-}));
-
-describe("AppNav", () => {
-	it("marks root nav item active for homepage", () => {
-		mockedPathname = "/";
-		render(<AppNav />);
-
-		expect(screen.getByRole("link", { name: "首页" })).toHaveAttribute("aria-current", "page");
-		expect(screen.getByRole("link", { name: "任务" })).not.toHaveAttribute("aria-current");
-	});
-
-	it("marks nested route active when pathname starts with section", () => {
-		mockedPathname = "/jobs/job-123";
-		render(<AppNav />);
-
-		expect(screen.getByRole("link", { name: "任务" })).toHaveAttribute("aria-current", "page");
-		expect(screen.getByRole("link", { name: "首页" })).not.toHaveAttribute("aria-current");
-	});
-});
 
 describe("RelativeTime", () => {
 	beforeEach(() => {
@@ -83,7 +50,6 @@ describe("RelativeTime", () => {
 
 describe("FormValidationController", () => {
 	beforeEach(() => {
-		mockedPathname = "/";
 		document.body.innerHTML = "";
 	});
 
@@ -178,6 +144,36 @@ describe("FormValidationController", () => {
 		expect(input).toHaveAttribute("aria-disabled", "true");
 
 		fireEvent.click(checkbox);
+
+		expect(input).not.toBeDisabled();
+		expect(input).toHaveAttribute("aria-disabled", "false");
+	});
+
+	it("toggles dependent field when checkbox state is mirrored through a hidden input", () => {
+		render(
+			<>
+				<form>
+					<input name="daily_digest_enabled" type="hidden" value="" />
+					<button type="button" role="checkbox" aria-label="开启每日摘要" aria-checked="false">
+						开启
+					</button>
+					<input name="daily_digest_hour_utc" data-disabled-unless-checked="daily_digest_enabled" />
+					<button type="submit">保存</button>
+				</form>
+				<FormValidationController />
+			</>,
+		);
+
+		const hiddenInput = document.querySelector<HTMLInputElement>(
+			'input[type="hidden"][name="daily_digest_enabled"]',
+		);
+		const input = screen.getByRole("textbox");
+
+		expect(input).toBeDisabled();
+		expect(input).toHaveAttribute("aria-disabled", "true");
+
+		hiddenInput!.value = "on";
+		fireEvent.input(hiddenInput!);
 
 		expect(input).not.toBeDisabled();
 		expect(input).toHaveAttribute("aria-disabled", "false");

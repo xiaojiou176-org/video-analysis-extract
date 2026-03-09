@@ -16,6 +16,8 @@
 - 锁文件：`apps/web/package-lock.json`
 - 安装命令：`npm --prefix apps/web ci`
 - 覆盖率运行依赖：`@vitest/coverage-v8`（`vitest run --coverage` 必需）
+- UI 基座依赖：当前 Web shell 使用 `tailwindcss@4` + `@tailwindcss/postcss` + `radix-ui` + `next-themes` + `geist`；
+  若继续扩展 UI primitives，优先复用现有 shadcn/radix 风格组件，不要并行引入第二套组件体系。
 
 ## CI Gates
 
@@ -32,7 +34,7 @@
   - `gitleaks detect --source . --verbose --redact`
 - `mutation-weekly.yml`：
   - 使用 `pyproject.toml` 的 `[tool.mutmut]` 作为唯一配置源
-  - 默认阈值 `--mutation-min-score 0.85`
+  - 默认阈值 `--mutation-min-score 0.64`
   - 周期审计要求 `survived=0`（无存活突变体）
 
 ## Upgrade Workflow
@@ -98,7 +100,7 @@ npm --prefix apps/web run build
 - 强制守卫：
   - `python3 scripts/check_mutation_scope.py` 会在 pre-commit/pre-push/CI preflight 运行，防止范围缩水。
   - `python3 scripts/check_mutation_test_selection.py` 会在 pre-commit/pre-push/CI preflight 运行，防止测试选择清单缩水。
-  - `quality_gate.sh` 对 mutmut 结果执行三维门禁：`score>=0.62`、`effective_ratio>=0.25`、`no_tests_ratio<=0.75`（CI 参数可显式覆盖）。
+  - `quality_gate.sh` 对 mutmut 结果执行三维门禁：`score>=0.64`、`effective_ratio>=0.27`、`no_tests_ratio<=0.72`（CI 参数可显式覆盖）。
 
 ## Doc-Drift Enforcement
 

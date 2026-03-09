@@ -37,4 +37,24 @@ describe("resolveSearchParams", () => {
 			raw: "",
 		});
 	});
+
+	it("returns empty string when array params contain no string values", async () => {
+		const raw = {
+			cursor: [1, 2, 3] as unknown as string[],
+		};
+
+		await expect(resolveSearchParams(raw, ["cursor"] as const)).resolves.toEqual({
+			cursor: "",
+		});
+	});
+
+	it("picks the first non-empty trimmed string from mixed arrays", async () => {
+		const raw = {
+			cursor: [1, "  next-page  ", "fallback"] as unknown as string[],
+		};
+
+		await expect(resolveSearchParams(raw, ["cursor"] as const)).resolves.toEqual({
+			cursor: "next-page",
+		});
+	});
 });

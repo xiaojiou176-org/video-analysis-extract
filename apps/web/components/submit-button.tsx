@@ -4,14 +4,18 @@ import type { ComponentProps } from "react";
 import { useId } from "react";
 import { useFormStatus } from "react-dom";
 
-type SubmitButtonProps = Omit<ComponentProps<"button">, "type" | "disabled"> & {
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+
+type SubmitButtonProps = Omit<ComponentProps<typeof Button>, "type" | "disabled"> & {
 	pendingLabel?: string;
 	statusText?: string;
 };
 
 export function SubmitButton({
 	children,
-	className = "primary",
+	className,
 	pendingLabel = "提交中…",
 	statusText,
 	"aria-describedby": ariaDescribedBy,
@@ -20,48 +24,50 @@ export function SubmitButton({
 	const { pending } = useFormStatus();
 	const statusId = useId();
 	const state = pending ? "pending" : "idle";
-	const describedBy = [ariaDescribedBy, statusId].filter(Boolean).join(" ");
 	const buttonLabel = pending ? (
-		<span className="inline" data-part="button-content" data-state={state}>
-			<span
-				className="status-chip status-running"
+		<span className="inline-flex items-center gap-2" data-part="button-content" data-state={state}>
+			<Badge
+				variant="secondary"
+				className="rounded-full bg-primary-foreground/18 px-1.5 py-0 text-[10px] font-semibold text-primary-foreground"
 				data-part="pending-indicator"
 				data-state={state}
 				aria-hidden="true"
 			>
-				•
-			</span>
+				处理中
+			</Badge>
 			<span data-part="button-label" data-state={state}>
 				{pendingLabel}
 			</span>
 			<span className="sr-only">正在提交，请稍候。</span>
 		</span>
 	) : (
-		<span className="inline" data-part="button-content" data-state={state}>
+		<span className="inline-flex items-center gap-2" data-part="button-content" data-state={state}>
 			<span data-part="button-label" data-state={state}>
 				{children}
 			</span>
 		</span>
 	);
 	const pendingStatusText = statusText ?? pendingLabel;
-	const buttonClassName = pending ? `${className} btn-feedback-pending` : className;
+	const buttonClassName = cn("min-w-[8.5rem] rounded-xl shadow-sm", className);
+	const describedBy = [ariaDescribedBy, statusId].filter(Boolean).join(" ") || undefined;
 
 	return (
 		<>
-			<button
+			<Button
 				{...props}
 				type="submit"
 				className={buttonClassName}
 				disabled={pending}
-				aria-disabled={pending ? "true" : "false"}
-				aria-busy={pending ? "true" : "false"}
+				aria-disabled={pending}
+				aria-busy={pending}
 				aria-describedby={describedBy}
 				data-state={state}
 				data-feedback-state={state}
 				data-interaction="cta"
+				suppressHydrationWarning
 			>
 				{buttonLabel}
-			</button>
+			</Button>
 			<output id={statusId} className="sr-only" role="status" aria-live="polite" aria-atomic="true">
 				{pending ? pendingStatusText : ""}
 			</output>

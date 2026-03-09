@@ -1,12 +1,14 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
+import { getActionSessionTokenForForm } from "@/app/action-security";
 import { getFlashMessage, toErrorCode } from "@/app/flash-message";
-import { MarkdownPreview } from "@/components/markdown-preview";
-import { RelativeTime } from "@/components/relative-time";
+import { EntryList } from "@/components/entry-list";
+import { FormSelectField } from "@/components/form-field";
+import { ReadingPane } from "@/components/reading-pane";
 import { SyncNowButton } from "@/components/sync-now-button";
+import { Button } from "@/components/ui/button";
 import { apiClient } from "@/lib/api/client";
-import { sanitizeExternalUrl } from "@/lib/api/url";
 import { resolveSearchParams, type SearchParamsInput } from "@/lib/search-params";
 
 export const metadata: Metadata = { title: "AI 摘要" };
@@ -43,59 +45,45 @@ function toSourceSelectValue(source: string): (typeof SOURCE_OPTIONS)[number]["v
 
 function toSourceLabel(source: string): string {
 	const normalized = source.trim().toLowerCase();
-	if (normalized === "youtube") {
-		return "YouTube";
-	}
-	if (normalized === "bilibili") {
-		return "Bilibili";
-	}
-	if (normalized === "rss" || normalized === "rss_generic") {
-		return "RSS";
-	}
+	if (normalized === "youtube") return "YouTube";
+	if (normalized === "bilibili") return "Bilibili";
+	if (normalized === "rss" || normalized === "rss_generic") return "RSS";
 	return source || "未知";
 }
 
-function renderSourceName(source: string, sourceName: string): string {
-	const fallback = toSourceLabel(source);
-	const name = sourceName.trim();
-	if (!name || name.toLowerCase() === source.trim().toLowerCase()) {
-		return fallback;
-	}
-	return `${fallback} · ${name}`;
+function formatPublishedDateLabel(value: string | undefined): string | undefined {
+	if (!value) return undefined;
+	const parsed = new Date(value);
+	if (Number.isNaN(parsed.getTime())) return value;
+	return new Intl.DateTimeFormat("zh-CN", {
+		year: "numeric",
+		month: "long",
+		day: "numeric",
+		timeZone: "UTC",
+	}).format(parsed);
 }
 
 export default async function FeedPage({ searchParams }: FeedPageProps) {
-	const { source, category, limit, cursor, prev_cursor, page } = await resolveSearchParams(searchParams, [
-		"source",
-		"category",
-		"limit",
-		"cursor",
-		"prev_cursor",
-		"page",
-	] as const);
+	const sessionToken = getActionSessionTokenForForm();
+	const { source, category, sub, limit, cursor, prev_cursor, page, item } = await resolveSearchParams(
+		searchParams,
+		["source", "category", "sub", "limit", "cursor", "prev_cursor", "page", "item"],
+	);
 
 	const parsedLimit = Number.parseInt(limit, 10);
-	const safeLimit =
-		Number.isFinite(parsedLimit) && parsedLimit > 0 ? Math.min(parsedLimit, 100) : 20;
+	const safeLimit = Number.isFinite(parsedLimit) && parsedLimit > 0 ? Math.min(parsedLimit, 100) : 20;
 	const safeCursor = cursor.trim() || undefined;
 	const safePrevCursor = prev_cursor.trim() || undefined;
 	const parsedPage = Number.parseInt(page, 10);
 	const inferredPage = safeCursor ? 2 : 1;
-	const safePage =
-		Number.isFinite(parsedPage) && parsedPage > 0 ? parsedPage : inferredPage;
+	const safePage = Number.isFinite(parsedPage) && parsedPage > 0 ? parsedPage : inferredPage;
 	const normalizedSource = source.trim().toLowerCase();
 	const safeSource = normalizedSource || undefined;
+	const safeSubscriptionId = sub.trim() || undefined;
 	const sourceSelectValue = toSourceSelectValue(source);
-	const isFiltered = Boolean(safeSource || category);
-	const hasVisibleFilterLabel = Boolean(safeSource || category);
-	const filterSummaryParts = [
-		safeSource ? `来源 ${toSourceLabel(safeSource)}` : null,
-		category ? `分类 ${CATEGORY_LABELS[category] ?? category}` : null,
-	].filter((part): part is string => Boolean(part));
-	const filterSummaryText =
-		filterSummaryParts.length > 0
-			? `，当前筛选：${filterSummaryParts.join("，")}`
-			: "，当前为全部内容";
+	const isFiltered = Boolean(safeSource || category || safeSubscriptionId);
+	const hasVisibleFilterLabel = Boolean(safeSource || category || safeSubscriptionId);
+	const selectedJobId = item.trim() || null;
 
 	let feed: Awaited<ReturnType<typeof apiClient.getDigestFeed>> | null = null;
 	let errorCode: string | null = null;
@@ -110,6 +98,7 @@ export default async function FeedPage({ searchParams }: FeedPageProps) {
 				category === "misc"
 					? category
 					: undefined,
+			subscription_id: safeSubscriptionId,
 			limit: safeLimit,
 			cursor: safeCursor,
 		});
@@ -121,89 +110,110 @@ export default async function FeedPage({ searchParams }: FeedPageProps) {
 	const nextCursor = feed?.next_cursor ?? null;
 	const isFirstPage = !safeCursor;
 
-	// 构建分页链接
 	const buildPageUrl = ({
 		cursorValue,
 		prevCursorValue,
 		pageValue,
+		itemValue,
 	}: {
 		cursorValue?: string;
 		prevCursorValue?: string;
 		pageValue: number;
+		itemValue?: string;
 	}) => {
 		const params = new URLSearchParams();
-		if (safeSource) {
-			params.set("source", safeSource);
-		}
-		if (category) {
-			params.set("category", category);
-		}
-		if (safeLimit !== 20) {
-			params.set("limit", String(safeLimit));
-		}
-		if (pageValue > 1) {
-			params.set("page", String(pageValue));
-		}
-		if (cursorValue) {
-			params.set("cursor", cursorValue);
-		}
-		if (prevCursorValue) {
-			params.set("prev_cursor", prevCursorValue);
-		}
+		if (safeSource) params.set("source", safeSource);
+		if (category) params.set("category", category);
+		if (safeSubscriptionId) params.set("sub", safeSubscriptionId);
+		if (safeLimit !== 20) params.set("limit", String(safeLimit));
+		if (pageValue > 1) params.set("page", String(pageValue));
+		if (cursorValue) params.set("cursor", cursorValue);
+		if (prevCursorValue) params.set("prev_cursor", prevCursorValue);
+		if (itemValue) params.set("item", itemValue);
 		const qs = params.toString();
 		return `/feed${qs ? `?${qs}` : ""}`;
 	};
+
+	const buildItemUrl = ({ item: itemId }: { item?: string }) =>
+		buildPageUrl({
+			cursorValue: safeCursor,
+			prevCursorValue: safePrevCursor,
+			pageValue: safePage,
+			itemValue: itemId ?? undefined,
+		});
+
 	const retryHref = buildPageUrl({
 		cursorValue: safeCursor,
 		prevCursorValue: safePrevCursor,
 		pageValue: safePage,
+		itemValue: selectedJobId ?? undefined,
 	});
 
+	const selectedItem = selectedJobId ? items.find((feedItem) => feedItem.job_id === selectedJobId) : null;
+
 	return (
-		<div className="stack">
-			{/* 筛选控件 */}
-			<section className="card stack">
-				<div className="flex-between">
-					<h2 className="m-0">AI 摘要订阅流</h2>
-					<SyncNowButton />
+		<div className="folo-page-shell folo-unified-shell">
+			<div className="folo-page-header">
+				<div className="folo-page-title-row">
+					<div>
+						<p className="folo-page-kicker">Folo Feed</p>
+						<h1 className="folo-page-title" data-route-heading>
+							主阅读流
+						</h1>
+						<p className="folo-page-subtitle">
+							在同一阅读流中浏览摘要条目与正文，并保留按来源、分类快速筛选的工作路径。
+						</p>
+					</div>
+					<div className="folo-page-toolbar">
+						<SyncNowButton sessionToken={sessionToken} />
+					</div>
 				</div>
-				<p className="small">
-					AI 生成摘要的统一时间线。优先展示 digest 全文，无 digest 时回退到 outline 摘要。
-				</p>
-				<form method="GET" className="inline">
-					<label>
-						来源平台
-						<select name="source" defaultValue={sourceSelectValue}>
-							{SOURCE_OPTIONS.map((option) => (
-								<option key={option.value || "all"} value={option.value}>
-									{option.label}
-								</option>
-							))}
-						</select>
-					</label>
-					<label>
-						分类
-						<select name="category" defaultValue={category}>
-							<option value="">全部分类</option>
-							<option value="tech">科技</option>
-							<option value="creator">创作者</option>
-							<option value="macro">宏观</option>
-							<option value="ops">运维</option>
-							<option value="misc">其他</option>
-						</select>
-					</label>
-					<label>
-						每页条数
-						<input name="limit" type="number" min={1} max={100} defaultValue={String(safeLimit)} />
-					</label>
-					<button type="submit" className="primary">
-						筛选
-					</button>
-					{isFiltered && (
-						<Link href="/feed" className="btn-link" data-interaction="link-muted">
-							清除筛选
-						</Link>
-					)}
+			</div>
+
+				<section className="folo-panel folo-surface feed-filter-panel" aria-label="摘要筛选">
+					<form method="GET" className="feed-filter-form">
+						<input type="hidden" name="item" value={selectedJobId ?? ""} />
+						<div className="feed-filter-selects">
+							<FormSelectField
+								name="source"
+								label="来源"
+								defaultValue={sourceSelectValue}
+								options={SOURCE_OPTIONS.map((option) => ({ value: option.value, label: option.label }))}
+								fieldClassName="feed-filter-field"
+								labelClassName="sr-only"
+								selectClassName="feed-filter-select"
+							/>
+							<FormSelectField
+								name="category"
+								label="分类"
+								defaultValue={category}
+								options={[
+									{ value: "", label: "全部分类" },
+									...Object.entries(CATEGORY_LABELS).map(([key, value]) => ({ value: key, label: value })),
+								]}
+								fieldClassName="feed-filter-field"
+								labelClassName="sr-only"
+								selectClassName="feed-filter-select"
+							/>
+						</div>
+					{safeSubscriptionId ? <input type="hidden" name="sub" value={safeSubscriptionId} /> : null}
+					<input type="hidden" name="limit" value={String(safeLimit)} />
+					<div className="feed-filter-actions">
+						<Button
+							type="submit"
+							variant="hero"
+							size="sm"
+							data-interaction="control"
+							data-testid="feed-filter-submit"
+						>
+							筛选
+						</Button>
+						{isFiltered ? (
+							<Button asChild variant="ghost" size="sm" className="feed-filter-clear" data-testid="feed-filter-clear">
+								<Link href={selectedJobId ? `/feed?item=${encodeURIComponent(selectedJobId)}` : "/feed"}>清除</Link>
+							</Button>
+						) : null}
+					</div>
 				</form>
 			</section>
 
@@ -212,145 +222,89 @@ export default async function FeedPage({ searchParams }: FeedPageProps) {
 					<p className="alert alert-enter error" role="alert" aria-live="assertive">
 						{getFlashMessage(errorCode)}
 					</p>
-					<Link href={retryHref} className="btn-link" data-interaction="link-muted">
-						重试当前页面
-					</Link>
+					<Button asChild variant="surface" size="sm" data-interaction="link-muted">
+						<Link href={retryHref}>重试当前页面</Link>
+					</Button>
 				</>
 			) : null}
-			{!errorCode ? (
-				<p className="small" role="status" aria-live="polite">
-					已加载 {items.length} 条摘要{filterSummaryText}。
-				</p>
-			) : null}
 
-			{/* 空状态 */}
 			{!errorCode && items.length === 0 ? (
-				<section className="card empty-state-card">
-					<p className="empty-state-title">暂无 AI 摘要内容</p>
-					<p className="small">
+				<section className="folo-panel folo-surface folo-empty-panel">
+					<p className="folo-empty-title">暂无 AI 摘要内容</p>
+					<p className="folo-empty-description">
 						{isFiltered
 							? "当前筛选条件下没有结果，试试清除筛选。"
 							: "还没有处理过的视频或文章。请先去添加订阅并触发采集。"}
 					</p>
-					{!isFiltered && (
-						<div className="inline mt-8">
-							<Link href="/subscriptions" className="btn-cta">
-								→ 前往订阅管理
-							</Link>
-						</div>
-					)}
+					{!isFiltered ? (
+						<Button asChild variant="hero" size="sm" data-interaction="cta">
+							<Link href="/subscriptions">前往订阅管理</Link>
+						</Button>
+					) : null}
 				</section>
-			) : null}
+			) : (
+				<div className="feed-main-flow">
+					<EntryList
+						items={items.map((feedItem) => ({
+							...feedItem,
+							href: buildItemUrl({ item: feedItem.job_id }),
+						}))}
+						selectedJobId={selectedJobId}
+					/>
+					<ReadingPane
+						jobId={selectedJobId}
+						title={selectedItem?.title}
+						source={selectedItem?.source}
+						sourceName={selectedItem?.source_name}
+						videoUrl={selectedItem?.video_url}
+						publishedAt={selectedItem?.published_at}
+						publishedDateLabel={formatPublishedDateLabel(selectedItem?.published_at)}
+					/>
+				</div>
+			)}
 
-			{/* Feed 内容卡列表 */}
-			{items.map((item) => {
-				const safeVideoUrl = sanitizeExternalUrl(item.video_url);
-				return (
-					<article
-						className="card card-feed stack"
-						key={item.feed_id}
-						data-category={item.category}
-					>
-						<div className="flex-between feed-item-header">
-							<h3 className="m-0 feed-item-title">{item.title}</h3>
-							<span className="feed-item-meta">
-								{renderSourceName(item.source, item.source_name)}
-								<span className="feed-category-chip" data-category={item.category}>
-									{CATEGORY_LABELS[item.category] ?? item.category}
-								</span>
-								<RelativeTime dateTime={item.published_at} />
-							</span>
-						</div>
-
-						<MarkdownPreview markdown={item.summary_md} />
-
-						<div className="feed-item-footer">
-							<div className="inline">
-								<Link
-									href={`/artifacts?job_id=${encodeURIComponent(item.job_id)}`}
-									data-interaction="link-primary"
-								>
-									查看产物
-								</Link>
-								{safeVideoUrl ? (
-									<a
-										href={safeVideoUrl}
-										target="_blank"
-										rel="noreferrer noopener"
-										aria-label="打开原始链接（在新标签页打开）"
-										data-interaction="link-muted"
-									>
-										打开原始链接（在新标签页打开）
-									</a>
-								) : (
-									<span className="small">原始链接不可用</span>
-								)}
-							</div>
-							<span className="small feed-item-ops">
-								<code>{item.artifact_type}</code>
-								{" · "}
-								<Link
-									href={`/jobs?job_id=${encodeURIComponent(item.job_id)}`}
-									className="job-id-link"
-									data-interaction="link-muted"
-								>
-									{item.job_id.slice(0, 8)}…
-								</Link>
-							</span>
-						</div>
-					</article>
-				);
-			})}
-
-			{/* 分页 */}
 			{!errorCode && items.length > 0 ? (
-				<nav className="card feed-pagination" aria-label="分页">
-					<div className="inline">
-						{!isFirstPage && (
-							<Link
-								href={buildPageUrl({
-									cursorValue: safePrevCursor,
-									pageValue: Math.max(1, safePage - 1),
-								})}
-								className="btn-page"
-							>
-								← 上一页
-							</Link>
-						)}
-						{isFiltered && hasVisibleFilterLabel && (
-							<span className="small">
-								{safeSource && `来源：${toSourceLabel(safeSource)}`}
-								{safeSource && category && " · "}
-								{category && `分类：${CATEGORY_LABELS[category] ?? category}`}
+				<nav className="folo-panel folo-surface folo-pagination-shell" aria-label="分页">
+					<div className="folo-pagination-group">
+						{!isFirstPage ? (
+							<Button asChild variant="surface" size="sm">
+								<Link
+									href={buildPageUrl({
+										cursorValue: safePrevCursor,
+										pageValue: Math.max(1, safePage - 1),
+										itemValue: selectedJobId ?? undefined,
+									})}
+								>
+									← 上一页
+								</Link>
+							</Button>
+						) : null}
+						{isFiltered && hasVisibleFilterLabel ? (
+							<span className="folo-filter-label">
+								{safeSource && `${toSourceLabel(safeSource)}`}
+								{safeSource && category ? " · " : ""}
+								{category && `${CATEGORY_LABELS[category] ?? category}`}
+								{(safeSource || category) && safeSubscriptionId ? " · " : ""}
+								{safeSubscriptionId ? "订阅源" : ""}
 							</span>
-						)}
+						) : null}
 					</div>
-					<div className="inline">
-						<span className="small pagination-info">
-							{`第 ${safePage} 页`}
-							{nextCursor === null ? "  · 已到末页" : ""}
-						</span>
+					<div className="folo-pagination-group">
+						<span className="folo-filter-label">页码 {safePage}</span>
 						{nextCursor !== null ? (
-							<Link
-								href={buildPageUrl({
-									cursorValue: nextCursor,
-									prevCursorValue: safeCursor,
-									pageValue: safePage + 1,
-								})}
-								className="btn-page btn-page-primary"
-							>
-								下一页 →
-							</Link>
-						) : (
-							<button
-								type="button"
-								className="btn-page btn-page-disabled"
-								disabled
-								aria-disabled="true"
-							>
-								已到末页
-							</button>
-						)}
+							<Button asChild variant="surface" size="sm">
+								<Link
+									href={buildPageUrl({
+										cursorValue: nextCursor,
+										prevCursorValue: safeCursor,
+										pageValue: safePage + 1,
+										itemValue: selectedJobId ?? undefined,
+									})}
+								>
+									下一页 →
+								</Link>
+							</Button>
+						) : null}
 					</div>
 				</nav>
 			) : null}

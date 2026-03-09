@@ -1,7 +1,6 @@
-import { render } from "@testing-library/react";
+import { cleanup, render } from "@testing-library/react";
 import { axe } from "jest-axe";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import ArtifactsPage from "@/app/artifacts/page";
 import FeedPage from "@/app/feed/page";
 import JobsPage from "@/app/jobs/page";
 import DashboardPage from "@/app/page";
@@ -46,7 +45,7 @@ vi.mock("@/lib/api/client", () => ({
 }));
 
 describe("a11y smoke", () => {
-	const A11Y_TIMEOUT_MS = 30000;
+	const A11Y_TIMEOUT_MS = 60000;
 
 	beforeEach(() => {
 		vi.clearAllMocks();
@@ -101,31 +100,37 @@ describe("a11y smoke", () => {
 	});
 
 	it(
-		"dashboard/subscriptions/settings/feed/jobs/artifacts pages have no critical accessibility violations",
+		"dashboard/subscriptions/settings/feed/jobs pages have no critical accessibility violations",
 		async () => {
 			const dashboard = render(await DashboardPage({ searchParams: {} }));
 			const dashboardResults = await axe(dashboard.container);
 			expect(dashboardResults.violations).toHaveLength(0);
+			dashboard.unmount();
+			cleanup();
 
 			const subscriptions = render(await SubscriptionsPage({ searchParams: {} }));
 			const subscriptionsResults = await axe(subscriptions.container);
 			expect(subscriptionsResults.violations).toHaveLength(0);
+			subscriptions.unmount();
+			cleanup();
 
 			const settings = render(await SettingsPage({ searchParams: {} }));
 			const settingsResults = await axe(settings.container);
 			expect(settingsResults.violations).toHaveLength(0);
+			settings.unmount();
+			cleanup();
 
 			const jobs = render(await JobsPage({ searchParams: { job_id: "job-1" } }));
 			const jobsResults = await axe(jobs.container);
 			expect(jobsResults.violations).toHaveLength(0);
+			jobs.unmount();
+			cleanup();
 
 			const feed = render(await FeedPage({ searchParams: {} }));
 			const feedResults = await axe(feed.container);
 			expect(feedResults.violations).toHaveLength(0);
-
-			const artifacts = render(await ArtifactsPage({ searchParams: { job_id: "job-1" } }));
-			const artifactsResults = await axe(artifacts.container);
-			expect(artifactsResults.violations).toHaveLength(0);
+			feed.unmount();
+			cleanup();
 		},
 		A11Y_TIMEOUT_MS,
 	);

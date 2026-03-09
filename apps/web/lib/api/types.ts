@@ -74,6 +74,7 @@ export type Video = {
 	last_seen_at: string;
 	status: JobStatus | null;
 	last_job_id: string | null;
+	content_type?: ContentType;
 };
 
 export type VideoProcessRequest = {
@@ -200,6 +201,8 @@ export type NotificationSendResponse = {
 	created_at: string;
 };
 
+export type ContentType = "video" | "article";
+
 export type DigestFeedItem = {
 	feed_id: string;
 	job_id: string;
@@ -211,6 +214,7 @@ export type DigestFeedItem = {
 	published_at: string;
 	summary_md: string;
 	artifact_type: "digest" | "outline";
+	content_type?: ContentType;
 };
 
 export type DigestFeedResponse = {

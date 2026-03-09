@@ -7,7 +7,10 @@ Recommended run args:
 
 import re
 
+import pytest
 from playwright.sync_api import Page, expect
+
+pytestmark = pytest.mark.web_e2e_reduced_motion("reduce")
 
 
 def _collect_route_motion_snapshot(page: Page) -> dict[str, object]:
@@ -57,6 +60,26 @@ def _collect_route_motion_snapshot(page: Page) -> dict[str, object]:
     )
 
 
+def _collect_dashboard_surface_motion_snapshot(page: Page) -> list[dict[str, str]]:
+    return page.evaluate(
+        """
+        () =>
+            Array.from(
+                document.querySelectorAll(".route-transition [data-slot='card']")
+            )
+                .slice(0, 4)
+                .map((el) => {
+                    const style = window.getComputedStyle(el);
+                    return {
+                        animationName: style.animationName,
+                        animationDuration: style.animationDuration,
+                        transitionDuration: style.transitionDuration
+                    };
+                })
+        """
+    )
+
+
 def test_reduced_motion_route_transition_has_no_lingering_animation(page: Page) -> None:
     page.goto("/", wait_until="domcontentloaded")
     expect(page.get_by_role("navigation", name="主导航")).to_be_visible()
@@ -82,3 +105,19 @@ def test_reduced_motion_route_transition_has_no_lingering_animation(page: Page) 
         if isinstance(item, dict) and item.get("playState") == "running"
     ]
     assert not running, f"route transition has lingering running animations: {running}"
+
+
+def test_reduced_motion_disables_dashboard_surface_stagger_effect(page: Page) -> None:
+    page.goto("/", wait_until="domcontentloaded")
+    expect(page.get_by_role("heading", name="拉取采集")).to_be_visible()
+
+    snapshot = _collect_dashboard_surface_motion_snapshot(page)
+    assert len(snapshot) >= 3, (
+        "expected dashboard to render card surfaces under .route-transition > .stack; "
+        f"snapshot={snapshot}"
+    )
+    for index, style in enumerate(snapshot, start=1):
+        assert style["animationName"] == "none", (
+            "expected reduced-motion dashboard surfaces to disable stagger animation; "
+            f"card_index={index} style={style}"
+        )

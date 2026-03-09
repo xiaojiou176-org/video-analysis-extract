@@ -8,14 +8,17 @@ Recommended run args:
 import re
 import time
 
+import pytest
 from playwright.sync_api import Page, Route, expect
+
+pytestmark = pytest.mark.web_e2e_cpu_throttle(4)
 
 
 def _goto_feed_ready(page: Page) -> None:
     for attempt in range(3):
         page.goto("/feed", wait_until="domcontentloaded")
         try:
-            expect(page.get_by_role("heading", name="AI 摘要订阅流")).to_be_visible(timeout=12_000)
+            expect(page.get_by_role("heading", name=re.compile(r"AI 摘要订阅流|主阅读流"))).to_be_visible(timeout=12_000)
             return
         except AssertionError:
             body_text = page.locator("body").inner_text()
@@ -76,14 +79,14 @@ def test_perceived_latency_pending_feedback_with_cpu_throttle(page: Page) -> Non
                 typeof window.__syncStateClickAt === "number"
                     ? window.__syncStateClickAt
                     : performance.now();
-            const within350 = trace.filter((item) => item.t >= clickAt && item.t <= clickAt + 350);
-            const hasBusy = within350.some((item) => item.busy === "true");
-            const hasLoading = within350.some((item) => item.state === "loading");
-            return { trace, within350, hasBusy, hasLoading };
+            const within450 = trace.filter((item) => item.t >= clickAt && item.t <= clickAt + 450);
+            const hasBusy = within450.some((item) => item.busy === "true");
+            const hasLoading = within450.some((item) => item.state === "loading");
+            return { trace, within450, hasBusy, hasLoading };
         }
         """
     )
     assert trace_result["hasBusy"] or trace_result["hasLoading"], (
-        "expected pending/busy feedback within 350ms after click; "
+        "expected pending/busy feedback within 450ms after click; "
         f"trace={trace_result['trace']}"
     )

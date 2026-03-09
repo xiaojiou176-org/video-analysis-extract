@@ -47,6 +47,11 @@ class MockApiState:
     health_status: int = int(HTTPStatus.OK)
     health_delay_seconds: float = 0.0
     artifact_frame_files: list[str] = field(default_factory=list)
+    videos: list[dict[str, Any]] = field(default_factory=list)
+    feed_items: list[dict[str, Any]] = field(default_factory=list)
+    feed_has_more: bool = False
+    feed_next_cursor: str | None = None
+    feed_error_status: int | None = None
 
     def __post_init__(self) -> None:
         self.condition = threading.Condition(self.lock)
@@ -84,6 +89,24 @@ class MockApiState:
                 "screenshots/frame_0001.png",
                 "screenshots/frame_0002.webp",
             ]
+            self.videos = [
+                {
+                    "id": MOCK_VIDEO_ID,
+                    "platform": "youtube",
+                    "video_uid": "yt-e2e-001",
+                    "source_url": "https://youtube.com/watch?v=e2e001",
+                    "title": "E2E Demo",
+                    "published_at": now,
+                    "first_seen_at": now,
+                    "last_seen_at": now,
+                    "status": "running",
+                    "last_job_id": self.job_id,
+                }
+            ]
+            self.feed_items = []
+            self.feed_has_more = False
+            self.feed_next_cursor = None
+            self.feed_error_status = None
             self.condition.notify_all()
 
     def record(self, key: str, payload: dict[str, Any]) -> None:
@@ -289,21 +312,8 @@ def _mock_handler(state: MockApiState) -> type[BaseHTTPRequestHandler]:
                 return
 
             if path == "/api/v1/videos":
-                now = utc_now()
-                videos = [
-                    {
-                        "id": MOCK_VIDEO_ID,
-                        "platform": "youtube",
-                        "video_uid": "yt-e2e-001",
-                        "source_url": "https://youtube.com/watch?v=e2e001",
-                        "title": "E2E Demo",
-                        "published_at": now,
-                        "first_seen_at": now,
-                        "last_seen_at": now,
-                        "status": "running",
-                        "last_job_id": state.job_id,
-                    }
-                ]
+                with state.lock:
+                    videos = list(state.videos)
                 self._record_http(
                     method="GET",
                     path=path,
@@ -311,6 +321,38 @@ def _mock_handler(state: MockApiState) -> type[BaseHTTPRequestHandler]:
                     status=int(HTTPStatus.OK),
                 )
                 self._send_json(HTTPStatus.OK, videos)
+                return
+
+            if path == "/api/v1/feed/digests":
+                with state.lock:
+                    feed_error_status = state.feed_error_status
+                    feed_items = list(state.feed_items)
+                    feed_has_more = state.feed_has_more
+                    feed_next_cursor = state.feed_next_cursor
+                if feed_error_status is not None:
+                    status = HTTPStatus(feed_error_status)
+                    self._record_http(
+                        method="GET",
+                        path=path,
+                        query=parsed.query,
+                        status=int(status),
+                    )
+                    self._send_json(status, {"detail": "mock feed failure"})
+                    return
+                self._record_http(
+                    method="GET",
+                    path=path,
+                    query=parsed.query,
+                    status=int(HTTPStatus.OK),
+                )
+                self._send_json(
+                    HTTPStatus.OK,
+                    {
+                        "items": feed_items,
+                        "has_more": feed_has_more,
+                        "next_cursor": feed_next_cursor,
+                    },
+                )
                 return
 
             if path.startswith("/api/v1/jobs/"):

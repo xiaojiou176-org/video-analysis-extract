@@ -19,6 +19,10 @@ import type {
 	SubscriptionCategory,
 } from "@/lib/api/types";
 
+function getServerWriteToken(): string | null {
+	return process.env.VD_API_KEY?.trim() || null;
+}
+
 function statusUrl(status: "success" | "error", code: string): string {
 	return `/subscriptions?${toFlashQuery(status, code)}`;
 }
@@ -45,18 +49,18 @@ export async function upsertSubscriptionAction(formData: FormData) {
 			enabled: formData.get("enabled") === "on",
 		});
 
-		const result = await apiClient.upsertSubscription({
-			platform: payload.platform as Platform,
-			source_type: payload.source_type as SourceType,
-			source_value: payload.source_value,
+			const result = await apiClient.upsertSubscription({
+				platform: payload.platform as Platform,
+				source_type: payload.source_type as SourceType,
+				source_value: payload.source_value,
 			adapter_type: payload.adapter_type as SubscriptionAdapterType,
 			source_url: payload.source_url,
 			rsshub_route: payload.rsshub_route,
-			category: payload.category as SubscriptionCategory,
-			tags: payload.tags,
-			priority: payload.priority,
-			enabled: payload.enabled,
-		});
+				category: payload.category as SubscriptionCategory,
+				tags: payload.tags,
+				priority: payload.priority,
+				enabled: payload.enabled,
+			}, { writeAccessToken: getServerWriteToken() });
 
 		revalidatePath("/subscriptions");
 		redirect(
@@ -72,9 +76,9 @@ export async function upsertSubscriptionAction(formData: FormData) {
 
 export async function deleteSubscriptionAction(formData: FormData) {
 	try {
-		await assertActionSession(formData);
-		const id = parseIdentifier(String(formData.get("id") ?? ""));
-		await apiClient.deleteSubscription(id);
+			await assertActionSession(formData);
+			const id = parseIdentifier(String(formData.get("id") ?? ""));
+			await apiClient.deleteSubscription(id, { writeAccessToken: getServerWriteToken() });
 		revalidatePath("/subscriptions");
 		redirect(statusUrl("success", "SUBSCRIPTION_DELETED"));
 	} catch (error) {
@@ -82,5 +86,35 @@ export async function deleteSubscriptionAction(formData: FormData) {
 			throw error;
 		}
 		redirect(statusUrl("error", toActionErrorCode(error)));
+	}
+}
+
+export async function deleteSubscriptionByIdAction(id: string) {
+	try {
+		await apiClient.deleteSubscription(parseIdentifier(id), {
+			writeAccessToken: getServerWriteToken(),
+		});
+		revalidatePath("/subscriptions");
+		return { ok: true as const };
+	} catch (error) {
+		throw new Error(toActionErrorCode(error));
+	}
+}
+
+export async function batchUpdateSubscriptionCategoryAction(payload: {
+	ids: string[];
+	category: SubscriptionCategory;
+}) {
+	try {
+		const ids = payload.ids.map((id) => parseIdentifier(id));
+		const category = schemas.subscriptionUpsert.shape.category.parse(payload.category);
+		const result = await apiClient.batchUpdateSubscriptionCategory(
+			{ ids, category },
+			{ writeAccessToken: getServerWriteToken() },
+		);
+		revalidatePath("/subscriptions");
+		return result;
+	} catch (error) {
+		throw new Error(toActionErrorCode(error));
 	}
 }

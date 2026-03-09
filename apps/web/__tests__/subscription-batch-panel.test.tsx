@@ -108,15 +108,39 @@ describe("SubscriptionBatchPanel", () => {
 		PANEL_TEST_TIMEOUT_MS,
 	);
 
+		it(
+			"renders category badge semantics and shadcn status badges",
+		() => {
+			render(<SubscriptionBatchPanel subscriptions={MOCK_SUBS} />);
+
+			const techRow = screen.getByText("Tech Channel").closest("tr");
+			const disabledRow = screen.getByLabelText("选择 订阅 sub-3").closest("tr");
+			expect(techRow).not.toBeNull();
+			expect(disabledRow).not.toBeNull();
+
+			const techBadge = within(techRow as HTMLElement).getByText("科技");
+			expect(techBadge).toHaveClass("sub-category-badge");
+			expect(techBadge).toHaveAttribute("data-category", "tech");
+			const enabledBadge = within(techRow as HTMLElement).getByText("启用");
+			const disabledBadge = within(disabledRow as HTMLElement).getByText("停用");
+			expect(enabledBadge).toHaveAttribute("data-slot", "badge");
+			expect(disabledBadge).toHaveAttribute("data-slot", "badge");
+			expect(enabledBadge).not.toHaveClass("status-chip");
+			expect(disabledBadge).not.toHaveClass("status-chip");
+		},
+		PANEL_TEST_TIMEOUT_MS,
+	);
+
 	it(
 		"renders localized category labels in batch select while preserving english enum values",
 		() => {
 			render(<SubscriptionBatchPanel subscriptions={MOCK_SUBS} />);
 			fireEvent.click(screen.getByLabelText(/^全选/));
-			const combo = screen.getByRole("combobox");
-			const creatorOption = screen.getByRole("option", { name: "创作者" });
+			const combo = screen.getByRole("combobox", { name: "批量设分类" });
 			expect(combo).toBeInTheDocument();
-			expect(creatorOption).toHaveValue("creator");
+			expect(combo).toHaveTextContent("其他");
+			fireEvent.click(combo);
+			expect(screen.getByRole("option", { name: "创作者" })).toBeInTheDocument();
 		},
 		PANEL_TEST_TIMEOUT_MS,
 	);
@@ -175,7 +199,7 @@ describe("SubscriptionBatchPanel", () => {
 			fireEvent.click(screen.getByRole("button", { name: "应用分类" }));
 
 			const pendingButton = screen.getByRole("button", { name: "应用分类中…" });
-			expect(pendingButton).toHaveClass("btn-feedback-pending");
+			expect(pendingButton).toHaveAttribute("data-feedback-state", "pending");
 			expect(pendingButton).toHaveAttribute("data-feedback-state", "pending");
 			expect(pendingButton).toHaveAttribute("aria-busy", "true");
 			expect(pendingButton).toBeDisabled();
@@ -210,7 +234,8 @@ describe("SubscriptionBatchPanel", () => {
 			render(<SubscriptionBatchPanel subscriptions={MOCK_SUBS} />);
 
 			fireEvent.click(screen.getByLabelText(/^全选/));
-			fireEvent.change(screen.getByRole("combobox"), { target: { value: "creator" } });
+			fireEvent.click(screen.getByRole("combobox", { name: "批量设分类" }));
+			fireEvent.click(screen.getByRole("option", { name: "创作者" }));
 			fireEvent.click(screen.getByRole("button", { name: "应用分类" }));
 
 			await waitFor(() => {
@@ -249,6 +274,50 @@ describe("SubscriptionBatchPanel", () => {
 	);
 
 	it(
+		"retries batch update without session header when local e2e preflight fails",
+		async () => {
+			mockBatchUpdate
+				.mockRejectedValueOnce(new Error("ERR_REQUEST_FAILED"))
+				.mockResolvedValueOnce({ updated: 1 });
+			render(<SubscriptionBatchPanel subscriptions={MOCK_SUBS} sessionToken="session-token" />);
+
+			fireEvent.click(screen.getByLabelText("选择 Tech Channel"));
+			fireEvent.click(screen.getByRole("button", { name: "应用分类" }));
+
+			await waitFor(() => {
+				expect(mockBatchUpdate).toHaveBeenCalledTimes(2);
+			});
+			expect(mockBatchUpdate).toHaveBeenNthCalledWith(
+				1,
+				{ ids: ["sub-1"], category: "misc" },
+				{ webSessionToken: "session-token" },
+			);
+			expect(mockBatchUpdate).toHaveBeenNthCalledWith(2, {
+				ids: ["sub-1"],
+				category: "misc",
+			});
+		},
+		PANEL_TEST_TIMEOUT_MS,
+	);
+
+	it(
+		"does not retry batch update when failure is not the preflight error",
+		async () => {
+			mockBatchUpdate.mockRejectedValue(new Error("ERR_INVALID_INPUT"));
+			render(<SubscriptionBatchPanel subscriptions={MOCK_SUBS} sessionToken="session-token" />);
+
+			fireEvent.click(screen.getByLabelText("选择 Tech Channel"));
+			fireEvent.click(screen.getByRole("button", { name: "应用分类" }));
+
+			await waitFor(() => {
+				expect(mockBatchUpdate).toHaveBeenCalledTimes(1);
+			});
+			expect(screen.getByText("操作失败：输入参数不合法，请检查后重试。")).toBeInTheDocument();
+		},
+		PANEL_TEST_TIMEOUT_MS,
+	);
+
+	it(
 		"shows undo after batch update and restores previous categories when undone",
 		async () => {
 			mockBatchUpdate.mockResolvedValueOnce({ updated: 2 });
@@ -257,7 +326,8 @@ describe("SubscriptionBatchPanel", () => {
 
 			fireEvent.click(screen.getByLabelText("选择 Tech Channel"));
 			fireEvent.click(screen.getByLabelText("选择 Finance Blog"));
-			fireEvent.change(screen.getByRole("combobox"), { target: { value: "creator" } });
+			fireEvent.click(screen.getByRole("combobox", { name: "批量设分类" }));
+			fireEvent.click(screen.getByRole("option", { name: "创作者" }));
 			fireEvent.click(screen.getByRole("button", { name: "应用分类" }));
 
 			await waitFor(() => {
@@ -296,7 +366,8 @@ describe("SubscriptionBatchPanel", () => {
 
 			fireEvent.click(screen.getByLabelText("选择 Tech Channel"));
 			fireEvent.click(screen.getByLabelText("选择 Finance Blog"));
-			fireEvent.change(screen.getByRole("combobox"), { target: { value: "creator" } });
+			fireEvent.click(screen.getByRole("combobox", { name: "批量设分类" }));
+			fireEvent.click(screen.getByRole("option", { name: "创作者" }));
 			fireEvent.click(screen.getByRole("button", { name: "应用分类" }));
 
 			await act(async () => {
@@ -328,7 +399,8 @@ describe("SubscriptionBatchPanel", () => {
 
 			fireEvent.click(screen.getByLabelText("选择 Tech Channel"));
 			fireEvent.click(screen.getByLabelText("选择 Finance Blog"));
-			fireEvent.change(screen.getByRole("combobox"), { target: { value: "creator" } });
+			fireEvent.click(screen.getByRole("combobox", { name: "批量设分类" }));
+			fireEvent.click(screen.getByRole("option", { name: "创作者" }));
 			fireEvent.click(screen.getByRole("button", { name: "应用分类" }));
 
 			await waitFor(() => {
@@ -378,6 +450,26 @@ describe("SubscriptionBatchPanel", () => {
 				"/subscriptions?status=success&code=SUBSCRIPTION_DELETED",
 			);
 			expect(mockRefresh).toHaveBeenCalledTimes(1);
+		},
+		PANEL_TEST_TIMEOUT_MS,
+	);
+
+	it(
+		"retries delete without session header when local e2e preflight fails",
+		async () => {
+			mockDelete
+				.mockRejectedValueOnce(new Error("ERR_REQUEST_FAILED"))
+				.mockResolvedValueOnce(undefined);
+			render(<SubscriptionBatchPanel subscriptions={MOCK_SUBS} sessionToken="session-token" />);
+
+			fireEvent.click(screen.getAllByRole("button", { name: "删除" })[0]);
+			fireEvent.click(screen.getByRole("button", { name: "确认删除「Tech Channel」" }));
+
+			await waitFor(() => {
+				expect(mockDelete).toHaveBeenCalledTimes(2);
+			});
+			expect(mockDelete).toHaveBeenNthCalledWith(1, "sub-1", { webSessionToken: "session-token" });
+			expect(mockDelete).toHaveBeenNthCalledWith(2, "sub-1");
 		},
 		PANEL_TEST_TIMEOUT_MS,
 	);

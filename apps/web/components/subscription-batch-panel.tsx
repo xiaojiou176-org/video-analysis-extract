@@ -3,10 +3,18 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
+import { StatusBadge } from "@/components/status-badge";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { getFlashMessage, toErrorCode } from "@/app/flash-message";
 import { apiClient } from "@/lib/api/client";
 import type { Subscription, SubscriptionCategory } from "@/lib/api/types";
 import { formatDateTime } from "@/lib/format";
+import { cn } from "@/lib/utils";
 
 const CATEGORIES: SubscriptionCategory[] = ["tech", "creator", "macro", "ops", "misc"];
 const UNDO_WINDOW_MS = 10_000;
@@ -20,6 +28,7 @@ const CATEGORY_LABELS: Record<SubscriptionCategory, string> = {
 
 type Props = {
 	subscriptions: Subscription[];
+	sessionToken?: string;
 };
 
 type UndoContext = {
@@ -34,18 +43,7 @@ type UndoHistory = {
 	isError: boolean;
 };
 
-function getStatusChipFeedbackClass(status: string): string {
-	const normalized = status.trim().toLowerCase();
-	if (normalized === "running" || normalized === "queued" || normalized === "pending") {
-		return "status-chip-feedback status-chip-is-updating";
-	}
-	if (normalized === "succeeded" || normalized === "enabled") {
-		return "status-chip-feedback status-chip-is-confirmed";
-	}
-	return "status-chip-feedback";
-}
-
-export function SubscriptionBatchPanel({ subscriptions }: Props) {
+export function SubscriptionBatchPanel({ subscriptions, sessionToken }: Props) {
 	const router = useRouter();
 	const [visibleSubscriptions, setVisibleSubscriptions] = useState<Subscription[]>(subscriptions);
 	const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -56,13 +54,11 @@ export function SubscriptionBatchPanel({ subscriptions }: Props) {
 	const [undoContext, setUndoContext] = useState<UndoContext | null>(null);
 	const [undoRemainingSeconds, setUndoRemainingSeconds] = useState(0);
 	const [undoHistory, setUndoHistory] = useState<UndoHistory | null>(null);
-	// 二步确认：存储待删除的 ID
 	const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
 	const [deletingId, setDeletingId] = useState<string | null>(null);
 	const [deleteStatusMessage, setDeleteStatusMessage] = useState("");
 	const confirmDeleteRefs = useRef<Record<string, HTMLButtonElement | null>>({});
 	const deleteTriggerRefs = useRef<Record<string, HTMLButtonElement | null>>({});
-	const selectAllRef = useRef<HTMLInputElement | null>(null);
 	const restoreDeleteTriggerFocusIdRef = useRef<string | null>(null);
 	const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 	const undoCountdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -108,15 +104,6 @@ export function SubscriptionBatchPanel({ subscriptions }: Props) {
 		restoreDeleteTriggerFocusIdRef.current = null;
 		deleteTriggerRefs.current[targetId]?.focus();
 	}, [pendingDeleteId, deletingId]);
-
-	useEffect(() => {
-		if (!selectAllRef.current) {
-			return;
-		}
-		const hasSelection = selected.size > 0;
-		const partialSelection = hasSelection && selected.size < visibleSubscriptions.length;
-		selectAllRef.current.indeterminate = partialSelection;
-	}, [selected, visibleSubscriptions.length]);
 
 	useEffect(() => {
 		return () => {
@@ -176,13 +163,52 @@ export function SubscriptionBatchPanel({ subscriptions }: Props) {
 		return CATEGORY_LABELS[category];
 	}
 
+	function writeOptions() {
+		return sessionToken ? { webSessionToken: sessionToken } : undefined;
+	}
+
+	// In cross-origin local E2E mode, preflight may reject custom session headers.
+	function shouldRetryWithoutSessionHeader(err: unknown): boolean {
+		return err instanceof Error && err.message === "ERR_REQUEST_FAILED";
+	}
+
+	async function deleteSubscriptionWithAuth(id: string) {
+		const options = writeOptions();
+		if (!options) {
+			return apiClient.deleteSubscription(id);
+		}
+		try {
+			return await apiClient.deleteSubscription(id, options);
+		} catch (err) {
+			if (shouldRetryWithoutSessionHeader(err)) {
+				return apiClient.deleteSubscription(id);
+			}
+			throw err;
+		}
+	}
+
+	async function batchUpdateWithAuth(payload: { ids: string[]; category: SubscriptionCategory }) {
+		const options = writeOptions();
+		if (!options) {
+			return apiClient.batchUpdateSubscriptionCategory(payload);
+		}
+		try {
+			return await apiClient.batchUpdateSubscriptionCategory(payload, options);
+		} catch (err) {
+			if (shouldRetryWithoutSessionHeader(err)) {
+				return apiClient.batchUpdateSubscriptionCategory(payload);
+			}
+			throw err;
+		}
+	}
+
 	async function handleDeleteConfirm(id: string) {
 		const targetName = getSubscriptionDisplayNameById(id);
 		setDeletingId(id);
 		setPendingDeleteId(null);
 		setDeleteStatusMessage(`正在删除「${targetName}」。`);
 		try {
-			await apiClient.deleteSubscription(id);
+				await deleteSubscriptionWithAuth(id);
 			setVisibleSubscriptions((prev) => prev.filter((item) => item.id !== id));
 			setSelected((prev) => {
 				const next = new Set(prev);
@@ -218,10 +244,10 @@ export function SubscriptionBatchPanel({ subscriptions }: Props) {
 		setApplying(true);
 		setApplyResult(null);
 		try {
-			const result = await apiClient.batchUpdateSubscriptionCategory({
-				ids: selectedIds,
-				category: batchCategory,
-			});
+				const result = await batchUpdateWithAuth({
+					ids: selectedIds,
+					category: batchCategory,
+				});
 			setVisibleSubscriptions((prev) =>
 				prev.map((item) =>
 					selectedIds.includes(item.id) ? { ...item, category: batchCategory } : item,
@@ -261,7 +287,7 @@ export function SubscriptionBatchPanel({ subscriptions }: Props) {
 
 			await Promise.all(
 				Array.from(idsByCategory.entries()).map(([category, ids]) =>
-					apiClient.batchUpdateSubscriptionCategory({ ids, category }),
+					batchUpdateWithAuth({ ids, category }),
 				),
 			);
 
@@ -276,10 +302,7 @@ export function SubscriptionBatchPanel({ subscriptions }: Props) {
 				message: `已恢复 ${undoContext.ids.length} 条订阅至原分类。`,
 				isError: false,
 			});
-			setApplyResult(
-				`已撤销分类变更，恢复 ${undoContext.ids.length} 条订阅至原分类。`,
-			);
-			router.refresh();
+			setApplyResult(`已撤销分类变更，恢复 ${undoContext.ids.length} 条订阅至原分类。`);
 		} catch (err) {
 			setUndoHistory({
 				message: "上次撤销失败，请稍后重试。",
@@ -293,6 +316,8 @@ export function SubscriptionBatchPanel({ subscriptions }: Props) {
 
 	const allSelected =
 		visibleSubscriptions.length > 0 && selected.size === visibleSubscriptions.length;
+	const partialSelection =
+		selected.size > 0 && selected.size < visibleSubscriptions.length;
 	const selectedSummary = `${selected.size}/${visibleSubscriptions.length}`;
 	const isApplyError = Boolean(
 		applyResult &&
@@ -312,60 +337,75 @@ export function SubscriptionBatchPanel({ subscriptions }: Props) {
 		return target ? getSubscriptionDisplayName(target) : `订阅 ${id}`;
 	}
 
+	if (visibleSubscriptions.length === 0) {
+		return (
+			<Card className="border-dashed">
+				<CardHeader className="gap-2">
+					<CardTitle className="text-base">订阅批量管理</CardTitle>
+					<CardDescription>暂无订阅数据。</CardDescription>
+				</CardHeader>
+			</Card>
+		);
+	}
+
 	return (
-		<div className="stack">
-			{visibleSubscriptions.length === 0 ? (
-				<p className="small">暂无订阅数据。</p>
-			) : (
-				<>
-					<div className="table-scroll">
-						<table>
-							<caption className="sr-only">当前订阅列表</caption>
-							<thead>
-								<tr>
-									<th scope="col">
-										<input
-											ref={selectAllRef}
-											type="checkbox"
-											checked={allSelected}
-											onChange={toggleAll}
-											aria-label={`全选（已选 ${selectedSummary}）`}
-										/>
-									</th>
-									<th scope="col">来源</th>
-									<th scope="col">平台 / 类型</th>
-									<th scope="col">分类 / 优先级</th>
-									<th scope="col">启用</th>
-									<th scope="col">更新时间</th>
-									<th scope="col">操作</th>
-								</tr>
-							</thead>
-							<tbody>
-								{visibleSubscriptions.map((item) => {
-									const isSelected = selected.has(item.id);
-									const rowState =
-										deletingId === item.id
-											? "deleting"
-											: pendingDeleteId === item.id
-												? "confirming-delete"
-												: undefined;
-									return (
+		<Card>
+			<CardHeader className="gap-2">
+				<CardTitle className="text-base">订阅批量管理</CardTitle>
+				<CardDescription>统一进行批量分类、状态查看和安全删除确认。</CardDescription>
+			</CardHeader>
+			<CardContent className="space-y-4">
+				<div className="overflow-x-auto rounded-lg border">
+					<table className="min-w-[920px] w-full text-sm">
+						<caption className="sr-only">当前订阅列表</caption>
+						<thead className="bg-muted/40">
+							<tr className="[&_th]:px-3 [&_th]:py-2.5 [&_th]:text-left [&_th]:text-xs [&_th]:font-medium [&_th]:text-muted-foreground">
+								<th scope="col" className="w-12">
+									<Checkbox
+										checked={allSelected ? true : partialSelection ? "indeterminate" : false}
+										onCheckedChange={toggleAll}
+										aria-label={`全选（已选 ${selectedSummary}）`}
+									/>
+								</th>
+								<th scope="col">来源</th>
+								<th scope="col">平台 / 类型</th>
+								<th scope="col">分类 / 优先级</th>
+								<th scope="col">启用</th>
+								<th scope="col">更新时间</th>
+								<th scope="col">操作</th>
+							</tr>
+						</thead>
+						<tbody>
+							{visibleSubscriptions.map((item) => {
+								const isSelected = selected.has(item.id);
+								const rowState =
+									deletingId === item.id
+										? "deleting"
+										: pendingDeleteId === item.id
+											? "confirming-delete"
+											: undefined;
+
+								return (
 									<tr
 										key={item.id}
-										className={isSelected ? "row-selected" : undefined}
+										className={cn(
+											"border-b align-top transition-colors hover:bg-muted/20",
+											isSelected && "row-selected bg-muted/35",
+										)}
 										data-state={rowState}
 									>
-										<td>
-											<input
-												type="checkbox"
+										<td className="px-3 py-3">
+											<Checkbox
 												checked={isSelected}
-												onChange={() => toggleOne(item.id)}
+												onCheckedChange={() => toggleOne(item.id)}
 												aria-label={`选择 ${getSubscriptionDisplayName(item)}`}
 											/>
 										</td>
-										<td>
-											<div className="sub-source-name">{getSubscriptionDisplayName(item)}</div>
-											<div className="small">
+										<td className="px-3 py-3">
+											<div className="font-medium leading-5">
+												{getSubscriptionDisplayName(item)}
+											</div>
+											<div className="text-xs text-muted-foreground">
 												{item.adapter_type}
 												{item.source_url
 													? ` · ${item.source_url}`
@@ -374,68 +414,76 @@ export function SubscriptionBatchPanel({ subscriptions }: Props) {
 														: ""}
 											</div>
 										</td>
-										<td>
+										<td className="px-3 py-3">
 											<div>{item.platform}</div>
-											<div className="small">{item.source_type}</div>
+											<div className="text-xs text-muted-foreground">{item.source_type}</div>
 										</td>
-										<td>
-											<div className="sub-category-badge" data-category={item.category}>
+										<td className="px-3 py-3">
+											<Badge
+												variant={item.category === "misc" ? "outline" : "secondary"}
+												className="sub-category-badge"
+												data-category={item.category}
+											>
 												{getCategoryLabel(item.category)}
-											</div>
-											<div className="small">
+											</Badge>
+											<div className="mt-1 text-xs text-muted-foreground">
 												优先级 {item.priority}
 												{item.tags.length > 0 ? ` · ${item.tags.join(", ")}` : ""}
 											</div>
+											</td>
+											<td className="px-3 py-3">
+												<StatusBadge
+													label={item.enabled ? "启用" : "停用"}
+													tone={item.enabled ? "success" : "error"}
+												/>
+											</td>
+										<td className="px-3 py-3 text-xs text-muted-foreground">
+											{formatDateTime(item.updated_at)}
 										</td>
-										<td>
-											<span
-												className={`status-chip ${getStatusChipFeedbackClass(
-													item.enabled ? "enabled" : "failed",
-												)} ${item.enabled ? "status-succeeded" : "status-failed"}`}
+										<td className="px-3 py-3">
+											{pendingDeleteId === item.id ? (
+												<div className="inline-flex flex-wrap items-center gap-2">
+													<Button
+													ref={(element) => {
+													confirmDeleteRefs.current[item.id] = element;
+													}}
+													type="button"
+													variant="destructive"
+													size="xs"
+													disabled={deletingId === item.id}
+													onClick={() => handleDeleteConfirm(item.id)}
+													data-interaction="cta"
+													 data-testid="subscription-confirm-delete"
 											>
-												{item.enabled ? "启用" : "停用"}
-											</span>
-										</td>
-										<td className="small">{formatDateTime(item.updated_at)}</td>
-										<td>
-									{pendingDeleteId === item.id ? (
-												<span className="inline">
-													<button
-														ref={(element) => {
-															confirmDeleteRefs.current[item.id] = element;
-														}}
-														type="button"
-														className="destructive"
-														disabled={deletingId === item.id}
-														onClick={() => handleDeleteConfirm(item.id)}
-														data-interaction="cta"
-													>
 														{deletingId === item.id
 															? "删除中…"
 															: `确认删除「${getSubscriptionDisplayName(item)}」`}
-													</button>
-														<button
-															type="button"
-															onClick={() => {
-																restoreDeleteTriggerFocusIdRef.current = item.id;
-																setPendingDeleteId(null);
-																setDeleteStatusMessage("已取消删除。");
-															}}
-															data-interaction="control"
-														>
+													</Button>
+													<Button
+														type="button"
+														variant="outline"
+														size="xs"
+														onClick={() => {
+															restoreDeleteTriggerFocusIdRef.current = item.id;
+															setPendingDeleteId(null);
+															setDeleteStatusMessage("已取消删除。");
+														}}
+														data-interaction="control"
+													>
 														取消
-													</button>
-												</span>
+													</Button>
+												</div>
 											) : (
-												<button
-													ref={(element) => {
-														deleteTriggerRefs.current[item.id] = element;
-													}}
-													type="button"
-													className="btn-ghost-danger"
-													disabled={deletingId === item.id}
-													onClick={() => {
-														setPendingDeleteId(item.id);
+													<Button
+														ref={(element) => {
+															deleteTriggerRefs.current[item.id] = element;
+														}}
+														type="button"
+														variant="destructiveGhost"
+														size="sm"
+														disabled={deletingId === item.id}
+														onClick={() => {
+															setPendingDeleteId(item.id);
 														setDeleteStatusMessage(
 															`已进入删除确认，目标为 ${getSubscriptionDisplayName(item)}。`,
 														);
@@ -443,92 +491,126 @@ export function SubscriptionBatchPanel({ subscriptions }: Props) {
 													data-interaction="cta"
 												>
 													删除
-												</button>
+												</Button>
 											)}
 										</td>
 									</tr>
-									);
-								})}
-							</tbody>
-						</table>
-					</div>
+								);
+							})}
+						</tbody>
+					</table>
+				</div>
 
-					{selected.size > 0 && (
-						<div className="batch-action-bar">
-							<span className="small">
-								已选 <strong>{selected.size}</strong> 条
+				{selected.size > 0 && (
+					<div className="batch-action-bar rounded-lg border bg-muted/25 p-3">
+						<div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+							<span className="text-sm text-muted-foreground">
+								已选 <strong className="text-foreground">{selected.size}</strong> 条
 							</span>
-							<div className="inline">
-								<label className="batch-category-label">
+							<div className="inline-flex flex-wrap items-center gap-2">
+								<Label htmlFor="batch-category" className="batch-category-label text-xs font-medium">
 									批量设分类
-									<select
+								</Label>
+									<Select
 										value={batchCategory}
-										onChange={(e) => setBatchCategory(e.target.value as SubscriptionCategory)}
+										onValueChange={(value) => setBatchCategory(value as SubscriptionCategory)}
 									>
-										{CATEGORIES.map((c) => (
-											<option key={c} value={c}>
-												{getCategoryLabel(c)}
-											</option>
-										))}
-									</select>
-								</label>
-								<button
+										<SelectTrigger id="batch-category" aria-label="批量设分类" className="min-w-[9rem]">
+											<SelectValue placeholder="选择分类" />
+										</SelectTrigger>
+										<SelectContent>
+											{CATEGORIES.map((c) => (
+												<SelectItem key={c} value={c}>
+													{getCategoryLabel(c)}
+												</SelectItem>
+											))}
+										</SelectContent>
+									</Select>
+									<Button
 									type="button"
-									className={applying ? "primary btn-feedback-pending" : "primary"}
 									disabled={applying || undoing}
 									onClick={handleApplyCategory}
 									data-interaction="cta"
 									data-feedback-state={applying ? "pending" : "idle"}
-									aria-busy={applying}
+									 aria-busy={applying}
+									  data-testid="subscription-apply-category"
+									>
+									 {applying ? "应用分类中…" : "应用分类"}
+									</Button>
+								<Button
+									type="button"
+									variant="outline"
+									onClick={() => setSelected(new Set())}
+									data-interaction="control"
 								>
-									{applying ? "应用分类中…" : "应用分类"}
-								</button>
-								<button type="button" onClick={() => setSelected(new Set())} data-interaction="control">
 									取消选择
-								</button>
+								</Button>
 							</div>
 						</div>
-					)}
+					</div>
+				)}
 
-					{applyResult && (
-						<p
-							className={isApplyError ? "alert error" : "alert success"}
+				{applyResult && (
+					<p
+						className={cn(
+							"alert mt-2 rounded-md border px-3 py-2 text-sm",
+							isApplyError
+								? "alert error border-destructive/40 bg-destructive/10 text-destructive"
+								: "alert success border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+							)}
 							role={isApplyError ? "alert" : "status"}
 							aria-live={isApplyError ? "assertive" : "polite"}
-						>
-							{applyResult}
-						</p>
-					)}
-					{undoContext && (
-						<p className="alert" role="status" aria-live="polite">
-							已将 {undoContext.ids.length} 条订阅从「
-							{getCategoryLabel(undoContext.nextCategory)}
-							」更新，可在 {undoRemainingSeconds} 秒内撤销。
-							<button
-								type="button"
-								onClick={handleUndoCategory}
-								disabled={undoing || applying}
-								data-interaction="control"
-							>
-								{undoing ? "撤销中…" : "撤销"}
-							</button>
-						</p>
-					)}
-					{undoHistory && (
-						<p
-							className={undoHistory.isError ? "alert error" : "alert"}
-							role={undoHistory.isError ? "alert" : "status"}
-							aria-live={undoHistory.isError ? "assertive" : "polite"}
 							aria-atomic="true"
 						>
-							{undoHistory.message}
-						</p>
-					)}
-					<output className="sr-only" aria-live="polite" aria-atomic="true">
-						{deleteStatusMessage}
-					</output>
-				</>
-			)}
-		</div>
+						{applyResult}
+					</p>
+				)}
+
+				{undoContext && (
+					<p
+						className="alert flex flex-wrap items-center gap-2 rounded-md border border-border bg-muted/20 px-3 py-2 text-sm"
+						role="status"
+						aria-live="polite"
+					>
+						<span>
+							已将 {undoContext.ids.length} 条订阅从「{getCategoryLabel(undoContext.nextCategory)}」更新，可在{" "}
+							{undoRemainingSeconds} 秒内撤销。
+						</span>
+						<Button
+						type="button"
+						variant="link"
+						size="sm"
+						className="h-auto p-0"
+						onClick={handleUndoCategory}
+						disabled={undoing || applying}
+						data-interaction="control"
+						 data-testid="subscription-undo-category"
+							>
+							{undoing ? "撤销中…" : "撤销"}
+						</Button>
+					</p>
+				)}
+
+				{undoHistory && (
+					<p
+						className={cn(
+							"alert rounded-md border px-3 py-2 text-sm",
+							undoHistory.isError
+								? "alert error border-destructive/40 bg-destructive/10 text-destructive"
+								: "border-border bg-muted/20",
+						)}
+						role={undoHistory.isError ? "alert" : "status"}
+						aria-live={undoHistory.isError ? "assertive" : "polite"}
+						aria-atomic="true"
+					>
+						{undoHistory.message}
+					</p>
+				)}
+
+				<output className="sr-only" aria-live="polite" aria-atomic="true">
+					{deleteStatusMessage}
+				</output>
+			</CardContent>
+		</Card>
 	);
 }

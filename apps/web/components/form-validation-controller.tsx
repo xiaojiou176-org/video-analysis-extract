@@ -40,7 +40,7 @@ function getOrCreateValidationMessageNode(
 	output.className = FORM_VALIDATION_HINT_BASE_CLASS;
 	output.setAttribute("data-state", "idle");
 	output.hidden = true;
-	form.prepend(output);
+	form.append(output);
 	return output;
 }
 
@@ -145,18 +145,23 @@ function evaluateForm(form: HTMLFormElement): void {
 			"[data-disabled-unless-checked]",
 		),
 	);
-	dependentFields.forEach((field) => {
-		const controllerName = field.getAttribute("data-disabled-unless-checked");
-		if (!controllerName) {
-			return;
-		}
-		const controller = form.querySelector<HTMLInputElement>(
-			`input[type="checkbox"][name="${controllerName}"]`,
-		);
-		const enabled = Boolean(controller?.checked);
-		field.disabled = !enabled;
-		field.setAttribute("aria-disabled", enabled ? "false" : "true");
-	});
+		dependentFields.forEach((field) => {
+			const controllerName = field.getAttribute("data-disabled-unless-checked");
+			if (!controllerName) {
+				return;
+			}
+			const checkboxController = form.querySelector<HTMLInputElement>(
+				`input[type="checkbox"][name="${controllerName}"]`,
+			);
+			const hiddenController = form.querySelector<HTMLInputElement>(
+				`input[type="hidden"][name="${controllerName}"]`,
+			);
+			const enabled = checkboxController
+				? Boolean(checkboxController.checked)
+				: Boolean(hiddenController?.value);
+			field.disabled = !enabled;
+			field.setAttribute("aria-disabled", enabled ? "false" : "true");
+		});
 }
 
 function evaluateAllForms(): void {

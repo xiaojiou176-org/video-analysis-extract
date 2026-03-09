@@ -1,7 +1,11 @@
+import { screen } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
 import RootLayout from "@/app/layout";
+
+vi.mock("geist/font/sans", () => ({ GeistSans: { variable: "font-geist-sans" } }));
+vi.mock("geist/font/mono", () => ({ GeistMono: { variable: "font-geist-mono" } }));
 
 vi.mock("next/link", () => ({
 	default: ({ href, children, ...rest }: { href: string; children: React.ReactNode }) => (
@@ -11,34 +15,53 @@ vi.mock("next/link", () => ({
 	),
 }));
 
-vi.mock("@/components/nav", () => ({
-	AppNav: () => <nav data-testid="app-nav-stub">nav</nav>,
+vi.mock("@/components/theme-provider", () => ({
+	ThemeProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+}));
+
+vi.mock("@/components/sidebar-wrapper", () => ({
+	SidebarWrapper: ({
+		apiHealthState,
+		apiHealthUrl,
+		apiHealthLabel,
+	}: {
+		apiHealthState: string;
+		apiHealthUrl: string;
+		apiHealthLabel: string;
+	}) => (
+		<aside data-testid="sidebar-stub" aria-live="polite">
+			sidebar
+			<a href={apiHealthUrl} className={`api-health-dot-${apiHealthState}`}>
+				API 状态：{apiHealthLabel}
+			</a>
+		</aside>
+	),
 }));
 
 vi.mock("@/components/form-validation-controller", () => ({
 	FormValidationController: () => <div data-testid="form-validation-controller-stub" />,
 }));
 
+const fetchApiHealthStateMock = vi.fn();
+
+vi.mock("@/lib/api/health", () => ({
+	fetchApiHealthState: (options: unknown) => fetchApiHealthStateMock(options),
+}));
+
 describe("RootLayout", () => {
 	it("shows healthy api state chip", async () => {
-		const fetchMock = vi.fn().mockResolvedValue({ ok: true });
-		vi.stubGlobal("fetch", fetchMock);
+		process.env.API_PORT = "18000";
+		fetchApiHealthStateMock.mockResolvedValue("healthy");
 
 		const html = renderToStaticMarkup(await RootLayout({ children: <div>content</div> }));
 
 		expect(html).toContain("API 状态：正常");
-		expect(html).toContain('href="http://127.0.0.1:8000/healthz"');
-		expect(fetchMock).toHaveBeenCalledWith(
-			"http://127.0.0.1:8000/healthz",
-			expect.objectContaining({
-				cache: "force-cache",
-				next: { revalidate: 30 },
-			}),
-		);
+		expect(html).toContain("http://127.0.0.1:18000/healthz");
+		expect(fetchApiHealthStateMock).toHaveBeenCalledWith({ timeoutMs: 2000 });
 	});
 
 	it("shows unhealthy api state chip", async () => {
-		vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false }));
+		fetchApiHealthStateMock.mockResolvedValue("unhealthy");
 
 		const html = renderToStaticMarkup(await RootLayout({ children: <div>content</div> }));
 
@@ -46,15 +69,22 @@ describe("RootLayout", () => {
 	});
 
 	it("shows timeout/unknown api state chip when fetch throws", async () => {
-		vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("offline")));
+		fetchApiHealthStateMock.mockResolvedValue("timeout_or_unknown");
 
 		const html = renderToStaticMarkup(await RootLayout({ children: <div>content</div> }));
 
 		expect(html).toContain("api-health-dot-timeout_or_unknown");
-		expect(html).toContain("API 状态：超时/未知");
+			expect(html).toContain("API 状态：超时/未知");
 		expect(html).toContain('aria-live="polite"');
 		expect(html).toContain("跳至主内容");
 		expect(html).toContain('id="main-content"');
 		expect(html).toContain('tabindex="-1"');
+	});
+
+	it("renders skip link with accessible name", async () => {
+		vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true }));
+
+		document.body.innerHTML = renderToStaticMarkup(await RootLayout({ children: <div>content</div> }));
+		expect(screen.getByRole("link", { name: "跳至主内容" })).toHaveAttribute("href", "#main-content");
 	});
 });

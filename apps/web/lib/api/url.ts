@@ -5,7 +5,13 @@ type ResolveOptions = {
 	strict?: boolean;
 };
 
-const DEFAULT_LOCAL_API_BASE_URL = "http://127.0.0.1:8000";
+function resolveLocalApiBaseUrl(): string {
+	const configuredPort = process.env.API_PORT?.trim();
+	if (configuredPort && /^\d+$/.test(configuredPort)) {
+		return `http://127.0.0.1:${configuredPort}`;
+	}
+	return "http://127.0.0.1:9000";
+}
 
 export function resolveApiBaseUrl(options: ResolveOptions = {}): string {
 	const strict = options.strict === true;
@@ -14,7 +20,7 @@ export function resolveApiBaseUrl(options: ResolveOptions = {}): string {
 	const base = rawBase?.trim();
 	if (!base) {
 		if (allowFallback) {
-			return DEFAULT_LOCAL_API_BASE_URL;
+			return resolveLocalApiBaseUrl();
 		}
 		throw new Error("API base URL is not configured. Set NEXT_PUBLIC_API_BASE_URL.");
 	}
@@ -125,5 +131,5 @@ export function sanitizeExternalUrl(rawUrl: string): string | null {
 }
 
 export function getWebActionSessionToken(): string {
-	return (process.env.WEB_ACTION_SESSION_TOKEN ?? "").trim();
+	return (process.env.WEB_ACTION_SESSION_TOKEN ?? process.env.VD_API_KEY ?? "").trim();
 }

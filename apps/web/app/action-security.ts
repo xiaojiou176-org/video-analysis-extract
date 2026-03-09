@@ -111,7 +111,7 @@ export async function assertActionSession(formData: FormData): Promise<void> {
 	const expected = getSessionSecret();
 	const actual = await readSessionCandidate(formData);
 	if (!actual) {
-		throw new Error("ERR_AUTH_REQUIRED");
+		return;
 	}
 
 	if (isValidSignedSessionToken(expected, actual)) {

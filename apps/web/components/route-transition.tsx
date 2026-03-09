@@ -12,7 +12,6 @@ const ROUTE_NAME_MAP: Array<{ href: string; label: string }> = [
 	{ href: "/subscriptions", label: "订阅管理" },
 	{ href: "/jobs", label: "任务" },
 	{ href: "/feed", label: "AI 摘要" },
-	{ href: "/artifacts", label: "产物" },
 	{ href: "/settings", label: "设置" },
 ];
 
@@ -34,6 +33,7 @@ export function RouteTransition({ children }: RouteTransitionProps) {
 	const pathname = usePathname();
 	const transitionRef = useRef<HTMLDivElement>(null);
 	const routeLabel = useMemo(() => getRouteLabel(pathname), [pathname]);
+	const lastFocusedHeadingRef = useRef<HTMLElement | null>(null);
 
 	useEffect(() => {
 		const transitionElement = transitionRef.current;
@@ -54,20 +54,26 @@ export function RouteTransition({ children }: RouteTransitionProps) {
 				return;
 			}
 
-			const focusedHeadings = transitionElement.querySelectorAll<HTMLElement>("[data-route-focus-target]");
-			for (const heading of focusedHeadings) {
-				heading.removeAttribute("data-route-focus-target");
+			const prev = lastFocusedHeadingRef.current;
+			if (prev && prev !== targetHeading) {
+				prev.removeAttribute("tabindex");
 			}
+
 			if (!targetHeading.hasAttribute("tabindex")) {
 				targetHeading.setAttribute("tabindex", "-1");
 			}
-			targetHeading.setAttribute("data-route-focus-target", "true");
+			lastFocusedHeadingRef.current = targetHeading;
 			targetHeading.focus({ preventScroll: true });
 		};
 
 		const frameId = window.requestAnimationFrame(focusMainHeading);
 		return () => {
 			window.cancelAnimationFrame(frameId);
+			const prev = lastFocusedHeadingRef.current;
+			if (prev) {
+				prev.removeAttribute("tabindex");
+				lastFocusedHeadingRef.current = null;
+			}
 		};
 	}, [pathname]);
 
@@ -75,7 +81,7 @@ export function RouteTransition({ children }: RouteTransitionProps) {
 		<div
 			ref={transitionRef}
 			key={pathname}
-			className="route-transition route-transition-enter"
+			className="route-transition route-transition-enter folo-route-layer"
 			data-route={pathname}
 		>
 			<div aria-hidden="true" className="route-progress-indicator">

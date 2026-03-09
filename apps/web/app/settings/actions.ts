@@ -12,6 +12,10 @@ import {
 import { toFlashQuery } from "@/app/flash-message";
 import { apiClient } from "@/lib/api/client";
 
+function getServerWriteToken(): string | null {
+	return process.env.VD_API_KEY?.trim() || null;
+}
+
 function statusUrl(status: "success" | "error", code: string): string {
 	return `/settings?${toFlashQuery(status, code)}`;
 }
@@ -35,13 +39,13 @@ export async function updateNotificationConfigAction(formData: FormData) {
 			failure_alert_enabled: formData.get("failure_alert_enabled") === "on",
 		});
 
-		await apiClient.updateNotificationConfig({
-			enabled: payload.enabled,
-			to_email: payload.to_email,
-			daily_digest_enabled: payload.daily_digest_enabled,
-			daily_digest_hour_utc: payload.daily_digest_hour_utc,
-			failure_alert_enabled: payload.failure_alert_enabled,
-		});
+			await apiClient.updateNotificationConfig({
+				enabled: payload.enabled,
+				to_email: payload.to_email,
+				daily_digest_enabled: payload.daily_digest_enabled,
+				daily_digest_hour_utc: payload.daily_digest_hour_utc,
+				failure_alert_enabled: payload.failure_alert_enabled,
+			}, { writeAccessToken: getServerWriteToken() });
 
 		revalidatePath("/settings");
 		redirect(statusUrl("success", "NOTIFICATION_CONFIG_SAVED"));
@@ -62,11 +66,11 @@ export async function sendTestNotificationAction(formData: FormData) {
 			body: toOptionalString(formData.get("body")),
 		});
 
-		await apiClient.sendNotificationTest({
-			to_email: payload.to_email,
-			subject: payload.subject,
-			body: payload.body,
-		});
+			await apiClient.sendNotificationTest({
+				to_email: payload.to_email,
+				subject: payload.subject,
+				body: payload.body,
+			}, { writeAccessToken: getServerWriteToken() });
 
 		revalidatePath("/settings");
 		redirect(statusUrl("success", "NOTIFICATION_TEST_SENT"));

@@ -24,7 +24,7 @@ describe("SyncNowButton", () => {
 
 	it("renders idle label", () => {
 		render(<SyncNowButton />);
-		expect(screen.getByRole("button", { name: "立即同步" })).toBeInTheDocument();
+		expect(screen.getByRole("button", { name: "立即同步" })).toHaveAttribute("data-variant", "hero");
 	});
 
 	it("shows loading state and prevents duplicate requests while in flight", async () => {
@@ -92,6 +92,7 @@ describe("SyncNowButton", () => {
 			expect(screen.getByRole("button", { name: "同步失败，重试" })).toBeInTheDocument(),
 		);
 		expect(status).toHaveAttribute("aria-live", "assertive");
+		expect(screen.getByRole("button", { name: "同步失败，重试" })).toHaveAttribute("data-variant", "destructive");
 	});
 
 	it("keeps error state until user retries and can recover on next success", async () => {
@@ -106,7 +107,8 @@ describe("SyncNowButton", () => {
 		await waitFor(() =>
 			expect(screen.getByRole("button", { name: "同步失败，重试" })).toBeInTheDocument(),
 		);
-		expect(screen.getByRole("button", { name: "同步失败，重试" })).toHaveClass("destructive");
+		expect(screen.getByRole("button", { name: "同步失败，重试" })).toHaveAttribute("data-variant", "destructive");
+		expect(screen.getByRole("button", { name: "同步失败，重试" })).toHaveAttribute("data-feedback-state", "error");
 		expect(mockPollIngest).toHaveBeenCalledTimes(1);
 		expect(mockRefresh).not.toHaveBeenCalled();
 
@@ -134,4 +136,57 @@ describe("SyncNowButton", () => {
 			},
 		);
 	});
+
+	it(
+		"applies button feedback states without relying on legacy status chips",
+		async () => {
+			let resolveFirstSync!: () => void;
+			mockPollIngest.mockReturnValueOnce(
+				new Promise<void>((resolve) => {
+					resolveFirstSync = resolve;
+				}),
+			);
+			mockPollIngest.mockRejectedValueOnce(new Error("Network error"));
+			render(<SyncNowButton />);
+
+			await act(async () => {
+				fireEvent.click(screen.getByRole("button", { name: "立即同步" }));
+			});
+
+			const loadingButton = await screen.findByRole("button", { name: "同步中…" });
+			expect(loadingButton).toHaveAttribute("data-variant", "secondary");
+			expect(loadingButton).toHaveAttribute("data-feedback-state", "loading");
+			const loadingHint = document.querySelector('[data-part="status-hint"][data-state="loading"]');
+			expect(loadingHint).not.toBeNull();
+			expect(loadingHint).toHaveTextContent("正在拉取与分析新内容，请稍候。");
+
+			await act(async () => {
+				resolveFirstSync();
+			});
+
+			const doneButton = await screen.findByRole("button", { name: "同步完成" });
+			expect(doneButton).toHaveAttribute("data-variant", "success");
+			expect(doneButton).toHaveAttribute("data-feedback-state", "done");
+			const doneHint = document.querySelector('[data-part="status-hint"][data-state="done"]');
+			expect(doneHint).not.toBeNull();
+			expect(doneHint).toHaveTextContent("同步完成，列表即将刷新。");
+			expect(doneHint).not.toHaveClass("status-chip-feedback");
+
+			const idleButton = await screen.findByRole("button", { name: "立即同步" }, { timeout: 2500 });
+			expect(idleButton).toHaveAttribute("data-variant", "hero");
+
+			await act(async () => {
+				fireEvent.click(idleButton);
+			});
+
+			const errorButton = await screen.findByRole("button", { name: "同步失败，重试" });
+			expect(errorButton).toHaveAttribute("data-variant", "destructive");
+			expect(errorButton).toHaveAttribute("data-feedback-state", "error");
+			const errorHint = document.querySelector('[data-part="status-hint"][data-state="error"]');
+			expect(errorHint).not.toBeNull();
+			expect(errorHint).toHaveTextContent("同步失败，请检查网络后重试。");
+			expect(errorHint).not.toHaveClass("status-chip-feedback");
+		},
+		8000,
+	);
 });
