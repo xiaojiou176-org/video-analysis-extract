@@ -23,8 +23,7 @@
 
 ## Explanation
 
-- 架构（Phase1-2）：`docs/phase1-2-architecture.md`
-- 架构（Phase3）：`docs/phase3-architecture.md`
+- 架构：`docs/architecture.md`
 
 ## Maintenance Rule
 

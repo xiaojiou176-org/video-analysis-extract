@@ -347,6 +347,7 @@ bash scripts/env/final_governance_check.sh --skip-prepush
   - E2E 口径仅统计 Playwright pytest 中真实 `.click()` 的 `button/link` 交互，不再把仅 `get_by_role` 查询视为覆盖。
   - 当前保留例外：全局错误边界内的 `重试页面` 按钮仍以 unit 覆盖为主（combined 仍需 100%）。
 - 变异测试门禁强制执行（Python 核心模块）：CI/Hook 执行口径为 mutation score `>=0.64`，并要求 `effective_ratio>=0.27`、`no_tests_ratio<=0.72`；`quality_gate.sh` 裸跑默认阈值为 `0.64`，可通过参数覆盖。
+- Web/依赖变更命中时，CI 会执行阻断式 `Gemini UI/UX audit`：必须同时满足 `status=passed`、`reason_code=ok`、`successful_batches==batch_count` 且 `model_attempts>0`；只有“真的调过模型且所有批次成功”才算真绿。
 - `pre-push` 采用 fail-fast：先短检查，再长测试；长测试并行执行并输出 heartbeat。
 - `pre-push` 后端链路新增硬门禁：`api cors preflight smoke (OPTIONS DELETE)` 与 `contract diff local gate (base vs head)`。
 - `pre-push` 与远端 CI `preflight-fast`/`web-test-build` 关键阻断项对齐：`check_ci_docs_parity`、`docs env canonical guard`、`provider residual guard`、`worker line limits guard`、`schema parity gate`、`web design token guard`、`web build`、`web button coverage`。

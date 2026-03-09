@@ -9,6 +9,9 @@ from pathlib import Path
 from typing import Any
 
 DEFAULT_SUMMARY_PATH = Path("apps/web/coverage/coverage-summary.json")
+DEFAULT_REQUIRED_METRICS = ("lines", "functions", "branches")
+DEFAULT_GLOBAL_THRESHOLD = 95.0
+DEFAULT_CORE_THRESHOLD = 95.0
 DEFAULT_CORE_PATTERNS = [
     "apps/web/lib/*.ts",
     "apps/web/lib/**/*.ts",
@@ -21,7 +24,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
             "Validate web coverage thresholds from a Vitest json-summary file. "
-            "Hard gates: global >= 85 and core >= 95 by default."
+            "Hard gates: global >= 95 and core >= 95 by default."
         )
     )
     parser.add_argument(
@@ -33,20 +36,24 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--global-threshold",
         type=float,
-        default=85.0,
-        help="Minimum global coverage percentage [0,100]. Default: 85",
+        default=DEFAULT_GLOBAL_THRESHOLD,
+        help="Minimum global coverage percentage [0,100]. Default: 95",
     )
     parser.add_argument(
         "--core-threshold",
         type=float,
-        default=95.0,
+        default=DEFAULT_CORE_THRESHOLD,
         help="Minimum core coverage percentage [0,100]. Default: 95",
     )
     parser.add_argument(
         "--metric",
+        action="append",
         choices=["lines", "statements", "functions", "branches"],
-        default="lines",
-        help="Coverage metric to evaluate. Default: lines",
+        default=[],
+        help=(
+            "Coverage metric to evaluate. Repeatable. "
+            "Default: lines,functions,branches"
+        ),
     )
     parser.add_argument(
         "--core-pattern",
@@ -82,7 +89,7 @@ def normalize_path_for_matching(raw_key: str) -> str:
 
 def load_summary(path: Path) -> dict[str, Any]:
     if not path.is_file():
-        cmd = ["npm", "--prefix", "apps/web", "run", "test", "--", "--coverage"]
+        cmd = ["npm", "--prefix", "apps/web", "run", "test:coverage"]
         print(
             f"coverage summary not found: {path}. Generating with: {' '.join(cmd)}",
         )
@@ -130,7 +137,17 @@ def is_core_file(path_key: str, patterns: list[str]) -> bool:
     )
 
 
-def evaluate(
+def resolve_metrics(metrics: list[str]) -> list[str]:
+    if not metrics:
+        return list(DEFAULT_REQUIRED_METRICS)
+    deduped: list[str] = []
+    for metric in metrics:
+        if metric not in deduped:
+            deduped.append(metric)
+    return deduped
+
+
+def evaluate_metric(
     summary: dict[str, Any], metric: str, core_patterns: list[str]
 ) -> tuple[float, int, int, float, int, int, int]:
     total_payload = summary.get("total")
@@ -177,48 +194,50 @@ def main() -> int:
     validate_threshold(args.core_threshold, "core-threshold")
 
     core_patterns = args.core_pattern if args.core_pattern else list(DEFAULT_CORE_PATTERNS)
+    metrics = resolve_metrics(args.metric)
 
     if args.dry_run:
         print("[dry-run] web coverage threshold check configuration")
         print(f"[dry-run] summary_path={args.summary_path}")
-        print(f"[dry-run] metric={args.metric}")
+        print(f"[dry-run] metrics={metrics}")
         print(f"[dry-run] global_threshold={args.global_threshold:.2f}%")
         print(f"[dry-run] core_threshold={args.core_threshold:.2f}%")
         print(f"[dry-run] core_patterns={core_patterns}")
         return 0
 
     summary = load_summary(args.summary_path)
-    (
-        global_pct,
-        global_total,
-        global_covered,
-        core_pct,
-        core_total,
-        core_covered,
-        core_matches,
-    ) = evaluate(summary, args.metric, core_patterns)
-
-    print(
-        "web coverage gate: "
-        f"metric={args.metric} "
-        f"global={global_pct:.2f}% ({global_covered}/{global_total}) "
-        f"core={core_pct:.2f}% ({core_covered}/{core_total}) "
-        f"core_matches={core_matches}"
-    )
-
     failures: list[str] = []
-    if global_pct < args.global_threshold:
-        failures.append(
-            f"global coverage {global_pct:.2f}% is below threshold {args.global_threshold:.2f}%"
+    for metric in metrics:
+        (
+            global_pct,
+            global_total,
+            global_covered,
+            core_pct,
+            core_total,
+            core_covered,
+            core_matches,
+        ) = evaluate_metric(summary, metric, core_patterns)
+
+        print(
+            "web coverage gate: "
+            f"metric={metric} "
+            f"global={global_pct:.2f}% ({global_covered}/{global_total}) "
+            f"core={core_pct:.2f}% ({core_covered}/{core_total}) "
+            f"core_matches={core_matches}"
         )
-    if core_matches == 0:
-        failures.append(
-            "no core files matched --core-pattern; adjust patterns or coverage include settings"
-        )
-    elif core_pct < args.core_threshold:
-        failures.append(
-            f"core coverage {core_pct:.2f}% is below threshold {args.core_threshold:.2f}%"
-        )
+
+        if global_pct < args.global_threshold:
+            failures.append(
+                f"{metric} global coverage {global_pct:.2f}% is below threshold {args.global_threshold:.2f}%"
+            )
+        if core_matches == 0:
+            failures.append(
+                f"{metric} has no core file matches; adjust --core-pattern or coverage include settings"
+            )
+        elif core_pct < args.core_threshold:
+            failures.append(
+                f"{metric} core coverage {core_pct:.2f}% is below threshold {args.core_threshold:.2f}%"
+            )
 
     if failures:
         print("web coverage gate failed:")

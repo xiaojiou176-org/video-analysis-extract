@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from apps.worker.worker.pipeline import runner_policies
 from worker.config import Settings
+
+from apps.worker.worker.pipeline import runner_policies
 
 
 def _settings() -> Settings:
@@ -289,15 +290,15 @@ def test_string_and_language_helpers_cover_json_and_cjk_detection() -> None:
         limit=4,
     )
     deduped = runner_policies.dedupe_keep_order(["a", "a", "b", "", "c"], limit=2)
-    json_text = runner_policies.extract_json_object("```json\n{\"ok\": true}\n```")
-    fallback_json = runner_policies.extract_json_object("prefix {\"x\":1} suffix")
+    json_text = runner_policies.extract_json_object('```json\n{"ok": true}\n```')
+    fallback_json = runner_policies.extract_json_object('prefix {"x":1} suffix')
     outline_payload = {"title": "你好", "chapters": [{"title": "章节", "summary": "摘要"}]}
     digest_payload = {"title": "总结", "summary": "内容", "tldr": ["重点"]}
 
     assert values == ["a", "b", "c", "7"]
     assert deduped == ["a", "b"]
-    assert json_text == "{\"ok\": true}"
-    assert fallback_json == "{\"x\":1}"
+    assert json_text == '{"ok": true}'
+    assert fallback_json == '{"x":1}'
     assert runner_policies.contains_cjk("hello你好") is True
     assert runner_policies.contains_cjk("plain english") is False
     assert runner_policies.outline_is_chinese(outline_payload) is True

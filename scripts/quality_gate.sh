@@ -4,9 +4,9 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 MODE="pre-push"
 HEARTBEAT_SECONDS="25"
-MUTATION_MIN_SCORE="0.62"
-MUTATION_MIN_EFFECTIVE_RATIO="0.25"
-MUTATION_MAX_NO_TESTS_RATIO="0.75"
+MUTATION_MIN_SCORE="0.64"
+MUTATION_MIN_EFFECTIVE_RATIO="0.27"
+MUTATION_MAX_NO_TESTS_RATIO="0.72"
 PROFILE_ONLY="0"
 FINAL_CHECK="0"
 FINAL_SKIP_PREPUSH="0"
@@ -47,9 +47,9 @@ Profiles:
   live-smoke  Validate live-smoke profile governance.
 Flags:
   --profile NAME   Append explicit profile checks (repeatable).
-  --mutation-min-score N  Mutation score threshold (default: 0.62).
-  --mutation-min-effective-ratio N  Mutation effective ratio threshold (default: 0.25).
-  --mutation-max-no-tests-ratio N  Mutation no-tests ratio upper bound (default: 0.75).
+  --mutation-min-score N  Mutation score threshold (default: 0.64).
+  --mutation-min-effective-ratio N  Mutation effective ratio threshold (default: 0.27).
+  --mutation-max-no-tests-ratio N  Mutation no-tests ratio upper bound (default: 0.72).
   --profile-only   Run profile checks only, skip other quality gates.
   --changed-backend true|false|auto    Backend change hint (default: auto).
   --changed-web true|false|auto        Frontend change hint (default: auto).
@@ -57,7 +57,7 @@ Flags:
   --changed-migrations true|false|auto Migration change hint (default: auto).
   --ci-dedupe 0|1  Pre-push only: when 1, skip checks covered by standalone CI jobs.
   --skip-mutation 0|1  Pre-push only: when 1, skip local mutation gate (CI remains source of truth).
-  --strict-full-run 0|1  Force full pre-push gates regardless of change detection and disallow mutation skip.
+  --strict-full-run 0|1  Force full pre-push gates regardless of change detection, disallow mutation skip, disable ci-dedupe, and require local real Postgres smoke.
   --final-check    Shortcut to run scripts/env/final_governance_check.sh.
   --skip-prepush   Used with --final-check to skip final pre-push phase.
 
@@ -66,8 +66,8 @@ Quality policy (blocking):
   - Placebo assertions are forbidden.
   - Documentation drift gate is mandatory.
   - Secrets leak scan is mandatory.
-  - Coverage thresholds: total >= 85%, core modules >= 95%.
-  - Mutation testing (Python core): mutation score >= configured threshold (default: 0.62).
+  - Coverage thresholds: total >= 95%, core modules >= 95%.
+  - Mutation testing (Python core): mutation score >= configured threshold (default: 0.64).
 USAGE
 }
 
@@ -207,6 +207,21 @@ fi
 
 if [[ "$FINAL_SKIP_PREPUSH" == "1" && "$FINAL_CHECK" != "1" ]]; then
   echo "[quality-gate] --skip-prepush can only be used with --final-check" >&2
+  exit 2
+fi
+
+if [[ "$STRICT_FULL_RUN" == "1" && "$MODE" != "pre-push" ]]; then
+  echo "[quality-gate] --strict-full-run is only valid with --mode pre-push" >&2
+  exit 2
+fi
+
+if [[ "$STRICT_FULL_RUN" == "1" && "$CI_DEDUPE" == "1" ]]; then
+  echo "[quality-gate] --strict-full-run forbids --ci-dedupe=1" >&2
+  exit 2
+fi
+
+if [[ "$STRICT_FULL_RUN" == "1" && "$SKIP_MUTATION" == "1" ]]; then
+  echo "[quality-gate] --strict-full-run forbids --skip-mutation=1" >&2
   exit 2
 fi
 
@@ -535,7 +550,7 @@ stats = json.loads(stats_path.read_text(encoding="utf-8"))
 killed = int(stats.get("killed", 0))
 survived = int(stats.get("survived", 0))
 total = int(stats.get("total", killed + survived))
-no_tests = int(stats.get("no_tests", 0))
+no_tests = int(stats.get("no_tests", stats.get("skipped", 0)))
 effective = killed + survived
 if effective <= 0:
     print(
@@ -743,15 +758,16 @@ run_web_design_token_guard_local() {
 
 run_python_tests_with_coverage_and_skip_guard() {
   mkdir -p .runtime-cache
-  PYTHONPATH="$PWD:$PWD/apps/worker" \
-  DATABASE_URL='sqlite+pysqlite:///:memory:' \
-    uv run pytest apps/worker/tests apps/api/tests apps/mcp/tests -q -rA \
-      --cov=apps/worker/worker \
-      --cov=apps/api \
-      --cov=apps/mcp \
-      --cov-report=term-missing:skip-covered \
-      --cov-fail-under=85 \
-      --junitxml=.runtime-cache/python-tests-junit-local.xml
+	  PYTHONPATH="$PWD:$PWD/apps/worker" \
+	  DATABASE_URL='sqlite+pysqlite:///:memory:' \
+	    uv run pytest apps/worker/tests apps/api/tests apps/mcp/tests -q -rA \
+	      --cov=apps/worker/worker \
+	      --cov=apps/api/app \
+	      --cov=apps/mcp/server.py \
+	      --cov=apps/mcp/tools \
+	      --cov-report=term-missing:skip-covered \
+		      --cov-fail-under=95 \
+	      --junitxml=.runtime-cache/python-tests-junit-local.xml
 
   python3 - <<'PY'
 import xml.etree.ElementTree as ET
@@ -789,6 +805,10 @@ print(
     f"tests={tests}, skipped={skipped}, allowed={allowed_skipped}, unexpected={unexpected_skipped}"
 )
 PY
+}
+
+run_api_real_smoke_local_gate() {
+  ./scripts/api_real_smoke_local.sh
 }
 
 run_web_dependency_policy_gate() {
@@ -1201,7 +1221,7 @@ if missing:
 
 defaults = {
     "LIVE_SMOKE_REQUIRE_API": "1",
-    "LIVE_SMOKE_REQUIRE_SECRETS": "0",
+    "LIVE_SMOKE_REQUIRE_SECRETS": "1",
     "LIVE_SMOKE_COMPUTER_USE_STRICT": "1",
     "LIVE_SMOKE_COMPUTER_USE_SKIP": "0",
     "LIVE_SMOKE_MAX_RETRIES": "2",
@@ -1298,7 +1318,7 @@ run_pre_commit_mode() {
   fi
   if is_true "$EFFECTIVE_BACKEND_CHANGED"; then
     run_async_gate "ruff_full" "backend lint (ruff full rules)" \
-      "uv run --with ruff ruff check apps scripts"
+      "uv run --with ruff ruff check apps/api apps/worker apps/mcp"
   else
     echo "[quality-gate] skip: backend lint (effective_backend_changed=false)"
   fi
@@ -1382,7 +1402,7 @@ run_pre_push_mode() {
     echo "[quality-gate] skip: backend lint (ruff) (--ci-dedupe=1)"
   elif is_true "$EFFECTIVE_BACKEND_CHANGED"; then
     run_async_gate "ruff_full" "backend lint (ruff full rules)" \
-      "uv run --with ruff ruff check apps scripts"
+      "uv run --with ruff ruff check apps/api apps/worker apps/mcp"
   else
     echo "[quality-gate] skip: backend lint (effective_backend_changed=false)"
   fi
@@ -1402,14 +1422,14 @@ run_pre_push_mode() {
     echo "[quality-gate] skip: web coverage threshold gate (--ci-dedupe=1, covered by CI web-test-build)"
   elif is_true "$EFFECTIVE_WEB_CHANGED"; then
     run_async_gate "web_unit_tests" "web unit tests" \
-      "npm --prefix apps/web run test -- --coverage"
+      "npm --prefix apps/web run test:coverage"
     run_web_coverage_threshold_after_tests="true"
     run_async_gate "web_design_token_guard" "web design token guard (local diff)" \
       "run_web_design_token_guard_local"
     run_async_gate "web_build" "web build" \
       "npm --prefix apps/web run build"
-    run_async_gate "web_button_coverage" "web button coverage gate (threshold=1.0)" \
-      "python3 scripts/check_web_button_coverage.py --threshold 1.0"
+    run_async_gate "web_button_coverage" "web interactive coverage gate (combined=1.0 e2e=0.6 unit=0.93)" \
+      "python3 scripts/check_web_button_coverage.py --threshold 1.0 --e2e-threshold 0.6 --unit-threshold 0.93"
   else
     echo "[quality-gate] skip: web unit tests (effective_web_changed=false)"
     echo "[quality-gate] skip: web coverage threshold gate (effective_web_changed=false)"
@@ -1417,7 +1437,7 @@ run_pre_push_mode() {
   if [[ "$CI_DEDUPE" == "1" ]]; then
     echo "[quality-gate] skip: python tests + total coverage (--ci-dedupe=1)"
   elif is_true "$EFFECTIVE_BACKEND_CHANGED"; then
-    run_async_gate "python_tests_with_coverage" "python tests + total coverage gate (>=85%)" \
+    run_async_gate "python_tests_with_coverage" "python tests + total coverage gate (>=95%)" \
       "run_python_tests_with_coverage_and_skip_guard"
     run_async_gate "api_cors_preflight_smoke" "api cors preflight smoke (OPTIONS DELETE)" \
       "run_api_cors_preflight_smoke"
@@ -1446,8 +1466,8 @@ run_pre_push_mode() {
 
   if [[ "$run_web_coverage_threshold_after_tests" == "true" ]]; then
     echo "[quality-gate] phase=web-coverage-threshold (post web unit tests)"
-    if ! run_sync_gate_with_heartbeat "web_coverage_threshold" "web coverage threshold gate (global>=85, core>=95)" \
-      "python3 scripts/check_web_coverage_threshold.py --summary-path apps/web/coverage/coverage-summary.json --global-threshold 85 --core-threshold 95"; then
+    if ! run_sync_gate_with_heartbeat "web_coverage_threshold" "web coverage threshold gate (lines/functions/branches global>=95, core>=95)" \
+      "python3 scripts/check_web_coverage_threshold.py --summary-path apps/web/coverage/coverage-summary.json --global-threshold 95 --core-threshold 95 --metric lines --metric functions --metric branches"; then
       echo "[quality-gate] pre-push failed in web-coverage-threshold phase" >&2
       exit 1
     fi
@@ -1460,9 +1480,9 @@ run_pre_push_mode() {
     echo "[quality-gate] skip: coverage core gates (--ci-dedupe=1)"
   elif is_true "$EFFECTIVE_BACKEND_CHANGED"; then
     run_async_gate "coverage_worker_core_95" "worker core coverage gate (>=95%)" \
-      "uv run coverage report --include=\"*/apps/worker/worker/pipeline/orchestrator.py,*/apps/worker/worker/pipeline/policies.py,*/apps/worker/worker/pipeline/runner.py,*/apps/worker/worker/pipeline/types.py\" --show-missing --fail-under=95"
+      "uv run coverage report --include=\"apps/worker/worker/pipeline/orchestrator.py,*/apps/worker/worker/pipeline/orchestrator.py,apps/worker/worker/pipeline/policies.py,*/apps/worker/worker/pipeline/policies.py,apps/worker/worker/pipeline/runner.py,*/apps/worker/worker/pipeline/runner.py,apps/worker/worker/pipeline/types.py,*/apps/worker/worker/pipeline/types.py\" --show-missing --fail-under=95"
     run_async_gate "coverage_api_core_95" "api core coverage gate (>=95%)" \
-      "uv run coverage report --include=\"*/apps/api/app/routers/ingest.py,*/apps/api/app/routers/jobs.py,*/apps/api/app/routers/subscriptions.py,*/apps/api/app/routers/videos.py,*/apps/api/app/services/jobs.py,*/apps/api/app/services/subscriptions.py,*/apps/api/app/services/videos.py\" --show-missing --fail-under=95"
+      "uv run coverage report --include=\"apps/api/app/routers/ingest.py,*/apps/api/app/routers/ingest.py,apps/api/app/routers/jobs.py,*/apps/api/app/routers/jobs.py,apps/api/app/routers/subscriptions.py,*/apps/api/app/routers/subscriptions.py,apps/api/app/routers/videos.py,*/apps/api/app/routers/videos.py,apps/api/app/services/jobs.py,*/apps/api/app/services/jobs.py,apps/api/app/services/subscriptions.py,*/apps/api/app/services/subscriptions.py,apps/api/app/services/videos.py,*/apps/api/app/services/videos.py\" --show-missing --fail-under=95"
   else
     echo "[quality-gate] skip: coverage core gates (effective_backend_changed=false)"
   fi
@@ -1494,6 +1514,21 @@ run_pre_push_mode() {
     echo "[quality-gate] skip: mutation gate (mutation_relevant_changed=false)"
   fi
 
+  if [[ "$STRICT_FULL_RUN" == "1" || ( "$CI_DEDUPE" != "1" && "$EFFECTIVE_BACKEND_CHANGED" == "true" ) ]]; then
+    if [[ "$STRICT_FULL_RUN" == "1" ]]; then
+      echo "[quality-gate] phase=api-real-smoke-local (strict-full-run)"
+    else
+      echo "[quality-gate] phase=api-real-smoke-local (backend changed)"
+    fi
+    if ! run_sync_gate_with_heartbeat "api_real_smoke_local" "api real smoke local (postgresql+psycopg)" \
+      "run_api_real_smoke_local_gate"; then
+      echo "[quality-gate] pre-push failed in api-real-smoke-local phase" >&2
+      exit 1
+    fi
+  else
+    echo "[quality-gate] skip: api-real-smoke-local (effective_backend_changed=false or --ci-dedupe=1)"
+  fi
+
   echo "[quality-gate] all checks passed"
 }
 
@@ -1503,6 +1538,7 @@ if [[ "$MODE" == "pre-commit" ]]; then
 else
   if [[ "$STRICT_FULL_RUN" == "1" ]]; then
     SKIP_MUTATION="0"
+    CI_DEDUPE="0"
   fi
   resolve_changed_flags
   run_pre_push_mode

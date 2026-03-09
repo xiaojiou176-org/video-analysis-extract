@@ -71,7 +71,7 @@ def _check_permissive_regex_assertions(path: Path, tree: ast.AST) -> list[str]:
             continue
         if not isinstance(node.func, ast.Attribute):
             continue
-        if node.func.attr not in {"to_contain_text", "to_have_text"}:
+        if node.func.attr not in {"to_contain_text", "to_have_text", "to_have_url"}:
             continue
         if not node.args:
             continue

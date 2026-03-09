@@ -391,7 +391,7 @@ jobs:
               --profile live-smoke \
               --profile-only \
               --heartbeat-seconds 20 \
-              --mutation-min-score 0.62
+              --mutation-min-score 0.64
           fi
 
   quality-gate-pre-push:
@@ -435,6 +435,112 @@ jobs:
       - name: Install web deps
         run: npm --prefix apps/web ci
 
+      - name: Gemini UI/UX audit (blocking)
+        if: ${{ needs.changes.outputs.web_changed == 'true' || needs.changes.outputs.deps_changed == 'true' }}
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_UI_UX_AUDIT_REPORT_PATH: .runtime-cache/ui-audit/gemini-ui-ux-audit-report.json
+        run: |
+          set -euo pipefail
+          mkdir -p .runtime-cache/ui-audit
+
+          base_ref=""
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            base_ref="${{ github.event.pull_request.base.sha }}"
+          else
+            base_ref="${{ github.event.before }}"
+            if [[ -z "$base_ref" || "$base_ref" == "0000000000000000000000000000000000000000" ]]; then
+              base_ref="$(git rev-list --max-count=1 HEAD^ 2>/dev/null || true)"
+            fi
+          fi
+
+          changed_files=""
+          if [[ -n "$base_ref" ]]; then
+            changed_files="$(git diff --name-only "$base_ref" "${{ github.sha }}" | rg '^apps/web/(app|components|lib)/.*\.(ts|tsx|js|jsx|css|scss|sass|html)$' || true)"
+          fi
+          if [[ -z "$changed_files" ]]; then
+            changed_files="$(git ls-files apps/web/app apps/web/components apps/web/lib | rg '\.(ts|tsx|js|jsx|css|scss|sass|html)$' || true)"
+          fi
+
+          audit_args=()
+          if [[ -n "$changed_files" ]]; then
+            while IFS= read -r file; do
+              [[ -z "$file" ]] && continue
+              audit_args+=("$file")
+            done <<< "$changed_files"
+          fi
+
+          uv run --with google-genai python3 scripts/gemini_ui_ux_audit.py "${audit_args[@]}" \
+            2>&1 | tee .runtime-cache/ui-audit/gemini-ui-ux-audit.log
+
+      - name: Gemini UI/UX audit summary (strict)
+        if: ${{ always() && (needs.changes.outputs.web_changed == 'true' || needs.changes.outputs.deps_changed == 'true') }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          report = Path(".runtime-cache/ui-audit/gemini-ui-ux-audit-report.json")
+          if not report.is_file():
+              print("::error::gemini-ui-ux-audit report missing")
+              raise SystemExit(1)
+
+          payload = json.loads(report.read_text(encoding="utf-8"))
+          status = str(payload.get("status", "unknown"))
+          reason_code = str(payload.get("reason_code", payload.get("reason", "unknown")))
+          provider_status = payload.get("provider_status")
+          model_attempts = payload.get("model_attempts", [])
+          batch_count = int(payload.get("batch_count", 0))
+          successful_batches = int(payload.get("successful_batches", 0))
+          issue_count = int(payload.get("issue_count", 0))
+          blocking_count = int(payload.get("blocking_count", 0))
+          warning_count = int(payload.get("warning_count", 0))
+          line = (
+              "gemini-ui-ux-audit summary: "
+              f"status={status} reason_code={reason_code} provider_status={provider_status} "
+              f"blocking_count={blocking_count} issue_count={issue_count} "
+              f"batches={successful_batches}/{batch_count} model_attempts={len(model_attempts)}"
+          )
+          print(line)
+
+          if status == "failed":
+              print(f"::warning::{line}")
+          elif batch_count > 0 and successful_batches != batch_count:
+              print(f"::warning::gemini-ui-ux-audit incomplete batch coverage: {line}")
+          elif status == "passed" and not model_attempts:
+              print(f"::warning::gemini-ui-ux-audit passed without model attempts: {line}")
+
+          summary_path = os.getenv("GITHUB_STEP_SUMMARY", "")
+          if summary_path:
+              with open(summary_path, "a", encoding="utf-8") as fh:
+                  fh.write("\n### Gemini UI/UX Audit\n")
+                  fh.write(f"- status: `{status}`\n")
+                  fh.write(f"- reason_code: `{reason_code}`\n")
+                  fh.write(f"- provider_status: `{provider_status}`\n")
+                  fh.write(f"- successful_batches: `{successful_batches}/{batch_count}`\n")
+                  fh.write(f"- blocking_count: `{blocking_count}`\n")
+                  fh.write(f"- warning_count: `{warning_count}`\n")
+                  fh.write(f"- issue_count: `{issue_count}`\n")
+                  fh.write(f"- model_attempts: `{len(model_attempts)}`\n")
+
+          failures = []
+          if status != "passed":
+              failures.append(f"status must be passed, got {status}")
+          if reason_code != "ok":
+              failures.append(f"reason_code must be ok, got {reason_code}")
+          if batch_count > 0 and successful_batches != batch_count:
+              failures.append(
+                  f"incomplete batch coverage: successful_batches={successful_batches} batch_count={batch_count}"
+              )
+          if batch_count > 0 and not model_attempts:
+              failures.append("passed result without model_attempts is invalid")
+          if failures:
+              for item in failures:
+                  print(f"::error::gemini-ui-ux-audit strict gate: {item}")
+              raise SystemExit(1)
+          PY
+
       - name: Full quality gate (pre-push, mutation handled by dedicated job)
         run: |
             ./scripts/quality_gate.sh \
@@ -448,9 +554,19 @@ jobs:
               --changed-deps "${{ needs.changes.outputs.deps_changed }}" \
               --changed-migrations "${{ needs.changes.outputs.migrations_changed }}" \
               --heartbeat-seconds 25 \
-              --mutation-min-score 0.62 \
-              --mutation-min-effective-ratio 0.25 \
-              --mutation-max-no-tests-ratio 0.75
+              --mutation-min-score 0.64 \
+              --mutation-min-effective-ratio 0.27 \
+              --mutation-max-no-tests-ratio 0.72
+
+      - name: Upload Gemini UI audit artifact
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: gemini-ui-ux-audit-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: warn
+          path: |
+            .runtime-cache/ui-audit/gemini-ui-ux-audit-report.json
+            .runtime-cache/ui-audit/gemini-ui-ux-audit.log
 
   db-migration-smoke:
     runs-on: [self-hosted, video-analysis-extract]
@@ -547,9 +663,9 @@ jobs:
 
       - name: Validate mutation score and effective ratio
         env:
-          MUTATION_MIN_SCORE: "0.62"
-          MUTATION_MIN_EFFECTIVE_RATIO: "0.25"
-          MUTATION_MAX_NO_TESTS_RATIO: "0.75"
+          MUTATION_MIN_SCORE: "0.64"
+          MUTATION_MIN_EFFECTIVE_RATIO: "0.27"
+          MUTATION_MAX_NO_TESTS_RATIO: "0.72"
         run: |
           python3 - <<'PY'
           import json
@@ -565,21 +681,21 @@ jobs:
           survived = int(stats.get("survived", 0))
           suspicious = int(stats.get("suspicious", 0))
           timeout = int(stats.get("timeout", 0))
-          skipped = int(stats.get("skipped", 0))
+          no_tests = int(stats.get("no_tests", stats.get("skipped", 0)))
           total = int(stats.get("total", 0))
 
           effective = killed + survived
           score = killed / effective if effective > 0 else 0.0
           effective_ratio = effective / total if total > 0 else 0.0
-          no_tests_ratio = skipped / total if total > 0 else 0.0
+          no_tests_ratio = no_tests / total if total > 0 else 0.0
 
-          min_score = float(os.environ.get("MUTATION_MIN_SCORE", "0.62"))
-          min_effective_ratio = float(os.environ.get("MUTATION_MIN_EFFECTIVE_RATIO", "0.25"))
-          max_no_tests_ratio = float(os.environ.get("MUTATION_MAX_NO_TESTS_RATIO", "0.75"))
+          min_score = float(os.environ.get("MUTATION_MIN_SCORE", "0.64"))
+          min_effective_ratio = float(os.environ.get("MUTATION_MIN_EFFECTIVE_RATIO", "0.27"))
+          max_no_tests_ratio = float(os.environ.get("MUTATION_MAX_NO_TESTS_RATIO", "0.72"))
 
           print(
               f"mutation stats: killed={killed}, survived={survived}, suspicious={suspicious}, "
-              f"timeout={timeout}, skipped={skipped}, total={total}"
+              f"timeout={timeout}, no_tests={no_tests}, total={total}"
           )
           print(
               f"mutation quality: score={score:.4f} (threshold={min_score:.4f}), "
@@ -691,13 +807,14 @@ jobs:
           mkdir -p .runtime-cache
           set -o pipefail
           (
-            uv run pytest apps/worker/tests apps/api/tests apps/mcp/tests -q -rA -n 2 \
-              --cov=apps/worker/worker \
-              --cov=apps/api \
-              --cov=apps/mcp \
-              --cov-report=term-missing:skip-covered \
-              --cov-report=xml:.runtime-cache/python-coverage.xml \
-              --cov-fail-under=85 \
+	            uv run pytest apps/worker/tests apps/api/tests apps/mcp/tests -q -rA -n 2 \
+	              --cov=apps/worker/worker \
+	              --cov=apps/api/app \
+	              --cov=apps/mcp/server.py \
+	              --cov=apps/mcp/tools \
+	              --cov-report=term-missing:skip-covered \
+	              --cov-report=xml:.runtime-cache/python-coverage.xml \
+              --cov-fail-under=95 \
               --junitxml=.runtime-cache/python-tests-junit.xml \
               2>&1 | tee .runtime-cache/python-tests.log
           ) &
@@ -1059,7 +1176,7 @@ jobs:
     runs-on: [self-hosted, video-analysis-extract]
     timeout-minutes: 25
     needs: [preflight-fast, changes]
-    if: ${{ always() && needs.preflight-fast.result == 'success' && needs.changes.result == 'success' && (github.event_name != 'pull_request' || needs.changes.outputs.web_changed == 'true' || needs.changes.outputs.deps_changed == 'true') }}
+    if: ${{ always() && needs.preflight-fast.result == 'success' && needs.changes.result == 'success' }}
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -1099,20 +1216,23 @@ jobs:
           fi
 
       - name: Web unit tests (vitest + coverage gate)
-        run: npm --prefix apps/web run test -- --coverage
+        run: npm --prefix apps/web run test:coverage
 
-      - name: Web coverage threshold gate (global>=85, core>=95)
+      - name: Web coverage threshold gate (lines/functions/branches global>=95, core>=95)
         run: |
           python3 scripts/check_web_coverage_threshold.py \
             --summary-path apps/web/coverage/coverage-summary.json \
-            --global-threshold 85 \
-            --core-threshold 95
+            --global-threshold 95 \
+            --core-threshold 95 \
+            --metric lines \
+            --metric functions \
+            --metric branches
 
       - name: Web build
         run: npm --prefix apps/web run build
 
-      - name: Web button coverage check
-        run: python3 scripts/check_web_button_coverage.py --threshold 1.0
+      - name: Web interactive coverage check
+        run: python3 scripts/check_web_button_coverage.py --threshold 1.0 --e2e-threshold 0.6 --unit-threshold 0.93
 
   web-e2e:
     runs-on: [self-hosted, video-analysis-extract]
@@ -1303,14 +1423,14 @@ jobs:
       - name: Start real API for web e2e (127.0.0.1:${{ env.WEB_E2E_API_PORT }})
         env:
           DATABASE_URL: "postgresql+psycopg://postgres:postgres@127.0.0.1:${{ job.services.postgres.ports['5432'] }}/video_analysis_web_e2e"
+          VD_API_KEY: video-digestor-local-dev-token
+          WEB_ACTION_SESSION_TOKEN: video-digestor-local-dev-token
           TEMPORAL_TARGET_HOST: 127.0.0.1:${{ env.WEB_E2E_TEMPORAL_PORT }}
           TEMPORAL_NAMESPACE: default
           TEMPORAL_TASK_QUEUE: video-analysis-worker
           SQLITE_STATE_PATH: ${{ env.WEB_E2E_SQLITE_STATE_PATH }}
           UI_AUDIT_GEMINI_ENABLED: "false"
           NOTIFICATION_ENABLED: "0"
-          VD_ALLOW_UNAUTH_WRITE: "1"
-          VD_CI_ALLOW_UNAUTH_WRITE: "1"
         run: |
           mkdir -p .runtime-cache
           start_web_e2e_api() {
@@ -1405,13 +1525,12 @@ jobs:
           BROWSER="${{ matrix.browser }}"
 
           set -o pipefail
-          # 专项用例由 web-e2e-perceived 独立执行
+          # 感知/移动专项用例由 web-e2e-perceived 承担；subscriptions 纳入主线 web-e2e。
           uv run --with pytest --with playwright \
             pytest apps/web/tests/e2e \
             --ignore=apps/web/tests/e2e/test_mobile_breakpoints.py \
             --ignore=apps/web/tests/e2e/test_perceived_latency.py \
             --ignore=apps/web/tests/e2e/test_reduced_motion.py \
-            --ignore=apps/web/tests/e2e/test_subscriptions.py \
             -q --junitxml=".runtime-cache/web-e2e-junit-${BROWSER}.xml" -rA \
             --web-e2e-browser "$BROWSER" \
             --web-e2e-api-base-url "http://127.0.0.1:${WEB_E2E_API_PORT}" \
@@ -1759,8 +1878,8 @@ jobs:
           SQLITE_STATE_PATH: ${{ env.WEB_E2E_PERCEIVED_SQLITE_STATE_PATH }}
           UI_AUDIT_GEMINI_ENABLED: "false"
           NOTIFICATION_ENABLED: "0"
-          VD_ALLOW_UNAUTH_WRITE: "1"
-          VD_CI_ALLOW_UNAUTH_WRITE: "1"
+          VD_API_KEY: video-digestor-local-dev-token
+          WEB_ACTION_SESSION_TOKEN: video-digestor-local-dev-token
         run: |
           mkdir -p .runtime-cache
           uv run --with uvicorn uvicorn apps.api.app.main:app --host 127.0.0.1 --port "${WEB_E2E_PERCEIVED_API_PORT}" > .runtime-cache/web-e2e-perceived-api.log 2>&1 &
@@ -2042,11 +2161,7 @@ jobs:
             [[ "$backend_changed" == "true" ]] && required_backend_group=1 || required_backend_group=0
             [[ "$web_changed" == "true" ]] && required_web_group=1 || required_web_group=0
             [[ "$backend_changed" == "true" ]] && required_api_real_smoke=1 || required_api_real_smoke=0
-            if [[ "$web_changed" == "true" || "$deps_changed" == "true" ]]; then
-              required_web_test_build=1
-            else
-              required_web_test_build=0
-            fi
+            required_web_test_build=1
             if [[ "$backend_changed" == "true" || "$web_changed" == "true" || "$deps_changed" == "true" ]]; then
               required_web_e2e=1
               required_web_e2e_perceived=1

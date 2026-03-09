@@ -292,6 +292,7 @@ uv run --with pytest --with playwright pytest \
 - 覆盖率门禁口径升级：全仓总覆盖率硬门禁 `>=95%`，核心模块维持 `>=95%`。
 - Web 覆盖率门禁不再只看 lines：`lines/functions/branches` 三指标必须同时满足 `global >=95%` 且 `core >=95%`。
 - Web 交互覆盖门禁已拆成更诚实的三段口径：`combined=1.0`、`e2e>=0.6`、`unit>=0.93`，不再把 E2E 与 unit 混成一个虚高的 100%。
+- Web/依赖变更命中时，CI 还会额外执行阻断式 `Gemini UI/UX audit`；只有 `status=passed`、`reason_code=ok`、批次全成功且存在真实 `model_attempts` 才算通过。
 - 本地 `pre-push` 新增硬门禁：`api cors preflight smoke (OPTIONS DELETE)` 与 `contract diff local gate (base vs head)`，先于远程 CI 拦截跨端链路与契约回归。
 - 本地 `pre-push` 进一步对齐远端 `preflight-fast` + `web-test-build`：`check_ci_docs_parity`、`docs env canonical guard`、`provider residual guard`、`worker line limits`、`schema parity`、`web design token guard`、`web build`、`web button coverage`。
 - 本地验收分层：sqlite 口径用于默认快速回归；真实 Postgres integration smoke 必须单独跑 `scripts/api_real_smoke_local.sh`，用于对齐 CI `api-real-smoke`。
