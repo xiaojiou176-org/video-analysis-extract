@@ -14,6 +14,7 @@ __pycache__/
 mutants/
 
 # Node / Next build artifacts
+node_modules/
 apps/web/node_modules/
 apps/web/.next/
 apps/web/.next-e2e-*/
@@ -42,6 +43,8 @@ env/profiles/*.local.env
 .DS_Store
 .idea/
 .vscode/
+.codex/
+Folo/
 
 # Personal local notes
 我和ChatGPT的对话.md
