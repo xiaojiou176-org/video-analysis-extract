@@ -17,6 +17,37 @@ http_api_fail() {
   exit 1
 }
 
+resolve_http_api_base_url() {
+  local cli_value="${1:-}"
+  local root_dir="${2:-${ROOT_DIR:-}}"
+  local default_value="http://127.0.0.1:9000"
+
+  if [[ -n "$cli_value" ]]; then
+    printf '%s\n' "$cli_value"
+    return 0
+  fi
+
+  if declare -F resolve_runtime_route_value >/dev/null 2>&1 && [[ -n "$root_dir" ]]; then
+    resolve_runtime_route_value "$root_dir" "VD_API_BASE_URL" "" "$default_value"
+    return 0
+  fi
+
+  if [[ -n "${VD_API_BASE_URL:-}" ]]; then
+    printf '%s\n' "$VD_API_BASE_URL"
+    return 0
+  fi
+
+  printf '%s\n' "$default_value"
+}
+
+apply_http_api_base_url() {
+  local cli_value="${1:-}"
+  local root_dir="${2:-${ROOT_DIR:-}}"
+  export VD_API_BASE_URL
+  VD_API_BASE_URL="$(resolve_http_api_base_url "$cli_value" "$root_dir")"
+  export HTTP_API_BASE_URL_OVERRIDE="$VD_API_BASE_URL"
+}
+
 safe_body_preview() {
   BODY="${1:-}" python3 - <<'PY'
 import os
@@ -48,7 +79,7 @@ api_get() {
   tmp_body="$(mktemp)"
 
   local base_url status
-  base_url="${VD_API_BASE_URL:-http://127.0.0.1:8000}"
+  base_url="$(resolve_http_api_base_url "${HTTP_API_BASE_URL_OVERRIDE:-${VD_API_BASE_URL:-}}" "${ROOT_DIR:-}")"
   if ! status="$(
     curl -sS -o "$tmp_body" -w '%{http_code}' \
       -H 'Accept: application/json' \
@@ -70,7 +101,7 @@ api_post() {
   tmp_body="$(mktemp)"
 
   local base_url status
-  base_url="${VD_API_BASE_URL:-http://127.0.0.1:8000}"
+  base_url="$(resolve_http_api_base_url "${HTTP_API_BASE_URL_OVERRIDE:-${VD_API_BASE_URL:-}}" "${ROOT_DIR:-}")"
   if ! status="$(
     curl -sS -o "$tmp_body" -w '%{http_code}' \
       -H 'Accept: application/json' \
@@ -92,5 +123,5 @@ check_api_health() {
   if [[ "$HTTP_STATUS" -lt 200 || "$HTTP_STATUS" -ge 300 ]]; then
     http_api_fail "API health check failed: status=${HTTP_STATUS}, body=$(safe_body_preview "$HTTP_BODY")"
   fi
-  http_api_log "API reachable: ${VD_API_BASE_URL}"
+  http_api_log "API reachable: $(resolve_http_api_base_url "${HTTP_API_BASE_URL_OVERRIDE:-${VD_API_BASE_URL:-}}" "${ROOT_DIR:-}")"
 }

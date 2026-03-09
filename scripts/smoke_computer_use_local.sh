@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-API_BASE_URL="http://127.0.0.1:8000"
+API_BASE_URL="http://127.0.0.1:9000"
 RETRIES="2"
 HEARTBEAT_SECONDS="30"
+ALLOW_UNSUPPORTED_SKIP="0"
 heartbeat_pid=""
 TMP_FILES=()
 
@@ -59,6 +60,10 @@ while [[ $# -gt 0 ]]; do
       HEARTBEAT_SECONDS="$2"
       shift 2
       ;;
+    --allow-unsupported-skip)
+      ALLOW_UNSUPPORTED_SKIP="$2"
+      shift 2
+      ;;
     *)
       log "unknown arg: $1"
       exit 2
@@ -71,6 +76,7 @@ done
 (( RETRIES <= 2 )) || fail "--retries must be <= 2 for live smoke policy"
 [[ "$HEARTBEAT_SECONDS" =~ ^[0-9]+$ ]] || fail "--heartbeat-seconds must be a positive integer"
 (( HEARTBEAT_SECONDS > 0 )) || fail "--heartbeat-seconds must be > 0"
+[[ "$ALLOW_UNSUPPORTED_SKIP" =~ ^[01]$ ]] || fail "--allow-unsupported-skip must be 0 or 1"
 
 payload="$(
   python3 - <<'PY'
@@ -138,8 +144,12 @@ fi
 
 if [[ "$status" != "200" ]]; then
   if [[ "$status" == "400" ]] && [[ "$body" == *"Computer Use is not enabled"* || "$body" == *"computer_use_provider_error:400 INVALID_ARGUMENT"* ]]; then
-    log "skipped: computer use capability is not enabled for current provider account"
-    exit 0
+    if [[ "$ALLOW_UNSUPPORTED_SKIP" == "1" ]]; then
+      log "result=skipped reason=provider_account_not_enabled_for_computer_use"
+      exit 0
+    fi
+    log "status=${status} body=${body}"
+    fail "provider account does not have computer use capability; pass --allow-unsupported-skip=1 to treat this as skip"
   fi
   log "status=${status} body=${body}"
   exit 1
@@ -159,5 +169,5 @@ if not isinstance(obj["actions"], list) or not obj["actions"]:
 if "provider" not in (obj.get("thought_metadata") or {}):
     print("thought_metadata.provider missing", file=sys.stderr)
     sys.exit(1)
-print("[smoke_computer_use_local] passed")
+print("[smoke_computer_use_local] result=passed")
 PY

@@ -4,12 +4,12 @@ set -euo pipefail
 SCRIPT_NAME="e2e_live_smoke"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ENV_PROFILE="${ENV_PROFILE:-local}"
-CLI_LIVE_SMOKE_API_BASE_URL="http://127.0.0.1:8000"
+CLI_LIVE_SMOKE_API_BASE_URL="http://127.0.0.1:9000"
 LIVE_SMOKE_REQUIRE_API="1"
 LIVE_SMOKE_COMPUTER_USE_STRICT="1"
 LIVE_SMOKE_COMPUTER_USE_SKIP="0"
 LIVE_SMOKE_COMPUTER_USE_SKIP_REASON=""
-LIVE_SMOKE_REQUIRE_SECRETS="0"
+LIVE_SMOKE_REQUIRE_SECRETS="1"
 YOUTUBE_SMOKE_URL="https://www.youtube.com/watch?v=dQw4w9WgXcQ"
 LIVE_SMOKE_TIMEOUT_SECONDS="180"
 LIVE_SMOKE_POLL_INTERVAL_SECONDS="3"
@@ -29,7 +29,7 @@ Options:
   --profile, --env-profile <name>             Env profile passed to load_repo_env (default: local)
   --api-base-url <url>                        API base URL override
   --require-api <0|1>                         Require API health check (default: 1)
-  --require-secrets <0|1>                     Require secrets gate (default: 0)
+  --require-secrets <0|1>                     Require secrets gate (default: 1)
   --computer-use-strict <0|1>                 Strict computer-use validation (default: 1)
   --computer-use-skip <0|1>                   Skip computer-use phase (default: 0)
   --computer-use-skip-reason <text>           Skip reason when --computer-use-skip=1
@@ -107,6 +107,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --computer-use-cmd)
       LIVE_SMOKE_COMPUTER_USE_CMD="${2:-}"
+      shift 2
+      ;;
+    --youtube-url)
+      YOUTUBE_SMOKE_URL="${2:-}"
       shift 2
       ;;
     --bilibili-url)
@@ -657,15 +661,33 @@ PY
   printf '%s' "$resolved"
 }
 
+resolve_local_write_token() {
+  if [[ -n "${WEB_ACTION_SESSION_TOKEN:-}" ]]; then
+    printf '%s' "$WEB_ACTION_SESSION_TOKEN"
+    return 0
+  fi
+  if [[ -n "${VD_API_KEY:-}" ]]; then
+    printf '%s' "$VD_API_KEY"
+    return 0
+  fi
+  if [[ -z "${CI:-}" && -z "${GITHUB_ACTIONS:-}" ]]; then
+    printf 'video-digestor-local-dev-token'
+    return 0
+  fi
+  printf ''
+}
+
 api_post() {
   local path="$1"
   local payload="$2"
   local tmp_body
   tmp_body="$(mktemp)"
   local -a auth_headers=()
-  if [[ -n "${VD_API_KEY:-}" ]]; then
-    auth_headers+=(-H "X-API-Key: ${VD_API_KEY}")
-    auth_headers+=(-H "Authorization: Bearer ${VD_API_KEY}")
+  local write_token
+  write_token="$(resolve_local_write_token)"
+  if [[ -n "$write_token" ]]; then
+    auth_headers+=(-H "X-API-Key: ${write_token}")
+    auth_headers+=(-H "Authorization: Bearer ${write_token}")
   fi
   local status
   status="$(
@@ -688,9 +710,11 @@ api_get() {
   local tmp_body
   tmp_body="$(mktemp)"
   local -a auth_headers=()
-  if [[ -n "${VD_API_KEY:-}" ]]; then
-    auth_headers+=(-H "X-API-Key: ${VD_API_KEY}")
-    auth_headers+=(-H "Authorization: Bearer ${VD_API_KEY}")
+  local write_token
+  write_token="$(resolve_local_write_token)"
+  if [[ -n "$write_token" ]]; then
+    auth_headers+=(-H "X-API-Key: ${write_token}")
+    auth_headers+=(-H "Authorization: Bearer ${write_token}")
   fi
   local status
   status="$(
@@ -949,6 +973,134 @@ PY
   printf '%s\n' "$job_id"
 }
 
+run_cleanup_workflow_via_api() {
+  local probe_root="$ROOT_DIR/.runtime-cache/e2e-live-smoke-cleanup"
+  local workspace_dir="$probe_root/workspace"
+  local cache_dir="$probe_root/cache"
+  local media_file="$workspace_dir/job-cleanup/downloads/media.mp4"
+  local frame_file="$workspace_dir/job-cleanup/frames/frame_001.jpg"
+  local digest_file="$workspace_dir/job-cleanup/artifacts/digest.md"
+  local cache_old_file="$cache_dir/stale-cache.bin"
+  local cache_keep_file="$cache_dir/fresh-cache.bin"
+  local idempotency_key
+  local payload
+  local response
+  local status
+  local body
+
+  mkdir -p \
+    "$(dirname "$media_file")" \
+    "$(dirname "$frame_file")" \
+    "$(dirname "$digest_file")" \
+    "$cache_dir"
+  printf 'video-bytes' >"$media_file"
+  printf 'frame-bytes' >"$frame_file"
+  printf 'keep-digest' >"$digest_file"
+  printf 'stale-cache' >"$cache_old_file"
+  printf 'fresh-cache' >"$cache_keep_file"
+
+  CLEANUP_MEDIA_FILE="$media_file" \
+  CLEANUP_FRAME_FILE="$frame_file" \
+  CLEANUP_DIGEST_FILE="$digest_file" \
+  CLEANUP_CACHE_OLD_FILE="$cache_old_file" \
+  python3 - <<'PY'
+import os
+from datetime import datetime, timedelta, timezone
+
+old_ts = (datetime.now(timezone.utc) - timedelta(hours=3)).timestamp()
+for env_name in (
+    "CLEANUP_MEDIA_FILE",
+    "CLEANUP_FRAME_FILE",
+    "CLEANUP_DIGEST_FILE",
+    "CLEANUP_CACHE_OLD_FILE",
+):
+    path = os.environ[env_name]
+    os.utime(path, (old_ts, old_ts))
+PY
+
+  idempotency_key="$(
+    WORKSPACE_DIR="$workspace_dir" CACHE_DIR="$cache_dir" python3 - <<'PY'
+import hashlib
+import os
+
+raw = "|".join(("cleanup_workflow", os.environ["WORKSPACE_DIR"], os.environ["CACHE_DIR"]))
+print(hashlib.sha256(raw.encode("utf-8")).hexdigest()[:24])
+PY
+  )"
+  payload="$(
+    WORKSPACE_DIR="$workspace_dir" CACHE_DIR="$cache_dir" python3 - <<'PY'
+import json
+import os
+
+print(
+    json.dumps(
+        {
+            "workflow": "cleanup",
+            "run_once": True,
+            "wait_for_result": True,
+            "payload": {
+                "workspace_dir": os.environ["WORKSPACE_DIR"],
+                "cache_dir": os.environ["CACHE_DIR"],
+                "older_than_hours": 1,
+                "cache_older_than_hours": 1,
+                "cache_max_size_mb": 1,
+            },
+        }
+    )
+)
+PY
+  )"
+
+  response="$(api_post "/api/v1/workflows/run" "$payload")"
+  status="${response%%$'\n'*}"
+  body="${response#*$'\n'}"
+  if [[ "$status" != "200" ]]; then
+    fail "cleanup_workflow_api failed: status=${status} body=${body}"
+  fi
+
+  if ! \
+    CLEANUP_RESPONSE_BODY="$body" \
+    EXPECT_WORKSPACE_DIR="$workspace_dir" \
+    EXPECT_CACHE_DIR="$cache_dir" \
+    EXPECT_MEDIA_FILE="$media_file" \
+    EXPECT_FRAME_FILE="$frame_file" \
+    EXPECT_DIGEST_FILE="$digest_file" \
+    EXPECT_CACHE_OLD_FILE="$cache_old_file" \
+    EXPECT_CACHE_KEEP_FILE="$cache_keep_file" \
+    python3 - <<'PY'
+import json
+import os
+from pathlib import Path
+
+payload = json.loads(os.environ["CLEANUP_RESPONSE_BODY"])
+result = payload.get("result") or {}
+
+assert payload["workflow"] == "cleanup"
+assert payload["workflow_name"] == "CleanupWorkspaceWorkflow"
+assert payload["status"] == "completed"
+assert result.get("ok") is True
+assert result.get("workspace_dir") == os.environ["EXPECT_WORKSPACE_DIR"]
+assert result.get("cache_dir") == os.environ["EXPECT_CACHE_DIR"]
+assert int(result.get("deleted_files", 0)) >= 2
+assert int(result.get("cache_deleted_files_by_age", 0)) >= 1
+assert not Path(os.environ["EXPECT_MEDIA_FILE"]).exists()
+assert not Path(os.environ["EXPECT_FRAME_FILE"]).exists()
+assert Path(os.environ["EXPECT_DIGEST_FILE"]).exists()
+assert not Path(os.environ["EXPECT_CACHE_OLD_FILE"]).exists()
+assert Path(os.environ["EXPECT_CACHE_KEEP_FILE"]).exists()
+PY
+  then
+    fail "cleanup_workflow_api returned unexpected payload or filesystem state: body=${body}"
+  fi
+
+  record_scenario "cleanup_workflow_api" "passed" "status=completed"
+  record_write_operation \
+    "POST /api/v1/workflows/run:cleanup_workflow_api" \
+    "$idempotency_key" \
+    "cleanup workflow only deletes isolated smoke workspace/cache files" \
+    "workspace_dir=${workspace_dir} cache_dir=${cache_dir}"
+}
+
 wait_for_terminal_status() {
   local job_id="$1"
   local label="$2"
@@ -1114,6 +1266,9 @@ main() {
   log "phase=short_tests status=passed"
 
   log "phase=long_tests status=start"
+  log "Scenario: cleanup workflow API closure"
+  run_cleanup_workflow_via_api
+
   log "Scenario: YouTube full"
   local youtube_job_id
   youtube_job_id="$(process_video "youtube" "$YOUTUBE_SMOKE_URL" "full" "youtube_full")"

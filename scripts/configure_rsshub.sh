@@ -20,7 +20,7 @@ Options:
 
 Environment variables:
   RSSHUB_BASE_URL            Preferred RSSHub base URL
-  VD_API_BASE_URL            API base URL (default: http://127.0.0.1:8000)
+  VD_API_BASE_URL            API base URL (default: http://127.0.0.1:9000)
 
 Examples:
   ${SCRIPT_NAME} --base-url "https://rsshub.example.com" --bili-uids "123,456"
@@ -220,7 +220,7 @@ if [[ -z "$RSSHUB_BASE_URL" ]]; then
 fi
 RSSHUB_BASE_URL="$(normalize_base_url "$RSSHUB_BASE_URL")"
 
-API_BASE_URL="${VD_API_BASE_URL:-http://127.0.0.1:8000}"
+API_BASE_URL="${VD_API_BASE_URL:-http://127.0.0.1:9000}"
 API_BASE_URL="$(normalize_base_url "$API_BASE_URL")"
 
 echo "RSSHub base: ${RSSHUB_BASE_URL}"

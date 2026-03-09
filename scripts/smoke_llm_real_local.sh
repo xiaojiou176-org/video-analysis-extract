@@ -8,7 +8,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$ROOT_DIR/scripts/lib/load_env.sh"
 load_repo_env "$ROOT_DIR" "$SCRIPT_NAME"
 
-API_BASE_URL="http://127.0.0.1:8000"
+API_BASE_URL="http://127.0.0.1:9000"
 DIAGNOSTICS_JSON=".runtime-cache/pr-llm-real-smoke-result.json"
 HEARTBEAT_SECONDS="30"
 MAX_RETRIES="2"
@@ -29,7 +29,7 @@ usage() {
 Usage: scripts/smoke_llm_real_local.sh [options]
 
 Options:
-  --api-base-url <url>            API base URL (default: http://127.0.0.1:8000)
+  --api-base-url <url>            API base URL (default: http://127.0.0.1:9000)
   --diagnostics-json <path>       Diagnostics output path (default: .runtime-cache/pr-llm-real-smoke-result.json)
   --heartbeat-seconds <n>         Heartbeat interval seconds (default: 30)
   --max-retries <n>               Max retries in [1,2] (default: 2)

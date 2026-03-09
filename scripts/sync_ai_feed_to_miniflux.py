@@ -57,6 +57,16 @@ def http_json(
         raise RuntimeError(f"HTTP {exc.code} {method} {url}: {body[:500]}") from exc
 
 
+def is_duplicate_entry_error(exc: Exception) -> bool:
+    message = str(exc)
+    lowered = message.lower()
+    return (
+        "entries_feed_id_hash_key" in message
+        or "duplicate key value violates unique constraint" in lowered
+        or "already exists" in lowered
+    )
+
+
 def ensure_category_and_feed(base: str, headers: dict[str, str]) -> int:
     seed_feed_url = DEFAULT_IMPORT_FEED_URL
     categories = http_json("GET", f"{base}/v1/categories", headers) or []
@@ -140,14 +150,19 @@ def import_entries(
             "external_id": f"video-digestor:{job_id}",
             "published_at": to_unix(str(item.get("published_at") or "")),
         }
-        http_json("POST", f"{base}/v1/feeds/{feed_id}/entries/import", headers, payload)
+        try:
+            http_json("POST", f"{base}/v1/feeds/{feed_id}/entries/import", headers, payload)
+        except RuntimeError as exc:
+            if is_duplicate_entry_error(exc):
+                continue
+            raise
         imported += 1
     return imported
 
 
 def main() -> int:
     miniflux_base = env("MINIFLUX_BASE_URL", "http://127.0.0.1:8080").rstrip("/")
-    api_base = env("VD_API_BASE_URL", "http://127.0.0.1:8000").rstrip("/")
+    api_base = env("VD_API_BASE_URL", "http://127.0.0.1:9000").rstrip("/")
     limit = DEFAULT_SYNC_LIMIT
 
     headers = build_headers()

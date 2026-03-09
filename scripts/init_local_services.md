@@ -36,7 +36,7 @@ export TEMPORAL_NAMESPACE='default'
 export TEMPORAL_TASK_QUEUE='video-analysis-worker'
 export SQLITE_STATE_PATH="$HOME/.video-digestor/state/worker_state.db"
 export SQLITE_PATH="$HOME/.video-digestor/state/worker_state.db"
-export VD_API_BASE_URL='http://127.0.0.1:8000'
+export VD_API_BASE_URL='http://127.0.0.1:9000'
 ```
 
 ## 6) 停止服务

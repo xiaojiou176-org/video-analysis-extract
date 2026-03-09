@@ -13,10 +13,13 @@ WITH_CORE_SERVICES="1"
 WITH_READER_STACK="1"
 READER_ENV_FILE="$ROOT_DIR/env/profiles/reader.env"
 OFFLINE_FALLBACK="1"
-API_PORT="8000"
+API_PORT="9000"
 WEB_PORT="3000"
+API_PORT_EXPLICIT="0"
+WEB_PORT_EXPLICIT="0"
 FALLBACK_MARKER_DIR="$ROOT_DIR/.runtime-cache/full-stack"
 FALLBACK_MARKER_FILE="$FALLBACK_MARKER_DIR/offline-fallback.flag"
+RESOLVED_ENV_PATH="$(get_runtime_resolved_env_path "$ROOT_DIR")"
 
 log() { printf '[%s] %s\n' "$SCRIPT_NAME" "$*" >&2; }
 fail() { log "ERROR: $*"; exit 1; }
@@ -92,8 +95,8 @@ EOF
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --profile) PROFILE="$2"; shift 2 ;;
-    --api-port) API_PORT="$2"; shift 2 ;;
-    --web-port) WEB_PORT="$2"; shift 2 ;;
+    --api-port) API_PORT="$2"; API_PORT_EXPLICIT="1"; shift 2 ;;
+    --web-port) WEB_PORT="$2"; WEB_PORT_EXPLICIT="1"; shift 2 ;;
     --install-deps) INSTALL_DEPS="$2"; shift 2 ;;
     --with-core-services) WITH_CORE_SERVICES="$2"; shift 2 ;;
     --with-reader-stack) WITH_READER_STACK="$2"; shift 2 ;;
@@ -105,13 +108,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 [[ "$PROFILE" == "local" || "$PROFILE" == "gce" ]] || fail "--profile must be local|gce"
-if ! [[ "$API_PORT" =~ ^[0-9]+$ ]] || (( API_PORT <= 0 || API_PORT > 65535 )); then
-  fail "--api-port must be an integer in [1,65535]"
-fi
-if ! [[ "$WEB_PORT" =~ ^[0-9]+$ ]] || (( WEB_PORT <= 0 || WEB_PORT > 65535 )); then
-  fail "--web-port must be an integer in [1,65535]"
-fi
-rm -f "$FALLBACK_MARKER_FILE"
+rm -f "$FALLBACK_MARKER_FILE" "$RESOLVED_ENV_PATH"
 
 command -v python3 >/dev/null 2>&1 || fail "python3 not found"
 command -v uv >/dev/null 2>&1 || fail "uv not found"
@@ -129,12 +126,28 @@ if [[ ! -f "$ROOT_DIR/.env" ]]; then
   cp "$ROOT_DIR/.env.example" "$ROOT_DIR/.env"
 fi
 
-if grep -q "postgresql+psycopg://localhost:5432/video_analysis" "$ROOT_DIR/.env"; then
-  log "Upgrading DATABASE_URL in .env for dockerized postgres compatibility"
-  sed -i.bak "s|postgresql+psycopg://localhost:5432/video_analysis|postgresql+psycopg://postgres:postgres@127.0.0.1:5432/video_analysis|g" "$ROOT_DIR/.env"
+load_repo_env "$ROOT_DIR" "$SCRIPT_NAME" "$PROFILE"
+
+api_port_cli=""
+web_port_cli=""
+if [[ "$API_PORT_EXPLICIT" == "1" ]]; then
+  api_port_cli="$API_PORT"
+fi
+if [[ "$WEB_PORT_EXPLICIT" == "1" ]]; then
+  web_port_cli="$WEB_PORT"
 fi
 
-load_repo_env "$ROOT_DIR" "$SCRIPT_NAME" "$PROFILE"
+API_PORT="$(resolve_runtime_route_value "$ROOT_DIR" "API_PORT" "$api_port_cli" "9000")"
+WEB_PORT="$(resolve_runtime_route_value "$ROOT_DIR" "WEB_PORT" "$web_port_cli" "3000")"
+DATABASE_URL="$(resolve_runtime_route_value "$ROOT_DIR" "DATABASE_URL" "" "postgresql+psycopg://postgres:postgres@127.0.0.1:5432/video_analysis")"
+export DATABASE_URL
+
+if ! [[ "$API_PORT" =~ ^[0-9]+$ ]] || (( API_PORT <= 0 || API_PORT > 65535 )); then
+  fail "--api-port must be an integer in [1,65535]"
+fi
+if ! [[ "$WEB_PORT" =~ ^[0-9]+$ ]] || (( WEB_PORT <= 0 || WEB_PORT > 65535 )); then
+  fail "--web-port must be an integer in [1,65535]"
+fi
 
 API_PORT_CURRENT="$API_PORT"
 WEB_PORT_CURRENT="$WEB_PORT"
@@ -147,14 +160,13 @@ if is_truthy "$WITH_READER_STACK"; then
   fi
 fi
 if [[ "$API_PORT_PICKED" != "$API_PORT_CURRENT" || "$WEB_PORT_PICKED" != "$WEB_PORT_CURRENT" ]]; then
-  log "Port conflict detected; applying API_PORT=${API_PORT_PICKED}, WEB_PORT=${WEB_PORT_PICKED}"
-  cat >> "$ROOT_DIR/.env" <<EOF
-export API_PORT='${API_PORT_PICKED}'
-export WEB_PORT='${WEB_PORT_PICKED}'
-export VD_API_BASE_URL='http://127.0.0.1:${API_PORT_PICKED}'
-export NEXT_PUBLIC_API_BASE_URL='http://127.0.0.1:${API_PORT_PICKED}'
-EOF
+  log "Port conflict detected; using runtime API_PORT=${API_PORT_PICKED}, WEB_PORT=${WEB_PORT_PICKED}"
 fi
+API_PORT="$API_PORT_PICKED"
+WEB_PORT="$WEB_PORT_PICKED"
+VD_API_BASE_URL="http://127.0.0.1:${API_PORT}"
+NEXT_PUBLIC_API_BASE_URL="$VD_API_BASE_URL"
+export API_PORT WEB_PORT VD_API_BASE_URL NEXT_PUBLIC_API_BASE_URL
 
 log "Validating env contract"
 (cd "$ROOT_DIR" && python3 scripts/check_env_contract.py --strict)
@@ -173,7 +185,7 @@ if is_truthy "$WITH_CORE_SERVICES"; then
 fi
 
 if command -v psql >/dev/null 2>&1; then
-  DB_URL="${DATABASE_URL:-postgresql+psycopg://localhost:5432/video_analysis}"
+  DB_URL="${DATABASE_URL:-postgresql+psycopg://postgres:postgres@127.0.0.1:5432/video_analysis}"
   PSQL_URL="${DB_URL/postgresql+psycopg:\/\//postgresql://}"
   if [[ "$DB_URL" == postgresql* ]]; then
     DB_NAME="$(python3 - <<'PY'
@@ -244,11 +256,10 @@ fallback_db = os.getenv('FALLBACK_DB_NAME')
 new_path = '/' + fallback_db
 print(urlunparse((p.scheme, p.netloc, new_path, p.params, p.query, p.fragment)))
 PY
-)"
+      )"
       apply_psql_migrations "$FALLBACK_PSQL_URL"
       FALLBACK_DB_URL="${FALLBACK_PSQL_URL/postgresql:\/\//postgresql+psycopg://}"
-      log "Updating .env DATABASE_URL to isolated DB: ${FALLBACK_DB_URL}"
-      perl -0pi -e "s|export DATABASE_URL='[^']*'|export DATABASE_URL='${FALLBACK_DB_URL}'|g" "$ROOT_DIR/.env"
+      log "Using runtime fallback DATABASE_URL: ${FALLBACK_DB_URL}"
       export DATABASE_URL="$FALLBACK_DB_URL"
     fi
   else
@@ -281,6 +292,13 @@ if is_truthy "$WITH_READER_STACK"; then
     fi
   fi
 fi
+
+write_runtime_resolved_env "$ROOT_DIR" "$SCRIPT_NAME" \
+  "API_PORT=${API_PORT}" \
+  "WEB_PORT=${WEB_PORT}" \
+  "VD_API_BASE_URL=${VD_API_BASE_URL}" \
+  "NEXT_PUBLIC_API_BASE_URL=${NEXT_PUBLIC_API_BASE_URL}" \
+  "DATABASE_URL=${DATABASE_URL}"
 
 cat <<EOF
 [$SCRIPT_NAME] Bootstrap complete.

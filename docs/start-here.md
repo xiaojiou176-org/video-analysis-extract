@@ -176,6 +176,7 @@ curl -sS -X POST http://127.0.0.1:9000/api/v1/ingest/poll -H 'Content-Type: appl
 - `smoke_full_stack.sh` 会执行本地联调烟测并覆盖 reader 栈检查；默认 `--offline-fallback 0`，只有显式传 `--offline-fallback 1` 且命中 `.runtime-cache/full-stack/offline-fallback.flag` 才会降级跳过 reader checks。
 - `smoke_full_stack.sh` 不是 `api-real-smoke` 替代；后端真实 Postgres integration smoke 必须单独执行 `scripts/api_real_smoke_local.sh`。
 - `scripts/api_real_smoke_local.sh` 现在会先做本机 IPv4 loopback 预检；若命中 `failure_kind=host_loopback_ipv4_exhausted`（常见于当前机器本地 127.0.0.1 临时端口池被大量 MCP/Codex 连接占满），脚本会直接 fail-fast，而不是继续启动 API/worker/Temporal 后才深处报错。
+- 本地脚本排障时优先看 `logs/full-stack/*.log`、`.runtime-cache/full-stack/resolved.env` 与 `.runtime-cache/api-real-smoke-local.log`，这样能先区分“端口/路由漂移”还是“业务失败”。
 
 边界说明：
 

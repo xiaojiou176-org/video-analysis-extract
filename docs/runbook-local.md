@@ -311,6 +311,7 @@ bash -n scripts/start_ops_workflows.sh
 - `scripts/api_real_smoke_local.sh` 默认监听 `127.0.0.1:18080`；若该默认端口被其他本地服务占用且未显式传 `--api-port`，脚本会自动选择下一个空闲端口。
 - `scripts/api_real_smoke_local.sh` 会在 cleanup workflow closure probe 前临时启动 worker；脚本退出时会一并清理 API/worker 与隔离数据库。
 - `scripts/api_real_smoke_local.sh` 现在会先检测本机 IPv4 loopback 是否健康；如果一开始就报 `failure_kind=host_loopback_ipv4_exhausted`，优先处理主机环境（减少本地 MCP/Codex bridge 长连接、换更干净 runner），而不是继续追 API/Temporal 业务日志。
+- 运行时排障优先顺序：先看 `.runtime-cache/full-stack/resolved.env` 与 `logs/full-stack/*.log`，再看 `.runtime-cache/api-real-smoke-local.log`，最后才下钻到 API/worker 业务栈日志。
 - compose 固定默认（不再通过 env 覆盖）：core Postgres `DB/User`、Redis 端口、Temporal 端口；Miniflux `DB/User/DB_NAME` 与 Miniflux 端口。
 
 `full_stack.sh` 运行约束（稳定性修复）：

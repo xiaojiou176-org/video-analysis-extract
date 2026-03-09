@@ -5,17 +5,20 @@ SCRIPT_NAME="smoke_full_stack"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ENV_PROFILE="${ENV_PROFILE:-local}"
 LIVE_DIAGNOSTICS_JSON=".runtime-cache/e2e-live-smoke-result.json"
-API_BASE="http://127.0.0.1:8000"
+API_BASE="http://127.0.0.1:9000"
 WEB_BASE="http://127.0.0.1:3001"
+API_BASE_EXPLICIT="0"
+WEB_BASE_EXPLICIT="0"
 REQUIRE_READER="1"
 MINIFLUX_BASE=""
 NEXTFLUX_PORT="3000"
-OFFLINE_FALLBACK="1"
+OFFLINE_FALLBACK="0"
 READER_ENV_FILE="$ROOT_DIR/env/profiles/reader.env"
 HEARTBEAT_SECONDS="30"
-LIVE_SMOKE_API_BASE_URL="http://127.0.0.1:8000"
+LIVE_SMOKE_API_BASE_URL="http://127.0.0.1:9000"
+LIVE_SMOKE_API_BASE_URL_EXPLICIT="0"
 LIVE_SMOKE_REQUIRE_API="1"
-LIVE_SMOKE_REQUIRE_SECRETS="0"
+LIVE_SMOKE_REQUIRE_SECRETS="1"
 LIVE_SMOKE_COMPUTER_USE_STRICT="1"
 LIVE_SMOKE_COMPUTER_USE_SKIP="0"
 LIVE_SMOKE_COMPUTER_USE_SKIP_REASON=""
@@ -27,15 +30,15 @@ Usage: scripts/smoke_full_stack.sh [options]
 
 Options:
   --profile, --env-profile <name>     Env profile passed to load_repo_env (default: local)
-  --api-base-url <url>                API base URL (default: http://127.0.0.1:8000)
-  --web-base-url <url>                Web base URL (default: http://127.0.0.1:3001)
+  --api-base-url <url>                API base URL (default: resolved runtime route / .env / 9000)
+  --web-base-url <url>                Web base URL (default: resolved WEB_PORT / .env / 3001)
   --require-reader <0|1>              Require reader checks (default: 1)
-  --offline-fallback <0|1>            Allow offline fallback marker skip (default: 1)
+  --offline-fallback <0|1>            Allow offline fallback marker skip (default: 0)
   --reader-env-file <path>            Reader env file for Miniflux/Nextflux values
   --heartbeat-seconds <n>             Smoke heartbeat interval (default: 30)
-  --live-smoke-api-base-url <url>     e2e live smoke API base URL
+  --live-smoke-api-base-url <url>     e2e live smoke API base URL (default: same as --api-base-url)
   --live-smoke-require-api <0|1>      e2e live smoke require API health gate (default: 1)
-  --live-smoke-require-secrets <0|1>  e2e live smoke require secrets (default: 0)
+  --live-smoke-require-secrets <0|1>  e2e live smoke require secrets (default: 1)
   --live-smoke-computer-use-strict <0|1>
                                        e2e live smoke computer-use strict mode (default: 1)
   --live-smoke-computer-use-skip <0|1>
@@ -56,10 +59,12 @@ while [[ $# -gt 0 ]]; do
       ;;
     --api-base-url)
       API_BASE="${2:-}"
+      API_BASE_EXPLICIT="1"
       shift 2
       ;;
     --web-base-url)
       WEB_BASE="${2:-}"
+      WEB_BASE_EXPLICIT="1"
       shift 2
       ;;
     --require-reader)
@@ -80,6 +85,7 @@ while [[ $# -gt 0 ]]; do
       ;;
     --live-smoke-api-base-url)
       LIVE_SMOKE_API_BASE_URL="${2:-}"
+      LIVE_SMOKE_API_BASE_URL_EXPLICIT="1"
       shift 2
       ;;
     --live-smoke-require-api)
@@ -129,6 +135,41 @@ done
 # shellcheck source=./scripts/lib/load_env.sh
 source "$ROOT_DIR/scripts/lib/load_env.sh"
 load_repo_env "$ROOT_DIR" "$SCRIPT_NAME" "$ENV_PROFILE"
+
+resolve_route_value_local() {
+  local key="$1"
+  local cli_value="$2"
+  local default_value="$3"
+  if declare -F resolve_runtime_route_value >/dev/null 2>&1; then
+    resolve_runtime_route_value "$ROOT_DIR" "$key" "$cli_value" "$default_value"
+    return 0
+  fi
+  if [[ -n "$cli_value" ]]; then
+    printf '%s\n' "$cli_value"
+    return 0
+  fi
+  local current_value
+  current_value="${!key:-}"
+  if [[ -n "$current_value" ]]; then
+    printf '%s\n' "$current_value"
+    return 0
+  fi
+  printf '%s\n' "$default_value"
+}
+
+api_base_cli=""
+if [[ "$API_BASE_EXPLICIT" == "1" ]]; then
+  api_base_cli="$API_BASE"
+fi
+API_BASE="$(resolve_route_value_local "VD_API_BASE_URL" "$api_base_cli" "http://127.0.0.1:9000")"
+
+if [[ "$WEB_BASE_EXPLICIT" != "1" ]]; then
+  resolved_web_port="$(resolve_route_value_local "WEB_PORT" "" "3001")"
+  WEB_BASE="http://127.0.0.1:${resolved_web_port}"
+fi
+if [[ "$LIVE_SMOKE_API_BASE_URL_EXPLICIT" != "1" ]]; then
+  LIVE_SMOKE_API_BASE_URL="$API_BASE"
+fi
 
 FALLBACK_MARKER_FILE="$ROOT_DIR/.runtime-cache/full-stack/offline-fallback.flag"
 MINIFLUX_BASE="${MINIFLUX_BASE_URL:-$MINIFLUX_BASE}"
@@ -248,7 +289,7 @@ log "e2e_live_smoke diagnostics_path=$ROOT_DIR/$LIVE_DIAGNOSTICS_JSON"
 
 if is_truthy "$REQUIRE_READER"; then
   if [[ -z "$MINIFLUX_BASE" && -f "$READER_ENV_FILE" ]]; then
-    load_env_file "$READER_ENV_FILE" "$SCRIPT_NAME"
+    load_env_file_preserve_process_env "$READER_ENV_FILE" "$SCRIPT_NAME"
     MINIFLUX_BASE="${MINIFLUX_BASE_URL:-}"
     NEXTFLUX_PORT="${NEXTFLUX_PORT:-3000}"
   fi
@@ -270,7 +311,11 @@ if is_truthy "$REQUIRE_READER"; then
   log "Running AI feed -> Miniflux sync"
   AI_FEED_SYNC_TMP_OUTPUT="$(mktemp)"
   start_heartbeat "run_ai_feed_sync"
-  (cd "$ROOT_DIR" && ./scripts/run_ai_feed_sync.sh >"$AI_FEED_SYNC_TMP_OUTPUT")
+  (cd "$ROOT_DIR" && ./scripts/run_ai_feed_sync.sh \
+    --profile "$ENV_PROFILE" \
+    --reader-env-file "$READER_ENV_FILE" \
+    --api-base-url "$API_BASE" \
+    --miniflux-base-url "$MINIFLUX_BASE" >"$AI_FEED_SYNC_TMP_OUTPUT")
   stop_heartbeat
   log "AI feed sync result: $(cat "$AI_FEED_SYNC_TMP_OUTPUT")"
   cleanup_temp_files

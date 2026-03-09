@@ -51,6 +51,7 @@
 - `scripts/api_real_smoke_local.sh` 默认尝试 `127.0.0.1:18080`；若默认端口已被其他本地服务占用且未显式传 `--api-port`，脚本会自动选择下一个空闲端口并在日志中说明。
 - `scripts/api_real_smoke_local.sh` 现在会为 cleanup workflow closure probe 临时拉起本地 worker，并在脚本退出时自动清理，不再要求你先手动起 worker。
 - `scripts/api_real_smoke_local.sh` 现在会先检查本机 IPv4 loopback；如果直接报 `failure_kind=host_loopback_ipv4_exhausted`，说明当前主机 `127.0.0.1` 自连接本身异常，应先处理本机环境而不是继续追仓库业务日志。
+- 运行 `full_stack.sh` / `api_real_smoke_local.sh` 时，优先排查 `logs/full-stack/*.log` 与 `.runtime-cache/api-real-smoke-local.log`，不要先去猜是业务代码还是本机端口漂移。
 - `UI audit` 结果默认会写入 `.runtime-cache/ui-audit-runs/`；`autofix` 当前只会返回持久化 dry-run 计划，不会假装已经落盘改代码。
 - `scripts/smoke_computer_use_local.sh` 默认严格口径：provider 未开通 computer use 会直接失败；仅显式传 `--allow-unsupported-skip=1` 才允许按 skip 通过。
 

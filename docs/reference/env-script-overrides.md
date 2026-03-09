@@ -25,7 +25,7 @@
 ```bash
 # 旧：通过环境变量覆盖
 # 新：直接传 flag
-./scripts/run_daily_digest.sh --date 2026-02-27 --to-email you@example.com --api-base-url http://127.0.0.1:8000
+./scripts/run_daily_digest.sh --date 2026-02-27 --to-email you@example.com --api-base-url http://127.0.0.1:9000
 ```
 
 ## Failure Alerts (`scripts/run_failure_alerts.sh`)
@@ -44,7 +44,7 @@
 迁移示例：
 
 ```bash
-./scripts/run_failure_alerts.sh --lookback-hours 6 --limit 10 --to-email you@example.com --api-base-url http://127.0.0.1:8000
+./scripts/run_failure_alerts.sh --lookback-hours 6 --limit 10 --to-email you@example.com --api-base-url http://127.0.0.1:9000
 ```
 
 ## Live Smoke (`scripts/e2e_live_smoke.sh`)
@@ -72,7 +72,7 @@
 
 ```bash
 ./scripts/e2e_live_smoke.sh \
-  --api-base-url http://127.0.0.1:8000 \
+  --api-base-url http://127.0.0.1:9000 \
   --timeout-seconds 240 \
   --heartbeat-seconds 20 \
   --diagnostics-json .runtime-cache/e2e-live-smoke-result.json
@@ -117,6 +117,11 @@ export VD_API_KEY='local-dev-token'
 
 - `--output`
 - `--force`
+
+说明：
+
+- 该脚本只是辅助模板生成工具，不是默认初始化入口。
+- 标准初始化路径固定为：`cp .env.example .env`。
 
 ## Ops Workflows (`scripts/start_ops_workflows.sh`)
 
@@ -177,12 +182,23 @@ workflow 管理参数：
 - `--reader-env-file`
 - `--offline-fallback`
 
+说明：
+
+- `bootstrap_full_stack.sh` 不再持久化改写 `.env`（仅在 `.env` 缺失时复制 `.env.example`）。
+- 端口冲突与回退等运行时决策会写入 `.runtime-cache/full-stack/resolved.env`。
+- 本地路由真相源是 `API_PORT/WEB_PORT`；`VD_API_BASE_URL` 与 `NEXT_PUBLIC_API_BASE_URL` 为派生地址。
+
 ### `scripts/full_stack.sh`
 
 - `--profile`
 - `--api-port`
 - `--web-port`
 - `--api-health-url`
+
+说明：
+
+- `full_stack.sh` 读取 `API_PORT/WEB_PORT` 作为本地路由真相源。
+- `VD_API_BASE_URL` 与 `NEXT_PUBLIC_API_BASE_URL` 默认由路由真相源派生，必要时可通过 CLI 显式覆盖。
 
 ### `scripts/smoke_full_stack.sh`
 
@@ -209,7 +225,29 @@ workflow 管理参数：
   --profile local \
   --require-reader 1 \
   --offline-fallback 0 \
-  --live-smoke-api-base-url http://127.0.0.1:8000
+  --live-smoke-api-base-url http://127.0.0.1:9000
+```
+
+说明：
+
+- `env/profiles/reader.env` 仅用于补齐 reader 相关默认值（如 `MINIFLUX_BASE_URL`、`NEXTFLUX_PORT`）。
+- 当前 shell 已显式注入的 `MINIFLUX_*` / `NEXTFLUX_*` 变量优先级更高，不会被 reader profile 模板覆盖。
+
+### `scripts/run_ai_feed_sync.sh`
+
+- `--profile`
+- `--reader-env-file`
+- `--api-base-url`
+- `--miniflux-base-url`
+
+迁移示例：
+
+```bash
+./scripts/run_ai_feed_sync.sh \
+  --profile local \
+  --reader-env-file env/profiles/reader.env \
+  --api-base-url http://127.0.0.1:9000 \
+  --miniflux-base-url http://127.0.0.1:8080
 ```
 
 ## Recreate GCE Instance (`scripts/recreate_gce_instance.sh`)

@@ -64,9 +64,9 @@ sudo systemctl restart vd-api vd-worker vd-web
 4. Validate health and critical workflow.
 
 ```bash
-curl -fsS http://127.0.0.1:8000/healthz
-curl -fsS http://127.0.0.1:8000/readyz
-curl -fsS http://127.0.0.1:8000/metrics | head -n 20
+curl -fsS http://127.0.0.1:9000/healthz
+curl -fsS http://127.0.0.1:9000/readyz
+curl -fsS http://127.0.0.1:9000/metrics | head -n 20
 ```
 
 5. Confirm release evidence and incident notes.

@@ -6,9 +6,16 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$ROOT_DIR/scripts/lib/load_env.sh"
 load_repo_env "$ROOT_DIR" "dev_api"
 
+if [[ -z "${VD_API_KEY:-}" && -z "${CI:-}" && -z "${GITHUB_ACTIONS:-}" ]]; then
+  export VD_API_KEY="video-digestor-local-dev-token"
+fi
+if [[ -z "${WEB_ACTION_SESSION_TOKEN:-}" && -n "${VD_API_KEY:-}" ]]; then
+  export WEB_ACTION_SESSION_TOKEN="$VD_API_KEY"
+fi
+
 API_APP="apps.api.app.main:app"
 API_HOST="127.0.0.1"
-API_PORT="8000"
+API_PORT="9000"
 ENABLE_RELOAD=1
 
 usage() {

@@ -8,6 +8,7 @@ This repository uses a contract-first environment model:
 4. Gate: `python3 scripts/check_env_contract.py --strict`
 
 `.env.example` is intentionally minimal (required + critical + high-frequency overrides). For the full script override catalog, see `docs/reference/env-script-overrides.md`.
+Standard initialization path is fixed to `.env.example -> .env` (`cp .env.example .env`); `scripts/init_env_example.sh` is an optional helper for generating auxiliary templates only.
 
 ## Core/Profile Overlay Architecture
 
@@ -47,6 +48,16 @@ Notes:
 - In general runtime scripts, inherited parent-shell variables can overwrite `.env` values.
 - For one-off overrides, use script-supported flags or explicit per-command env where documented.
 
+## Full-Stack Routing Truth Source
+
+For full-stack local scripts (`bootstrap_full_stack.sh` / `full_stack.sh` / `smoke_full_stack.sh`):
+
+1. `API_PORT` and `WEB_PORT` are the routing source of truth.
+2. `VD_API_BASE_URL` and `NEXT_PUBLIC_API_BASE_URL` are derived URLs by default (unless explicitly overridden by CLI flags such as `--api-base-url`).
+3. Runtime decisions (port fallback, derived routing values) are written to `.runtime-cache/full-stack/resolved.env`.
+4. `bootstrap_full_stack.sh` does not persist runtime decisions back into `.env` (except first-copy from `.env.example` when `.env` is missing).
+5. `bootstrap_full_stack.sh` defaults to `--offline-fallback 1` (may write `.runtime-cache/full-stack/offline-fallback.flag`), while `smoke_full_stack.sh` defaults to `--offline-fallback 0`; reader checks are skipped only when smoke is explicitly run with `--offline-fallback 1` and the marker exists.
+
 ## Fail-Fast Rules
 
 Startup validation fails when:
@@ -61,6 +72,7 @@ Startup validation fails when:
 2. `NOTIFICATION_ENABLED=true` but either `RESEND_API_KEY` or `RESEND_FROM_EMAIL` is missing/blank.
 3. Web API client cannot resolve a valid base URL:
    - `NEXT_PUBLIC_API_BASE_URL` (required for web runtime)
+4. `full_stack.sh up` cannot reach `TEMPORAL_TARGET_HOST` (Worker Temporal preflight; default `localhost:7233`).
 
 ## Variable Tiers
 
@@ -121,7 +133,7 @@ Default model lane:
 - Default selected: `gemini-3.1-pro-preview`
 - Supported alternates: `gemini-3.0-pro`, `gemini-3.0-flash`
 - Embedding: `gemini-embedding-001`
-- Computer use: `GEMINI_COMPUTER_USE_MODEL` (default `gemini-3.1-pro-preview`; can follow dedicated computer-use model when adopted)
+- Computer use: `GEMINI_COMPUTER_USE_MODEL` (default `gemini-2.5-computer-use-preview-10-2025`; this must point at the dedicated computer-use preview model, not the generic `GEMINI_MODEL`)
 
 ### Secret Source and Logging Policy
 
@@ -139,12 +151,15 @@ Default model lane:
 
 ### API / MCP / Web
 
+- Routing truth source for local full-stack scripts: `API_PORT`, `WEB_PORT`.
 - API/MCP runtime: `VD_API_BASE_URL`, `VD_API_TIMEOUT_SEC`, `VD_API_KEY`, `VD_ALLOW_UNAUTH_WRITE`, `VD_CI_ALLOW_UNAUTH_WRITE`, `VD_API_RETRY_ATTEMPTS`, `VD_API_RETRY_BACKOFF_SEC`
-- Web runtime: `NEXT_PUBLIC_API_BASE_URL` (web client only reads this variable for API base URL)
+- Web runtime: `NEXT_PUBLIC_API_BASE_URL` (web client only reads this variable for API base URL; usually derived from `API_PORT` in local full-stack flows)
 - `UI_AUDIT_GEMINI_ENABLED` (API-side Gemini UI audit toggle, default `true`)
 - `UI_AUDIT_ARTIFACT_BASE_ROOT` (UI audit artifact directory whitelist root; only `artifact_root` paths within this base are accepted; defaults to OS temp directory when unset)
+- `UI_AUDIT_RUN_STORE_DIR` (persisted UI audit run snapshot directory, default `.runtime-cache/ui-audit-runs`)
 - `VD_MCP_MAX_BASE64_BYTES` (MCP base64 payload size limit, bytes)
 - `WEB_ACTION_SESSION_TOKEN` (optional server-action session secret)
+- `GEMINI_UI_UX_AUDIT_REPORT_PATH` (CI UI/UX audit report output path, default `.runtime-cache/ui-audit/gemini-ui-ux-audit-report.json`)
 
 Write auth behavior contract (`apps/api/app/security.py`):
 
@@ -203,6 +218,7 @@ Exception detail sanitization contract:
   - CLI flags still take precedence over env defaults
 
 Live smoke includes strict computer-use controls via CLI flags in `scripts/e2e_live_smoke.sh`.
+- `scripts/e2e_live_smoke.sh` default contract is `--require-api=1` and `--require-secrets=1`; `scripts/quality_gate.sh` live-smoke profile gate enforces these defaults.
 
 - `scripts/smoke_computer_use_local.sh` uses CLI flags (`--retries`, `--heartbeat-seconds`) with internal defaults.
 - `YOUTUBE_API_KEY` resolution for live smoke: current environment / `.env`; no `.env.local` / `.env.bak` / shell login fallback probing.
@@ -227,8 +243,15 @@ Live smoke includes strict computer-use controls via CLI flags in `scripts/e2e_l
 - CI/Test behavior flags are contract-registered:
   - `CI` / `GITHUB_ACTIONS`: CI context detection flags (hosted CI normally injects these automatically).
   - `API_INTEGRATION_SMOKE_STRICT`: local strictness override for `apps/api/tests/test_api_integration_smoke.py`.
+    - `unset/0`: local default fast mode; unmet real-Postgres requirements can `xfail`.
+    - `1`: strict mode; unmet requirements or failures are blocking.
   - `WEB_E2E_USE_MOCK_API`: local-only debug toggle for web E2E mock API wiring; CI/mainline must keep real API path.
   - `WEB_E2E_NEXT_DIST_DIR`: optional E2E-only Next.js distDir isolation; used to avoid concurrent `.next/dev/lock` contention across parallel E2E workers.
+
+Local verification boundary:
+
+- `DATABASE_URL='sqlite+pysqlite:///:memory:'` is the default fast regression path.
+- Real Postgres integration smoke must run separately via `./scripts/api_real_smoke_local.sh` (for CI parity), and `smoke_full_stack.sh` is not a replacement for that backend integration gate.
 
 `scripts/external_playwright_smoke.sh` defaults (override via CLI flags):
 
@@ -257,9 +280,14 @@ Live smoke includes strict computer-use controls via CLI flags in `scripts/e2e_l
 ## Local Setup
 
 ```bash
-./scripts/init_env_example.sh
 cp .env.example .env
 # edit .env
+```
+
+Optional helper (not the default path):
+
+```bash
+./scripts/init_env_example.sh --output .runtime-cache/temp/.env.generated.example --force
 ```
 
 ## Minimal Required Variables by Profile

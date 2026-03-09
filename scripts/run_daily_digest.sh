@@ -9,7 +9,7 @@ source "$ROOT_DIR/scripts/lib/load_env.sh"
 source "$ROOT_DIR/scripts/lib/http_api.sh"
 load_repo_env "$ROOT_DIR" "$SCRIPT_NAME"
 
-VD_API_BASE_URL="${VD_API_BASE_URL:-http://127.0.0.1:8000}"
+API_BASE_URL_OVERRIDE=""
 digest_date="$(date -u +%F)"
 digest_channel="email"
 digest_dry_run="false"
@@ -181,7 +181,7 @@ main() {
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      --api-base-url) VD_API_BASE_URL="${2:-}"; shift 2 ;;
+      --api-base-url) API_BASE_URL_OVERRIDE="${2:-}"; shift 2 ;;
       --date) digest_date="${2:-}"; shift 2 ;;
       --channel) digest_channel="${2:-}"; shift 2 ;;
       --dry-run) digest_dry_run="${2:-}"; shift 2 ;;
@@ -206,6 +206,7 @@ USAGE
   done
 
   cd "$ROOT_DIR"
+  apply_http_api_base_url "$API_BASE_URL_OVERRIDE" "$ROOT_DIR"
   check_api_health
 
   if try_primary_route; then
