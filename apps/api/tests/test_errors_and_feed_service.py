@@ -90,6 +90,7 @@ def test_feed_service_list_digest_feed_applies_cursor_filters_and_has_more(
             "job_id": "job-3",
             "source_url": "https://example.com/v3",
             "source": "youtube",
+            "content_type": "article",
             "title": "",
             "video_uid": "v-3",
             "published_at": ts1,
@@ -98,6 +99,7 @@ def test_feed_service_list_digest_feed_applies_cursor_filters_and_has_more(
             "category": "tech",
             "subscription_source_type": "url",
             "subscription_source_value": "https://youtube.com/@demo",
+            "subscription_id": "sub-tech-1",
             "artifact_digest_md": str(digest_1),
             "artifact_root": None,
         },
@@ -105,6 +107,7 @@ def test_feed_service_list_digest_feed_applies_cursor_filters_and_has_more(
             "job_id": "job-2",
             "source_url": "https://example.com/v2",
             "source": "youtube",
+            "content_type": "video",
             "title": "Video 2",
             "video_uid": "v-2",
             "published_at": ts2,
@@ -113,6 +116,7 @@ def test_feed_service_list_digest_feed_applies_cursor_filters_and_has_more(
             "category": "tech",
             "subscription_source_type": "url",
             "subscription_source_value": "https://youtube.com/@demo",
+            "subscription_id": "sub-tech-1",
             "artifact_digest_md": str(digest_2),
             "artifact_root": None,
         },
@@ -120,6 +124,7 @@ def test_feed_service_list_digest_feed_applies_cursor_filters_and_has_more(
             "job_id": "job-1",
             "source_url": "https://example.com/v1",
             "source": "youtube",
+            "content_type": "video",
             "title": "Video 1",
             "video_uid": "v-1",
             "published_at": ts3,
@@ -128,6 +133,7 @@ def test_feed_service_list_digest_feed_applies_cursor_filters_and_has_more(
             "category": "tech",
             "subscription_source_type": "url",
             "subscription_source_value": "https://youtube.com/@demo",
+            "subscription_id": "sub-tech-2",
             "artifact_digest_md": str(digest_3),
             "artifact_root": None,
         },
@@ -138,12 +144,14 @@ def test_feed_service_list_digest_feed_applies_cursor_filters_and_has_more(
     result = service.list_digest_feed(
         source="youtube",
         category=" Tech ",
+        subscription_id=" sub-tech-1 ",
         limit=2,
         cursor="2026-02-24T09:00:00+00:00__job-0",
     )
 
     params = fake_db.calls[0]["params"]
     assert params["category"] == "tech"
+    assert params["subscription_id"] == "sub-tech-1"
     assert params["limit"] == 3
     assert params["cursor_ts"] == "2026-02-24T09:00:00+00:00"
     assert params["cursor_job_id"] == "job-0"
@@ -154,6 +162,8 @@ def test_feed_service_list_digest_feed_applies_cursor_filters_and_has_more(
     assert result["items"][0]["title"] == "v-3"
     assert result["items"][0]["source_name"] in {"youtube", "Demo Channel"}
     assert result["items"][0]["artifact_type"] == "digest"
+    assert result["items"][0]["content_type"] == "article"
+    assert result["items"][1]["content_type"] == "video"
 
 
 def test_feed_service_parse_cursor_and_title_resolution() -> None:
@@ -171,3 +181,123 @@ def test_feed_service_parse_cursor_and_title_resolution() -> None:
         == "https://x"
     )
     assert service._resolve_title({"title": "", "video_uid": "", "source_url": ""}) == "Untitled"
+
+
+def test_feed_service_list_digest_feed_skips_invalid_rows_and_uses_outline_fallback(
+    tmp_path: Path,
+) -> None:
+    ts = datetime(2026, 3, 1, 9, 0, tzinfo=UTC)
+    outline_root = tmp_path / "outline-root"
+    outline_root.mkdir(parents=True)
+    (outline_root / "outline.json").write_text(
+        json.dumps({"title": "No Summary"}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+    rows = [
+        {
+            "job_id": "job-no-summary",
+            "source_url": "https://example.com/no-summary",
+            "source": "rss",
+            "content_type": "video",
+            "title": "No summary",
+            "video_uid": "v0",
+            "published_at": ts,
+            "created_at": ts,
+            "sort_ts": ts,
+            "category": "misc",
+            "subscription_source_type": "",
+            "subscription_source_value": "",
+            "subscription_id": "s0",
+            "artifact_digest_md": None,
+            "artifact_root": None,
+        },
+        {
+            "job_id": "",
+            "source_url": "https://example.com/no-job",
+            "source": "rss",
+            "content_type": "article",
+            "title": "No job",
+            "video_uid": "v1",
+            "published_at": ts,
+            "created_at": ts,
+            "sort_ts": ts,
+            "category": "misc",
+            "subscription_source_type": "",
+            "subscription_source_value": "",
+            "subscription_id": "s1",
+            "artifact_digest_md": None,
+            "artifact_root": str(outline_root),
+        },
+        {
+            "job_id": "job-outline",
+            "source_url": "https://example.com/outline",
+            "source": "rss",
+            "content_type": "unexpected",
+            "title": "",
+            "video_uid": "",
+            "published_at": None,
+            "created_at": ts,
+            "sort_ts": ts,
+            "category": "misc",
+            "subscription_source_type": "",
+            "subscription_source_value": "",
+            "subscription_id": "s2",
+            "artifact_digest_md": None,
+            "artifact_root": str(outline_root),
+        },
+    ]
+
+    fake_db = _FakeDB(rows)
+    service = FeedService(db=fake_db)  # type: ignore[arg-type]
+    result = service.list_digest_feed(limit=0)
+
+    assert len(result["items"]) == 1
+    assert result["items"][0]["job_id"] == "job-outline"
+    assert result["items"][0]["artifact_type"] == "outline"
+    assert result["items"][0]["summary_md"] == "# No Summary\n\nOutline generated successfully."
+    assert result["items"][0]["content_type"] == "video"
+    assert fake_db.calls[0]["params"]["limit"] == 2
+
+
+def test_feed_service_resolve_summary_and_digest_io_edge_cases(tmp_path: Path, monkeypatch) -> None:
+    service = FeedService(db=None)  # type: ignore[arg-type]
+
+    digest_dir = tmp_path / "digest-dir"
+    digest_dir.mkdir(parents=True)
+    assert service._read_digest_file(str(digest_dir)) is None
+    assert service._read_digest_file("") is None
+    assert service._read_digest_file(str(tmp_path / "missing-digest.md")) is None
+
+    digest_file = tmp_path / "digest.md"
+    digest_file.write_text("payload", encoding="utf-8")
+
+    def _raise_oserror(self, encoding: str = "utf-8") -> str:  # pragma: no cover - behavior mock
+        raise OSError("read failure")
+
+    with monkeypatch.context() as m:
+        m.setattr(Path, "read_text", _raise_oserror)
+        assert service._read_digest_file(str(digest_file)) is None
+
+    outline_root = tmp_path / "outline-nondict"
+    outline_root.mkdir(parents=True)
+    (outline_root / "outline.json").write_text('["not-dict"]', encoding="utf-8")
+    assert service._read_outline_fallback(str(outline_root)) is None
+    assert service._read_outline_fallback(str(tmp_path / "missing-outline-root")) is None
+
+    outline_file_root = tmp_path / "outline-file"
+    outline_file_root.mkdir(parents=True)
+    (outline_file_root / "outline.json").mkdir(parents=True)
+    assert service._read_outline_fallback(str(outline_file_root)) is None
+
+    missing_summary, artifact_type = service._resolve_summary(digest_path=None, artifact_root=None)
+    assert (missing_summary, artifact_type) == (None, "outline")
+
+    assert service._normalize_content_type("article") == "article"
+    assert service._normalize_content_type(" anything ") == "video"
+    assert service._iso(" ") != " "
+    assert service._parse_cursor(" 2026-03-01T00:00:00Z __ job-1 ") == (
+        "2026-03-01T00:00:00Z",
+        "job-1",
+    )
+    assert isinstance(service._iso(None), str)

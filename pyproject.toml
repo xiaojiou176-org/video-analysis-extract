@@ -14,6 +14,7 @@ dependencies = [
   "pydantic>=2.11.7,<3",
   "sqlalchemy>=2.0.43,<3",
   "temporalio>=1.17.0,<2",
+  "trafilatura>=1.12.0,<2",
   "tzdata>=2025.2",
   "uvicorn>=0.35.0,<1",
 ]
@@ -40,6 +41,11 @@ markers = [
 ]
 reruns = 0
 reruns_delay = 0
+
+[tool.coverage.report]
+fail_under = 95
+precision = 2
+show_missing = true
 
 [tool.ruff]
 target-version = "py311"
@@ -103,6 +109,7 @@ paths_to_mutate = [
   "apps/worker/worker/pipeline/runner_policies.py",
   "apps/worker/worker/pipeline/types.py",
   "apps/worker/worker/pipeline/step_executor.py",
+  "apps/worker/worker/pipeline/steps/llm_computer_use.py",
   "apps/worker/worker/pipeline/steps/llm_step_gates.py",
   "apps/worker/worker/state/sqlite_store.py",
   "apps/api/app/services/ingest.py",
@@ -128,6 +135,8 @@ pytest_add_cli_args_test_selection = [
   "apps/worker/tests/test_runner_llm_and_status.py",
   "apps/worker/tests/test_runner_overrides.py",
   "apps/worker/tests/test_runner_multimodal.py",
+  "apps/worker/tests/test_llm_computer_use_step.py",
+  "apps/worker/tests/test_runner_policies_app_prefix.py",
   "apps/worker/tests/test_worker_step_branches.py",
   "apps/worker/tests/test_step_executor_cancellation.py",
   "apps/worker/tests/test_runner_fallbacks.py",

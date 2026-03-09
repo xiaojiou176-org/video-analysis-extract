@@ -5,6 +5,10 @@
 ## CI Tool Cache Governance
 
 - Repo 内允许：`.runtime-cache/` 仅用于日志、Junit/XML、coverage、诊断 JSON、artifact staging 等一次性运行产物。
+- 本地严格验收新增产物：
+  - `.runtime-cache/api-real-smoke-local.log`
+  - `.runtime-cache/e2e-live-smoke-result.json`
+  - `.runtime-cache/full-stack/` 下的运行时 PID/状态文件
 - Repo 内禁止：pre-commit 环境、uv/pip/npm 下载缓存、Playwright 浏览器二进制、其他可复用工具缓存。
 - Self-hosted CI 必须使用 `runner.temp` 作为工具缓存根目录，并通过统一变量收口：
   - `CI_CACHE_ROOT=${{ runner.temp }}/ci-cache`
@@ -149,6 +153,11 @@
 补充：
 
 - 该机制属于“重试状态恢复”，不改变本页已有 cache 路径/保留策略。
+
+## Full-stack / Smoke 运行时缓存边界（2026-03）
+
+- `scripts/smoke_full_stack.sh` 与 `scripts/e2e_live_smoke.sh` 产生的 `.runtime-cache/*` 文件属于一次性诊断产物，不应被当作长期缓存命中来源。
+- `scripts/api_real_smoke_local.sh` 创建的隔离 smoke 数据库会在退出时删除；它依赖 `.runtime-cache/api-real-smoke-local-state.sqlite3` 作为临时状态文件，不进入长期保留策略。
 
 
 <!-- doc-sync: api/worker reliability + auth guard update (2026-03-03) -->

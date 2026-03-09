@@ -23,7 +23,9 @@ class ComputerUseService:
     def __init__(self) -> None:
         settings = Settings.from_env()
         self._api_key = (settings.gemini_api_key or "").strip()
-        self._model = (settings.gemini_model or "gemini-3.1-pro-preview").strip()
+        self._model = (
+            settings.gemini_computer_use_model or "gemini-2.5-computer-use-preview-10-2025"
+        ).strip()
         self._thinking_level = (settings.gemini_thinking_level or "high").strip().upper()
 
     def run(
@@ -60,6 +62,13 @@ class ComputerUseService:
                 min_value=0,
                 max_value=3,
             )
+            config_kwargs: dict[str, Any] = {
+                "tools": [genai_types.Tool(computer_use=genai_types.ComputerUse())]
+            }
+            if "computer-use" not in self._model:
+                config_kwargs["thinking_config"] = genai_types.ThinkingConfig(
+                    thinking_level=self._thinking_level,
+                )
             response = self._generate_with_timeout_and_retry(
                 client=client,
                 model=self._model,
@@ -70,12 +79,7 @@ class ComputerUseService:
                         mime_type="image/png",
                     ),
                 ],
-                config=genai_types.GenerateContentConfig(
-                    tools=[genai_types.Tool(computer_use=genai_types.ComputerUse())],
-                    thinking_config=genai_types.ThinkingConfig(
-                        thinking_level=self._thinking_level,
-                    ),
-                ),
+                config=genai_types.GenerateContentConfig(**config_kwargs),
                 timeout_seconds=timeout_seconds,
                 max_retries=max_retries,
             )

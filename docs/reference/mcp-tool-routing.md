@@ -60,13 +60,14 @@
 
 ### `vd.ui_audit.read`
 
-- `action=get`: 读取 run 摘要
+- `action=get`: 读取 run 摘要（包含 `gemini_review.status/reason_code/provider_status/model`）
 - `action=list_findings`: 可带 `severity`
 - `action=get_artifact`: 必填 `key`，可带 `include_base64`
 - `action=autofix`: 可带 `mode`, `max_files`, `max_changed_lines`
 - 常见失败:
   - `run_id` 不存在 -> 404
   - `autofix` 超出限制 -> 4xx（请收紧 `max_files/max_changed_lines`）
+  - `action=get` 返回 `status=completed_with_gemini_failure` -> 说明基础证据已收集，但 Gemini 深审失败，不能视为深审通过
 
 ## I/O Example Snippets
 

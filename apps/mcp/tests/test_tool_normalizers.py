@@ -17,7 +17,7 @@ from apps.mcp.tools._common import (
     validate_base64_size,
 )
 from apps.mcp.tools.artifacts import _normalize_markdown_payload, register_artifact_tools
-from apps.mcp.tools.computer_use import register_computer_use_tools
+from apps.mcp.tools.computer_use import _normalize_action_item, register_computer_use_tools
 from apps.mcp.tools.health import register_health_tools
 from apps.mcp.tools.jobs import _normalize_job_payload, register_job_tools
 from apps.mcp.tools.notifications import (
@@ -28,7 +28,7 @@ from apps.mcp.tools.notifications import (
 from apps.mcp.tools.retrieval import register_retrieval_tools
 from apps.mcp.tools.subscriptions import register_subscription_tools
 from apps.mcp.tools.ui_audit import register_ui_audit_tools
-from apps.mcp.tools.workflows import register_workflow_tools
+from apps.mcp.tools.workflows import _normalize_workflow_payload, register_workflow_tools
 
 UUID_1 = "11111111-1111-1111-1111-111111111111"
 UUID_2 = "22222222-2222-2222-2222-222222222222"
@@ -589,10 +589,15 @@ def test_ui_audit_run_and_read_tools() -> None:
         if path == f"/api/v1/ui-audit/{run_id}/autofix":
             return {
                 "run_id": run_id,
-                "mode": "dry-run",
+                "mode": "apply",
                 "autofix_applied": False,
                 "summary": {"finding_count": 1, "high_or_worse_count": 1},
-                "guardrails": {"max_files": 2, "max_changed_lines": 80},
+                "guardrails": {
+                    "max_files": 2,
+                    "max_changed_lines": 80,
+                    "requested_mode": "apply",
+                    "effective_mode": "dry-run",
+                },
                 "suggested_actions": ["Fix high severity"],
             }
         raise AssertionError(path)
@@ -610,6 +615,8 @@ def test_ui_audit_run_and_read_tools() -> None:
     assert get_payload["run_id"] == run_id
     assert findings_payload["items"][0]["severity"] == "high"
     assert artifact_payload["exists"] is True
+    assert autofix_payload["mode"] == "dry-run"
+    assert "plan-only dry-run" in autofix_payload["guardrails"]["note"]
     assert autofix_payload["summary"]["high_or_worse_count"] == 1
 
 
@@ -823,3 +830,142 @@ def test_computer_use_rejects_invalid_blocked_actions_shape() -> None:
 
     assert invalid_blocked_actions["code"] == "INVALID_ARGUMENT"
     assert invalid_blocked_actions["details"]["field"] == "safety.blocked_actions"
+
+
+def test_workflow_payload_normalizer_rejects_invalid_boolean_and_parses_ranges() -> None:
+    invalid_payload, field, error = _normalize_workflow_payload(
+        "poll_feeds", {"run_once": "yes"}
+    )
+    assert invalid_payload is None
+    assert field == "run_once"
+    assert error is not None
+
+    poll_feeds, field, error = _normalize_workflow_payload("poll_feeds", {"max_new_videos": 10})
+    assert error is None and field is None
+    assert poll_feeds == {"max_new_videos": 10}
+
+    poll_feeds_with_run_once, field, error = _normalize_workflow_payload(
+        "poll_feeds", {"run_once": True, "max_new_videos": 5}
+    )
+    assert error is None and field is None
+    assert poll_feeds_with_run_once == {"run_once": True, "max_new_videos": 5}
+
+    daily_digest, field, error = _normalize_workflow_payload(
+        "daily_digest",
+        {"timezone_offset_minutes": -60, "local_hour": 9},
+    )
+    assert error is None and field is None
+    assert daily_digest == {"timezone_offset_minutes": -60, "local_hour": 9}
+
+    notification_retry, field, error = _normalize_workflow_payload(
+        "notification_retry",
+        {"interval_minutes": 30, "retry_batch_limit": 20},
+    )
+    assert error is None and field is None
+    assert notification_retry == {"interval_minutes": 30, "retry_batch_limit": 20}
+
+    cleanup, field, error = _normalize_workflow_payload(
+        "cleanup",
+        {
+            "interval_hours": 4,
+            "older_than_hours": 72,
+            "cache_older_than_hours": 24,
+            "cache_max_size_mb": 128,
+        },
+    )
+    assert error is None and field is None
+    assert cleanup == {
+        "interval_hours": 4,
+        "older_than_hours": 72,
+        "cache_older_than_hours": 24,
+        "cache_max_size_mb": 128,
+    }
+
+    provider_canary, field, error = _normalize_workflow_payload(
+        "provider_canary",
+        {"interval_hours": 6, "timeout_seconds": 120},
+    )
+    assert error is None and field is None
+    assert provider_canary == {"interval_hours": 6, "timeout_seconds": 120}
+
+
+def test_workflows_run_reports_invalid_payload_value_with_original_input() -> None:
+    mcp = _FakeMCP()
+    register_workflow_tools(mcp, lambda *_args, **_kwargs: {"ok": True})
+
+    payload = mcp.tools["vd.workflows.run"](
+        workflow="cleanup",
+        payload={"cache_max_size_mb": 0},
+    )
+
+    assert payload["code"] == "INVALID_ARGUMENT"
+    assert payload["details"]["field"] == "payload.cache_max_size_mb"
+    assert str(payload["details"]["value"]).startswith("<redacted type=int")
+
+
+def test_normalize_action_item_applies_defaults() -> None:
+    assert _normalize_action_item("bad-shape", default_step=3) == {
+        "step": 3,
+        "action": "observe",
+        "target": None,
+        "input_text": None,
+        "reasoning": None,
+    }
+    assert _normalize_action_item({"step": -1, "action": "   "}, default_step=2)["step"] == 2
+    assert _normalize_action_item({"step": -1, "action": "   "}, default_step=2)["action"] == "   "
+
+
+def test_computer_use_rejects_invalid_confirm_before_execute_type() -> None:
+    mcp = _FakeMCP()
+    register_computer_use_tools(mcp, lambda *_args, **_kwargs: {"ok": True})
+
+    payload = mcp.tools["vd.computer_use.run"](
+        instruction="click",
+        screenshot_base64="ZmFrZQ==",
+        safety={"confirm_before_execute": "true"},
+    )
+
+    assert payload["code"] == "INVALID_ARGUMENT"
+    assert payload["details"]["field"] == "safety.confirm_before_execute"
+
+
+def test_computer_use_rejects_blank_instruction() -> None:
+    mcp = _FakeMCP()
+    register_computer_use_tools(mcp, lambda *_args, **_kwargs: {"ok": True})
+
+    payload = mcp.tools["vd.computer_use.run"](
+        instruction="   ",
+        screenshot_base64="ZmFrZQ==",
+    )
+
+    assert payload["code"] == "INVALID_ARGUMENT"
+    assert payload["details"]["field"] == "instruction"
+
+
+def test_computer_use_includes_all_safety_fields_and_passes_upstream_errors() -> None:
+    mcp = _FakeMCP()
+    calls: list[dict[str, Any]] = []
+
+    def fake_api_call(method: str, path: str, **kwargs: Any) -> dict[str, Any]:
+        calls.append({"method": method, "path": path, "kwargs": kwargs})
+        return {"code": "UPSTREAM_HTTP_ERROR", "message": "downstream", "details": {"status_code": 502}}
+
+    register_computer_use_tools(mcp, fake_api_call)
+    payload = mcp.tools["vd.computer_use.run"](
+        instruction="click submit",
+        screenshot_base64="ZmFrZQ==",
+        safety={
+            "confirm_before_execute": True,
+            "blocked_actions": ["submit"],
+            "max_actions": 4,
+        },
+    )
+
+    assert payload["code"] == "UPSTREAM_HTTP_ERROR"
+    assert calls[0]["method"] == "POST"
+    assert calls[0]["path"] == "/api/v1/computer-use/run"
+    assert calls[0]["kwargs"]["json_body"]["safety"] == {
+        "confirm_before_execute": True,
+        "blocked_actions": ["submit"],
+        "max_actions": 4,
+    }

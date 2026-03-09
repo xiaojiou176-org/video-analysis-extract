@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from types import SimpleNamespace
 from typing import Any
 
+import pytest
 from sqlalchemy.exc import DBAPIError, IntegrityError
 
 from apps.api.app.repositories.jobs import JobsRepository
@@ -49,6 +50,8 @@ class _SessionStub(_DBStub):
         self.added: list[Any] = []
         self.commits = 0
         self.refreshed: list[Any] = []
+        self._stored: dict[Any, Any] = {}
+        self.scalar_result: Any = None
 
     def add(self, instance: Any) -> None:
         self.added.append(instance)
@@ -58,6 +61,12 @@ class _SessionStub(_DBStub):
 
     def refresh(self, instance: Any) -> None:
         self.refreshed.append(instance)
+
+    def get(self, _model: Any, key: Any) -> Any:
+        return self._stored.get(key)
+
+    def scalar(self, _stmt: Any) -> Any:
+        return self.scalar_result
 
 
 def _dbapi_error(message: str) -> DBAPIError:
@@ -148,6 +157,76 @@ def test_create_or_reuse_on_integrity_error_rolls_back_and_returns_existing() ->
     assert created is False
 
 
+def test_create_persists_refreshes_and_returns_job_instance() -> None:
+    db = _SessionStub()
+    repo = JobsRepository(db)  # type: ignore[arg-type]
+
+    created = repo.create(
+        video_id=uuid.uuid4(),
+        kind="video_digest_v1",
+        mode="full",
+        overrides_json={"lang": "zh-CN"},
+        status="queued",
+        idempotency_key="idem-create",
+        error_message="pending",
+    )
+
+    assert created.kind == "video_digest_v1"
+    assert created.mode == "full"
+    assert created.overrides_json == {"lang": "zh-CN"}
+    assert created.status == "queued"
+    assert created.idempotency_key == "idem-create"
+    assert created.error_message == "pending"
+    assert db.added == [created]
+    assert db.commits == 1
+    assert db.refreshed == [created]
+
+
+def test_create_or_reuse_force_creates_without_lookup() -> None:
+    repo = _CreateOrReuseRepo(_DBStub())
+    repo.created = _JobStub(status="queued")
+    repo.active = _JobStub(status="running")
+    repo.retryable = _JobStub(status="failed")
+
+    job, created = repo.create_or_reuse(
+        video_id=uuid.uuid4(),
+        kind="video_digest_v1",
+        mode="full",
+        overrides_json={},
+        idempotency_key="idem-force",
+        force=True,
+    )
+
+    assert job.status == "queued"
+    assert created is True
+
+
+def test_create_or_reuse_raises_when_integrity_error_has_no_existing_job() -> None:
+    repo = _CreateOrReuseRepo(_DBStub())
+    repo.raise_integrity = True
+
+    with pytest.raises(IntegrityError):
+        repo.create_or_reuse(
+            video_id=uuid.uuid4(),
+            kind="video_digest_v1",
+            mode="full",
+            overrides_json={},
+            idempotency_key="idem-missing",
+            force=False,
+        )
+
+
+def test_requeue_retryable_dispatch_failure_returns_none_when_job_not_found() -> None:
+    db = _SessionStub()
+    repo = JobsRepository(db)  # type: ignore[arg-type]
+
+    updated = repo.requeue_retryable_dispatch_failure(idempotency_key="idem-none")
+
+    assert updated is None
+    assert db.commits == 0
+    assert db.refreshed == []
+
+
 def test_get_pipeline_final_status_returns_none_when_column_missing() -> None:
     db = _ExecuteDBStub(exc=_dbapi_error('column "pipeline_final_status" does not exist'))
     repo = JobsRepository(db)  # type: ignore[arg-type]
@@ -155,6 +234,26 @@ def test_get_pipeline_final_status_returns_none_when_column_missing() -> None:
     result = repo.get_pipeline_final_status(job_id=uuid.uuid4())
 
     assert result is None
+    assert db.rollback_calls == 1
+
+
+def test_get_pipeline_final_status_returns_value_and_none_for_empty_rows() -> None:
+    value_db = _ExecuteDBStub(row=("degraded",))
+    none_db = _ExecuteDBStub(row=None)
+    empty_db = _ExecuteDBStub(row=("",))
+
+    assert JobsRepository(value_db).get_pipeline_final_status(job_id=uuid.uuid4()) == "degraded"  # type: ignore[arg-type]
+    assert JobsRepository(none_db).get_pipeline_final_status(job_id=uuid.uuid4()) is None  # type: ignore[arg-type]
+    assert JobsRepository(empty_db).get_pipeline_final_status(job_id=uuid.uuid4()) is None  # type: ignore[arg-type]
+
+
+def test_get_pipeline_final_status_reraises_non_column_errors() -> None:
+    db = _ExecuteDBStub(exc=_dbapi_error("connection reset by peer"))
+    repo = JobsRepository(db)  # type: ignore[arg-type]
+
+    with pytest.raises(DBAPIError):
+        repo.get_pipeline_final_status(job_id=uuid.uuid4())
+
     assert db.rollback_calls == 1
 
 
@@ -168,6 +267,26 @@ def test_get_artifact_digest_md_returns_none_when_column_missing() -> None:
     assert db.rollback_calls == 1
 
 
+def test_get_artifact_digest_md_returns_value_and_none_for_empty_rows() -> None:
+    value_db = _ExecuteDBStub(row=("# digest",))
+    none_db = _ExecuteDBStub(row=None)
+    empty_db = _ExecuteDBStub(row=("",))
+
+    assert JobsRepository(value_db).get_artifact_digest_md(job_id=uuid.uuid4()) == "# digest"  # type: ignore[arg-type]
+    assert JobsRepository(none_db).get_artifact_digest_md(job_id=uuid.uuid4()) is None  # type: ignore[arg-type]
+    assert JobsRepository(empty_db).get_artifact_digest_md(job_id=uuid.uuid4()) is None  # type: ignore[arg-type]
+
+
+def test_get_artifact_digest_md_reraises_non_column_errors() -> None:
+    db = _ExecuteDBStub(exc=_dbapi_error("read timeout"))
+    repo = JobsRepository(db)  # type: ignore[arg-type]
+
+    with pytest.raises(DBAPIError):
+        repo.get_artifact_digest_md(job_id=uuid.uuid4())
+
+    assert db.rollback_calls == 1
+
+
 def test_get_artifact_digest_md_by_video_url_returns_string_value() -> None:
     db = _ExecuteDBStub(row=("# digest",))
     repo = JobsRepository(db)  # type: ignore[arg-type]
@@ -177,6 +296,30 @@ def test_get_artifact_digest_md_by_video_url_returns_string_value() -> None:
     )
 
     assert result == "# digest"
+
+
+def test_get_artifact_digest_md_by_video_url_returns_none_for_missing_or_empty_rows() -> None:
+    none_db = _ExecuteDBStub(row=None)
+    empty_db = _ExecuteDBStub(row=("",))
+
+    assert (
+        JobsRepository(none_db).get_artifact_digest_md_by_video_url(video_url="https://example.com/none")
+        is None
+    )  # type: ignore[arg-type]
+    assert (
+        JobsRepository(empty_db).get_artifact_digest_md_by_video_url(video_url="https://example.com/empty")
+        is None
+    )  # type: ignore[arg-type]
+
+
+def test_get_artifact_digest_md_by_video_url_reraises_non_column_errors() -> None:
+    db = _ExecuteDBStub(exc=_dbapi_error("relation videos is locked"))
+    repo = JobsRepository(db)  # type: ignore[arg-type]
+
+    with pytest.raises(DBAPIError):
+        repo.get_artifact_digest_md_by_video_url(video_url="https://example.com/fail")
+
+    assert db.rollback_calls == 1
 
 
 def test_mark_dispatch_failed_sets_pipeline_final_status_failed() -> None:
@@ -203,6 +346,14 @@ def test_mark_dispatch_failed_sets_pipeline_final_status_failed() -> None:
     assert job.pipeline_final_status == "failed"
     assert db.commits == 1
     assert db.refreshed == [job]
+
+
+def test_mark_dispatch_failed_raises_when_job_is_missing() -> None:
+    repo = JobsRepository(_SessionStub())  # type: ignore[arg-type]
+    repo.get = lambda _job_id: None  # type: ignore[method-assign]
+
+    with pytest.raises(ValueError, match="job not found"):
+        repo.mark_dispatch_failed(job_id=uuid.uuid4(), error_message="missing")
 
 
 def test_requeue_retryable_dispatch_failure_resets_terminal_fields_but_preserves_llm_required() -> None:
@@ -233,3 +384,16 @@ def test_requeue_retryable_dispatch_failure_resets_terminal_fields_but_preserves
     assert job.llm_gate_passed is None
     assert db.commits == 1
     assert db.refreshed == [job]
+
+
+def test_get_lookup_methods_delegate_to_session_storage() -> None:
+    db = _SessionStub()
+    repo = JobsRepository(db)  # type: ignore[arg-type]
+    job_id = uuid.uuid4()
+    job = SimpleNamespace(id=job_id, idempotency_key="idem-lookup", status="running")
+    db._stored[job_id] = job
+    db.scalar_result = job
+
+    assert repo.get(job_id) is job
+    assert repo.get_by_idempotency_key("idem-lookup") is job
+    assert repo.get_active_by_idempotency_key("idem-lookup") is job

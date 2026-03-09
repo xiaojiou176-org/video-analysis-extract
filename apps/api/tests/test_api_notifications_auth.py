@@ -182,3 +182,188 @@ def test_notifications_route_contract_fields_are_owned_by_api(monkeypatch) -> No
         "subject": "API contract test",
         "body": "route contract assertion",
     }
+
+
+def test_notifications_get_config_normalizes_non_dict_category_rules(monkeypatch) -> None:
+    now = datetime.now(UTC)
+    monkeypatch.setattr(
+        notifications_router,
+        "get_notification_config",
+        lambda *_args, **_kwargs: SimpleNamespace(
+            enabled=True,
+            to_email="ops@example.com",
+            daily_digest_enabled=True,
+            daily_digest_hour_utc=8,
+            failure_alert_enabled=True,
+            category_rules="not-a-dict",
+            created_at=now,
+            updated_at=now,
+        ),
+    )
+
+    with _build_notifications_client() as client:
+        response = client.get("/api/v1/notifications/config")
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json()["category_rules"] == {}
+
+
+def test_notifications_test_send_maps_value_and_runtime_errors(monkeypatch) -> None:
+    monkeypatch.setenv("VD_API_KEY", "unit-test-token")
+
+    def _raise_value_error(*_args, **_kwargs):
+        raise ValueError("bad input")
+
+    monkeypatch.setattr(notifications_router, "send_test_email", _raise_value_error)
+    with _build_notifications_client() as client:
+        bad_request = client.post(
+            "/api/v1/notifications/test",
+            json={"to_email": "ops@example.com"},
+            headers={"X-API-Key": "unit-test-token"},
+        )
+
+    assert bad_request.status_code == status.HTTP_400_BAD_REQUEST
+
+    def _raise_runtime_error(*_args, **_kwargs):
+        raise RuntimeError("provider unavailable")
+
+    monkeypatch.setattr(notifications_router, "send_test_email", _raise_runtime_error)
+    with _build_notifications_client() as client:
+        service_unavailable = client.post(
+            "/api/v1/notifications/test",
+            json={"to_email": "ops@example.com"},
+            headers={"X-API-Key": "unit-test-token"},
+        )
+
+    assert service_unavailable.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
+
+
+def test_daily_report_send_uses_payload_digest_date_and_invalid_falls_back(monkeypatch) -> None:
+    now = datetime.now(UTC)
+    monkeypatch.setenv("VD_API_KEY", "unit-test-token")
+    responses = [
+        SimpleNamespace(
+            id="00000000-0000-4000-8000-000000000011",
+            status="sent",
+            payload_json={"digest_date": "2026-02-20"},
+            recipient_email="ops@example.com",
+            subject="Daily",
+            error_message=None,
+            sent_at=now,
+            created_at=now,
+        ),
+        SimpleNamespace(
+            id="00000000-0000-4000-8000-000000000012",
+            status="failed",
+            payload_json={"digest_date": "invalid-date"},
+            recipient_email="ops@example.com",
+            subject="Daily",
+            error_message="boom",
+            sent_at=None,
+            created_at=now,
+        ),
+    ]
+
+    def _fake_send_daily(*_args, **_kwargs):
+        return responses.pop(0)
+
+    monkeypatch.setattr(notifications_router, "send_daily_report_notification", _fake_send_daily)
+    with _build_notifications_client() as client:
+        from_payload = client.post(
+            "/api/v1/reports/daily/send",
+            json={},
+            headers={"Authorization": "Bearer unit-test-token"},
+        )
+        fallback_today = client.post(
+            "/api/v1/reports/daily/send",
+            json={},
+            headers={"Authorization": "Bearer unit-test-token"},
+        )
+
+    assert from_payload.status_code == status.HTTP_200_OK
+    assert from_payload.json()["date"] == "2026-02-20"
+    assert fallback_today.status_code == status.HTTP_200_OK
+    assert fallback_today.json()["date"] == date.today().isoformat()
+    assert fallback_today.json()["sent"] is False
+
+
+def test_daily_report_and_category_send_map_value_and_runtime_errors(monkeypatch) -> None:
+    monkeypatch.setenv("VD_API_KEY", "unit-test-token")
+
+    def _daily_value_error(*_args, **_kwargs):
+        raise ValueError("bad date")
+
+    monkeypatch.setattr(notifications_router, "send_daily_report_notification", _daily_value_error)
+    with _build_notifications_client() as client:
+        daily_bad = client.post(
+            "/api/v1/reports/daily/send",
+            json={},
+            headers={"X-API-Key": "unit-test-token"},
+        )
+    assert daily_bad.status_code == status.HTTP_400_BAD_REQUEST
+
+    def _daily_runtime_error(*_args, **_kwargs):
+        raise RuntimeError("provider down")
+
+    monkeypatch.setattr(notifications_router, "send_daily_report_notification", _daily_runtime_error)
+    with _build_notifications_client() as client:
+        daily_unavailable = client.post(
+            "/api/v1/reports/daily/send",
+            json={},
+            headers={"X-API-Key": "unit-test-token"},
+        )
+    assert daily_unavailable.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
+
+    def _category_value_error(*_args, **_kwargs):
+        raise ValueError("bad category")
+
+    monkeypatch.setattr(notifications_router, "send_category_digest", _category_value_error)
+    with _build_notifications_client() as client:
+        category_bad = client.post(
+            "/api/v1/notifications/category/send",
+            json={"category": "ops", "body": "digest"},
+            headers={"X-API-Key": "unit-test-token"},
+        )
+    assert category_bad.status_code == status.HTTP_400_BAD_REQUEST
+
+    def _category_runtime_error(*_args, **_kwargs):
+        raise RuntimeError("send failed")
+
+    monkeypatch.setattr(notifications_router, "send_category_digest", _category_runtime_error)
+    with _build_notifications_client() as client:
+        category_unavailable = client.post(
+            "/api/v1/notifications/category/send",
+            json={"category": "ops", "body": "digest"},
+            headers={"X-API-Key": "unit-test-token"},
+        )
+    assert category_unavailable.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
+
+
+def test_category_send_success_response_contract(monkeypatch) -> None:
+    now = datetime.now(UTC)
+    monkeypatch.setenv("VD_API_KEY", "unit-test-token")
+    monkeypatch.setattr(
+        notifications_router,
+        "send_category_digest",
+        lambda *_args, **_kwargs: SimpleNamespace(
+            id="00000000-0000-4000-8000-000000000013",
+            status="sent",
+            provider_message_id="provider-13",
+            error_message=None,
+            recipient_email="ops@example.com",
+            subject="Category digest",
+            sent_at=now,
+            created_at=now,
+        ),
+    )
+
+    with _build_notifications_client() as client:
+        response = client.post(
+            "/api/v1/notifications/category/send",
+            json={"category": "ops", "body": "digest"},
+            headers={"Authorization": "Bearer unit-test-token"},
+        )
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json()["status"] == "sent"
+    assert response.json()["recipient_email"] == "ops@example.com"

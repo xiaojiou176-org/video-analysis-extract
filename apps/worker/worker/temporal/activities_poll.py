@@ -114,6 +114,9 @@ async def run_poll_feeds_once(
 
                 platform = _resolve_platform(normalized=normalized, subscription=subscription)
                 video_uid = _resolve_video_uid(normalized=normalized)
+                content_type = str(normalized.get("content_type") or "video").strip().lower()
+                if content_type not in ("video", "article"):
+                    content_type = "video"
 
                 video = pg_store.upsert_video(
                     platform=platform,
@@ -121,6 +124,7 @@ async def run_poll_feeds_once(
                     source_url=normalized.get("link") or feed_url,
                     title=normalized.get("title") or None,
                     published_at=normalized.get("published_at"),
+                    content_type=content_type,
                 )
 
                 ingest_event, event_created = pg_store.create_ingest_event(
@@ -145,10 +149,19 @@ async def run_poll_feeds_once(
                 adapter_type = str(subscription.get("adapter_type") or "rsshub_route")
                 pipeline_mode: str | None = "text_only" if adapter_type == "rss_generic" else None
 
+                job_overrides: dict[str, Any] | None = None
+                if content_type == "article":
+                    job_overrides = {}
+                    if normalized.get("content"):
+                        job_overrides["rss_content"] = normalized["content"]
+                    if normalized.get("summary"):
+                        job_overrides["rss_summary"] = normalized["summary"]
+
                 job, created = pg_store.create_queued_job(
                     video_id=video["id"],
                     idempotency_key=normalized["idempotency_key"],
                     mode=pipeline_mode,
+                    overrides_json=job_overrides,
                 )
                 if not created:
                     job_duplicates += 1

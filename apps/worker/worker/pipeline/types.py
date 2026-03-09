@@ -13,6 +13,7 @@ PipelineStatus = Literal["succeeded", "degraded", "failed"]
 RetryCategory = Literal["transient", "rate_limit", "auth", "fatal"]
 PipelineMode = Literal["full", "text_only", "refresh_comments", "refresh_llm"]
 LLMInputMode = Literal["auto", "text", "video_text", "frames_text"]
+ContentType = Literal["video", "article"]
 
 PIPELINE_STEPS: list[str] = [
     "fetch_metadata",
@@ -34,6 +35,24 @@ STEP_VERSIONS["llm_outline"] = "v5"
 STEP_VERSIONS["llm_digest"] = "v6"
 STEP_VERSIONS["build_embeddings"] = "v1"
 STEP_VERSIONS["write_artifacts"] = "v2"
+
+ARTICLE_PIPELINE_STEPS: list[str] = [
+    "fetch_article_content",
+    "llm_outline",
+    "llm_digest",
+    "build_embeddings",
+    "write_artifacts",
+]
+
+ARTICLE_STEP_VERSIONS: dict[str, str] = {
+    "fetch_article_content": "v1",
+    "llm_outline": "v5",
+    "llm_digest": "v6",
+    "build_embeddings": "v1",
+    "write_artifacts": "v2",
+}
+
+STEP_VERSIONS["fetch_article_content"] = "v1"
 
 NON_DEGRADING_SKIP_REASONS = {
     "cache_hit",
@@ -69,6 +88,14 @@ PIPELINE_MODE_SKIP_UPDATES: dict[str, dict[str, Any]] = {
 }
 
 STEP_INPUT_KEYS: dict[str, tuple[str, ...]] = {
+    "fetch_article_content": (
+        "source_url",
+        "title",
+        "platform",
+        "video_uid",
+        "published_at",
+        "overrides",
+    ),
     "fetch_metadata": ("source_url", "title", "platform", "video_uid", "published_at"),
     "download_media": ("source_url",),
     "collect_subtitles": ("media_path", "download_mode", "source_url", "platform", "video_uid"),
@@ -117,6 +144,7 @@ STEP_INPUT_KEYS: dict[str, tuple[str, ...]] = {
 }
 
 STEP_SETTING_KEYS: dict[str, tuple[str, ...]] = {
+    "fetch_article_content": ("request_retry_attempts", "request_retry_backoff_seconds"),
     "fetch_metadata": ("pipeline_subprocess_timeout_seconds",),
     "download_media": ("pipeline_subprocess_timeout_seconds", "bilibili_downloader"),
     "collect_subtitles": (

@@ -192,7 +192,7 @@ def test_poll_workflow_call_includes_expected_id_and_task_queue(
     }
 
 
-def test_poll_returns_candidates_from_created_job_ids(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_poll_returns_immediately_after_workflow_start(monkeypatch: pytest.MonkeyPatch) -> None:
     job_id = uuid.uuid4()
     video_id = uuid.uuid4()
     client = _FakeTemporalClient(result_payload={"created_job_ids": [str(job_id)]})
@@ -213,12 +213,8 @@ def test_poll_returns_candidates_from_created_job_ids(monkeypatch: pytest.Monkey
         _run_poll(service, subscription_id=uuid.uuid4(), platform="youtube", max_new_videos=20)
     )
 
-    assert total == 1
-    assert len(candidates) == 1
-    assert candidates[0]["job_id"] == job_id
-    assert candidates[0]["video_id"] == video_id
-    assert candidates[0]["video_uid"] == "abc123"
-    assert candidates[0]["source_url"] == "https://www.youtube.com/watch?v=abc123"
+    assert total == 0
+    assert candidates == []
 
 
 def test_poll_maps_connect_timeout_to_api_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -254,7 +250,9 @@ def test_poll_maps_workflow_start_timeout_to_api_timeout(monkeypatch: pytest.Mon
     assert "temporal workflow start timed out after" in exc_info.value.detail
 
 
-def test_poll_maps_workflow_result_timeout_to_api_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_poll_returns_degraded_empty_result_when_workflow_result_times_out(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     client = _FakeTemporalClient(result_payload={"created_job_ids": [str(uuid.uuid4())]})
     _install_temporal_client(monkeypatch, client)
     monkeypatch.setattr(
@@ -264,11 +262,10 @@ def test_poll_maps_workflow_result_timeout_to_api_timeout(monkeypatch: pytest.Mo
 
     service = IngestService(_PollDB(exists=True))  # type: ignore[arg-type]
 
-    with pytest.raises(ApiTimeoutError) as exc_info:
-        asyncio.run(_run_poll(service))
+    total, candidates = asyncio.run(_run_poll(service))
 
-    assert exc_info.value.error_code == "TEMPORAL_WORKFLOW_RESULT_TIMEOUT"
-    assert "temporal workflow result timed out after" in exc_info.value.detail
+    assert total == 0
+    assert candidates == []
 
 
 def test_poll_raises_runtime_error_when_temporal_client_import_fails(

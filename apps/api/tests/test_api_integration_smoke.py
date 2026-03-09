@@ -27,6 +27,7 @@ class IntegrationHarness:
     job_model: type
     video_model: type
     subscription_model: type
+    temporal_client: object
 
 
 def _purge_api_modules() -> None:
@@ -163,6 +164,7 @@ def integration_api(
                 job_model=Job,
                 video_model=Video,
                 subscription_model=Subscription,
+                temporal_client=fake_temporal_client,
             )
     finally:
         _purge_api_modules()
@@ -282,6 +284,29 @@ def test_videos_process_force_creates_new_job_with_same_video(
     with integration_api.session_factory() as session:
         assert _count_rows(session, integration_api.video_model) == 1
         assert _count_rows(session, integration_api.job_model) == 2
+
+
+def test_ingest_poll_starts_workflow_with_real_postgres_harness(
+    integration_api: IntegrationHarness,
+) -> None:
+    response = integration_api.client.post(
+        "/api/v1/ingest/poll",
+        json={"platform": "youtube", "max_new_videos": 5},
+    )
+
+    assert response.status_code == 202
+    payload = response.json()
+    assert payload["enqueued"] == 0
+    assert payload["candidates"] == []
+
+    started = integration_api.temporal_client.started
+    assert len(started) == 1
+    assert started[0]["workflow"] == "PollFeedsWorkflow"
+    assert started[0]["job_id"] == {
+        "subscription_id": None,
+        "platform": "youtube",
+        "max_new_videos": 5,
+    }
 
 
 def test_subscriptions_upsert_is_idempotent_with_real_postgres(

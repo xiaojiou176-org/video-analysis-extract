@@ -46,6 +46,8 @@ touch logs/daily_digest.log logs/failure_alerts.log logs/ops/workflows.log
 启动约束补充：
 
 - `scripts/dev_api.sh` 在检测到 `uv` 时通过 `uv run python -m uvicorn ...` 启动 API，不依赖 `uvicorn` console entry；日志排障时若看到 `Failed to spawn: uvicorn`，优先检查是否绕开了该脚本入口。
+- `scripts/full_stack.sh` 与 `scripts/api_real_smoke_local.sh` 会把 API 启动日志落到 `logs/full-stack/api.log` 与 `.runtime-cache/api-real-smoke-local.log`；本地严格验收时优先检查这两个文件。
+- `scripts/api_real_smoke_local.sh` 会刻意让 pytest 子进程保持“未配置写 token”的 integration harness 语义，同时允许 `dev_api.sh` 为真实 HTTP smoke 进程注入本地 token；排查 401/403 时要区分“测试进程环境”和“API 进程环境”。
 
 ## Sensitive Data Rules
 

@@ -117,6 +117,7 @@ def normalize_entry(raw_entry: Mapping[str, Any], feed_url: str) -> dict[str, An
         published_at=published_at_text,
     )
     idempotency_key = make_job_idempotency_key(video_platform or "unknown", video_uid)
+    content_type = "video" if video_platform else "article"
 
     return {
         "phase": "phase2",
@@ -133,6 +134,7 @@ def normalize_entry(raw_entry: Mapping[str, Any], feed_url: str) -> dict[str, An
         "video_uid": video_uid,
         "entry_hash": entry_hash,
         "idempotency_key": idempotency_key,
+        "content_type": content_type,
         "normalized_at": _utc_now_iso(),
         "raw": dict(raw_entry),
     }

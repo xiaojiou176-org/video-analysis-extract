@@ -112,6 +112,7 @@ class PostgresBusinessStore:
         source_url: str,
         title: str | None,
         published_at: datetime | None,
+        content_type: str = "video",
     ) -> dict[str, Any]:
         with self._engine.begin() as conn:
             row = (
@@ -125,7 +126,8 @@ class PostgresBusinessStore:
                         title,
                         published_at,
                         first_seen_at,
-                        last_seen_at
+                        last_seen_at,
+                        content_type
                     )
                     VALUES (
                         :platform,
@@ -134,12 +136,14 @@ class PostgresBusinessStore:
                         :title,
                         :published_at,
                         NOW(),
-                        NOW()
+                        NOW(),
+                        :content_type
                     )
                     ON CONFLICT (platform, video_uid) DO UPDATE SET
                         source_url = EXCLUDED.source_url,
                         title = COALESCE(EXCLUDED.title, videos.title),
                         published_at = COALESCE(EXCLUDED.published_at, videos.published_at),
+                        content_type = EXCLUDED.content_type,
                         last_seen_at = NOW()
                     RETURNING
                         id::text AS id,
@@ -147,7 +151,8 @@ class PostgresBusinessStore:
                         video_uid,
                         source_url,
                         title,
-                        published_at
+                        published_at,
+                        content_type
                     """
                     ),
                     {
@@ -156,6 +161,7 @@ class PostgresBusinessStore:
                         "source_url": source_url,
                         "title": title,
                         "published_at": published_at,
+                        "content_type": content_type,
                     },
                 )
                 .mappings()
@@ -292,7 +298,9 @@ class PostgresBusinessStore:
         video_id: str,
         idempotency_key: str,
         mode: str | None = None,
+        overrides_json: dict[str, Any] | None = None,
     ) -> tuple[dict[str, Any], bool]:
+        overrides_raw = json.dumps(overrides_json) if overrides_json else None
         try:
             with self._engine.begin() as conn:
                 row = (
@@ -305,6 +313,7 @@ class PostgresBusinessStore:
                             status,
                             idempotency_key,
                             mode,
+                            overrides_json,
                             created_at,
                             updated_at
                         )
@@ -314,6 +323,7 @@ class PostgresBusinessStore:
                             'queued',
                             :idempotency_key,
                             :mode,
+                            CAST(:overrides_json AS JSONB),
                             NOW(),
                             NOW()
                         )
@@ -324,6 +334,7 @@ class PostgresBusinessStore:
                             "video_id": video_id,
                             "idempotency_key": idempotency_key,
                             "mode": mode,
+                            "overrides_json": overrides_raw,
                         },
                     )
                     .mappings()
@@ -455,7 +466,8 @@ class PostgresBusinessStore:
                         v.video_uid AS video_uid,
                         v.source_url AS source_url,
                         v.title AS title,
-                        v.published_at AS published_at
+                        v.published_at AS published_at,
+                        COALESCE(v.content_type, 'video') AS content_type
                     FROM jobs j
                     JOIN videos v ON v.id = j.video_id
                     WHERE j.id = CAST(:job_id AS UUID)

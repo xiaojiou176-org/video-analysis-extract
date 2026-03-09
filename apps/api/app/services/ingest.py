@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from ..config import settings
 from ..errors import ApiTimeoutError
-from ..models import Job, Subscription, Video
+from ..models import Subscription
 
 logger = logging.getLogger(__name__)
 
@@ -116,65 +116,14 @@ class IngestService:
                 error_code="TEMPORAL_WORKFLOW_START_TIMEOUT",
             ) from exc
 
-        try:
-            result = await asyncio.wait_for(
-                handle.result(),
-                timeout=settings.api_temporal_result_timeout_seconds,
-            )
-        except TimeoutError as exc:
-            logger.error(
-                "ingest_temporal_result_timeout",
-                extra={
-                    "trace_id": trace,
-                    "user": actor,
-                    "timeout_seconds": settings.api_temporal_result_timeout_seconds,
-                    "error": str(exc),
-                },
-            )
-            raise ApiTimeoutError(
-                detail=(
-                    "temporal workflow result timed out "
-                    f"after {settings.api_temporal_result_timeout_seconds:.1f}s"
-                ),
-                error_code="TEMPORAL_WORKFLOW_RESULT_TIMEOUT",
-            ) from exc
-
-        created_job_ids = [uuid.UUID(str(item)) for item in result.get("created_job_ids", [])]
-        if not created_job_ids:
-            logger.info(
-                "ingest_poll_completed",
-                extra={"trace_id": trace, "user": actor, "enqueued": 0, "candidates": 0},
-            )
-            return 0, []
-
-        stmt = (
-            select(Job, Video)
-            .join(Video, Video.id == Job.video_id)
-            .where(Job.id.in_(created_job_ids))
-            .order_by(Job.created_at.desc())
-            .limit(max_new_videos)
-        )
-        rows = self.db.execute(stmt).all()
-
-        candidates = [
-            {
-                "job_id": job.id,
-                "video_id": video.id,
-                "platform": video.platform,
-                "video_uid": video.video_uid,
-                "source_url": video.source_url,
-                "title": video.title,
-                "published_at": video.published_at,
-            }
-            for job, video in rows
-        ]
         logger.info(
             "ingest_poll_completed",
             extra={
                 "trace_id": trace,
                 "user": actor,
-                "enqueued": len(candidates),
-                "candidates": len(candidates),
+                "workflow_id": getattr(handle, "id", None),
+                "enqueued": 0,
+                "candidates": 0,
             },
         )
-        return len(candidates), candidates
+        return 0, []

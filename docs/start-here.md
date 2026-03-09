@@ -25,8 +25,8 @@
 
 ## 你需要先知道的 5 件事
 
-1. 流程口径：`ProcessJobWorkflow = 3 阶段 + 9-step pipeline`（详见 `docs/state-machine.md`）。
-2. 环境分层：采用 `core + profile overlay` 架构，`.env` 是 core，`env/profiles/reader.env` 是 reader profile 模板，脚本通过 `--profile local|gce` 控制行为。
+1. 流程口径：`ProcessJobWorkflow = 3 阶段 + content_type 分流 pipeline`（video 9-step / article 5-step，详见 `docs/state-machine.md`）。
+2. 环境分层：采用 `core + profile overlay` 架构，`.env` 是 core，`env/profiles/reader.env` 是 reader profile 模板，脚本通过 `--profile local|gce` 控制行为；reader overlay 只补缺失项，不覆盖当前进程里已显式注入的 reader 凭证。
 3. 密钥策略：只允许通过 `.env` 或进程环境注入；禁止依赖 shell 登录配置作为密钥来源。
 4. Python 命令统一使用 `python3`。
 5. AI/自动化执行必须在标准环境：优先 `.devcontainer/devcontainer.json`，基础设施使用 `infra/compose/*.compose.yml`。
@@ -41,6 +41,7 @@ python3 scripts/check_env_contract.py --strict
 说明：
 
 - `.env.example` 现在只保留最小可启动键和少量高频覆盖键，默认足够完成一次本地启动。
+- 标准初始化路径是 `.env.example -> .env`；`scripts/init_env_example.sh` 仅作为辅助模板生成工具，不是默认入口。
 - 脚本参数全集见 `docs/reference/env-script-overrides.md`（按需覆盖，不必全量写入 `.env`）。
 
 ## 一键验证（最短路径）
@@ -136,7 +137,6 @@ brew services start postgresql@16
 brew services start redis
 temporal server start-dev --ip 127.0.0.1 --port 7233
 
-./scripts/init_env_example.sh
 cp .env.example .env
 python3 scripts/check_env_contract.py --strict
 set -a; source .env; set +a
@@ -151,8 +151,8 @@ sqlite3 "$SQLITE_PATH" < infra/sql/sqlite_state_init.sql
 ./scripts/dev_worker.sh
 ./scripts/dev_mcp.sh
 
-curl -sS http://127.0.0.1:8000/healthz
-curl -sS -X POST http://127.0.0.1:8000/api/v1/ingest/poll -H 'Content-Type: application/json' -d '{"max_new_videos": 20}'
+curl -sS http://127.0.0.1:9000/healthz
+curl -sS -X POST http://127.0.0.1:9000/api/v1/ingest/poll -H 'Content-Type: application/json' -d '{"max_new_videos": 20}'
 ```
 
 ## 一键路径（推荐）
@@ -160,23 +160,40 @@ curl -sS -X POST http://127.0.0.1:8000/api/v1/ingest/poll -H 'Content-Type: appl
 ```bash
 ./scripts/bootstrap_full_stack.sh
 ./scripts/full_stack.sh up
-./scripts/smoke_full_stack.sh
+./scripts/smoke_full_stack.sh --offline-fallback 0
 ```
 
 默认行为：
 
 - `bootstrap_full_stack.sh` 会拉起 core services + Miniflux + Nextflux。
+- `bootstrap_full_stack.sh` 除首次 `.env` 不存在时复制模板外，不再持久化改写 `.env`；端口冲突与回退等运行时决策会写入 `.runtime-cache/full-stack/resolved.env`，仅对当前运行生效。
 - `core-services.compose.yml` 使用 `pgvector/pgvector:pg16` 镜像（支持向量检索扩展），`redis/temporal` 端口与 Postgres `DB/User` 已收口为固定默认（`6379` / `7233` / `video_analysis` / `postgres`）。
 - `miniflux-nextflux.compose.yml` 的 Miniflux 端口与 `DB/User/DB_NAME` 已收口为固定默认（`8080` / `miniflux` / `miniflux`）。
-- `full_stack.sh up` 会等待 API health(`GET /healthz`) 与 Web 端口可用；后台模式会调用 `./scripts/dev_api.sh --no-reload` 以避免 PID 漂移误判。
+- 本地路由真相源是 `API_PORT/WEB_PORT`；`VD_API_BASE_URL` 与 `NEXT_PUBLIC_API_BASE_URL` 属于派生目标地址。
+- `full_stack.sh up` 会按 `API health -> Web -> Worker` 顺序启动；Worker 启动前会先做 Temporal preflight（`TEMPORAL_TARGET_HOST`，默认 `localhost:7233`），不通时直接 fail-fast。
+- `scripts/dev_mcp.sh` 为交互式 stdio 入口，不作为 `full_stack.sh` 的后台守护进程管理；需要 MCP 本地调试时单独开一个终端运行。
 - `scripts/dev_api.sh` 在检测到 `uv` 时会调用 `uv run python -m uvicorn ...`，避免某些 self-hosted/隔离环境缺少 `uvicorn` console entry 时启动失败。
-- `smoke_full_stack.sh` 会执行本地联调烟测并覆盖 reader 栈检查。
+- `smoke_full_stack.sh` 会执行本地联调烟测并覆盖 reader 栈检查；默认 `--offline-fallback 0`，只有显式传 `--offline-fallback 1` 且命中 `.runtime-cache/full-stack/offline-fallback.flag` 才会降级跳过 reader checks。
+- `smoke_full_stack.sh` 不是 `api-real-smoke` 替代；后端真实 Postgres integration smoke 必须单独执行 `scripts/api_real_smoke_local.sh`。
+- `scripts/api_real_smoke_local.sh` 现在会先做本机 IPv4 loopback 预检；若命中 `failure_kind=host_loopback_ipv4_exhausted`（常见于当前机器本地 127.0.0.1 临时端口池被大量 MCP/Codex 连接占满），脚本会直接 fail-fast，而不是继续启动 API/worker/Temporal 后才深处报错。
 
 边界说明：
 
 - 这里的一键 smoke 指本地联调烟测，不等同于 CI 的 live-smoke。
+- 本地测试口径必须区分：sqlite 口径用于默认快速回归；真实 Postgres 口径用于 integration smoke 的最终验收。
 - CI `live-smoke` 仅在 `main` push / nightly schedule 强制执行，且要求外部 provider secrets 完整（详见 `docs/testing.md`）。
 - PR 阶段仅有条件触发真实 LLM 烟测（`pr-llm-real-smoke`）；`web-e2e` 在 CI 主路径默认走 real API，mock API 仅用于本地调试。
+
+标准严格验收（推荐顺序）：
+
+```bash
+./scripts/full_stack.sh up
+./scripts/api_real_smoke_local.sh
+./scripts/smoke_full_stack.sh --offline-fallback 0
+./scripts/quality_gate.sh --mode pre-push --strict-full-run 1 --profile ci --profile live-smoke --ci-dedupe 0
+```
+
+门禁口径补充：总覆盖率硬门禁 `>=95%`，Web `lines/functions/branches` 必须同时满足 `global >=95%` 且 `core >=95%`；`strict-full-run=1` 还会强制执行 mutation `score>=0.64 / effective_ratio>=0.27 / no_tests_ratio<=0.72`，并禁止 `ci-dedupe` 与 `skip-mutation`。此外，`pre-push` 在判定为后端改动时会默认执行 `api_real_smoke_local.sh`（真实 Postgres + Temporal + worker）。
 
 可选阅读栈（Miniflux + Nextflux）：
 

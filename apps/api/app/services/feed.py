@@ -20,6 +20,7 @@ class FeedService:
         *,
         source: str | None = None,
         category: str | None = None,
+        subscription_id: str | None = None,
         limit: int = 20,
         cursor: str | None = None,
         since: datetime | None = None,
@@ -31,6 +32,9 @@ class FeedService:
             "source": source,
             "category": category.strip().lower()
             if isinstance(category, str) and category.strip()
+            else None,
+            "subscription_id": subscription_id.strip()
+            if isinstance(subscription_id, str) and subscription_id.strip()
             else None,
             "since": since,
             "cursor_ts": cursor_ts,
@@ -45,6 +49,7 @@ class FeedService:
                         CAST(j.id AS TEXT) AS job_id,
                         v.source_url,
                         v.platform AS source,
+                        COALESCE(v.content_type, 'video') AS content_type,
                         v.title,
                         v.video_uid,
                         v.published_at,
@@ -83,6 +88,17 @@ class FeedService:
                             ),
                             ''
                         ) AS subscription_source_value,
+                        COALESCE(
+                            (
+                                SELECT CAST(s.id AS TEXT)
+                                FROM ingest_events ie
+                                JOIN subscriptions s ON s.id = ie.subscription_id
+                                WHERE ie.video_id = v.id
+                                ORDER BY ie.created_at DESC
+                                LIMIT 1
+                            ),
+                            ''
+                        ) AS subscription_id,
                         j.artifact_digest_md,
                         j.artifact_root
                     FROM jobs j
@@ -95,6 +111,10 @@ class FeedService:
                 SELECT *
                 FROM base
                 WHERE (CAST(:category AS TEXT) IS NULL OR base.category = CAST(:category AS TEXT))
+                  AND (
+                    CAST(:subscription_id AS TEXT) IS NULL
+                    OR base.subscription_id = CAST(:subscription_id AS TEXT)
+                  )
                   AND (
                     CAST(:cursor_ts AS TIMESTAMPTZ) IS NULL
                     OR base.sort_ts < CAST(:cursor_ts AS TIMESTAMPTZ)
@@ -127,6 +147,7 @@ class FeedService:
             published_at = row.get("published_at") or row.get("sort_ts") or row.get("created_at")
             sort_ts = row.get("sort_ts") or row.get("created_at")
             source_platform = str(row.get("source") or "")
+            content_type = self._normalize_content_type(row.get("content_type"))
             source_type = str(row.get("subscription_source_type") or "")
             source_value = str(row.get("subscription_source_value") or "")
             items.append(
@@ -145,6 +166,7 @@ class FeedService:
                     "published_at": self._iso(published_at),
                     "summary_md": summary_md,
                     "artifact_type": artifact_type,
+                    "content_type": content_type,
                     "_cursor_sort_ts": self._iso(sort_ts),
                 }
             )
@@ -243,3 +265,7 @@ class FeedService:
         if not ts or not job_id:
             return None, None
         return ts, job_id
+
+    def _normalize_content_type(self, value: Any) -> str:
+        normalized = str(value or "").strip().lower()
+        return "article" if normalized == "article" else "video"

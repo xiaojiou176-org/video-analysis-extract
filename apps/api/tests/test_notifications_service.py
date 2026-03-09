@@ -478,3 +478,99 @@ def test_evaluate_category_rule_weekly_and_unsupported() -> None:
     assert notifications._evaluate_category_rule(
         config=config_unknown, category="ops", now_utc=now, priority=None
     ) == ("unsupported cadence: monthly")
+
+
+def test_get_and_update_notification_config_cover_default_and_update_paths() -> None:
+    class _FakeDB:
+        def __init__(self) -> None:
+            self.scalar_value = None
+            self.added: list[object] = []
+            self.commits = 0
+            self.refreshed: list[object] = []
+
+        def scalar(self, _stmt):
+            return self.scalar_value
+
+        def add(self, item):
+            self.added.append(item)
+            self.scalar_value = item
+
+        def commit(self):
+            self.commits += 1
+
+        def rollback(self):
+            return None
+
+        def refresh(self, item):
+            self.refreshed.append(item)
+
+    db = _FakeDB()
+    config = notifications.get_notification_config(db)  # type: ignore[arg-type]
+    assert config.singleton_key == 1
+    assert db.added[-1] is config
+
+    updated = notifications.update_notification_config(  # type: ignore[arg-type]
+        db,
+        enabled=False,
+        to_email="  ops@example.com  ",
+        daily_digest_enabled=True,
+        daily_digest_hour_utc=6,
+        failure_alert_enabled=False,
+        category_rules={"tech": {"enabled": True}},
+    )
+    assert updated.enabled is False
+    assert updated.to_email == "ops@example.com"
+    assert updated.daily_digest_hour_utc == 6
+    assert updated.category_rules == {"tech": {"enabled": True}}
+
+
+def test_notification_helpers_cover_normalization_and_skip_reasons(monkeypatch) -> None:
+    config = _config_with_rules(
+        {
+            "category_rules": {"tech": {"enabled": False}},
+            "default_rule": {"cadence": "hourly", "interval_hours": "3"},
+        }
+    )
+    assert notifications._normalize_email("  a@example.com ") == "a@example.com"
+    assert notifications._normalize_email(" ") is None
+    assert notifications._normalize_dispatch_key(" key ") == "key"
+    assert notifications._normalize_dispatch_key("") is None
+    assert notifications._coerce_int("4") == 4
+    assert notifications._coerce_int(3.5) == 3
+    assert notifications._coerce_int("bad", default=9) == 9
+    assert notifications._resolve_recipient_email(config, " override@example.com ") == "override@example.com"
+    assert notifications._resolve_recipient_email(config, None) == "demo@example.com"
+    assert notifications._extract_notification_rules(config, "other") == {"cadence": "hourly", "interval_hours": "3"}
+    assert (
+        notifications._evaluate_category_rule(
+            config=config,
+            category="tech",
+            now_utc=datetime(2026, 3, 8, 9, tzinfo=UTC),
+            priority=5,
+        )
+        == "category rule disabled: tech"
+    )
+
+    captured: dict[str, object] = {}
+
+    def fake_dispatch(db, **kwargs):
+        del db
+        captured.update(kwargs)
+        return SimpleNamespace(status="skipped", recipient_email=kwargs["recipient_email"])
+
+    disabled_config = SimpleNamespace(
+        enabled=False,
+        to_email="ops@example.com",
+        daily_digest_enabled=False,
+        failure_alert_enabled=False,
+        category_rules={},
+    )
+    monkeypatch.setattr(notifications, "get_notification_config", lambda _db: disabled_config)
+    monkeypatch.setattr(notifications, "_dispatch_email", fake_dispatch)
+
+    notifications.send_failure_alert(None, title="Job failed", details="boom")  # type: ignore[arg-type]
+    assert captured["skip_reason"] == "notification config is disabled"
+
+    notifications.send_video_digest(None, job_id=uuid.uuid4(), digest_markdown="# hi")  # type: ignore[arg-type]
+    assert captured["kind"] == "video_digest"
+    assert captured["skip_reason"] == "notification config is disabled"

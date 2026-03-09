@@ -28,7 +28,11 @@
 
 - `preflight-fast` + `preflight-heavy`：预检门禁（env contract、schema parity、provider residual、worker line limits、structured log guard、e2e strictness guard、mutation scope guard、mutation test selection guard）。
 - `db-migration-smoke` + `python-tests` + `api-real-smoke` + `backend-lint` + `frontend-lint` + `web-test-build` + `web-e2e`：并行执行的主链路测试集合。
+- `web-test-build` 现在在 PR/push/schedule 都默认执行（只要 `preflight-fast` 与 `changes` 成功），避免 path-filter 误判导致关键 Web gate 被跳过。
+- `web-test-build` 会追加阻断式 `Gemini UI/UX audit`，并上传 `.runtime-cache/ui-audit/gemini-ui-ux-audit-*.{json,log}` 作为审查工件；严格通过条件为 `status=passed`、`reason_code=ok`、`successful_batches==batch_count` 且 `model_attempts>0`。
+- 当 Gemini 返回不可解析格式时，脚本会把该批次记为结构化阻断项并继续后续批次；报告中可通过 `reason_code=batch_failures_detected`、`failed_batch_count`、`failed_batches` 精确定位失败批次证据。
 - `web-e2e`：CI 主路径使用真实 API（real API）执行完整端到端验证；`mock` 仅允许本地调试，不允许进入 CI gate。
+- `web-e2e` 主路径不再忽略 `test_subscriptions.py`，订阅链路与 dashboard/feed/jobs/settings 同属主线回归范围。
 - `web-e2e` real 链路包含 Temporal + API + worker 后台进程，`ingest/poll` 成功路径要求经过 worker 消费。
 - `web-e2e` 作业结束会执行 worker 进程清理，并在 `always()` 分支上传 worker 日志 artifact 供排障。
 - `live-smoke`：仅 `main` / `release` / nightly 强制执行，且不得 `skip` / `skipped`；PR 由 `pr-llm-real-smoke` 承担真实 LLM 烟测。
@@ -91,15 +95,17 @@ scripts/e2e_live_smoke.sh \
   --diagnostics-json ".runtime-cache/e2e-live-smoke-result.json"
 ```
 
-- D2 mutation 硬门禁阈值 `0.62`（并新增结构质量约束）：
+说明：`scripts/quality_gate.sh` 的 live-smoke profile gate 会校验 `scripts/e2e_live_smoke.sh` 默认值，其中 `LIVE_SMOKE_REQUIRE_SECRETS` 必须保持为 `1`（与 D1 强制 secrets 口径一致）。
+
+- D2 mutation 硬门禁阈值 `0.64`（并新增结构质量约束）：
 
 ```bash
 ./scripts/quality_gate.sh \
   --mode pre-push \
   --heartbeat-seconds 20 \
-  --mutation-min-score 0.62 \
-  --mutation-min-effective-ratio 0.25 \
-  --mutation-max-no-tests-ratio 0.75 \
+  --mutation-min-score 0.64 \
+  --mutation-min-effective-ratio 0.27 \
+  --mutation-max-no-tests-ratio 0.72 \
   --profile ci \
   --profile live-smoke \
   --ci-dedupe 0
@@ -107,18 +113,36 @@ scripts/e2e_live_smoke.sh \
 
 说明：上面是本地 pre-push 口径；远端 `.github/workflows/ci.yml` 的 `quality-gate-pre-push` 为避免重复重型检查，使用 `--ci-dedupe 1 --skip-mutation 1`，mutation 由独立 job 执行。
 
-- D3 Web 覆盖硬门禁 `global >=85` 且 `core >=95`：
+- D3 Web 覆盖硬门禁 `global >=95` 且 `core >=95`，并且必须同时满足 `lines/functions/branches` 三个指标：
 
 ```bash
-npm --prefix apps/web run test -- --coverage
+npm --prefix apps/web run test:coverage
 python3 scripts/check_web_coverage_threshold.py \
   --summary-path apps/web/coverage/coverage-summary.json \
-  --global-threshold 85 \
-  --core-threshold 95
+  --global-threshold 95 \
+  --core-threshold 95 \
+  --metric lines \
+  --metric functions \
+  --metric branches
 ```
 
 - D4 集成 smoke 禁止 skip：PR 为 `api-real-smoke` / `web-e2e`，main/release/nightly 额外包含 `live-smoke`。
 - D5 E2E CI 主路径必须全量 real API；`mock API` 仅用于本地 debug，不参与 CI 判定。
+
+本地验收口径同步（与 CI 对齐）：
+
+- 默认快速回归仍使用 sqlite 口径；但当 `quality_gate` 判定存在后端改动时，`pre-push` 会强制执行 `scripts/api_real_smoke_local.sh`（真实 Postgres + Temporal + worker）。
+- 本地真实 Postgres integration smoke 的真相源是 `./scripts/api_real_smoke_local.sh`。
+- `scripts/api_real_smoke_local.sh` 默认使用 `127.0.0.1:18080`；若默认端口已被占用且未显式传 `--api-port`，脚本会自动回退到下一个可用端口并记录诊断日志。
+- `scripts/api_real_smoke_local.sh` 会在 cleanup workflow closure probe 前临时拉起一个本地 worker，并在脚本退出时自动回收，因此不再要求调用方先手动启动 worker。
+- `scripts/api_real_smoke_local.sh` 现在包含本机 IPv4 loopback preflight；若主机先天无法建立 `127.0.0.1` 自连接，会直接输出 `failure_kind=host_loopback_ipv4_exhausted` 并 fail-fast，这属于环境级阻塞，不应误判为 API/worker 业务回归。
+- 当执行 `./scripts/quality_gate.sh --mode pre-push --strict-full-run 1 ...` 时，必须额外跑本地真实 Postgres smoke。
+- `strict-full-run=1` 会强制关闭 `--ci-dedupe` 且禁止 `--skip-mutation`，确保本地执行真实全量门禁。
+- `scripts/smoke_full_stack.sh` 负责本地联调与 live smoke 相关检查，不是 `api-real-smoke` 的替代品。
+- `UI Audit` 结果现会落盘到 `UI_AUDIT_RUN_STORE_DIR`（默认 `.runtime-cache/ui-audit-runs/`），避免 API 重启后审查记录丢失。
+- `POST /api/v1/ui-audit/run` 的响应会携带 `gemini_review` 元信息；若返回 `status=completed_with_gemini_failure`，表示证据采集完成但 Gemini 深审失败，不能当作 UI 深审通过。
+- UI Audit 高级运行时调优（`UI_AUDIT_MODEL_TIMEOUT_SECONDS` / `UI_AUDIT_MODEL_MAX_RETRIES` 与 `GEMINI_UI_UX_AUDIT_MODEL` 等）当前仅作为运行时可选覆盖，不属于 `.env.example` 的 strict contract 白名单。
+- `POST /api/v1/ui-audit/{run_id}/autofix` 当前只会返回“持久化 dry-run 计划”；即使请求 `mode=apply`，响应中的 `mode` 也会明确回退到 `dry-run`，并在 `guardrails.requested_mode/effective_mode` 里说明。
 
 ## 测试类型与依赖边界（避免误解）
 
@@ -164,15 +188,20 @@ CI `live-smoke` 必需 secrets（main/release/nightly）：
 Live 诊断与执行策略（本地/CI 一致）：
 
 - 环境变量优先级：先读仓库 `.env`，缺失项仅使用当前 shell 环境变量。
+- reader 相关 smoke（`smoke_full_stack.sh` / `run_ai_feed_sync.sh`）只会从 `env/profiles/reader.env` 补齐缺失的 `MINIFLUX_*` / `NEXTFLUX_*` 变量，不会覆盖当前 shell 已显式注入的 reader 凭证。
 - Batch B 契约口径：`e2e_live_smoke.sh` 与 `smoke_llm_real_local.sh` 的运行参数改为 CLI 优先；legacy env 仅兼容，不再建议在 `.env` 持久化。
 - `YOUTUBE_API_KEY` 失效修复：`e2e_live_smoke.sh` 会按 `.env` → 当前 shell 环境变量自动探测可用 key，并在修复成功后回写 `.env`（日志仅展示脱敏 key 片段）。
 - 若所有来源都无效：脚本直接失败，并输出“需要用户提供有效key”。
+- `scripts/smoke_computer_use_local.sh` 默认严格判定：只有 `status=200` 且响应字段完整才算 `passed`；遇到 provider 未开通能力会失败（不是隐式 skip）。
+- 若确需允许 provider 能力未开通时的跳过，必须显式传 `--allow-unsupported-skip=1`，并在日志中出现 `result=skipped`。
 - 失败分类：诊断 JSON 必须携带 `failure_kind`，取值为 `code_logic_error` 或 `network_or_environment_timeout`。
 - `--offline-fallback` 口径（去除假通过）：
-  - `scripts/smoke_full_stack.sh` 默认 `--offline-fallback 1`。
-  - 标准 `local` / `ci` / `live-smoke` profile 的执行建议显式传 `--offline-fallback 0`，保持 fail-fast（核心服务或 reader 栈异常立即失败）。
+  - `scripts/smoke_full_stack.sh` 默认 `--offline-fallback 0`（fail-fast）。
+  - `scripts/bootstrap_full_stack.sh` 默认 `--offline-fallback 1`；core/reader 启动失败时会写入 `.runtime-cache/full-stack/offline-fallback.flag`。
+  - 标准 `local` / `ci` / `live-smoke` profile 的执行建议显式传 `--offline-fallback 0`，保持口径固定（核心服务或 reader 栈异常立即失败）。
   - 当显式启用 `--offline-fallback 1` 且命中 `.runtime-cache/full-stack/offline-fallback.flag` 时，`smoke_full_stack.sh` 会跳过 reader checks 并输出 degraded 信息。
   - 降级路径不改变 `e2e_live_smoke` 的失败分类枚举；`failure_kind` 仍仅使用上述两类值。
+  - `smoke_full_stack.sh` 是本地联调 smoke，不是 `api-real-smoke` 的替代品。
 - 长任务可观测：live 脚本输出 heartbeat 与 phase 进度日志（`phase=short_tests` / `phase=long_tests`）。
 - 顺序规则：先 short tests 再 long tests，再执行 `phase=teardown`（仅做安全清理，不做破坏性操作）。
 - 写操作约束：live smoke 仅执行可重复验证写入；诊断 JSON 必须包含 `write_operations[].idempotency_key`、`write_operations[].cleanup_action`、`teardown.steps[]`、`youtube_key_resolution[]`。
@@ -216,6 +245,20 @@ done
 scripts/smoke_llm_real_local.sh --api-base-url "http://127.0.0.1:18081"
 ```
 
+3. 复现本地真实 Postgres integration smoke（对齐 CI `api-real-smoke`）：
+
+```bash
+export DATABASE_URL='postgresql+psycopg://postgres:postgres@127.0.0.1:5432/video_analysis'
+export API_INTEGRATION_SMOKE_STRICT='1'
+./scripts/api_real_smoke_local.sh
+```
+
+说明：
+
+- 这条命令会基于当前 `DATABASE_URL` 指向的 Postgres 实例创建隔离 smoke 数据库，补跑 `infra/migrations/*.sql`、真实启动本地 API，并执行 `apps/api/tests/test_api_integration_smoke.py`。
+- 默认 sqlite 总回归里的 integration smoke `xfail` 只表示“当前是快速回归口径”，不表示真实 Postgres 路径坏掉。
+- 标准严格验收固定链路：`./scripts/full_stack.sh up` → `./scripts/api_real_smoke_local.sh` → `./scripts/smoke_full_stack.sh --offline-fallback 0` → `./scripts/quality_gate.sh --mode pre-push --strict-full-run 1 --profile ci --profile live-smoke --ci-dedupe 0`。
+
 ## Full-stack 本地自测（稳定性）
 
 ```bash
@@ -234,7 +277,7 @@ scripts/smoke_llm_real_local.sh --api-base-url "http://127.0.0.1:18081"
 
 | 触发源 | 必跑项 | 可跳过项 | 强制门禁 |
 |---|---|---|---|
-| `pull_request` | `preflight-*`、`db-migration-smoke`、`python-tests`、`api-real-smoke`、`pr-llm-real-smoke`、`backend-lint`、`frontend-lint`、`web-test-build`、`web-e2e(real API)`、`aggregate-gate`、`ci-final-gate` | `live-smoke`（仅 main/release/nightly） | 集成 smoke（`api-real-smoke` / `web-e2e`）禁止 `skip` / `skipped`，必须 `success` |
+| `pull_request` | `preflight-*`、按变更触发的 `db-migration-smoke`、`python-tests`、`api-real-smoke`、`pr-llm-real-smoke`、`backend-lint`、`frontend-lint`、`web-test-build`、`web-e2e(real API)`、`quality-gate-pre-push`、`aggregate-gate`、`ci-final-gate` | `live-smoke`（仅 main/release/nightly） | 集成 smoke（`api-real-smoke` / `web-e2e`）禁止 `skip` / `skipped`，必须 `success` |
 | `push` 到 `main`/`release` | `pull_request` 全部必跑项 + `profile-governance` + `quality-gate-pre-push` + `external-playwright-smoke` | 无 | `aggregate-gate` 与 `ci-final-gate` 全链路强制 `success` |
 | `schedule` nightly | `main/release` 全部必跑项 + `nightly-flaky-*` | 无 | `live-smoke`、`nightly-flaky-*`、集成 smoke 全部必须 `success` |
 
@@ -256,6 +299,23 @@ python3 scripts/check_test_assertions.py
 
 ```bash
 ./scripts/quality_gate.sh
+```
+
+### 0.1.A) 本地后端验收分层（必须区分）
+
+- 默认快速回归（sqlite）：用于日常本地回归与速度优先场景。
+- 真实集成验收（Postgres）：用于对齐 CI `api-real-smoke`，避免“sqlite 下 xfail 但真实环境已通过”的歧义。
+- `API_INTEGRATION_SMOKE_STRICT` 语义：
+  - `unset/0`：环境不满足时允许 integration smoke 按约定 `xfail`（默认本地快速回归模式）。
+  - `1`：环境不满足或测试失败时直接失败（严格本地验收模式）。
+
+标准严格验收命令（无歧义口径）：
+
+```bash
+./scripts/full_stack.sh up
+./scripts/api_real_smoke_local.sh
+./scripts/smoke_full_stack.sh --offline-fallback 0
+./scripts/quality_gate.sh --mode pre-push --strict-full-run 1 --profile ci --profile live-smoke --ci-dedupe 0
 ```
 
 ### 0.1.1) 一键最终门禁集成验收（profile -> pre-commit -> pre-push）
@@ -280,9 +340,13 @@ bash scripts/env/final_governance_check.sh --skip-prepush
 - Secrets 泄漏扫描必须通过（`sk-*` / `ghp_*` / `AKIA*` / 私钥头模式）。
 - 空洞日志文案扫描必须通过（禁止 `Something went wrong` / `unexpected error` / `error occurred` / `unknown error`）。
 - 文档漂移门禁强制执行（staged/push）。
-- 覆盖率阈值：总覆盖率 `>=85%`，核心模块覆盖率 `>=95%`（worker pipeline + api 核心 router/service）。
-- Web 覆盖率硬门禁：`global >=85%` 且 `core >=95%`（默认读取 `apps/web/coverage/coverage-summary.json`）。
-- 变异测试门禁强制执行（Python 核心模块）：CI/Hook 执行口径为 mutation score `>=0.62`，并要求 `effective_ratio>=0.25`、`no_tests_ratio<=0.75`；`quality_gate.sh` 裸跑默认阈值为 `0.62`，可通过参数覆盖。
+- 覆盖率阈值：总覆盖率 `>=95%`，核心模块覆盖率 `>=95%`（worker pipeline + api 核心 router/service）。
+- Web 覆盖率硬门禁：`lines/functions/branches` 三指标均需满足 `global >=95%` 且 `core >=95%`（默认读取 `apps/web/coverage/coverage-summary.json`）。
+- Web 交互覆盖门禁：`python3 scripts/check_web_button_coverage.py --threshold 1.0 --e2e-threshold 0.6 --unit-threshold 0.93`，分别校验 combined / E2E / unit 三段口径。
+  - source 范围默认覆盖 `apps/web/app` + `apps/web/components`（自动排除 `__tests__`、`node_modules`、`.next`）。
+  - E2E 口径仅统计 Playwright pytest 中真实 `.click()` 的 `button/link` 交互，不再把仅 `get_by_role` 查询视为覆盖。
+  - 当前保留例外：全局错误边界内的 `重试页面` 按钮仍以 unit 覆盖为主（combined 仍需 100%）。
+- 变异测试门禁强制执行（Python 核心模块）：CI/Hook 执行口径为 mutation score `>=0.64`，并要求 `effective_ratio>=0.27`、`no_tests_ratio<=0.72`；`quality_gate.sh` 裸跑默认阈值为 `0.64`，可通过参数覆盖。
 - `pre-push` 采用 fail-fast：先短检查，再长测试；长测试并行执行并输出 heartbeat。
 - `pre-push` 后端链路新增硬门禁：`api cors preflight smoke (OPTIONS DELETE)` 与 `contract diff local gate (base vs head)`。
 - `pre-push` 与远端 CI `preflight-fast`/`web-test-build` 关键阻断项对齐：`check_ci_docs_parity`、`docs env canonical guard`、`provider residual guard`、`worker line limits guard`、`schema parity gate`、`web design token guard`、`web build`、`web button coverage`。
@@ -292,16 +356,19 @@ bash scripts/env/final_governance_check.sh --skip-prepush
 ### 0.1.2) Web 覆盖率硬门禁（Vitest json-summary）
 
 ```bash
-npm --prefix apps/web run test -- --coverage
+npm --prefix apps/web run test:coverage
 python3 scripts/check_web_coverage_threshold.py \
   --summary-path apps/web/coverage/coverage-summary.json \
-  --global-threshold 85 \
-  --core-threshold 95
+  --global-threshold 95 \
+  --core-threshold 95 \
+  --metric lines \
+  --metric functions \
+  --metric branches
 ```
 
 可选参数：
 
-- `--metric lines|statements|functions|branches`（默认 `lines`）。
+- `--metric lines|statements|functions|branches`（可重复，默认 `lines/functions/branches`）。
 - `--core-pattern '<glob>'`（可重复传入；默认 core 口径覆盖 `apps/web/lib` 与 `apps/web/components` 的直接文件和递归子目录文件）。
 - `--dry-run`（仅打印配置与路径，不读取 coverage 文件）。
 
@@ -384,9 +451,9 @@ echo "feat(api): add ingest health guard" > /tmp/commit-msg-ok.txt
   - secrets 泄漏扫描（阻断）
   - `npm --prefix apps/web run lint`
   - `uv run --with ruff ruff check apps scripts`
-  - `npm --prefix apps/web run test -- --coverage`
-  - `python3 scripts/check_web_coverage_threshold.py --summary-path apps/web/coverage/coverage-summary.json --global-threshold 85 --core-threshold 95`
-  - `uv run pytest ... --cov-fail-under=85`
+  - `npm --prefix apps/web run test:coverage`
+  - `python3 scripts/check_web_coverage_threshold.py --summary-path apps/web/coverage/coverage-summary.json --global-threshold 95 --core-threshold 95 --metric lines --metric functions --metric branches`
+  - `uv run pytest ... --cov-fail-under=95`
   - `python skip guard`（junit `tests>0` 且 `skipped=0`）
   - `uv run coverage report ... --fail-under=95`（worker core / api core）
   - `python3 scripts/check_ci_docs_parity.py`
@@ -395,10 +462,11 @@ echo "feat(api): add ingest health guard" > /tmp/commit-msg-ok.txt
   - `schema parity gate`（`apps/mcp/schemas/tools.json` vs `packages/shared-contracts/jsonschema/mcp-tools.schema.json`）
   - `python3 scripts/check_design_tokens.py --from-ref <merge_base> --to-ref HEAD apps/web`（回退 `--all-lines`）
   - `npm --prefix apps/web run build`
-  - `python3 scripts/check_web_button_coverage.py --threshold 1.0`
+  - `python3 scripts/check_web_button_coverage.py --threshold 1.0 --e2e-threshold 0.6 --unit-threshold 0.93`
+  - 交互覆盖脚本默认扫描 `apps/web/app` 与 `apps/web/components`，并要求 E2E 用例使用真实点击断言（`.click()`）。
   - `DATABASE_URL='sqlite+pysqlite:///:memory:' uv run --extra dev --with mutmut mutmut run`
   - `uv run --extra dev --with mutmut mutmut export-cicd-stats`
-  - `python3 -c '...读取 mutants/mutmut-cicd-stats.json 并校验 score/effective_ratio/no_tests_ratio 阈值...'`（CI/Hook 常用阈值 `score>=0.62`；脚本裸跑默认 `0.62`）
+  - `python3 -c '...读取 mutants/mutmut-cicd-stats.json 并校验 score/effective_ratio/no_tests_ratio 阈值...'`（CI/Hook 常用阈值 `score>=0.64`；脚本裸跑默认 `0.64`）
 
 变异测试工具不可用策略（阻断）：
 

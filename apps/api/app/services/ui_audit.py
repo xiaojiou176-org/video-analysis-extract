@@ -2,12 +2,15 @@ from __future__ import annotations
 
 import base64
 import concurrent.futures
+import hashlib
 import json
 import mimetypes
 import os
+import re
 import tempfile
 import threading
 import uuid
+from contextlib import suppress
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -48,6 +51,7 @@ _MAX_GEMINI_IMAGES = 4
 _MAX_GEMINI_TEXT_SNIPPETS = 4
 _TEXT_SUFFIXES = {".md", ".txt", ".json", ".ndjson", ".log"}
 _DEFAULT_ARTIFACT_BASE_ROOT = tempfile.gettempdir()
+_DEFAULT_UI_AUDIT_RUN_STORE = ".runtime-cache/ui-audit-runs"
 _DEFAULT_MODEL_TIMEOUT_SECONDS = 15.0
 _DEFAULT_MODEL_MAX_RETRIES = 1
 
@@ -121,29 +125,36 @@ class UiAuditService:
         artifacts = self._collect_artifacts(resolved_root)
         findings = self._collect_findings(artifacts)
         gemini_suggested_actions: list[str] = []
+        gemini_review_meta = self._build_gemini_review_meta(status="skipped", reason_code="not_run")
         gemini_review = self._run_gemini_review(artifacts)
-        if gemini_review is not None:
-            findings.extend(gemini_review.get("findings", []))
-            gemini_suggested_actions = gemini_review.get("suggested_actions", [])
-            overall = str(gemini_review.get("overall_assessment") or "").strip()
-            if overall:
-                findings.append(
-                    {
-                        "id": "gemini-overall-assessment",
-                        "severity": "info",
-                        "title": "Gemini UI/UX Overall Assessment",
-                        "message": overall,
-                        "rule": "gemini-overall-assessment",
-                        "artifact_key": None,
-                    }
-                )
+        gemini_review_meta = gemini_review.get("meta", gemini_review_meta)
+        findings.extend(gemini_review.get("findings", []))
+        gemini_suggested_actions = gemini_review.get("suggested_actions", [])
+        overall = str(gemini_review.get("overall_assessment") or "").strip()
+        if overall:
+            findings.append(
+                {
+                    "id": "gemini-overall-assessment",
+                    "severity": "info",
+                    "title": "Gemini UI/UX Overall Assessment",
+                    "message": overall,
+                    "rule": "gemini-overall-assessment",
+                    "artifact_key": None,
+                }
+            )
         severity_counts = self._build_severity_counts(findings)
+        status = "completed"
+        gemini_status = str(gemini_review_meta.get("status") or "").lower()
+        if gemini_status == "failed":
+            status = "completed_with_gemini_failure"
+        elif gemini_status == "skipped":
+            status = "completed_with_gemini_skipped"
 
         payload = {
             "run_id": run_id,
             "job_id": str(job_id) if job_id is not None else None,
             "artifact_root": str(resolved_root),
-            "status": "completed",
+            "status": status,
             "created_at": created_at,
             "summary": {
                 "artifact_count": len(artifacts),
@@ -152,14 +163,14 @@ class UiAuditService:
             },
             "findings": findings,
             "artifacts": artifacts,
+            "gemini_review": gemini_review_meta,
             "gemini_suggested_actions": gemini_suggested_actions,
         }
         self._save_run(payload)
         return payload
 
     def get(self, run_id: str) -> dict[str, Any] | None:
-        with self._store_lock:
-            payload = self._run_store.get(run_id)
+        payload = self._load_run(run_id)
         if payload is None:
             return None
         return {
@@ -174,13 +185,13 @@ class UiAuditService:
                 "finding_count": 0,
                 "severity_counts": {},
             },
+            "gemini_review": payload.get("gemini_review"),
         }
 
     def list_findings(
         self, *, run_id: str, severity: str | None = None
     ) -> list[dict[str, Any]] | None:
-        with self._store_lock:
-            payload = self._run_store.get(run_id)
+        payload = self._load_run(run_id)
         if payload is None:
             return None
 
@@ -197,8 +208,7 @@ class UiAuditService:
         ]
 
     def list_artifacts(self, *, run_id: str) -> list[dict[str, Any]] | None:
-        with self._store_lock:
-            payload = self._run_store.get(run_id)
+        payload = self._load_run(run_id)
         if payload is None:
             return None
 
@@ -250,8 +260,7 @@ class UiAuditService:
         max_files: int = 3,
         max_changed_lines: int = 120,
     ) -> dict[str, Any] | None:
-        with self._store_lock:
-            payload = self._run_store.get(run_id)
+        payload = self._load_run(run_id)
         if payload is None:
             return None
 
@@ -280,10 +289,18 @@ class UiAuditService:
         if not finding_items:
             suggested_actions.append("No findings detected; no code changes recommended.")
 
+        effective_mode = "dry-run"
+        requested_mode = "apply" if mode == "apply" else "dry-run"
+        guardrail_note = "This endpoint currently returns a dry-run plan only."
+        if requested_mode == "apply":
+            guardrail_note = (
+                "Requested apply mode is not supported yet; returning a persisted dry-run plan."
+            )
+
         return {
             "run_id": run_id,
-            "mode": "dry-run" if mode != "apply" else "apply",
-            "autofix_applied": False if mode != "apply" else False,
+            "mode": effective_mode,
+            "autofix_applied": False,
             "summary": {
                 "finding_count": len([item for item in finding_items if isinstance(item, dict)]),
                 "high_or_worse_count": int(high_or_worse),
@@ -291,29 +308,44 @@ class UiAuditService:
             "guardrails": {
                 "max_files": int(max_files),
                 "max_changed_lines": int(max_changed_lines),
-                "note": "This endpoint currently returns a dry-run plan only.",
+                "requested_mode": requested_mode,
+                "effective_mode": effective_mode,
+                "note": guardrail_note,
             },
             "suggested_actions": suggested_actions,
         }
 
-    def _run_gemini_review(self, artifacts: list[dict[str, Any]]) -> dict[str, Any] | None:
+    def _run_gemini_review(self, artifacts: list[dict[str, Any]]) -> dict[str, Any]:
         settings = Settings.from_env()
         if not self._is_gemini_ui_audit_enabled(settings):
-            return None
+            return self._gemini_review_result(status="skipped", reason_code="disabled")
         api_key = (settings.gemini_api_key or "").strip()
         if not api_key:
-            return None
+            return self._gemini_review_result(status="skipped", reason_code="missing_gemini_api_key")
 
         try:
             from google import genai  # type: ignore
             from google.genai import types as genai_types  # type: ignore
-        except Exception:
-            return None
+        except Exception as exc:
+            return self._gemini_review_result(
+                status="failed",
+                reason_code="sdk_unavailable",
+                findings=[
+                    {
+                        "id": "gemini-ui-review-sdk-unavailable",
+                        "severity": "high",
+                        "title": "Gemini UI review unavailable",
+                        "message": f"Gemini SDK unavailable: {exc}",
+                        "rule": "gemini-ui-review-sdk-unavailable",
+                        "artifact_key": None,
+                    }
+                ],
+            )
 
         image_artifacts = self._select_gemini_image_artifacts(artifacts)
         text_snippets = self._select_gemini_text_snippets(artifacts)
         if not image_artifacts and not text_snippets:
-            return None
+            return self._gemini_review_result(status="skipped", reason_code="no_supported_artifacts")
 
         model = (settings.gemini_model or "gemini-3.1-pro-preview").strip()
         thinking_level = (settings.gemini_thinking_level or "high").strip().upper()
@@ -352,54 +384,82 @@ class UiAuditService:
                 client=client,
                 model=model,
                 contents=contents,
-                config=genai_types.GenerateContentConfig(
-                    temperature=1.0,
-                    response_mime_type="application/json",
-                    response_json_schema=_GEMINI_UI_AUDIT_SCHEMA,
-                    thinking_config=genai_types.ThinkingConfig(
-                        thinking_level=thinking_level,
-                    ),
+                config=self._build_gemini_generate_config(
+                    genai_types=genai_types,
+                    thinking_level=thinking_level,
                 ),
                 timeout_seconds=timeout_seconds,
                 max_retries=max_retries,
             )
         except Exception as exc:
-            return {
-                "overall_assessment": "",
-                "findings": [
+            return self._gemini_review_result(
+                status="failed",
+                reason_code="provider_error",
+                provider_status=self._extract_provider_status(exc),
+                model=model,
+                timeout_seconds=timeout_seconds,
+                max_retries=max_retries,
+                findings=[
                     {
                         "id": "gemini-ui-review-provider-error",
-                        "severity": "info",
+                        "severity": "high",
                         "title": "Gemini UI review unavailable",
-                        "message": f"Gemini UI review skipped due to provider error: {exc}",
+                        "message": f"Gemini UI review failed due to provider error: {exc}",
                         "rule": "gemini-ui-review-provider-error",
                         "artifact_key": None,
                     }
                 ],
-                "suggested_actions": [],
-            }
+            )
 
         raw_text = str(getattr(response, "text", "") or "").strip()
         if not raw_text:
-            return None
+            return self._gemini_review_result(
+                status="failed",
+                reason_code="empty_response",
+                model=model,
+                timeout_seconds=timeout_seconds,
+                max_retries=max_retries,
+                findings=[
+                    {
+                        "id": "gemini-ui-review-empty-response",
+                        "severity": "high",
+                        "title": "Gemini UI review empty response",
+                        "message": "Gemini returned an empty response; review result ignored.",
+                        "rule": "gemini-ui-review-empty-response",
+                        "artifact_key": None,
+                    }
+                ],
+            )
         try:
             parsed = json.loads(raw_text)
         except json.JSONDecodeError:
-            return {
-                "overall_assessment": "",
-                "findings": [
+            return self._gemini_review_result(
+                status="failed",
+                reason_code="invalid_json",
+                model=model,
+                timeout_seconds=timeout_seconds,
+                max_retries=max_retries,
+                findings=[
                     {
                         "id": "gemini-ui-review-invalid-json",
-                        "severity": "info",
+                        "severity": "high",
                         "title": "Gemini UI review parse fallback",
                         "message": "Gemini returned non-JSON output; review result ignored.",
                         "rule": "gemini-ui-review-invalid-json",
                         "artifact_key": None,
                     }
                 ],
-                "suggested_actions": [],
-            }
-        return self._normalize_gemini_review(parsed)
+            )
+        normalized = self._normalize_gemini_review(parsed)
+        normalized["meta"] = self._build_gemini_review_meta(
+            status="passed",
+            reason_code="ok",
+            provider_status=None,
+            model=model,
+            timeout_seconds=timeout_seconds,
+            max_retries=max_retries,
+        )
+        return normalized
 
     def _generate_with_timeout_and_retry(
         self,
@@ -611,16 +671,31 @@ class UiAuditService:
         evidence_text = "\n".join(snippet_lines) if snippet_lines else "- none"
         evidence_images = "\n".join(image_lines) if image_lines else "- none"
         return (
-            "You are a strict UI/UX quality reviewer. Analyze screenshots and Playwright evidence. "
+            "You are a strict Web UI/UX quality reviewer. Analyze screenshots and Playwright evidence. "
             "Return ONLY JSON that follows the provided schema.\n"
             "Rules:\n"
-            "1) Focus on concrete, user-visible defects.\n"
-            "2) Severity must be one of critical/high/medium/low/info.\n"
-            "3) Every finding should reference artifact_key when possible.\n"
-            "4) Keep suggested_actions short, actionable, and test-oriented.\n"
+            "1) Focus on concrete, user-visible defects in interaction quality.\n"
+            "2) Evaluate accessibility, interaction states, feedback clarity, responsive behavior, and hierarchy.\n"
+            "3) Severity must be one of critical/high/medium/low/info.\n"
+            "4) Every finding should reference artifact_key when possible.\n"
+            "5) Keep suggested_actions short, actionable, and test-oriented.\n"
             f"Text evidence snippets:\n{evidence_text}\n"
             f"Image evidence keys:\n{evidence_images}\n"
         )
+
+    def _build_gemini_generate_config(self, *, genai_types: Any, thinking_level: str) -> Any:
+        config_kwargs: dict[str, Any] = {
+            "temperature": 1.0,
+            "response_mime_type": "application/json",
+            "response_json_schema": _GEMINI_UI_AUDIT_SCHEMA,
+        }
+        thinking_config_cls = getattr(genai_types, "ThinkingConfig", None)
+        if callable(thinking_config_cls):
+            with suppress(Exception):
+                config_kwargs["thinking_config"] = thinking_config_cls(
+                    thinking_level=thinking_level,
+                )
+        return genai_types.GenerateContentConfig(**config_kwargs)
 
     def _normalize_gemini_review(self, payload: Any) -> dict[str, Any]:
         source = payload if isinstance(payload, dict) else {}
@@ -658,6 +733,73 @@ class UiAuditService:
             "findings": findings,
             "suggested_actions": suggested_actions,
         }
+
+    def _gemini_review_result(
+        self,
+        *,
+        status: str,
+        reason_code: str,
+        provider_status: int | None = None,
+        model: str | None = None,
+        timeout_seconds: float | None = None,
+        max_retries: int | None = None,
+        findings: list[dict[str, Any]] | None = None,
+        overall_assessment: str = "",
+        suggested_actions: list[str] | None = None,
+    ) -> dict[str, Any]:
+        return {
+            "meta": self._build_gemini_review_meta(
+                status=status,
+                reason_code=reason_code,
+                provider_status=provider_status,
+                model=model,
+                timeout_seconds=timeout_seconds,
+                max_retries=max_retries,
+            ),
+            "overall_assessment": overall_assessment,
+            "findings": findings or [],
+            "suggested_actions": suggested_actions or [],
+        }
+
+    def _build_gemini_review_meta(
+        self,
+        *,
+        status: str,
+        reason_code: str,
+        provider_status: int | None = None,
+        model: str | None = None,
+        timeout_seconds: float | None = None,
+        max_retries: int | None = None,
+    ) -> dict[str, Any]:
+        return {
+            "status": status,
+            "reason_code": reason_code,
+            "provider_status": provider_status,
+            "model": model,
+            "timeout_seconds": timeout_seconds,
+            "max_retries": max_retries,
+        }
+
+    def _extract_provider_status(self, exc: Exception) -> int | None:
+        for attr in ("status_code", "http_status", "status", "code"):
+            value = getattr(exc, attr, None)
+            if isinstance(value, int) and 100 <= value <= 599:
+                return value
+            if isinstance(value, str) and value.isdigit():
+                parsed = int(value)
+                if 100 <= parsed <= 599:
+                    return parsed
+
+        response = getattr(exc, "response", None)
+        if response is not None:
+            status_code = getattr(response, "status_code", None)
+            if isinstance(status_code, int) and 100 <= status_code <= 599:
+                return status_code
+
+        matched = re.search(r"\b(?:HTTP|status(?:\s*code)?)\s*[:=]?\s*(\d{3})\b", str(exc), re.I)
+        if matched:
+            return int(matched.group(1))
+        return None
 
     def _collect_findings(self, artifacts: list[dict[str, Any]]) -> list[dict[str, Any]]:
         findings: list[dict[str, Any]] = []
@@ -774,3 +916,59 @@ class UiAuditService:
             return
         with self._store_lock:
             self._run_store[run_id] = payload
+        self._persist_run_to_disk(run_id, payload)
+
+    def _load_run(self, run_id: str) -> dict[str, Any] | None:
+        with self._store_lock:
+            payload = self._run_store.get(run_id)
+        if payload is not None:
+            return payload
+        payload = self._load_run_from_disk(run_id)
+        if payload is None:
+            return None
+        with self._store_lock:
+            self._run_store[run_id] = payload
+        return payload
+
+    def _run_store_dir(self) -> Path:
+        configured = os.getenv("UI_AUDIT_RUN_STORE_DIR", _DEFAULT_UI_AUDIT_RUN_STORE)
+        base = Path(configured).expanduser()
+        if not base.is_absolute():
+            base = Path.cwd() / base
+        return base.resolve(strict=False)
+
+    def _run_store_path(self, run_id: str) -> Path:
+        digest = hashlib.sha256(run_id.encode("utf-8")).hexdigest()
+        return self._run_store_dir() / f"{digest}.json"
+
+    def _persist_run_to_disk(self, run_id: str, payload: dict[str, Any]) -> None:
+        path = self._run_store_path(run_id)
+        temp_path = path.with_suffix(".tmp")
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            temp_path.write_text(
+                json.dumps(payload, ensure_ascii=False, indent=2, default=str),
+                encoding="utf-8",
+            )
+            temp_path.replace(path)
+        except OSError:
+            try:
+                if temp_path.exists():
+                    temp_path.unlink()
+            except OSError:
+                pass
+            return
+
+    def _load_run_from_disk(self, run_id: str) -> dict[str, Any] | None:
+        path = self._run_store_path(run_id)
+        if not path.is_file():
+            return None
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return None
+        if not isinstance(payload, dict):
+            return None
+        if str(payload.get("run_id") or "") != run_id:
+            return None
+        return payload

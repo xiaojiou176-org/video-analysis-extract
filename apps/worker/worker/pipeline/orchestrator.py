@@ -164,6 +164,7 @@ async def run_pipeline(
     mode: str = "full",
     overrides: dict[str, Any] | None = None,
     step_handlers: list[tuple[str, StepHandler, bool]] | None = None,
+    pipeline_steps: list[str] | None = None,
 ) -> dict[str, Any]:
     pipeline_mode = normalize_pipeline_mode(mode)
     llm_input_mode = normalize_llm_input_mode(getattr(settings, "pipeline_llm_input_mode", "auto"))
@@ -178,11 +179,12 @@ async def run_pipeline(
     frame_policy = build_frame_policy(settings, resolved_overrides)
     llm_policy = build_llm_policy(settings, resolved_overrides)
 
+    steps_list = pipeline_steps if pipeline_steps is not None else PIPELINE_STEPS
     checkpoint = sqlite_store.get_checkpoint(job_id)
     checkpoint_step = str((checkpoint or {}).get("last_completed_step") or "")
     checkpoint_payload = dict((checkpoint or {}).get("payload") or {})
     resume_upto_idx = (
-        PIPELINE_STEPS.index(checkpoint_step) if checkpoint_step in PIPELINE_STEPS else -1
+        steps_list.index(checkpoint_step) if checkpoint_step in steps_list else -1
     )
 
     state: dict[str, Any] = {

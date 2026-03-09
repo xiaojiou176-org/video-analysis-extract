@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib
 import json
 import os
+import time
 import sys
 import tempfile
 import uuid
@@ -10,8 +11,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-from urllib.request import Request, urlopen
 
+import httpx
 import pytest
 from fastapi.routing import APIRoute
 from pydantic import TypeAdapter
@@ -44,23 +45,49 @@ MockApiState = mock_api.MockApiState
 start_mock_api_server = mock_api.start_mock_api_server
 stop_mock_api_server = mock_api.stop_mock_api_server
 
+_CLIENTS: dict[str, httpx.Client] = {}
+
+
+def _get_client(base_url: str) -> httpx.Client:
+    client = _CLIENTS.get(base_url)
+    if client is None:
+        client = httpx.Client(base_url=base_url, timeout=10.0)
+        _CLIENTS[base_url] = client
+    return client
+
+
+def _close_clients() -> None:
+    for client in _CLIENTS.values():
+        client.close()
+    _CLIENTS.clear()
+
 
 def _json_request(
     base_url: str, method: str, path: str, payload: dict[str, Any] | None = None
 ) -> tuple[int, Any]:
-    body = json.dumps(payload).encode("utf-8") if payload is not None else None
-    request = Request(
-        f"{base_url}{path}",
-        data=body,
-        method=method,
-        headers={"Content-Type": "application/json"} if body is not None else {},
-    )
-    with urlopen(request, timeout=10) as response:  # nosec B310 - local test server only
-        raw = response.read()
-        content_type = response.headers.get("Content-Type", "")
-        if "application/json" in content_type:
-            return response.status, json.loads(raw.decode("utf-8") or "null")
-        return response.status, raw.decode("utf-8")
+    client = _get_client(base_url)
+    last_error: httpx.HTTPError | None = None
+    for attempt in range(4):
+        try:
+            response = client.request(method, path, json=payload)
+            content_type = response.headers.get("Content-Type", "")
+            if "application/json" in content_type:
+                return response.status_code, response.json()
+            return response.status_code, response.text
+        except (httpx.ConnectError, httpx.ConnectTimeout, httpx.ReadTimeout) as exc:
+            last_error = exc
+            reason = getattr(exc, "__cause__", None)
+            errno_value = getattr(reason, "errno", None)
+            is_transient = isinstance(reason, TimeoutError) or errno_value in {49, 60, 61}
+            if not is_transient or attempt == 3:
+                raise
+            client.close()
+            _CLIENTS.pop(base_url, None)
+            client = _get_client(base_url)
+            time.sleep(0.2 * (attempt + 1))
+    if last_error is not None:
+        raise last_error
+    raise RuntimeError("unreachable: request retry loop did not return or raise")
 
 
 def _route_status(router, method: str, route_path: str) -> int:
@@ -213,6 +240,14 @@ def mock_api_server() -> MockApiServer:
         yield running.api_server
     finally:
         stop_mock_api_server(running)
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _cleanup_http_clients() -> None:
+    try:
+        yield
+    finally:
+        _close_clients()
 
 
 @pytest.fixture(autouse=True)

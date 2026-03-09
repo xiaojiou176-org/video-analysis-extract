@@ -1,11 +1,18 @@
 from __future__ import annotations
 
 import asyncio
+import sys
+import types
 from pathlib import Path
 from typing import Any
 
 from worker.config import Settings
 from worker.pipeline import runner
+from worker.pipeline.steps.llm_computer_use import build_default_computer_use_handler
+
+sys.modules["apps.worker.worker.pipeline.steps.llm_computer_use"] = sys.modules[
+    "worker.pipeline.steps.llm_computer_use"
+]
 
 
 def _build_ctx(tmp_path: Path, *, settings: Settings | None = None) -> runner.PipelineContext:
@@ -233,6 +240,91 @@ def test_step_llm_outline_applies_overrides(monkeypatch: Any, tmp_path: Path) ->
     assert computer_use_result["executor"] == "playwright"
     assert computer_use_result["fallback_from"] == "playwright"
     assert computer_use_result["target"]["url"] == "https://www.youtube.com/watch?v=demo"
+
+
+def test_selected_runner_suite_covers_computer_use_handler_playwright_branches(
+    monkeypatch: Any,
+) -> None:
+    recorded: list[tuple[str, Any]] = []
+
+    class FakePage:
+        def __init__(self) -> None:
+            self.url = "https://example.com/original"
+
+        def goto(self, url: str, *, timeout: int, wait_until: str) -> None:
+            recorded.append(("goto", url, timeout, wait_until))
+            self.url = url
+
+        def click(self, selector: str, *, timeout: int) -> None:
+            recorded.append(("click", selector, timeout))
+
+        def fill(self, selector: str, text: str, *, timeout: int) -> None:
+            recorded.append(("fill", selector, text, timeout))
+
+        def wait_for_timeout(self, wait_ms: int) -> None:
+            recorded.append(("wait", wait_ms))
+
+        def evaluate(self, script: str) -> None:
+            recorded.append(("evaluate", script))
+
+        def screenshot(self, *, type: str, full_page: bool) -> bytes:
+            recorded.append(("screenshot", type, full_page))
+            return b"png-bytes"
+
+    class FakeBrowser:
+        def __init__(self) -> None:
+            self.page = FakePage()
+
+        def new_page(self) -> FakePage:
+            return self.page
+
+        def close(self) -> None:
+            recorded.append(("close",))
+
+    class FakeChromium:
+        def launch(self, *, headless: bool) -> FakeBrowser:
+            recorded.append(("launch", headless))
+            return FakeBrowser()
+
+    class FakePlaywright:
+        def __enter__(self) -> types.SimpleNamespace:
+            return types.SimpleNamespace(chromium=FakeChromium())
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            return None
+
+    monkeypatch.setitem(
+        sys.modules,
+        "playwright.sync_api",
+        types.SimpleNamespace(sync_playwright=FakePlaywright),
+    )
+
+    handler = build_default_computer_use_handler(
+        state={
+            "source_url": "https://example.com/start",
+            "computer_use": {
+                "executor": "playwright",
+                "context": {"from": "state"},
+            },
+        },
+        llm_policy={},
+        section_policy={},
+    )
+
+    fill_result = handler(action="fill", element="#search", text="needle")
+    wait_result = handler(action="wait")
+    scroll_result = handler(action="scroll")
+    navigate_result = handler(action="navigate", url="https://example.com/next")
+
+    assert fill_result["status"] == "ok"
+    assert wait_result["status"] == "ok"
+    assert scroll_result["status"] == "ok"
+    assert navigate_result["status"] == "ok"
+    assert fill_result["target"]["context"] == {"from": "state"}
+    assert ("fill", "#search", "needle", 8000) in recorded
+    assert ("wait", 800) in recorded
+    assert ("evaluate", "window.scrollBy(0, Math.max(200, window.innerHeight * 0.8));") in recorded
+    assert ("goto", "https://example.com/next", 8000, "domcontentloaded") in recorded
 
 
 def test_cache_signature_includes_override_policies(tmp_path: Path) -> None:

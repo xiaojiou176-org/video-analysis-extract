@@ -33,13 +33,15 @@
 4. 写入 `videos` + `ingest_events`，按幂等去重创建 `jobs`。
 5. 为每个新 job 启动 `ProcessJobWorkflow`。
 
-## Process Workflow（3 阶段 + 9-step pipeline）
+## Process Workflow（3 阶段 + content_type 分流 pipeline）
 
 ### 阶段 A：运行前标记
 
 - `mark_running`
 
-### 阶段 B：`run_pipeline_activity`（9 steps）
+### 阶段 B：`run_pipeline_activity`（按 content_type 路由）
+
+**Video Pipeline（9 steps）**：当 `videos.content_type = 'video'` 时执行
 
 1. `fetch_metadata`
 2. `download_media`
@@ -50,6 +52,16 @@
 7. `llm_digest`
 8. `build_embeddings`
 9. `write_artifacts`
+
+**Article Pipeline（5 steps）**：当 `videos.content_type = 'article'` 时执行
+
+1. `fetch_article_content`（httpx 抓取原文 + trafilatura 提取正文，回退 RSS content/summary）
+2. `llm_outline`
+3. `llm_digest`
+4. `build_embeddings`
+5. `write_artifacts`
+
+`content_type` 由 `normalize_entry` 根据 `video_platform` 判定：YouTube/Bilibili 为 `video`，其余为 `article`。
 
 ### 阶段 C：收敛状态
 
@@ -113,6 +125,31 @@
 - `steps[].cache_key`
 - `steps[].thought_metadata`（兼容提取位，统一归一化，缺失时为空结构）
 - `degradations[].cache_meta`
+
+### Feed Read Contract（`GET /api/v1/feed/digests`）
+
+当前查询参数：
+
+- `source`
+- `category`
+- `limit`
+- `cursor`
+- `since`
+
+当前响应项字段：
+
+- `feed_id`
+- `job_id`
+- `video_url`
+- `title`
+- `source`
+- `source_name`
+- `category`
+- `published_at`
+- `summary_md`
+- `artifact_type`
+
+说明：当前支持 `source/category/sub/limit/cursor/since` 查询；响应项已暴露 `content_type`，供 Web 区分视频与文章条目。
 
 ## Retry Strategy
 

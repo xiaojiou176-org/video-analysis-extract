@@ -25,6 +25,15 @@ class UiAuditSummary(BaseModel):
     severity_counts: dict[str, int]
 
 
+class UiAuditGeminiReview(BaseModel):
+    status: str
+    reason_code: str
+    provider_status: int | None = None
+    model: str | None = None
+    timeout_seconds: float | None = None
+    max_retries: int | None = None
+
+
 class UiAuditRunResponse(BaseModel):
     run_id: str
     job_id: str | None = None
@@ -32,6 +41,7 @@ class UiAuditRunResponse(BaseModel):
     status: str
     created_at: datetime
     summary: UiAuditSummary
+    gemini_review: UiAuditGeminiReview | None = None
 
 
 class UiAuditFinding(BaseModel):
@@ -98,7 +108,11 @@ def run_ui_audit(payload: UiAuditRunRequest, db: Session = Depends(get_db)):
     return UiAuditRunResponse(**result)
 
 
-@router.get("/{run_id}", response_model=UiAuditRunResponse)
+@router.get(
+    "/{run_id}",
+    response_model=UiAuditRunResponse,
+    dependencies=[Depends(require_write_access)],
+)
 def get_ui_audit(run_id: str, db: Session = Depends(get_db)):
     del db
     service = UiAuditService()
@@ -108,7 +122,11 @@ def get_ui_audit(run_id: str, db: Session = Depends(get_db)):
     return UiAuditRunResponse(**payload)
 
 
-@router.get("/{run_id}/findings", response_model=UiAuditFindingsResponse)
+@router.get(
+    "/{run_id}/findings",
+    response_model=UiAuditFindingsResponse,
+    dependencies=[Depends(require_write_access)],
+)
 def list_ui_audit_findings(
     run_id: str,
     severity: str | None = Query(default=None),
@@ -122,7 +140,11 @@ def list_ui_audit_findings(
     return UiAuditFindingsResponse(items=[UiAuditFinding(**item) for item in payload])
 
 
-@router.get("/{run_id}/artifacts", response_model=UiAuditArtifactsResponse)
+@router.get(
+    "/{run_id}/artifacts",
+    response_model=UiAuditArtifactsResponse,
+    dependencies=[Depends(require_write_access)],
+)
 def list_ui_audit_artifacts(run_id: str, db: Session = Depends(get_db)):
     del db
     service = UiAuditService()
@@ -132,7 +154,11 @@ def list_ui_audit_artifacts(run_id: str, db: Session = Depends(get_db)):
     return UiAuditArtifactsResponse(items=[UiAuditArtifact(**item) for item in payload])
 
 
-@router.get("/{run_id}/artifact", response_model=UiAuditArtifactPayload)
+@router.get(
+    "/{run_id}/artifact",
+    response_model=UiAuditArtifactPayload,
+    dependencies=[Depends(require_write_access)],
+)
 def get_ui_audit_artifact(
     run_id: str,
     key: str = Query(..., min_length=1),

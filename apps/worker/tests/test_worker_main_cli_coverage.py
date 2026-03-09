@@ -5,6 +5,7 @@ import asyncio
 import json
 import sys
 import types
+from datetime import timedelta
 from types import SimpleNamespace
 
 import pytest
@@ -13,6 +14,8 @@ from worker import main as worker_main
 
 def _fake_settings() -> SimpleNamespace:
     return SimpleNamespace(
+        temporal_target_host="127.0.0.1:7233",
+        temporal_namespace="default",
         temporal_task_queue="video-analysis-worker",
         digest_daily_local_hour=9,
         digest_local_timezone="UTC",
@@ -163,6 +166,7 @@ def test_run_temporal_worker_registers_workflows_and_activities(monkeypatch) -> 
 def test_poll_and_process_workflow_start_paths(monkeypatch) -> None:
     workflows_mod = types.ModuleType("worker.temporal.workflows")
     common_mod = types.ModuleType("temporalio.common")
+    captured: list[dict[str, object]] = []
 
     class _Workflow:
         @staticmethod
@@ -174,7 +178,8 @@ def test_poll_and_process_workflow_start_paths(monkeypatch) -> None:
             return {"ok": True}
 
     class _Client:
-        async def start_workflow(self, *_args, **_kwargs):
+        async def start_workflow(self, *args, **kwargs):
+            captured.append({"args": args, "kwargs": kwargs})
             return _Handle()
 
     class _Reuse:
@@ -197,6 +202,9 @@ def test_poll_and_process_workflow_start_paths(monkeypatch) -> None:
     process = asyncio.run(worker_main.start_process_workflow(_fake_settings(), "job-1"))
     assert poll["ok"] is True
     assert process["ok"] is True
+    assert captured[0]["kwargs"]["task_queue"] == "video-analysis-worker"
+    assert captured[1]["kwargs"]["id_reuse_policy"] == _Reuse.REJECT_DUPLICATE
+    assert captured[1]["kwargs"]["id_conflict_policy"] == _Conflict.USE_EXISTING
 
 
 def test_retry_and_canary_workflow_already_started_paths(monkeypatch) -> None:
@@ -232,3 +240,427 @@ def test_retry_and_canary_workflow_already_started_paths(monkeypatch) -> None:
     )
     assert retry["status"] == "already_running"
     assert canary["status"] == "already_running"
+
+
+def test_connect_temporal_uses_settings_target_host_and_namespace(monkeypatch) -> None:
+    client_mod = types.ModuleType("temporalio.client")
+    captured: dict[str, object] = {}
+
+    class _Client:
+        @staticmethod
+        async def connect(target_host, *, namespace):
+            captured["target_host"] = target_host
+            captured["namespace"] = namespace
+            return {"ok": True}
+
+    client_mod.Client = _Client
+    monkeypatch.setitem(sys.modules, "temporalio.client", client_mod)
+
+    result = asyncio.run(worker_main._connect_temporal(_fake_settings()))
+
+    assert result == {"ok": True}
+    assert captured == {"target_host": "127.0.0.1:7233", "namespace": "default"}
+
+
+def test_local_utc_offset_minutes_returns_zero_when_timezone_has_no_offset(monkeypatch) -> None:
+    class _FakeAwareDatetime:
+        def utcoffset(self):
+            return None
+
+    class _FakeNow:
+        def astimezone(self):
+            return _FakeAwareDatetime()
+
+    class _FakeDatetime:
+        @staticmethod
+        def now():
+            return _FakeNow()
+
+    monkeypatch.setattr(worker_main, "datetime", _FakeDatetime)
+
+    assert worker_main._local_utc_offset_minutes() == 0
+
+
+def test_local_utc_offset_minutes_returns_positive_minutes(monkeypatch) -> None:
+    class _FakeAwareDatetime:
+        def utcoffset(self):
+            return timedelta(hours=5, minutes=30)
+
+    class _FakeNow:
+        def astimezone(self):
+            return _FakeAwareDatetime()
+
+    class _FakeDatetime:
+        @staticmethod
+        def now():
+            return _FakeNow()
+
+    monkeypatch.setattr(worker_main, "datetime", _FakeDatetime)
+
+    assert worker_main._local_utc_offset_minutes() == 330
+
+
+def test_start_daily_workflow_returns_run_once_result(monkeypatch) -> None:
+    exceptions_mod = types.ModuleType("temporalio.exceptions")
+    workflows_mod = types.ModuleType("worker.temporal.workflows")
+
+    class WorkflowAlreadyStartedError(Exception):
+        pass
+
+    class _Workflow:
+        @staticmethod
+        async def run(*_args, **_kwargs):
+            return {}
+
+    class _Handle:
+        async def result(self):
+            return {"ok": True, "status": "completed"}
+
+    class _Client:
+        async def start_workflow(self, *_args, **_kwargs):
+            return _Handle()
+
+    exceptions_mod.WorkflowAlreadyStartedError = WorkflowAlreadyStartedError
+    workflows_mod.DailyDigestWorkflow = _Workflow
+    monkeypatch.setitem(sys.modules, "temporalio.exceptions", exceptions_mod)
+    monkeypatch.setitem(sys.modules, "worker.temporal.workflows", workflows_mod)
+    monkeypatch.setattr(
+        worker_main, "_connect_temporal", lambda _settings: asyncio.sleep(0, result=_Client())
+    )
+
+    result = asyncio.run(
+        worker_main.start_daily_workflow(
+            _fake_settings(),
+            run_once=True,
+            local_hour=8,
+            timezone_name="Asia/Tokyo",
+            timezone_offset_minutes=540,
+            workflow_id="daily-run-once",
+        )
+    )
+
+    assert result == {"ok": True, "status": "completed"}
+
+
+def test_start_notification_retry_workflow_run_once_returns_result(monkeypatch) -> None:
+    exceptions_mod = types.ModuleType("temporalio.exceptions")
+    workflows_mod = types.ModuleType("worker.temporal.workflows")
+
+    class WorkflowAlreadyStartedError(Exception):
+        pass
+
+    class _Workflow:
+        @staticmethod
+        async def run(*_args, **_kwargs):
+            return {}
+
+    class _Handle:
+        async def result(self):
+            return {"ok": True, "status": "sent"}
+
+    class _Client:
+        async def start_workflow(self, *_args, **_kwargs):
+            return _Handle()
+
+    exceptions_mod.WorkflowAlreadyStartedError = WorkflowAlreadyStartedError
+    workflows_mod.NotificationRetryWorkflow = _Workflow
+    monkeypatch.setitem(sys.modules, "temporalio.exceptions", exceptions_mod)
+    monkeypatch.setitem(sys.modules, "worker.temporal.workflows", workflows_mod)
+    monkeypatch.setattr(
+        worker_main, "_connect_temporal", lambda _settings: asyncio.sleep(0, result=_Client())
+    )
+
+    result = asyncio.run(
+        worker_main.start_notification_retry_workflow(
+            _fake_settings(),
+            run_once=True,
+            interval_minutes=0,
+            retry_batch_limit=0,
+            workflow_id="retry-run-once",
+        )
+    )
+
+    assert result == {"ok": True, "status": "sent"}
+
+
+def test_start_notification_retry_workflow_started_payload_clamps_values(monkeypatch) -> None:
+    exceptions_mod = types.ModuleType("temporalio.exceptions")
+    workflows_mod = types.ModuleType("worker.temporal.workflows")
+    captured: dict[str, object] = {}
+
+    class WorkflowAlreadyStartedError(Exception):
+        pass
+
+    class _Workflow:
+        @staticmethod
+        async def run(*_args, **_kwargs):
+            return {}
+
+    class _Handle:
+        id = "retry-workflow"
+        run_id = "retry-run-id"
+        first_execution_run_id = "retry-first-run-id"
+
+    class _Client:
+        async def start_workflow(self, workflow, payload, **kwargs):
+            captured["workflow"] = workflow
+            captured["payload"] = payload
+            captured["kwargs"] = kwargs
+            return _Handle()
+
+    exceptions_mod.WorkflowAlreadyStartedError = WorkflowAlreadyStartedError
+    workflows_mod.NotificationRetryWorkflow = _Workflow
+    monkeypatch.setitem(sys.modules, "temporalio.exceptions", exceptions_mod)
+    monkeypatch.setitem(sys.modules, "worker.temporal.workflows", workflows_mod)
+    monkeypatch.setattr(
+        worker_main, "_connect_temporal", lambda _settings: asyncio.sleep(0, result=_Client())
+    )
+
+    result = asyncio.run(
+        worker_main.start_notification_retry_workflow(
+            _fake_settings(),
+            run_once=False,
+            interval_minutes=0,
+            retry_batch_limit=0,
+            workflow_id="retry-stable",
+        )
+    )
+
+    assert captured["payload"] == {
+        "run_once": False,
+        "interval_minutes": 1,
+        "retry_batch_limit": 1,
+    }
+    assert captured["kwargs"]["id"] == "retry-stable"
+    assert result["status"] == "started"
+    assert result["interval_minutes"] == 1
+    assert result["retry_batch_limit"] == 1
+    assert result["run_id"] == "retry-first-run-id"
+
+
+def test_start_provider_canary_workflow_run_once_returns_result(monkeypatch) -> None:
+    exceptions_mod = types.ModuleType("temporalio.exceptions")
+    workflows_mod = types.ModuleType("worker.temporal.workflows")
+
+    class WorkflowAlreadyStartedError(Exception):
+        pass
+
+    class _Workflow:
+        @staticmethod
+        async def run(*_args, **_kwargs):
+            return {}
+
+    class _Handle:
+        async def result(self):
+            return {"ok": True, "status": "healthy"}
+
+    class _Client:
+        async def start_workflow(self, *_args, **_kwargs):
+            return _Handle()
+
+    exceptions_mod.WorkflowAlreadyStartedError = WorkflowAlreadyStartedError
+    workflows_mod.ProviderCanaryWorkflow = _Workflow
+    monkeypatch.setitem(sys.modules, "temporalio.exceptions", exceptions_mod)
+    monkeypatch.setitem(sys.modules, "worker.temporal.workflows", workflows_mod)
+    monkeypatch.setattr(
+        worker_main, "_connect_temporal", lambda _settings: asyncio.sleep(0, result=_Client())
+    )
+
+    result = asyncio.run(
+        worker_main.start_provider_canary_workflow(
+            _fake_settings(),
+            run_once=True,
+            interval_hours=0,
+            timeout_seconds=1,
+            workflow_id="canary-run-once",
+        )
+    )
+
+    assert result == {"ok": True, "status": "healthy"}
+
+
+def test_start_provider_canary_workflow_started_payload_clamps_values(monkeypatch) -> None:
+    exceptions_mod = types.ModuleType("temporalio.exceptions")
+    workflows_mod = types.ModuleType("worker.temporal.workflows")
+    captured: dict[str, object] = {}
+
+    class WorkflowAlreadyStartedError(Exception):
+        pass
+
+    class _Workflow:
+        @staticmethod
+        async def run(*_args, **_kwargs):
+            return {}
+
+    class _Handle:
+        id = "provider-canary-workflow"
+        run_id = "provider-canary-run"
+
+    class _Client:
+        async def start_workflow(self, workflow, payload, **kwargs):
+            captured["workflow"] = workflow
+            captured["payload"] = payload
+            captured["kwargs"] = kwargs
+            return _Handle()
+
+    exceptions_mod.WorkflowAlreadyStartedError = WorkflowAlreadyStartedError
+    workflows_mod.ProviderCanaryWorkflow = _Workflow
+    monkeypatch.setitem(sys.modules, "temporalio.exceptions", exceptions_mod)
+    monkeypatch.setitem(sys.modules, "worker.temporal.workflows", workflows_mod)
+    monkeypatch.setattr(
+        worker_main, "_connect_temporal", lambda _settings: asyncio.sleep(0, result=_Client())
+    )
+
+    result = asyncio.run(
+        worker_main.start_provider_canary_workflow(
+            _fake_settings(),
+            run_once=False,
+            interval_hours=0,
+            timeout_seconds=2,
+            workflow_id="provider-canary-stable",
+        )
+    )
+
+    assert captured["payload"] == {
+        "run_once": False,
+        "interval_hours": 1,
+        "timeout_seconds": 3,
+    }
+    assert captured["kwargs"]["id"] == "provider-canary-stable"
+    assert result["status"] == "started"
+    assert result["interval_hours"] == 1
+    assert result["timeout_seconds"] == 3
+    assert result["run_id"] == "provider-canary-run"
+
+
+def test_start_cleanup_workflow_already_running(monkeypatch) -> None:
+    exceptions_mod = types.ModuleType("temporalio.exceptions")
+    workflows_mod = types.ModuleType("worker.temporal.workflows")
+
+    class WorkflowAlreadyStartedError(Exception):
+        pass
+
+    class _Workflow:
+        @staticmethod
+        async def run(*_args, **_kwargs):
+            return {}
+
+    class _Client:
+        async def start_workflow(self, *_args, **_kwargs):
+            raise WorkflowAlreadyStartedError
+
+    exceptions_mod.WorkflowAlreadyStartedError = WorkflowAlreadyStartedError
+    workflows_mod.CleanupWorkspaceWorkflow = _Workflow
+    monkeypatch.setitem(sys.modules, "temporalio.exceptions", exceptions_mod)
+    monkeypatch.setitem(sys.modules, "worker.temporal.workflows", workflows_mod)
+    monkeypatch.setattr(
+        worker_main, "_connect_temporal", lambda _settings: asyncio.sleep(0, result=_Client())
+    )
+
+    result = asyncio.run(
+        worker_main.start_cleanup_workflow(
+            _fake_settings(),
+            run_once=False,
+            workflow_id="cleanup-workflow",
+        )
+    )
+
+    assert result == {
+        "ok": True,
+        "workflow_id": "cleanup-workflow",
+        "status": "already_running",
+        "run_once": False,
+    }
+
+
+def test_start_cleanup_workflow_started_payload_includes_cache_controls(monkeypatch) -> None:
+    exceptions_mod = types.ModuleType("temporalio.exceptions")
+    workflows_mod = types.ModuleType("worker.temporal.workflows")
+    captured: dict[str, object] = {}
+
+    class WorkflowAlreadyStartedError(Exception):
+        pass
+
+    class _Workflow:
+        @staticmethod
+        async def run(*_args, **_kwargs):
+            return {}
+
+    class _Handle:
+        id = "cleanup-workflow"
+        first_execution_run_id = "cleanup-run-id"
+
+    class _Client:
+        async def start_workflow(self, workflow, payload, **kwargs):
+            captured["workflow"] = workflow
+            captured["payload"] = payload
+            captured["kwargs"] = kwargs
+            return _Handle()
+
+    exceptions_mod.WorkflowAlreadyStartedError = WorkflowAlreadyStartedError
+    workflows_mod.CleanupWorkspaceWorkflow = _Workflow
+    monkeypatch.setitem(sys.modules, "temporalio.exceptions", exceptions_mod)
+    monkeypatch.setitem(sys.modules, "worker.temporal.workflows", workflows_mod)
+    monkeypatch.setattr(
+        worker_main, "_connect_temporal", lambda _settings: asyncio.sleep(0, result=_Client())
+    )
+
+    result = asyncio.run(
+        worker_main.start_cleanup_workflow(
+            _fake_settings(),
+            run_once=False,
+            interval_hours=0,
+            older_than_hours=0,
+            workspace_dir="/tmp/workspace",
+            cache_dir="/tmp/cache",
+            cache_older_than_hours=0,
+            cache_max_size_mb=0,
+            workflow_id="cleanup-stable",
+        )
+    )
+
+    assert captured["payload"] == {
+        "run_once": False,
+        "interval_hours": 1,
+        "older_than_hours": 1,
+        "workspace_dir": "/tmp/workspace",
+        "cache_dir": "/tmp/cache",
+        "cache_older_than_hours": 1,
+        "cache_max_size_mb": 1,
+    }
+    assert captured["kwargs"]["id"] == "cleanup-stable"
+    assert result["status"] == "started"
+    assert result["interval_hours"] == 1
+    assert result["older_than_hours"] == 1
+    assert result["cache_older_than_hours"] == 1
+    assert result["cache_max_size_mb"] == 1
+    assert result["run_id"] == "cleanup-run-id"
+
+
+def test_main_invokes_parser_and_asyncio_run(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+    parsed_args = argparse.Namespace(command="run-worker")
+
+    def _parse_args():
+        captured["args"] = parsed_args
+        return parsed_args
+
+    parser = SimpleNamespace(parse_args=_parse_args)
+
+    monkeypatch.setattr(worker_main, "_build_parser", lambda: parser)
+
+    async def _fake_main_async(args):
+        captured["args"] = args
+
+    monkeypatch.setattr(worker_main, "_main_async", _fake_main_async)
+
+    def _fake_asyncio_run(coro):
+        captured["coro_type"] = type(coro).__name__
+        coro.close()
+
+    monkeypatch.setattr(worker_main.asyncio, "run", _fake_asyncio_run)
+
+    worker_main.main()
+
+    assert captured["args"].command == "run-worker"
+    assert captured["coro_type"] == "coroutine"

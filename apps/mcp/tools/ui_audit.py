@@ -47,6 +47,28 @@ def _normalize_run_payload(payload: dict[str, Any]) -> dict[str, Any]:
         "status": to_optional_str(source.get("status")) or "unknown",
         "created_at": to_optional_str(source.get("created_at")),
         "summary": _normalize_summary(source.get("summary")),
+        "gemini_review": _normalize_gemini_review(source.get("gemini_review")),
+    }
+
+
+def _normalize_gemini_review(value: Any) -> dict[str, Any] | None:
+    if not isinstance(value, dict):
+        return None
+    provider_status: int | None = None
+    raw_provider_status = value.get("provider_status")
+    if raw_provider_status is not None:
+        parsed_status = to_int(raw_provider_status, default=0)
+        if 100 <= parsed_status <= 599:
+            provider_status = parsed_status
+    return {
+        "status": to_optional_str(value.get("status")) or "unknown",
+        "reason_code": to_optional_str(value.get("reason_code")) or "unknown",
+        "provider_status": provider_status,
+        "model": to_optional_str(value.get("model")),
+        "timeout_seconds": value.get("timeout_seconds"),
+        "max_retries": to_int(value.get("max_retries"), default=0)
+        if value.get("max_retries") is not None
+        else None,
     }
 
 
@@ -78,13 +100,23 @@ def _normalize_autofix_payload(payload: dict[str, Any]) -> dict[str, Any]:
         return payload
 
     summary_source = payload.get("summary") if isinstance(payload.get("summary"), dict) else {}
-    guardrails = payload.get("guardrails") if isinstance(payload.get("guardrails"), dict) else {}
+    guardrails_source = payload.get("guardrails") if isinstance(payload.get("guardrails"), dict) else {}
+    guardrails = dict(guardrails_source)
     actions = payload.get("suggested_actions")
     raw_actions = actions if isinstance(actions, list) else []
+    mode_value = to_optional_str(payload.get("mode")) or "dry-run"
+    autofix_applied = bool(to_optional_bool(payload.get("autofix_applied")))
+    if mode_value == "apply" and not autofix_applied:
+        mode_value = "dry-run"
+        upstream_note = to_optional_str(guardrails.get("note")) or ""
+        honesty_note = "Apply mode is not supported; this result is a plan-only dry-run."
+        guardrails["note"] = (
+            f"{upstream_note} {honesty_note}".strip() if upstream_note else honesty_note
+        )
     return {
         "run_id": to_optional_str(payload.get("run_id")),
-        "mode": to_optional_str(payload.get("mode")) or "dry-run",
-        "autofix_applied": bool(to_optional_bool(payload.get("autofix_applied"))),
+        "mode": mode_value,
+        "autofix_applied": autofix_applied,
         "summary": {
             "finding_count": to_int(summary_source.get("finding_count"), default=0),
             "high_or_worse_count": to_int(summary_source.get("high_or_worse_count"), default=0),
@@ -95,7 +127,10 @@ def _normalize_autofix_payload(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 def register_ui_audit_tools(mcp: FastMCP, api_call: ApiCall) -> None:
-    @mcp.tool(name="vd.ui_audit.run", description="Run UI audit from artifact directory evidence.")
+    @mcp.tool(
+        name="vd.ui_audit.run",
+        description="Run UI audit from artifact directory evidence and persist the run snapshot.",
+    )
     def ui_audit_run(
         job_id: str | None = None,
         artifact_root: str | None = None,
@@ -123,7 +158,10 @@ def register_ui_audit_tools(mcp: FastMCP, api_call: ApiCall) -> None:
 
     @mcp.tool(
         name="vd.ui_audit.read",
-        description="Read UI audit results. action=get|list_findings|get_artifact|autofix.",
+        description=(
+            "Read UI audit results. action=get|list_findings|get_artifact|autofix. "
+            "autofix currently returns a plan-only dry-run summary."
+        ),
     )
     def ui_audit_read(
         action: str,

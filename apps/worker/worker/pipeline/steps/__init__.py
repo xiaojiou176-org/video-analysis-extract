@@ -1,3 +1,4 @@
+from worker.pipeline.steps.article import step_fetch_article_content
 from worker.pipeline.steps.artifacts import step_write_artifacts
 from worker.pipeline.steps.comments import step_collect_comments
 from worker.pipeline.steps.embedding import step_build_embeddings
@@ -13,6 +14,7 @@ __all__ = [
     "step_collect_subtitles",
     "step_download_media",
     "step_extract_frames",
+    "step_fetch_article_content",
     "step_fetch_metadata",
     "step_llm_digest",
     "step_llm_outline",

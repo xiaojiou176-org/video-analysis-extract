@@ -22,17 +22,18 @@ devcontainer up --workspace-folder .
   - `env/profiles/reader.env`（reader profile 模板）
 - Secret injection policy：密钥仅允许来自 `.env` 或进程环境；禁止依赖 shell 登录配置。
 
-变量优先级（按当前脚本实现）：
+变量优先级（收口后口径）：
 
-1. 脚本内显式保留/覆盖逻辑（如 `e2e_live_smoke.sh` 对 API 路由变量的保留）
-2. 继承自父 shell 的同名变量（`load_repo_env` 最后恢复 shell 快照）
-3. `.env`/`env/core.env`/`env/profiles/<profile>.env`（`load_repo_env` 加载）
-4. 代码默认值（仅可选项）
+1. 路由真相源（`API_PORT`/`WEB_PORT`）：`CLI > .runtime-cache/full-stack/resolved.env > .env > 默认值`
+2. 派生地址（`VD_API_BASE_URL`/`NEXT_PUBLIC_API_BASE_URL`）：默认由路由真相源派生，若显式传 `--api-base-url` 等 CLI 参数则以 CLI 为准。
+3. 密钥类键：当前进程显式注入优先，再回退到 `.env`。
+4. reader overlay：仅补齐缺失 `MINIFLUX_*`/`NEXTFLUX_*`，不覆盖当前进程已有值。
 
 Reader overlay 规则：
 
 - reader env 不会全局生效，仅在 reader 栈命令路径生效（`deploy_reader_stack.sh`、reader 检查/同步链路）。
 - 启用 reader 栈时，建议显式指定 `--env-file env/profiles/reader.env`。
+- reader overlay 只补齐缺失的 `MINIFLUX_*` / `NEXTFLUX_*` 变量；当前 shell 中显式导出的 reader 凭证优先级更高，不会被模板值覆盖。
 
 ## 标准启动链路（6 步）
 
@@ -76,8 +77,9 @@ pre-commit install --hook-type pre-commit --hook-type commit-msg --hook-type pre
 
 - `quality_gate.sh` 支持 `--changed-backend|web|deps|migrations` 与 `--ci-dedupe`。
 - pre-commit 的 `auto` 使用 staged diff；pre-push 的 `auto` 优先使用 upstream merge-base diff，失败回退 `HEAD~1..HEAD`，无法可靠识别时保守回退为全量检查。
-- 本地 pre-push 默认使用变更感知门禁：后端变更命中时强制 mutation，无后端变更时跳过 mutation 以避免无效本地消耗。
-- 在 CI 的 dedupe 模式中，`quality-gate-pre-push` 作为远端最重门禁执行（后端变更命中时含 mutation），lint/unit/coverage 由独立 CI job 并行交叉验证。
+- 本地 pre-push 默认使用变更感知门禁：后端变更命中时强制 mutation，并默认执行 `api_real_smoke_local.sh`（真实 Postgres + Temporal + worker）；无后端变更时跳过 mutation 与 real smoke 以避免无效本地消耗。
+- 在 CI 的 dedupe 模式中，`quality-gate-pre-push` 作为远端最重门禁执行（显式 `--skip-mutation 1`）；mutation 由独立 `mutation-testing` job 执行，lint/unit/coverage 由独立 CI job 并行交叉验证。
+- 本地 `strict-full-run=1` 会强制关闭 `ci-dedupe` 并禁用 `skip-mutation`，同时执行 repo-wide `>=95%` 覆盖率与 mutation `score>=0.64 / effective_ratio>=0.27 / no_tests_ratio<=0.72` 的完整全量门禁。
 - 本地 pre-push 会额外执行 `api cors preflight smoke (OPTIONS DELETE)` 与 `contract diff local gate (base vs head)`，用于在推送前发现跨端 CORS 与接口契约回归。
 - 成本治理约束：重跑远程 CI 前，必须先本地通过 pre-push；若远程失败，先本地复现修复再重跑，禁止连续重跑碰运气。
 
@@ -113,7 +115,6 @@ temporal server start-dev --ip 127.0.0.1 --port 7233
 ### 3) 初始化环境变量（统一流程）
 
 ```bash
-./scripts/init_env_example.sh
 cp .env.example .env
 python3 scripts/check_env_contract.py --strict
 set -a; source .env; set +a
@@ -122,7 +123,7 @@ set -a; source .env; set +a
 说明：
 
 - `scripts/dev_api.sh`、`scripts/dev_worker.sh`、`scripts/dev_mcp.sh`、`scripts/run_daily_digest.sh`、`scripts/run_failure_alerts.sh` 均会优先自动加载 `.env`。
-- 运行脚本会加载 repo env 文件；若需覆盖，以当前 shell 中显式导出的环境变量为准。
+- 标准初始化路径是 `.env.example -> .env`；`scripts/init_env_example.sh` 仅用于按需生成辅助模板。
 - 环境契约真相源：`ENVIRONMENT.md` + `infra/config/env.contract.json`。
 
 ### 4) 初始化数据库（统一迁移命令）
@@ -154,8 +155,8 @@ sqlite3 "$SQLITE_PATH" < infra/sql/sqlite_state_init.sql
 ### 6) 最小验收
 
 ```bash
-curl -sS http://127.0.0.1:8000/healthz
-curl -sS -X POST http://127.0.0.1:8000/api/v1/ingest/poll \
+curl -sS http://127.0.0.1:9000/healthz
+curl -sS -X POST http://127.0.0.1:9000/api/v1/ingest/poll \
   -H 'Content-Type: application/json' \
   -d '{"max_new_videos": 20}'
 ```
@@ -163,7 +164,7 @@ curl -sS -X POST http://127.0.0.1:8000/api/v1/ingest/poll \
 可选：查询 job 详情（稳定字段）
 
 ```bash
-curl -sS http://127.0.0.1:8000/api/v1/jobs/<job_id>
+curl -sS http://127.0.0.1:9000/api/v1/jobs/<job_id>
 ```
 
 ## 可选操作
@@ -293,14 +294,23 @@ bash -n scripts/start_ops_workflows.sh
 ```bash
 ./scripts/bootstrap_full_stack.sh
 ./scripts/full_stack.sh up
-./scripts/smoke_full_stack.sh
+./scripts/smoke_full_stack.sh --offline-fallback 0
 ```
 
 脚本说明：
 
 - `bootstrap_full_stack.sh`：依赖安装、环境校验、数据库迁移、可选 reader stack。
-- `full_stack.sh`：统一起停 API/Worker/MCP/Web；`up` 会等待 API health(`GET /healthz`) 与 Web 端口就绪，失败时输出关键服务日志片段。
+- `bootstrap_full_stack.sh` 除首次 `.env` 不存在时复制模板外，不再持久化改写 `.env`；端口冲突和回退等运行时决策会写入 `.runtime-cache/full-stack/resolved.env`，仅对当前运行生效。
+- `full_stack.sh`：统一起停 API/Worker/Web；`up` 会等待 API health(`GET /healthz`) 与 Web 端口就绪，失败时输出关键服务日志片段。
+- `scripts/dev_mcp.sh`：交互式 stdio MCP 入口，不由 `full_stack.sh` 作为后台守护进程管理。
+- `full_stack.sh` 启动 Web 时会显式注入 `NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:${API_PORT}`，避免开发日志继续回落到 `127.0.0.1:9000`。
+- 本地路由真相源是 `API_PORT/WEB_PORT`；`VD_API_BASE_URL` 与 `NEXT_PUBLIC_API_BASE_URL` 为派生地址。
+- `full_stack.sh` 的启动顺序是“API health -> Web -> Worker”；Worker 启动前会先做 Temporal preflight（`TEMPORAL_TARGET_HOST`，默认 `localhost:7233`），不可达时直接 fail-fast。
 - `smoke_full_stack.sh`：执行端到端 smoke（含 feed/web 检查，可选 reader 检查）。
+- `smoke_full_stack.sh` 不是 `api-real-smoke` 替代；后端真实 Postgres integration smoke 需单独执行 `scripts/api_real_smoke_local.sh`。
+- `scripts/api_real_smoke_local.sh` 默认监听 `127.0.0.1:18080`；若该默认端口被其他本地服务占用且未显式传 `--api-port`，脚本会自动选择下一个空闲端口。
+- `scripts/api_real_smoke_local.sh` 会在 cleanup workflow closure probe 前临时启动 worker；脚本退出时会一并清理 API/worker 与隔离数据库。
+- `scripts/api_real_smoke_local.sh` 现在会先检测本机 IPv4 loopback 是否健康；如果一开始就报 `failure_kind=host_loopback_ipv4_exhausted`，优先处理主机环境（减少本地 MCP/Codex bridge 长连接、换更干净 runner），而不是继续追 API/Temporal 业务日志。
 - compose 固定默认（不再通过 env 覆盖）：core Postgres `DB/User`、Redis 端口、Temporal 端口；Miniflux `DB/User/DB_NAME` 与 Miniflux 端口。
 
 `full_stack.sh` 运行约束（稳定性修复）：
@@ -311,6 +321,7 @@ bash -n scripts/start_ops_workflows.sh
 Live smoke 执行约束（2026-02 更新）：
 
 - 环境变量加载顺序：优先仓库 `.env`，缺失项仅使用当前 shell 环境变量。
+- reader 检查/同步链路会额外读取 `env/profiles/reader.env` 补齐缺失 reader 变量，但会保留当前 shell 已显式注入的 reader 凭证优先级。
 - `YOUTUBE_API_KEY` 失效自修复：按 `.env` → 当前 shell 环境变量顺序尝试可用 key；命中后自动回写 `.env`（日志仅输出脱敏片段，不输出完整 key）。
 - 若上述来源全部无效：live smoke 会明确失败并提示“需要用户提供有效key”。
 - 外部真实交互：`e2e_live_smoke.sh` 会先执行真实外部 API 探测，再执行真实浏览器外站探测（`external_playwright_smoke.sh`）。
@@ -323,6 +334,49 @@ Live smoke 执行约束（2026-02 更新）：
 
 - `bootstrap_full_stack.sh` 默认启用 core services 与 reader stack。
 - `smoke_full_stack.sh` 默认执行 reader checks，并会执行 `run_ai_feed_sync.sh` 验证 AI 文本回写 Miniflux。
+- `smoke_full_stack.sh` 默认 `--offline-fallback 0`；只有显式传 `--offline-fallback 1` 且命中 `.runtime-cache/full-stack/offline-fallback.flag` 才会降级跳过 reader checks（该 marker 由 `bootstrap_full_stack.sh` 在 `--offline-fallback 1` 场景下写入）。
+
+## 本地验收口径分层（sqlite vs 真实 Postgres）
+
+- 默认快速回归：`sqlite+pysqlite:///:memory:`，用于全仓快速测试与日常 pre-push。
+- 真实后端集成验收：`postgresql+psycopg://...` + `API_INTEGRATION_SMOKE_STRICT=1`，用于对齐 CI `api-real-smoke`。
+
+推荐命令：
+
+```bash
+./scripts/quality_gate.sh --mode pre-push --profile ci --profile live-smoke --ci-dedupe 0
+./scripts/api_real_smoke_local.sh
+./scripts/quality_gate.sh --mode pre-push --strict-full-run 1 --profile ci --profile live-smoke --ci-dedupe 0
+```
+
+标准严格验收命令（固定顺序）：
+
+```bash
+./scripts/full_stack.sh up
+./scripts/api_real_smoke_local.sh
+./scripts/smoke_full_stack.sh --offline-fallback 0
+./scripts/quality_gate.sh --mode pre-push --strict-full-run 1 --profile ci --profile live-smoke --ci-dedupe 0
+```
+
+如果 `api_real_smoke_local.sh` 在最开始就失败并输出 `host_loopback_ipv4_exhausted`：
+
+```bash
+# 先确认是不是当前主机的 127.0.0.1 环境本身不健康
+python3 - <<'PY'
+import socket
+s = socket.socket()
+try:
+    s.settimeout(2)
+    s.connect(("127.0.0.1", 80))
+    print("loopback-ok")
+except Exception as exc:
+    print(f"loopback-failed: {exc}")
+finally:
+    s.close()
+PY
+```
+
+出现 `Errno 49` 时，优先减少本机高连接占用进程（尤其是大量 MCP/Codex bridge），再重跑真实 smoke。
 
 ## 常见故障
 
@@ -354,7 +408,7 @@ Live smoke 执行约束（2026-02 更新）：
 示例（限制回合并开启 thought 输出）：
 
 ```bash
-curl -sS -X POST http://127.0.0.1:8000/api/v1/videos/process \
+curl -sS -X POST http://127.0.0.1:9000/api/v1/videos/process \
   -H 'Content-Type: application/json' \
   -d '{
     "video": {"platform": "youtube", "url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ"},

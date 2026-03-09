@@ -4,7 +4,7 @@ from collections.abc import Callable
 from typing import Any
 
 from apps.mcp.tools.ingest import register_ingest_tools
-from apps.mcp.tools.workflows import register_workflow_tools
+from apps.mcp.tools.workflows import _normalize_workflow_payload, register_workflow_tools
 
 UUID_1 = "11111111-1111-1111-1111-111111111111"
 
@@ -154,3 +154,34 @@ def test_workflows_run_rejects_invalid_payload_value_ranges() -> None:
 
     assert payload["code"] == "INVALID_ARGUMENT"
     assert payload["details"]["field"] == "payload.local_hour"
+
+
+def test_workflows_payload_normalizer_covers_bool_and_range_branches() -> None:
+    invalid_payload, field, error = _normalize_workflow_payload(
+        "poll_feeds",
+        {"run_once": "yes"},
+    )
+    assert invalid_payload is None
+    assert field == "run_once"
+    assert error == "payload.run_once must be a boolean"
+
+    poll_feeds, field, error = _normalize_workflow_payload(
+        "poll_feeds",
+        {"run_once": True, "max_new_videos": 25},
+    )
+    assert error is None and field is None
+    assert poll_feeds == {"run_once": True, "max_new_videos": 25}
+
+    notification_retry, field, error = _normalize_workflow_payload(
+        "notification_retry",
+        {"interval_minutes": 15, "retry_batch_limit": 9},
+    )
+    assert error is None and field is None
+    assert notification_retry == {"interval_minutes": 15, "retry_batch_limit": 9}
+
+    provider_canary, field, error = _normalize_workflow_payload(
+        "provider_canary",
+        {"interval_hours": 4, "timeout_seconds": 60},
+    )
+    assert error is None and field is None
+    assert provider_canary == {"interval_hours": 4, "timeout_seconds": 60}

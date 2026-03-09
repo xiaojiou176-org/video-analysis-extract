@@ -612,7 +612,10 @@ def _extract_daily_digest_date(payload_json: Any) -> date | None:
 def _extract_timezone_name(payload_json: Any) -> str | None:
     return _extract_timezone_name_impl(payload_json)
 def _extract_timezone_offset_minutes(payload_json: Any) -> int:
-    return _extract_timezone_offset_minutes_impl(payload_json, coerce_int=_coerce_int)
+    return _extract_timezone_offset_minutes_impl(
+        payload_json,
+        coerce_int=lambda value, fallback: _coerce_int(value, fallback=fallback),
+    )
 def _build_retry_failure_payload(
     *,
     error_message: str,

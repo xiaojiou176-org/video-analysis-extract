@@ -58,6 +58,16 @@ npm --prefix apps/web run test:a11y
 npm --prefix apps/web run build
 ```
 
+当前本地推荐口径补充：
+
+- Web 覆盖率统一使用 `npm --prefix apps/web run test:coverage`，不再使用临时 `vitest run --coverage` 命令拼接。
+- 若依赖升级影响到本地严格验收链路，还必须验证：
+
+```bash
+./scripts/api_real_smoke_local.sh
+./scripts/quality_gate.sh --mode pre-push --strict-full-run 1 --profile ci --profile live-smoke --ci-dedupe 0
+```
+
 ## Constraints
 
 - 禁止提交与清单不一致的锁文件。

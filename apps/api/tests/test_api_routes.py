@@ -517,9 +517,12 @@ def test_retrieval_search_semantic_failure_is_observable(
 
 
 def test_feed_digests_returns_items(api_client: TestClient, monkeypatch) -> None:
-    def fake_list_digest_feed(self, *, source, category, limit, cursor, since):
+    sub_id = str(uuid.uuid4())
+
+    def fake_list_digest_feed(self, *, source, category, subscription_id, limit, cursor, since):
         assert source == "youtube"
         assert category == "tech"
+        assert subscription_id == sub_id
         assert limit == 5
         assert cursor is None
         assert since is None
@@ -536,6 +539,7 @@ def test_feed_digests_returns_items(api_client: TestClient, monkeypatch) -> None
                     "published_at": "2026-02-23T09:58:12Z",
                     "summary_md": "# Demo\n\nsummary body",
                     "artifact_type": "digest",
+                    "content_type": "article",
                 }
             ],
             "has_more": True,
@@ -547,7 +551,8 @@ def test_feed_digests_returns_items(api_client: TestClient, monkeypatch) -> None
     )
 
     response = api_client.get(
-        "/api/v1/feed/digests", params={"source": "youtube", "category": "tech", "limit": 5}
+        "/api/v1/feed/digests",
+        params={"source": "youtube", "category": "tech", "sub": sub_id, "limit": 5},
     )
     payload = response.json()
 
@@ -557,6 +562,7 @@ def test_feed_digests_returns_items(api_client: TestClient, monkeypatch) -> None
     assert payload["items"][0]["category"] == "tech"
     assert payload["items"][0]["source"] == "youtube"
     assert payload["items"][0]["artifact_type"] == "digest"
+    assert payload["items"][0]["content_type"] == "article"
 
 
 def test_subscriptions_list_includes_adapter_and_category_fields(
@@ -1607,7 +1613,8 @@ def test_notification_html_renderer_supports_markdown() -> None:
     assert '<a href="https://example.com">链接</a>' in html
 
 
-def test_ui_audit_run_and_get_endpoints(api_client: TestClient, tmp_path) -> None:
+def test_ui_audit_run_and_get_endpoints(api_client: TestClient, tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("UI_AUDIT_RUN_STORE_DIR", str(tmp_path / "ui-audit-runs"))
     artifact_root = tmp_path / "ui-audit-artifacts"
     artifact_root.mkdir(parents=True, exist_ok=True)
     report_path = artifact_root / "playwright-axe-report.json"
@@ -1621,12 +1628,17 @@ def test_ui_audit_run_and_get_endpoints(api_client: TestClient, tmp_path) -> Non
     )
     assert run_response.status_code == 200
     run_payload = run_response.json()
-    assert run_payload["status"] == "completed"
+    assert run_payload["status"] == "completed_with_gemini_skipped"
     assert run_payload["summary"]["artifact_count"] >= 1
     assert run_payload["summary"]["finding_count"] == 1
     assert run_payload["summary"]["severity_counts"]["high"] == 1
 
     run_id = run_payload["run_id"]
+    from apps.api.app.services.ui_audit import UiAuditService
+
+    with UiAuditService._store_lock:
+        UiAuditService._run_store.clear()
+
     get_response = api_client.get(f"/api/v1/ui-audit/{run_id}")
     assert get_response.status_code == 200
     assert get_response.json()["run_id"] == run_id
@@ -1643,7 +1655,8 @@ def test_ui_audit_run_and_get_endpoints(api_client: TestClient, tmp_path) -> Non
     assert artifacts_payload["items"][0]["key"] == "playwright-axe-report.json"
 
 
-def test_ui_audit_get_artifact_returns_base64(api_client: TestClient, tmp_path) -> None:
+def test_ui_audit_get_artifact_returns_base64(api_client: TestClient, tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("UI_AUDIT_RUN_STORE_DIR", str(tmp_path / "ui-audit-runs"))
     artifact_root = tmp_path / "ui-audit-artifacts"
     artifact_root.mkdir(parents=True, exist_ok=True)
     report_path = artifact_root / "playwright-log.json"
@@ -1671,6 +1684,7 @@ def test_ui_audit_get_artifact_returns_base64(api_client: TestClient, tmp_path) 
 def test_ui_audit_run_includes_gemini_review_findings(
     api_client: TestClient, monkeypatch, tmp_path
 ) -> None:
+    monkeypatch.setenv("UI_AUDIT_RUN_STORE_DIR", str(tmp_path / "ui-audit-runs"))
     artifact_root = tmp_path / "ui-audit-artifacts"
     artifact_root.mkdir(parents=True, exist_ok=True)
     (artifact_root / "playwright-axe-report.json").write_text(
@@ -1747,7 +1761,8 @@ def test_ui_audit_run_includes_gemini_review_findings(
     )
 
 
-def test_ui_audit_autofix_endpoint_returns_summary(api_client: TestClient, tmp_path) -> None:
+def test_ui_audit_autofix_endpoint_returns_summary(api_client: TestClient, tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("UI_AUDIT_RUN_STORE_DIR", str(tmp_path / "ui-audit-runs"))
     artifact_root = tmp_path / "ui-audit-artifacts"
     artifact_root.mkdir(parents=True, exist_ok=True)
     report_path = artifact_root / "playwright-axe-report.json"
@@ -1775,7 +1790,39 @@ def test_ui_audit_autofix_endpoint_returns_summary(api_client: TestClient, tmp_p
     assert payload["summary"]["high_or_worse_count"] == 1
     assert payload["guardrails"]["max_files"] == 2
     assert payload["guardrails"]["max_changed_lines"] == 80
+    assert payload["guardrails"]["requested_mode"] == "dry-run"
+    assert payload["guardrails"]["effective_mode"] == "dry-run"
     assert isinstance(payload["suggested_actions"], list)
+
+
+def test_ui_audit_autofix_apply_request_returns_honest_dry_run_mode(
+    api_client: TestClient, tmp_path, monkeypatch
+) -> None:
+    monkeypatch.setenv("UI_AUDIT_RUN_STORE_DIR", str(tmp_path / "ui-audit-runs"))
+    artifact_root = tmp_path / "ui-audit-artifacts"
+    artifact_root.mkdir(parents=True, exist_ok=True)
+    (artifact_root / "playwright-axe-report.json").write_text(
+        '{"violations":[{"id":"color-contrast","impact":"serious","help":"Color contrast","description":"Insufficient contrast"}]}',
+        encoding="utf-8",
+    )
+
+    run_response = api_client.post(
+        "/api/v1/ui-audit/run", json={"artifact_root": str(artifact_root)}
+    )
+    run_id = run_response.json()["run_id"]
+
+    response = api_client.post(
+        f"/api/v1/ui-audit/{run_id}/autofix",
+        json={"mode": "apply", "max_files": 2, "max_changed_lines": 80},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["mode"] == "dry-run"
+    assert payload["autofix_applied"] is False
+    assert payload["guardrails"]["requested_mode"] == "apply"
+    assert payload["guardrails"]["effective_mode"] == "dry-run"
+    assert "not supported yet" in payload["guardrails"]["note"]
 
 
 def test_ui_audit_autofix_endpoint_returns_404_for_missing_run(api_client: TestClient) -> None:
@@ -1786,3 +1833,50 @@ def test_ui_audit_autofix_endpoint_returns_404_for_missing_run(api_client: TestC
 
     assert response.status_code == 404
     assert response.json()["detail"] == "ui audit run not found"
+
+
+def test_ui_audit_read_endpoints_require_write_access_when_api_key_configured(
+    api_client: TestClient, monkeypatch, tmp_path
+) -> None:
+    from apps.api.app.services.ui_audit import UiAuditService
+
+    monkeypatch.setenv("VD_API_KEY", "unit-test-token")
+    monkeypatch.setenv("UI_AUDIT_RUN_STORE_DIR", str(tmp_path / "ui-audit-runs"))
+    service = UiAuditService()
+    service._save_run(  # noqa: SLF001
+        {
+            "run_id": "secured-run",
+            "status": "completed",
+            "created_at": datetime.now(UTC).isoformat(),
+            "summary": {"artifact_count": 0, "finding_count": 0, "severity_counts": {}},
+            "findings": [],
+            "artifacts": [],
+        }
+    )
+
+    for path in (
+        "/api/v1/ui-audit/secured-run",
+        "/api/v1/ui-audit/secured-run/findings",
+        "/api/v1/ui-audit/secured-run/artifacts",
+        "/api/v1/ui-audit/secured-run/artifact?key=missing",
+    ):
+        response = api_client.get(path)
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+        assert response.json()["detail"] == "write access token required"
+
+    authorized = api_client.get(
+        "/api/v1/ui-audit/secured-run",
+        headers={"X-API-Key": "unit-test-token"},
+    )
+    assert authorized.status_code == 200
+    assert authorized.json()["run_id"] == "secured-run"
+
+    for path, detail in (
+        ("/api/v1/ui-audit/missing-run", "ui audit run not found"),
+        ("/api/v1/ui-audit/missing-run/findings", "ui audit run not found"),
+        ("/api/v1/ui-audit/missing-run/artifacts", "ui audit run not found"),
+        ("/api/v1/ui-audit/secured-run/artifact?key=missing", "ui audit artifact not found"),
+    ):
+        response = api_client.get(path, headers={"X-API-Key": "unit-test-token"})
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+        assert response.json()["detail"] == detail

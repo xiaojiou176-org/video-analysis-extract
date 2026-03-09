@@ -1,10 +1,20 @@
 from __future__ import annotations
 
+import hashlib
+import hmac
+import time
+
 import pytest
 from fastapi import HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials
 
 from apps.api.app.security import require_write_access
+
+
+def _build_web_session_token(secret: str) -> str:
+    bucket = int(time.time()) // (15 * 60)
+    signature = hmac.new(secret.encode("utf-8"), str(bucket).encode("utf-8"), hashlib.sha256).hexdigest()
+    return f"{bucket}.{signature}"
 
 
 def test_require_write_access_rejects_when_api_key_not_configured_by_default(
@@ -157,3 +167,31 @@ def test_require_write_access_prefers_bearer_and_rejects_mismatch_even_if_x_api_
 
     assert exc_info.value.status_code == status.HTTP_403_FORBIDDEN
     assert exc_info.value.detail == "invalid write access token"
+
+
+def test_require_write_access_accepts_valid_web_session_header(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("WEB_ACTION_SESSION_TOKEN", raising=False)
+    monkeypatch.setenv("VD_API_KEY", "unit-test-token")
+    require_write_access(
+        bearer=None,
+        api_key_header=None,
+        web_session_header=_build_web_session_token("unit-test-token"),
+    )
+
+
+def test_require_write_access_rejects_invalid_web_session_header(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("WEB_ACTION_SESSION_TOKEN", raising=False)
+    monkeypatch.setenv("VD_API_KEY", "unit-test-token")
+    with pytest.raises(HTTPException) as exc_info:
+        require_write_access(
+            bearer=None,
+            api_key_header=None,
+            web_session_header="bad-token",
+        )
+
+    assert exc_info.value.status_code == status.HTTP_401_UNAUTHORIZED
+    assert exc_info.value.detail == "write access token required"

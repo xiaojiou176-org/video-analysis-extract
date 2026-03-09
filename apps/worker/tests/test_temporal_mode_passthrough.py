@@ -13,6 +13,7 @@ def _patch_activity_runtime(
     *,
     tmp_path: Path,
     fallback_mode: str,
+    fallback_content_type: str = "video",
     captured: dict[str, Any],
     pipeline_result: dict[str, Any] | None = None,
 ):
@@ -45,6 +46,7 @@ def _patch_activity_runtime(
                 "published_at": None,
                 "mode": fallback_mode,
                 "overrides_json": {"lang": "zh-CN"},
+                "content_type": fallback_content_type,
             }
 
     async def _fake_run_pipeline(
@@ -56,11 +58,13 @@ def _patch_activity_runtime(
         attempt: int,
         mode: str = "full",
         overrides: dict[str, Any] | None = None,
+        content_type: str = "video",
     ) -> dict[str, Any]:
         captured["job_id"] = job_id
         captured["attempt"] = attempt
         captured["mode"] = mode
         captured["overrides"] = dict(overrides or {})
+        captured["content_type"] = content_type
         result = {
             "job_id": job_id,
             "attempt": attempt,
@@ -136,8 +140,9 @@ def test_process_job_workflow_explicit_mode_reaches_runner(
     assert payloads["run_pipeline"][0]["overrides"] == {"lang": "zh-CN"}
     assert captured["mode"] == "text_only"
     assert captured["overrides"] == {"lang": "zh-CN"}
+    assert captured["content_type"] == "video"
     assert result["pipeline"]["mode"] == "text_only"
-    assert fake_pg.get_job_calls == 0
+    assert fake_pg.get_job_calls == 1
 
 
 def test_process_job_workflow_db_mode_reaches_runner_when_mode_missing(
@@ -158,8 +163,31 @@ def test_process_job_workflow_db_mode_reaches_runner_when_mode_missing(
     assert "mode" not in payloads["run_pipeline"][0]
     assert captured["mode"] == "refresh_llm"
     assert captured["overrides"] == {"lang": "zh-CN"}
+    assert captured["content_type"] == "video"
     assert result["pipeline"]["mode"] == "refresh_llm"
     assert fake_pg.get_job_calls == 1
+
+
+def test_process_job_workflow_db_content_type_reaches_runner_when_article(
+    monkeypatch: Any,
+    tmp_path: Path,
+) -> None:
+    captured: dict[str, Any] = {}
+    _patch_activity_runtime(
+        monkeypatch,
+        tmp_path=tmp_path,
+        fallback_mode="full",
+        fallback_content_type="article",
+        captured=captured,
+    )
+    _patch_workflow_execute_activity(monkeypatch)
+
+    result = asyncio.run(workflows.ProcessJobWorkflow().run("job-db-article"))
+
+    assert captured["mode"] == "full"
+    assert captured["overrides"] == {"lang": "zh-CN"}
+    assert captured["content_type"] == "article"
+    assert result["pipeline"]["mode"] == "full"
 
 
 def test_process_job_workflow_forwards_llm_gate_fields_on_success(

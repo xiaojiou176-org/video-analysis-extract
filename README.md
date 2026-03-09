@@ -16,7 +16,7 @@
 ## 技术栈总览
 
 - 后端：Python、FastAPI、SQLAlchemy
-- 任务执行：Temporal Worker（9-step pipeline）
+- 任务执行：Temporal Worker（按 `content_type` 路由：video 9-step / article 5-step）
 - 工具层：FastMCP
 - 前端：Next.js
 - 存储：PostgreSQL（含 pgvector 扩展用于向量检索）+ SQLite（状态）+ Redis（可选）
@@ -31,7 +31,7 @@
 ```bash
 ./scripts/bootstrap_full_stack.sh
 ./scripts/full_stack.sh up
-./scripts/smoke_full_stack.sh
+./scripts/smoke_full_stack.sh --offline-fallback 0
 ```
 
 这三步会把仓库拉到“可运行 + 可验证”的状态（本地优先）。
@@ -39,8 +39,40 @@
 说明：
 
 - `bootstrap_full_stack.sh` 默认会拉起 core services（Postgres/Redis/Temporal）和 reader stack（Miniflux/Nextflux）。
-- `smoke_full_stack.sh` 默认会校验 reader stack，并执行一次 `AI Feed -> Miniflux` 回写检查。
+- `bootstrap_full_stack.sh` 除首次 `.env` 不存在时复制模板外，不再持久化改写 `.env`；端口冲突和回退等运行时决策会写入 `.runtime-cache/full-stack/resolved.env`，仅对当前运行生效。
+- `full_stack.sh` 默认只管理 API/Worker/Web；`scripts/dev_mcp.sh` 是交互式 stdio 入口，需要时单独开终端启动。
+- `full_stack.sh` 起 Web 时会自动把当前 API 端口注入为 `NEXT_PUBLIC_API_BASE_URL`，避免开发页在 18000/18001 口径下仍回落到 `127.0.0.1:9000`。
+- 本地路由真相源是 `API_PORT/WEB_PORT`；`VD_API_BASE_URL` 与 `NEXT_PUBLIC_API_BASE_URL` 是派生目标地址。
+- `full_stack.sh` 会按 `API health -> Web -> Worker` 顺序启动；Worker 启动前会先做 Temporal preflight（`TEMPORAL_TARGET_HOST`，默认 `localhost:7233`），不可达时直接 fail-fast。
+- `smoke_full_stack.sh` 默认会校验 reader stack，并执行一次 `AI Feed -> Miniflux` 回写检查；默认 `--offline-fallback 0`，只有显式传 `--offline-fallback 1` 且命中 `.runtime-cache/full-stack/offline-fallback.flag` 才会降级跳过 reader checks。
+- reader overlay 只会补齐缺失的 `MINIFLUX_*` / `NEXTFLUX_*` 变量；当前 shell 中显式注入的 reader 凭证优先级更高，不会再被 `env/profiles/reader.env` 模板覆盖。
 - 若你临时不想检查 reader：`./scripts/smoke_full_stack.sh --require-reader 0`
+- `smoke_full_stack.sh` 是本地联调 smoke，不是 `api-real-smoke` 的替代品；后端真实 Postgres 集成验收需要单独执行 `scripts/api_real_smoke_local.sh`。
+- `scripts/api_real_smoke_local.sh` 默认尝试 `127.0.0.1:18080`；若默认端口已被其他本地服务占用且未显式传 `--api-port`，脚本会自动选择下一个空闲端口并在日志中说明。
+- `scripts/api_real_smoke_local.sh` 现在会为 cleanup workflow closure probe 临时拉起本地 worker，并在脚本退出时自动清理，不再要求你先手动起 worker。
+- `scripts/api_real_smoke_local.sh` 现在会先检查本机 IPv4 loopback；如果直接报 `failure_kind=host_loopback_ipv4_exhausted`，说明当前主机 `127.0.0.1` 自连接本身异常，应先处理本机环境而不是继续追仓库业务日志。
+- `UI audit` 结果默认会写入 `.runtime-cache/ui-audit-runs/`；`autofix` 当前只会返回持久化 dry-run 计划，不会假装已经落盘改代码。
+- `scripts/smoke_computer_use_local.sh` 默认严格口径：provider 未开通 computer use 会直接失败；仅显式传 `--allow-unsupported-skip=1` 才允许按 skip 通过。
+
+## 本地验收分层（必须区分）
+
+- `sqlite+pysqlite:///:memory:`：默认快速回归口径（速度优先，允许 integration smoke 在环境不满足时按约定 `xfail`）。
+- `postgresql+psycopg://...`：真实 Postgres integration smoke 口径（与 CI `api-real-smoke` 对齐，用于无歧义后端验收）。
+
+标准严格验收（推荐按顺序执行）：
+
+```bash
+./scripts/full_stack.sh up
+./scripts/api_real_smoke_local.sh
+./scripts/smoke_full_stack.sh --offline-fallback 0
+./scripts/quality_gate.sh --mode pre-push --strict-full-run 1 --profile ci --profile live-smoke --ci-dedupe 0
+```
+
+日常本地快速回归（速度优先）：
+
+```bash
+./scripts/quality_gate.sh --mode pre-push --profile ci --profile live-smoke --ci-dedupe 0
+```
 
 ## IaC 与标准环境（AI 必须）
 
@@ -59,7 +91,7 @@ devcontainer up --workspace-folder .
 # 2) 在容器内执行（统一口径）
 ./scripts/bootstrap_full_stack.sh
 ./scripts/full_stack.sh up
-./scripts/smoke_full_stack.sh
+./scripts/smoke_full_stack.sh --offline-fallback 0
 ```
 
 运行风险说明：
@@ -74,10 +106,10 @@ devcontainer up --workspace-folder .
 `ProcessJobWorkflow` 由 3 个阶段组成：
 
 1. `mark_running`
-2. `run_pipeline_activity`（固定 9 steps）
+2. `run_pipeline_activity`（按 `content_type` 路由）
 3. `mark_succeeded` 或 `mark_failed`
 
-9-step pipeline：
+Video pipeline（`videos.content_type='video'`）：
 
 1. `fetch_metadata`
 2. `download_media`
@@ -89,7 +121,17 @@ devcontainer up --workspace-folder .
 8. `build_embeddings`
 9. `write_artifacts`
 
+Article pipeline（`videos.content_type='article'`）：
+
+1. `fetch_article_content`
+2. `llm_outline`
+3. `llm_digest`
+4. `build_embeddings`
+5. `write_artifacts`
+
 状态机细节见 `docs/state-machine.md`。
+
+`GET /api/v1/feed/digests` 当前查询参数为 `source/category/sub/limit/cursor/since`；响应项会返回 `content_type`，供 Web 区分视频与文章条目。
 
 ## 模型策略（Gemini-only）
 
@@ -154,13 +196,12 @@ temporal server start-dev --ip 127.0.0.1 --port 7233
 ### 3) 初始化环境变量
 
 ```bash
-./scripts/init_env_example.sh
 cp .env.example .env
 python3 scripts/check_env_contract.py --strict
 set -a; source .env; set +a
 ```
 
-说明：`scripts/dev_*.sh` 和 `scripts/run_*.sh` 只自动加载仓库根目录 `.env`；额外配置请通过当前 shell 环境变量显式注入。
+说明：标准初始化路径是 `.env.example -> .env`；`scripts/init_env_example.sh` 仅用于按需生成辅助模板。`scripts/dev_*.sh` 会自动加载仓库根目录 `.env`；reader 专用命令路径（如 `scripts/run_ai_feed_sync.sh`、`scripts/smoke_full_stack.sh` 的 reader 检查）会额外读取 `env/profiles/reader.env` 补齐缺失 reader 变量，但不会覆盖当前 shell 已显式注入的值。额外配置优先通过当前 shell 环境变量显式注入。
 补充：`.env.example` 已精简为最小可启动模板；脚本参数全集请查看 `docs/reference/env-script-overrides.md`。
 
 ### 4) 初始化数据库
@@ -190,7 +231,7 @@ sqlite3 "$SQLITE_PATH" < infra/sql/sqlite_state_init.sql
 - `./scripts/dev_api.sh --app apps.api.app.main:app --no-reload`
 - `./scripts/dev_worker.sh --worker-dir "$PWD/apps/worker" --entry worker.main --command run-worker --no-show-hints`
 - `./scripts/dev_mcp.sh --entry apps.mcp.server --mcp-dir "$PWD/apps/mcp"`
-- `./scripts/init_env_example.sh --output "$PWD/.env.generated.example" --force`
+- 可选辅助模板命令：`./scripts/init_env_example.sh --output "$PWD/.env.generated.example" --force`
 
 补充说明：
 
@@ -199,8 +240,8 @@ sqlite3 "$SQLITE_PATH" < infra/sql/sqlite_state_init.sql
 ### 6) 最小验收
 
 ```bash
-curl -sS http://127.0.0.1:8000/healthz
-curl -sS -X POST http://127.0.0.1:8000/api/v1/ingest/poll -H 'Content-Type: application/json' -d '{"max_new_videos": 20}'
+curl -sS http://127.0.0.1:9000/healthz
+curl -sS -X POST http://127.0.0.1:9000/api/v1/ingest/poll -H 'Content-Type: application/json' -d '{"max_new_videos": 20}'
 ```
 
 `GET /api/v1/jobs/{job_id}` 与 `vd.jobs.get` 稳定字段：
@@ -227,18 +268,32 @@ uv run pytest apps/worker/tests apps/api/tests apps/mcp/tests -q
 
 uv run --with playwright python -m playwright install chromium
 uv run --with pytest --with playwright pytest apps/web/tests/e2e -q
+
+# 关键前端控件链路（feed/dashboard/subscriptions）
+uv run --with pytest --with playwright pytest \
+  apps/web/tests/e2e/test_feed.py \
+  apps/web/tests/e2e/test_dashboard.py \
+  apps/web/tests/e2e/test_subscriptions.py \
+  -q -rA --web-e2e-browser chromium --web-e2e-use-mock-api=1
 ```
 
 注：`scripts/check_test_assertions.py` 默认禁止 `toBeDefined()`；仅在特例场景下允许用注释标记 `allow-low-value-assertion: toBeDefined` 显式豁免。
 
 测试与门禁口径更新（2026-02）：
 
-- 远程 CI 成本治理：触发或重跑 GitHub Actions 前，必须先本地跑通 `./scripts/quality_gate.sh --mode pre-push --heartbeat-seconds 20 --mutation-min-score 0.62 --mutation-min-effective-ratio 0.25 --mutation-max-no-tests-ratio 0.75 --profile ci --profile live-smoke --ci-dedupe 0`。
+- 远程 CI 成本治理：触发或重跑 GitHub Actions 前，必须先本地跑通 `./scripts/quality_gate.sh --mode pre-push --heartbeat-seconds 20 --mutation-min-score 0.64 --mutation-min-effective-ratio 0.27 --mutation-max-no-tests-ratio 0.72 --profile ci --profile live-smoke --ci-dedupe 0`。
+- 如需本地拿到与 CI `api-real-smoke` 同语义的最终后端验收，请额外执行 `./scripts/api_real_smoke_local.sh`，或直接执行 `./scripts/quality_gate.sh --mode pre-push --strict-full-run 1 --profile ci --profile live-smoke --ci-dedupe 0`。
+- `strict-full-run=1` 会强制关闭 `ci-dedupe` 且禁止 `skip-mutation`，确保本地跑的是完整门禁而非裁剪版。
 - 远程失败后必须先本地复现与修复，再触发下一次远程运行；禁止连续重跑碰运气。
 - CI 预检拆分为 `preflight-fast` + `preflight-heavy`，多数 job 先依赖 fast 以减少起跑阻塞，最终由 aggregate gate 同时约束两者成功。
 - `quality-gate-pre-push` 在 CI 全事件（PR/push/schedule）执行并透传 `--changed-*` 标记，作为远端最重门禁（该作业显式 `--skip-mutation 1`）；mutation 由独立 `mutation-testing` job 执行，并与 lint/unit/coverage 作业形成并行交叉验证。
+- `web-test-build` 在 PR/push/schedule 默认执行（只要 `preflight-fast` 与 `changes` 成功），避免变更感知误判导致关键 Web gate 被跳过。
+- 覆盖率门禁口径升级：全仓总覆盖率硬门禁 `>=95%`，核心模块维持 `>=95%`。
+- Web 覆盖率门禁不再只看 lines：`lines/functions/branches` 三指标必须同时满足 `global >=95%` 且 `core >=95%`。
+- Web 交互覆盖门禁已拆成更诚实的三段口径：`combined=1.0`、`e2e>=0.6`、`unit>=0.93`，不再把 E2E 与 unit 混成一个虚高的 100%。
 - 本地 `pre-push` 新增硬门禁：`api cors preflight smoke (OPTIONS DELETE)` 与 `contract diff local gate (base vs head)`，先于远程 CI 拦截跨端链路与契约回归。
 - 本地 `pre-push` 进一步对齐远端 `preflight-fast` + `web-test-build`：`check_ci_docs_parity`、`docs env canonical guard`、`provider residual guard`、`worker line limits`、`schema parity`、`web design token guard`、`web build`、`web button coverage`。
+- 本地验收分层：sqlite 口径用于默认快速回归；真实 Postgres integration smoke 必须单独跑 `scripts/api_real_smoke_local.sh`，用于对齐 CI `api-real-smoke`。
 - Web E2E 默认轻量化：trace 默认 `off`、video 默认 `retain-on-failure`，并仅在失败时上传重工件。
 - 测试分层主责明确：API 负责字段级契约断言，Web E2E 聚焦用户旅程，MCP 聚焦工具语义与路由动作。
 
@@ -286,9 +341,11 @@ pre-commit run --all-files
 测试口径补充（与 CI 对齐）：
 
 - `web-e2e` 在 CI 主路径是 Playwright + real API（不是 mock API，也不是“真实外部网站 smoke”）。
+- `web-e2e` 主路径已纳入 `subscriptions`，不再只在夜间 flaky 子集里覆盖订阅链路。
 - `external-playwright-smoke` 是独立作业，会在 CI 里真实访问外部站点（当前为 `https://example.com`），用于验证浏览器外网可达性。
   默认参数：`browser=chromium`、`expect_text="Example Domain"`、`timeout_ms=45000`、`retries=2`。
 - `pr-llm-real-smoke` 仅在 PR 场景按条件运行：`pull_request && same-repo-pr && backend_changed`；不满足条件时可 `skipped` 且不阻塞 aggregate gate。
+- `Gemini UI/UX audit` 在 CI 主路径为阻断门禁：`status=passed`、`reason_code=ok`、`successful_batches==batch_count` 且 `model_attempts>0` 才能通过；并上传 `.runtime-cache/ui-audit/*` 产物，杜绝“跑过但没真正审到”的假绿。
 - `GEMINI_API_KEY` 属于该作业运行期必需 secret（用于真实 Gemini 调用），不参与 job `if` 触发表达式；作业被触发后若缺失会失败。
 - `external-playwright-smoke` 仅在 `push` 到 `main` 或 nightly `schedule` 触发；PR 下该作业通常为 `skipped`，aggregate gate 接受 `success|skipped`。
 - `web-e2e` 默认注入 real API：`NEXT_PUBLIC_API_BASE_URL` 由 `--web-e2e-api-base-url`（默认 `http://127.0.0.1:18080`）提供；仅在显式开启 `--web-e2e-use-mock-api=1`（或 `WEB_E2E_USE_MOCK_API=1`）时切换 mock API。
@@ -296,6 +353,7 @@ pre-commit run --all-files
 - PR 不强制 `live-smoke`；`main` push 与 nightly schedule 强制 `live-smoke=success`。
 - `live-smoke` 为真实 LLM/provider 链路，CI 需要：`GEMINI_API_KEY`、`RESEND_API_KEY`、`RESEND_FROM_EMAIL`、`YOUTUBE_API_KEY`；工作流会拉起本地 API/Worker，并固定通过 `http://127.0.0.1:18080` 作为 smoke 目标。
 - `scripts/smoke_full_stack.sh` 是本地联调用 smoke，不等同于 CI 强制 `live-smoke` 门禁。
+- `scripts/smoke_full_stack.sh` 同样不是 `api-real-smoke` 替代；后端真实 Postgres 集成验收需执行 `scripts/api_real_smoke_local.sh`。
 - 两类真实 smoke 的本地复现命令见 `docs/testing.md` 的“本地复现两类真实 Smoke（CI 同口径）”。
 
 ## API 路由与管理端点契约
@@ -454,8 +512,6 @@ python3 scripts/release/verify_db_rollback_readiness.py \
 - 旧环境迁移指引：`ENVIRONMENT.md`（`Migration Guide: Legacy .env.example -> Core/Profile Overlay`）
 - 引用文档：`docs/reference/logging.md`、`docs/reference/cache.md`、`docs/reference/dependency-governance.md`
 - MCP 路由：`docs/reference/mcp-tool-routing.md`（13 工具、action 路由、组合示例）
-- 仓库完善蓝图：`Repo_Next_Step_Plan.md`
-- 证据链审计报告：`Repo完善与证据链报告.md`
 
 
 <!-- doc-sync: api/worker reliability + auth guard update (2026-03-03) -->

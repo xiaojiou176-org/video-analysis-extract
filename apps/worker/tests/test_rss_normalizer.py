@@ -38,6 +38,25 @@ def test_normalize_entry_generates_entry_hash_and_datetime() -> None:
     assert normalized["source"]["feed_url"] == "https://rsshub.app/youtube/channel/demo"
 
 
+def test_normalize_entry_sets_content_type_video_for_youtube_bilibili() -> None:
+    yt_raw = {"title": "YT", "link": "https://youtube.com/watch?v=abc", "guid": "g1", "published_at": ""}
+    bili_raw = {"title": "B", "link": "https://bilibili.com/video/BV1xx", "guid": "g2", "published_at": ""}
+    assert normalize_entry(yt_raw, "https://feed")["content_type"] == "video"
+    assert normalize_entry(bili_raw, "https://feed")["content_type"] == "video"
+
+
+def test_normalize_entry_sets_content_type_article_for_generic_url() -> None:
+    raw = {
+        "title": "Blog Post",
+        "link": "https://example.com/blog/123",
+        "guid": "g3",
+        "published_at": "2024-01-01T00:00:00Z",
+    }
+    normalized = normalize_entry(raw, "https://feed")
+    assert normalized["content_type"] == "article"
+    assert normalized["video_platform"] is None
+
+
 def test_make_job_idempotency_key_is_deterministic() -> None:
     key_1 = make_job_idempotency_key("youtube", "abc123")
     key_2 = make_job_idempotency_key("youtube", "abc123")

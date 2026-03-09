@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import uuid
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, Query
@@ -16,6 +17,7 @@ router = APIRouter(prefix="/api/v1/feed", tags=["feed"])
 def list_digests(
     source: str | None = Query(default=None),
     category: str | None = Query(default=None),
+    subscription_id: uuid.UUID | None = Query(default=None, alias="sub"),
     limit: int = Query(default=20, ge=1, le=100),
     cursor: str | None = Query(default=None),
     since: datetime | None = Query(default=None),
@@ -25,6 +27,7 @@ def list_digests(
     payload = service.list_digest_feed(
         source=source,
         category=category,
+        subscription_id=str(subscription_id) if subscription_id is not None else None,
         limit=limit,
         cursor=cursor,
         since=since,

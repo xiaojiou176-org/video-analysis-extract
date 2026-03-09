@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel
 
 
@@ -14,6 +16,7 @@ class DigestFeedItem(BaseModel):
     published_at: str
     summary_md: str
     artifact_type: str
+    content_type: Literal["video", "article"]
 
 
 class DigestFeedResponse(BaseModel):

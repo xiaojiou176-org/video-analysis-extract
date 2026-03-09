@@ -36,6 +36,8 @@ def _isolated_api_test_env(
     monkeypatch.setenv("UI_AUDIT_GEMINI_ENABLED", "false")
     if request.node.get_closest_marker("allow_unauth_write") is not None:
         monkeypatch.setenv("VD_ALLOW_UNAUTH_WRITE", "true")
+        monkeypatch.delenv("VD_API_KEY", raising=False)
+        monkeypatch.delenv("WEB_ACTION_SESSION_TOKEN", raising=False)
     else:
         monkeypatch.delenv("VD_ALLOW_UNAUTH_WRITE", raising=False)
 

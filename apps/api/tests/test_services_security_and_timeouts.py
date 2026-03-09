@@ -261,7 +261,9 @@ def test_ui_audit_gemini_timeout_retries_then_fallback(
     service = UiAuditService()
     payload = service.run(artifact_root=str(artifact_root))
 
-    assert payload["status"] == "completed"
+    assert payload["status"] == "completed_with_gemini_failure"
+    assert payload["gemini_review"]["status"] == "failed"
+    assert payload["gemini_review"]["reason_code"] == "provider_error"
     assert calls["count"] == 2
     assert any(
         item.get("rule") == "gemini-ui-review-provider-error" for item in payload["findings"]

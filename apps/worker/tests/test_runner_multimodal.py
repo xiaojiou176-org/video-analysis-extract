@@ -709,7 +709,7 @@ def test_gemini_computer_use_honors_timeout(monkeypatch: Any) -> None:
     monkeypatch.setitem(sys.modules, "google.genai", fake_genai)
 
     def _slow_handler(**_: Any) -> dict[str, Any]:
-        time.sleep(0.2)
+        time.sleep(1.2)
         return {"ok": True}
 
     settings = Settings(gemini_api_key="key")

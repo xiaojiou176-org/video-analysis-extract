@@ -164,6 +164,9 @@ from worker.pipeline.step_executor import (
 from worker.pipeline.step_executor import (
     run_command_once as _run_command_once,
 )
+from worker.pipeline.steps.article import (
+    step_fetch_article_content as _step_fetch_article_content_impl,
+)
 from worker.pipeline.steps.artifacts import step_write_artifacts as _step_write_artifacts_impl
 from worker.pipeline.steps.comments import step_collect_comments as _step_collect_comments_impl
 from worker.pipeline.steps.embedding import step_build_embeddings as _step_build_embeddings_impl
@@ -192,6 +195,7 @@ from worker.pipeline.steps.subtitles import (
     step_collect_subtitles as _step_collect_subtitles_impl,
 )
 from worker.pipeline.types import (
+    ARTICLE_PIPELINE_STEPS,
     PIPELINE_MODE_FORCE_STEPS,
     PIPELINE_MODE_SKIP_STEPS,
     PIPELINE_MODE_SKIP_UPDATES,
@@ -319,6 +323,10 @@ async def _step_fetch_metadata(ctx: PipelineContext, state: dict[str, Any]) -> S
     return await _step_fetch_metadata_impl(ctx, state, run_command=_run_command)
 
 
+async def _step_fetch_article_content(ctx: PipelineContext, state: dict[str, Any]) -> StepExecution:
+    return await _step_fetch_article_content_impl(ctx, state, run_command=_run_command)
+
+
 async def _step_download_media(ctx: PipelineContext, state: dict[str, Any]) -> StepExecution:
     return await _step_download_media_impl(ctx, state, run_command=_run_command)
 
@@ -370,18 +378,30 @@ async def run_pipeline(
     attempt: int,
     mode: str = "full",
     overrides: dict[str, Any] | None = None,
+    content_type: str = "video",
 ) -> dict[str, Any]:
-    step_handlers = [
-        ("fetch_metadata", _step_fetch_metadata, False),
-        ("download_media", _step_download_media, False),
-        ("collect_subtitles", _step_collect_subtitles, False),
-        ("collect_comments", _step_collect_comments, False),
-        ("extract_frames", _step_extract_frames, False),
-        ("llm_outline", _step_llm_outline, False),
-        ("llm_digest", _step_llm_digest, False),
-        ("build_embeddings", _step_build_embeddings, False),
-        ("write_artifacts", _step_write_artifacts, True),
-    ]
+    if content_type == "article":
+        step_handlers = [
+            ("fetch_article_content", _step_fetch_article_content, False),
+            ("llm_outline", _step_llm_outline, False),
+            ("llm_digest", _step_llm_digest, False),
+            ("build_embeddings", _step_build_embeddings, False),
+            ("write_artifacts", _step_write_artifacts, True),
+        ]
+        pipeline_steps = ARTICLE_PIPELINE_STEPS
+    else:
+        step_handlers = [
+            ("fetch_metadata", _step_fetch_metadata, False),
+            ("download_media", _step_download_media, False),
+            ("collect_subtitles", _step_collect_subtitles, False),
+            ("collect_comments", _step_collect_comments, False),
+            ("extract_frames", _step_extract_frames, False),
+            ("llm_outline", _step_llm_outline, False),
+            ("llm_digest", _step_llm_digest, False),
+            ("build_embeddings", _step_build_embeddings, False),
+            ("write_artifacts", _step_write_artifacts, True),
+        ]
+        pipeline_steps = PIPELINE_STEPS
     return await orchestrator.run_pipeline(
         settings,
         sqlite_store,
@@ -391,4 +411,5 @@ async def run_pipeline(
         mode=mode,
         overrides=overrides,
         step_handlers=step_handlers,
+        pipeline_steps=pipeline_steps,
     )

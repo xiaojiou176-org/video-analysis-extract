@@ -59,7 +59,10 @@ def _resolve_degradation_count(payload: dict[str, Any]) -> int | None:
 def _sanitize_error_code(value: Any) -> str | None:
     if not isinstance(value, str):
         return None
-    code = value.strip().splitlines()[0].strip()
+    normalized = value.strip()
+    if not normalized:
+        return None
+    code = normalized.splitlines()[0].strip()
     if not code:
         return None
     return code[:128]
@@ -167,14 +170,16 @@ async def run_pipeline_activity(payload: dict[str, Any]) -> dict[str, Any]:
     mode = str(payload.get("mode") or "").strip() or None
     payload_overrides = payload.get("overrides")
     overrides = dict(payload_overrides) if isinstance(payload_overrides, dict) else None
-    if mode is None or overrides is None:
-        job_record = pg_store.get_job_with_video(job_id=job_id)
-        if mode is None:
-            mode = str(job_record.get("mode") or "").strip() or "full"
-        if overrides is None:
-            job_overrides = job_record.get("overrides_json")
-            if isinstance(job_overrides, dict):
-                overrides = dict(job_overrides)
+    job_record = pg_store.get_job_with_video(job_id=job_id)
+    if mode is None:
+        mode = str(job_record.get("mode") or "").strip() or "full"
+    if overrides is None:
+        job_overrides = job_record.get("overrides_json")
+        if isinstance(job_overrides, dict):
+            overrides = dict(job_overrides)
+    content_type = str(job_record.get("content_type") or "video").strip().lower()
+    if content_type not in ("video", "article"):
+        content_type = "video"
 
     return await run_pipeline(
         settings,
@@ -184,6 +189,7 @@ async def run_pipeline_activity(payload: dict[str, Any]) -> dict[str, Any]:
         attempt=attempt,
         mode=mode,
         overrides=overrides,
+        content_type=content_type,
     )
 
 

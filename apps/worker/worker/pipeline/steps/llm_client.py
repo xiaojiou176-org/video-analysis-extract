@@ -446,6 +446,7 @@ def gemini_generate(
         return text if termination_reason == "text" else None, {
             "request_id": request_id,
             "model": model_name,
+            "termination_reason": termination_reason,
             "thinking": {
                 "enabled": True,
                 "level": str(effective_thinking_level).strip().lower(),
