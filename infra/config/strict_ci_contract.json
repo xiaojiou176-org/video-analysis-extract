@@ -2,8 +2,8 @@
   "version": 1,
   "standard_image": {
     "repository": "ghcr.io/xiaojiou176-org/video-analysis-extract-ci-standard",
-    "tag": "bootstrap",
-    "digest": "",
+    "tag": "2bf2b9a59bfeea1fd863f8d84769d88a5824f79d",
+    "digest": "sha256:d8088536c52e0e572407f8983255a1d8b97556009642cc16a71191c8aedfa7a9",
     "dockerfile": ".devcontainer/Dockerfile",
     "workdir": "/workspace"
   },
