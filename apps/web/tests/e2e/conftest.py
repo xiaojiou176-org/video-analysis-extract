@@ -5,6 +5,7 @@ import shutil
 import subprocess
 import threading
 from pathlib import Path
+from typing import Literal, NotRequired, TypedDict
 from urllib.parse import urlparse
 
 import pytest
@@ -31,6 +32,18 @@ WEB_E2E_VIDEO_DIR = WEB_E2E_ARTIFACT_ROOT / "videos"
 WEB_E2E_TRACE_DIR = WEB_E2E_ARTIFACT_ROOT / "traces"
 WEB_E2E_SCREENSHOT_DIR = WEB_E2E_ARTIFACT_ROOT / "screenshots"
 WEB_E2E_WRITE_TOKEN = "video-digestor-local-dev-token"
+
+DeviceProfile = Literal["desktop", "tablet", "mobile"]
+ReducedMotion = Literal["no-preference", "reduce"]
+
+
+class BrowserNewContextKwargs(TypedDict):
+    base_url: str
+    viewport: dict[str, int]
+    is_mobile: bool
+    has_touch: bool
+    device_scale_factor: int
+    record_video_dir: NotRequired[str]
 
 for artifact_dir in (WEB_E2E_VIDEO_DIR, WEB_E2E_TRACE_DIR, WEB_E2E_SCREENSHOT_DIR):
     artifact_dir.mkdir(parents=True, exist_ok=True)
@@ -154,6 +167,19 @@ def pytest_configure(config: pytest.Config) -> None:
     )
 
 
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    if _read_use_mock_api(config):
+        return
+
+    deselected = [item for item in items if item.nodeid.endswith("_with_mock_api")]
+    if not deselected:
+        return
+
+    kept = [item for item in items if not item.nodeid.endswith("_with_mock_api")]
+    items[:] = kept
+    config.hook.pytest_deselected(items=deselected)
+
+
 def _read_trace_mode(config: pytest.Config) -> str:
     mode = str(config.getoption("--web-e2e-trace-mode")).strip().lower()
     allowed = {"off", "on", "retain-on-failure"}
@@ -174,9 +200,9 @@ def _read_video_mode(config: pytest.Config) -> str:
     return mode
 
 
-def _read_device_profile(config: pytest.Config) -> str:
+def _read_device_profile(config: pytest.Config) -> DeviceProfile:
     profile = str(config.getoption("--web-e2e-device-profile")).strip().lower()
-    allowed = {"desktop", "tablet", "mobile"}
+    allowed: set[DeviceProfile] = {"desktop", "tablet", "mobile"}
     if profile not in allowed:
         raise RuntimeError(
             f"unsupported --web-e2e-device-profile={profile!r}; expected one of {sorted(allowed)}"
@@ -184,9 +210,9 @@ def _read_device_profile(config: pytest.Config) -> str:
     return profile
 
 
-def _read_reduced_motion(config: pytest.Config) -> str:
+def _read_reduced_motion(config: pytest.Config) -> ReducedMotion:
     value = str(config.getoption("--web-e2e-reduced-motion")).strip().lower()
-    allowed = {"no-preference", "reduce"}
+    allowed: set[ReducedMotion] = {"no-preference", "reduce"}
     if value not in allowed:
         raise RuntimeError(
             f"unsupported --web-e2e-reduced-motion={value!r}; expected one of {sorted(allowed)}"
@@ -214,7 +240,7 @@ def _marker_override(request: pytest.FixtureRequest, name: str) -> object | None
     return marker.args[0]
 
 
-def _resolve_device_profile(request: pytest.FixtureRequest) -> str:
+def _resolve_device_profile(request: pytest.FixtureRequest) -> DeviceProfile:
     override = _marker_override(request, "web_e2e_device")
     if isinstance(override, str):
         profile = override.strip().lower()
@@ -223,7 +249,7 @@ def _resolve_device_profile(request: pytest.FixtureRequest) -> str:
     return _read_device_profile(request.config)
 
 
-def _resolve_reduced_motion(request: pytest.FixtureRequest) -> str:
+def _resolve_reduced_motion(request: pytest.FixtureRequest) -> ReducedMotion:
     override = _marker_override(request, "web_e2e_reduced_motion")
     if isinstance(override, str):
         value = override.strip().lower()
@@ -241,8 +267,8 @@ def _resolve_cpu_throttle(request: pytest.FixtureRequest) -> int:
     return _read_cpu_throttle(request.config)
 
 
-def _device_profile_context_kwargs(profile: str) -> dict[str, object]:
-    presets: dict[str, dict[str, object]] = {
+def _device_profile_context_kwargs(profile: DeviceProfile) -> BrowserNewContextKwargs:
+    presets: dict[DeviceProfile, BrowserNewContextKwargs] = {
         "desktop": {
             "viewport": {"width": 1280, "height": 720},
             "is_mobile": False,
@@ -273,7 +299,7 @@ def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo[object]):
 
 
 @pytest.fixture(scope="session")
-def mock_api_server(pytestconfig: pytest.Config) -> MockApiServer:
+def mock_api_server(pytestconfig: pytest.Config):
     if not _read_use_mock_api(pytestconfig):
         raise RuntimeError(_mock_api_disabled_message())
     running = start_mock_api_server()
@@ -284,7 +310,9 @@ def mock_api_server(pytestconfig: pytest.Config) -> MockApiServer:
 
 
 @pytest.fixture(scope="session")
-def web_base_url(pytestconfig: pytest.Config, request: pytest.FixtureRequest) -> str:
+def web_base_url(
+    pytestconfig: pytest.Config, request: pytest.FixtureRequest
+):
     use_mock_api = _read_use_mock_api(pytestconfig)
     real_api_base_url = _read_real_api_base_url(pytestconfig)
     external_base_url = parse_external_web_base_url(
@@ -403,7 +431,7 @@ def mock_api_state(mock_api_server: MockApiServer, pytestconfig: pytest.Config) 
 
 
 @pytest.fixture(scope="session")
-def browser(pytestconfig: pytest.Config) -> Browser:
+def browser(pytestconfig: pytest.Config):
     browser_name = str(pytestconfig.getoption("--web-e2e-browser")).strip().lower()
     launchers = {"chromium", "firefox", "webkit"}
     if browser_name not in launchers:
@@ -417,7 +445,9 @@ def browser(pytestconfig: pytest.Config) -> Browser:
 
 
 @pytest.fixture
-def page(browser: Browser, web_base_url: str, request: pytest.FixtureRequest) -> Page:
+def page(
+    browser: Browser, web_base_url: str, request: pytest.FixtureRequest
+):
     artifact_slug = slugify_nodeid(request.node.nodeid)
     trace_mode = _read_trace_mode(request.config)
     video_mode = _read_video_mode(request.config)
@@ -425,7 +455,7 @@ def page(browser: Browser, web_base_url: str, request: pytest.FixtureRequest) ->
     reduced_motion = _resolve_reduced_motion(request)
     cpu_throttle = _resolve_cpu_throttle(request)
 
-    new_context_kwargs: dict[str, object] = {"base_url": web_base_url}
+    new_context_kwargs: BrowserNewContextKwargs = {"base_url": web_base_url}
     new_context_kwargs.update(_device_profile_context_kwargs(device_profile))
     video_test_dir = WEB_E2E_VIDEO_DIR / artifact_slug
     if video_mode != "off":

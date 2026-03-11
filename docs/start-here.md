@@ -26,7 +26,7 @@
 ## 你需要先知道的 5 件事
 
 1. 流程口径：`ProcessJobWorkflow = 3 阶段 + content_type 分流 pipeline`（video 9-step / article 5-step，详见 `docs/state-machine.md`）。
-2. 环境分层：采用 `core + profile overlay` 架构，`.env` 是 core，`env/profiles/reader.env` 是 reader profile 模板，脚本通过 `--profile local|gce` 控制行为；reader overlay 只补缺失项，不覆盖当前进程里已显式注入的 reader 凭证。
+2. 环境分层：采用 `core + profile overlay` 架构，`.env` 是 core，`env/profiles/reader.env` 是 reader profile 模板；严格验收只认标准环境与标准镜像入口，reader overlay 只补缺失项，不覆盖当前进程里已显式注入的 reader 凭证。
 3. 密钥策略：只允许通过 `.env` 或进程环境注入；禁止依赖 shell 登录配置作为密钥来源。
 4. Python 命令统一使用 `python3`。
 5. AI/自动化执行必须在标准环境：优先 `.devcontainer/devcontainer.json`，基础设施使用 `infra/compose/*.compose.yml`。
@@ -120,14 +120,14 @@ bash scripts/env/compose_env.sh --profile local --write .runtime-cache/temp/.env
 devcontainer up --workspace-folder .
 ```
 
-标准环境内再执行下文 6 步或一键路径，确保 lint/test/live smoke 结果可复现。
+标准环境是强制前置；未先进入标准环境的结果，不算 CI 等价证据。
 
 DevContainer 启动拓扑补充（2026-03）：
 
 - `.devcontainer/post-create.sh` 已移除 `curl|sh` 安装模式，改为 `python3 -m pip install --user --upgrade "uv>=0.10,<1.0"`。
 - 并发 Web E2E 场景可通过 `WEB_E2E_NEXT_DIST_DIR` 隔离 Next.js `distDir`，避免 `.next/dev/lock` 冲突（默认常规开发无需设置）。
 
-## 6 步启动（可直接执行）
+## 6 步启动（Host Fallback，仅排障时使用）
 
 ```bash
 uv sync --frozen --extra dev --extra e2e
@@ -180,21 +180,18 @@ curl -sS -X POST http://127.0.0.1:9000/api/v1/ingest/poll -H 'Content-Type: appl
 
 边界说明：
 
-- 这里的一键 smoke 指本地联调烟测，不等同于 CI 的 live-smoke。
+- 这里的一键 smoke 指本地联调烟测，不等同于 CI 的 live-smoke，也不能替代严格验收。
 - 本地测试口径必须区分：sqlite 口径用于默认快速回归；真实 Postgres 口径用于 integration smoke 的最终验收。
 - CI `live-smoke` 仅在 `main` push / nightly schedule 强制执行，且要求外部 provider secrets 完整（详见 `docs/testing.md`）。
 - PR 阶段仅有条件触发真实 LLM 烟测（`pr-llm-real-smoke`）；`web-e2e` 在 CI 主路径默认走 real API，mock API 仅用于本地调试。
 
-标准严格验收（推荐顺序）：
+标准严格验收（唯一权威入口）：
 
 ```bash
-./scripts/full_stack.sh up
-./scripts/api_real_smoke_local.sh
-./scripts/smoke_full_stack.sh --offline-fallback 0
-./scripts/quality_gate.sh --mode pre-push --strict-full-run 1 --profile ci --profile live-smoke --ci-dedupe 0
+./scripts/strict_ci_entry.sh --mode pre-push --strict-full-run 1 --ci-dedupe 0
 ```
 
-门禁口径补充：总覆盖率硬门禁 `>=95%`，Web `lines/functions/branches` 必须同时满足 `global >=95%` 且 `core >=95%`；`strict-full-run=1` 还会强制执行 mutation `score>=0.64 / effective_ratio>=0.27 / no_tests_ratio<=0.72`，并禁止 `ci-dedupe` 与 `skip-mutation`。此外，`pre-push` 在判定为后端改动时会默认执行 `api_real_smoke_local.sh`（真实 Postgres + Temporal + worker）。
+门禁口径补充：总覆盖率硬门禁 `>=95%`，Web `lines/functions/branches` 必须同时满足 `global >=95%` 且 `core >=95%`；`strict-full-run=1` 还会强制执行 mutation `score>=0.64 / effective_ratio>=0.27 / no_tests_ratio<=0.72`，并禁止 `ci-dedupe` 与 `skip-mutation`。`--offline-fallback 1` 仅限排障，不得用于 pre-push 或 CI 对齐验收。
 
 可选阅读栈（Miniflux + Nextflux）：
 

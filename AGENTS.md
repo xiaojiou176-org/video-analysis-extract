@@ -97,8 +97,9 @@
 ### 模式 B：一键 full-stack
 
 - `./scripts/bootstrap_full_stack.sh`
-- `./scripts/full_stack.sh up`
-- `./scripts/smoke_full_stack.sh`
+  - `./scripts/full_stack.sh up`
+  - `./scripts/smoke_full_stack.sh`
+  - `./scripts/strict_ci_entry.sh --mode pre-push --strict-full-run 1 --ci-dedupe 0`
 
 ### 模式 C：标准环境（AI 执行必须）
 
@@ -224,7 +225,7 @@ curl -sS -X POST http://127.0.0.1:9000/api/v1/ingest/poll \
 - `.githooks/pre-commit` → `./scripts/quality_gate.sh --mode pre-commit --profile local`
   - 包含：`scripts/ci_or_local_gate_doc_drift.sh --scope staged`
   - 包含：`check_test_assertions`、`web lint`、`ruff critical`、`secrets scan`、`gitleaks fast scan`、`structured log guard`、`env budget guard`、`IaC entrypoint guard`
-- `.githooks/pre-push` → `./scripts/quality_gate.sh --mode pre-push --heartbeat-seconds 20 --mutation-min-score 0.64 --mutation-min-effective-ratio 0.27 --mutation-max-no-tests-ratio 0.72 --profile ci --profile live-smoke --ci-dedupe 0`
+- `.githooks/pre-push` → `./scripts/strict_ci_entry.sh --mode pre-push --heartbeat-seconds 20 --ci-dedupe 0`
   - 包含：`scripts/ci_or_local_gate_doc_drift.sh --scope push`
   - 包含：`coverage>=95`、`core coverage>=95`、`web unit tests`、`python tests(no-silent-skip)`、`api cors preflight smoke`、`contract diff local gate`
   - 包含：与 `preflight-fast`/`web-test-build` 对齐的本地硬门禁：`check_ci_docs_parity`、`docs env canonical guard`、`provider residual guard`、`worker line limits guard`、`schema parity gate`、`web design token guard`、`web build`、`web button coverage`
@@ -232,7 +233,7 @@ curl -sS -X POST http://127.0.0.1:9000/api/v1/ingest/poll \
 
 ### 5.2 远程 CI 成本治理（必须遵守）
 
-- 触发或重跑任意远程 CI 前，必须先本地执行并通过：`./scripts/quality_gate.sh --mode pre-push --heartbeat-seconds 20 --mutation-min-score 0.64 --mutation-min-effective-ratio 0.27 --mutation-max-no-tests-ratio 0.72 --profile ci --profile live-smoke --ci-dedupe 0`。
+- 触发或重跑任意远程 CI 前，必须先本地执行并通过：`./scripts/strict_ci_entry.sh --mode pre-push --strict-full-run 1 --ci-dedupe 0`。
 - 上述本地 pre-push 必须覆盖与远程 CI 同级的核心阻断检查（至少包括 `preflight-fast` + `web-test-build` 关键门禁）；远程 CI 仅作为 double-check，不得替代本地验收。
 - 远程 CI 失败后，必须先在本地复现并修复，再执行下一次远程触发；禁止“连续重跑碰运气”。
 - 同一分支存在被新提交覆盖的 in-progress 远程运行时，必须主动取消旧运行，避免重复计费。
@@ -249,7 +250,7 @@ curl -sS -X POST http://127.0.0.1:9000/api/v1/ingest/poll \
    - `PYTHONPATH="$PWD:$PWD/apps/worker" DATABASE_URL='sqlite+pysqlite:///:memory:' uv run pytest apps/worker/tests apps/api/tests apps/mcp/tests -q`
 5. 前端 lint 通过：`npm --prefix apps/web run lint`。
 6. 假断言门禁通过：`python3 scripts/check_test_assertions.py`。
-7. 改动启动或链路逻辑时必须通过严格验收固定链路：`./scripts/full_stack.sh up` → `./scripts/api_real_smoke_local.sh` → `./scripts/smoke_full_stack.sh --offline-fallback 0` → `./scripts/quality_gate.sh --mode pre-push --strict-full-run 1 --profile ci --profile live-smoke --ci-dedupe 0`。
+7. 改动启动或链路逻辑时必须通过严格验收唯一入口：`./scripts/strict_ci_entry.sh --mode pre-push --strict-full-run 1 --ci-dedupe 0`。
 8. 覆盖率与变异门禁通过：总覆盖率 `>=95%`、核心覆盖率 `>=95%`，且 `DATABASE_URL='sqlite+pysqlite:///:memory:' uv run --extra dev --with mutmut mutmut run` 满足 `score>=0.64`、`effective_ratio>=0.27`、`no_tests_ratio<=0.72`。
 
 ## 7. 交付格式（提交结果必须包含）

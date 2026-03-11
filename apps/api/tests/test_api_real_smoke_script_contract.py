@@ -36,3 +36,12 @@ def test_api_real_smoke_script_enforces_real_postgres_and_strict_mode() -> None:
     assert "preflight_loopback_ipv4_connectivity" in script
     assert "host_loopback_ipv4_exhausted" in script
     assert "EADDRNOTAVAIL (Errno 49)" in script
+
+
+def test_api_real_smoke_script_can_run_inside_standard_env_without_host_specific_bootstrap() -> None:
+    script = (_repo_root() / "scripts" / "api_real_smoke_local.sh").read_text(encoding="utf-8")
+
+    assert "run_in_standard_env.sh" not in script
+    assert 'VD_IN_STANDARD_ENV="${VD_IN_STANDARD_ENV:-0}"' in script
+    assert 'if [[ "$VD_IN_STANDARD_ENV" != "1" ]]; then' in script
+    assert "preflight_loopback_ipv4_connectivity" in script

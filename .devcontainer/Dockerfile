@@ -1,8 +1,42 @@
-FROM mcr.microsoft.com/devcontainers/python:1-3.12-bookworm
+ARG STRICT_CI_BASE_IMAGE=mcr.microsoft.com/devcontainers/python:1-3.12-bookworm@sha256:7876580dc67fd460fd962f004cbeb480027e9bbc0657096f1087db11f9eaff39
+FROM ${STRICT_CI_BASE_IMAGE}
 
-RUN apt-get update \
+ARG STRICT_CI_NODE_MAJOR=22
+ARG STRICT_CI_UV_VERSION=0.10.7
+ARG STRICT_CI_TEMPORAL_CLI_VERSION=1.5.1
+ARG STRICT_CI_TEMPORAL_CLI_SHA256_LINUX_AMD64=ddc95e08b0b076efd4ea9733a3f488eb7d2be875f8834e616cd2a37358b4852d
+ARG STRICT_CI_TEMPORAL_CLI_SHA256_LINUX_ARM64=bd1b0db9f18b051026de8bf6cc1505f2510f14bbb7a8b9a4a91fff46c77454f5
+
+RUN rm -f /etc/apt/sources.list.d/yarn.list \
+  && apt-get update \
+  && apt-get install -y --no-install-recommends curl ca-certificates git jq ripgrep tar \
+  && curl -fsSL "https://deb.nodesource.com/setup_${STRICT_CI_NODE_MAJOR}.x" | bash - \
   && apt-get install -y --no-install-recommends \
+    nodejs \
     postgresql-client \
     sqlite3 \
     redis-tools \
-  && rm -rf /var/lib/apt/lists/*
+    unzip \
+  && rm -rf /var/lib/apt/lists/* \
+  && curl -LsSf https://astral.sh/uv/install.sh | sh -s -- --version "${STRICT_CI_UV_VERSION}" \
+  && export PATH="/root/.local/bin:$PATH" \
+  && arch="$(uname -m)" \
+  && case "$arch" in \
+      x86_64|amd64) temporal_arch="amd64"; expected_sha="${STRICT_CI_TEMPORAL_CLI_SHA256_LINUX_AMD64}" ;; \
+      aarch64|arm64) temporal_arch="arm64"; expected_sha="${STRICT_CI_TEMPORAL_CLI_SHA256_LINUX_ARM64}" ;; \
+      *) echo "Unsupported architecture: ${arch}" >&2; exit 1 ;; \
+    esac \
+  && tmpdir="$(mktemp -d)" \
+  && archive="temporal_cli_${STRICT_CI_TEMPORAL_CLI_VERSION}_linux_${temporal_arch}.tar.gz" \
+  && curl --retry 5 --retry-all-errors --retry-delay 2 -fL "https://github.com/temporalio/cli/releases/download/v${STRICT_CI_TEMPORAL_CLI_VERSION}/${archive}" -o "${tmpdir}/${archive}" \
+  && echo "${expected_sha}  ${tmpdir}/${archive}" | sha256sum -c - \
+  && tar -xzf "${tmpdir}/${archive}" -C "${tmpdir}" temporal \
+  && install -m 0755 "${tmpdir}/temporal" /usr/local/bin/temporal \
+  && uv --version \
+  && uv run --with playwright python -m playwright install --with-deps chromium firefox webkit \
+  && uv --version \
+  && node --version \
+  && npm --version \
+  && temporal --version
+
+ENV PATH="/root/.local/bin:${PATH}"

@@ -17,7 +17,7 @@
 - 测试配置采用 `core + profile overlay`：
   - core：`.env`
   - overlay：`env/profiles/reader.env`（reader profile 模板，仅 reader 相关 smoke）
-  - profile：通过脚本参数 `--profile local|gce` 选择运行画像
+  - 严格验收：统一通过 `scripts/strict_ci_entry.sh` 进入仓库标准镜像，不再把宿主机路径当作门禁真相源
 - 密钥只允许来自 `.env` 或进程环境注入（CI secrets / 当前 shell export）。
 - 禁止把 shell 登录配置作为测试密钥来源。
 - 默认最小变量集沿用 `ENVIRONMENT.md` 的 Shared Core；涉及真实 provider 链路时，再追加对应 secrets。
@@ -27,6 +27,7 @@
 以下口径按已拍板 D1~D5 执行，旧规则（E2E 默认 mock API）已废止。
 
 - `preflight-fast` + `preflight-heavy`：预检门禁（env contract、schema parity、provider residual、worker line limits、structured log guard、e2e strictness guard、mutation scope guard、mutation test selection guard）。
+- 严格执行型 job（`quality-gate-pre-push`、`python-tests`、`api-real-smoke`、`pr-llm-real-smoke`、`web-test-build`、`web-e2e`、`live-smoke`）统一运行在仓库自有标准镜像中，并通过 `scripts/strict_ci_entry.sh` 调 repo 脚本。
 - `db-migration-smoke` + `python-tests` + `api-real-smoke` + `backend-lint` + `frontend-lint` + `web-test-build` + `web-e2e`：并行执行的主链路测试集合。
 - `web-test-build` 现在在 PR/push/schedule 都默认执行（只要 `preflight-fast` 与 `changes` 成功），避免 path-filter 误判导致关键 Web gate 被跳过。
 - `web-test-build` 会追加阻断式 `Gemini UI/UX audit`，并上传 `.runtime-cache/ui-audit/gemini-ui-ux-audit-*.{json,log}` 作为审查工件；严格通过条件为 `status=passed`、`reason_code=ok`、`successful_batches==batch_count` 且 `model_attempts>0`。
@@ -100,15 +101,7 @@ scripts/e2e_live_smoke.sh \
 - D2 mutation 硬门禁阈值 `0.64`（并新增结构质量约束）：
 
 ```bash
-./scripts/quality_gate.sh \
-  --mode pre-push \
-  --heartbeat-seconds 20 \
-  --mutation-min-score 0.64 \
-  --mutation-min-effective-ratio 0.27 \
-  --mutation-max-no-tests-ratio 0.72 \
-  --profile ci \
-  --profile live-smoke \
-  --ci-dedupe 0
+./scripts/strict_ci_entry.sh --mode pre-push --strict-full-run 1 --ci-dedupe 0
 ```
 
 说明：上面是本地 pre-push 口径；远端 `.github/workflows/ci.yml` 的 `quality-gate-pre-push` 为避免重复重型检查，使用 `--ci-dedupe 1 --skip-mutation 1`，mutation 由独立 job 执行。
@@ -255,9 +248,9 @@ export API_INTEGRATION_SMOKE_STRICT='1'
 
 说明：
 
-- 这条命令会基于当前 `DATABASE_URL` 指向的 Postgres 实例创建隔离 smoke 数据库，补跑 `infra/migrations/*.sql`、真实启动本地 API，并执行 `apps/api/tests/test_api_integration_smoke.py`。
+- 这条命令会基于当前 `DATABASE_URL` 指向的 Postgres 实例创建隔离 smoke 数据库，补跑 `infra/migrations/*.sql`、真实启动本地 API，并执行 `apps/api/tests/test_api_integration_smoke.py`。这条命令本身不是 CI 等价入口，CI 等价入口是标准镜像内的 `strict_ci_entry`.
 - 默认 sqlite 总回归里的 integration smoke `xfail` 只表示“当前是快速回归口径”，不表示真实 Postgres 路径坏掉。
-- 标准严格验收固定链路：`./scripts/full_stack.sh up` → `./scripts/api_real_smoke_local.sh` → `./scripts/smoke_full_stack.sh --offline-fallback 0` → `./scripts/quality_gate.sh --mode pre-push --strict-full-run 1 --profile ci --profile live-smoke --ci-dedupe 0`。
+- 标准严格验收唯一入口：`./scripts/strict_ci_entry.sh --mode pre-push --strict-full-run 1 --ci-dedupe 0`。
 
 ## Full-stack 本地自测（稳定性）
 
@@ -298,7 +291,7 @@ python3 scripts/check_test_assertions.py
 ### 0.1) 一键质量门禁（推荐）
 
 ```bash
-./scripts/quality_gate.sh
+./scripts/strict_ci_entry.sh --mode pre-push --strict-full-run 1 --ci-dedupe 0
 ```
 
 ### 0.1.A) 本地后端验收分层（必须区分）
@@ -613,7 +606,7 @@ npm run lint
 - 由于当前 Web 代码尚未完成 Next.js 16 `searchParams` 异步迁移，`jobs -> artifacts` 用例会先断言查询跳转与页面占位状态（`No artifact loaded yet.`）；迁移后可升级为 markdown/screenshot 区块可见性断言。
 - API 路由测试会通过 `monkeypatch` 隔离 Temporal/数据库外部依赖，验证路由层映射行为。
 - 需要访问真实依赖（Postgres/Temporal）的端到端链路，可在后续补专门的 integration 套件。
-- CI 缓存策略：工具缓存必须放在 `runner.temp` 下，并通过统一变量收口，例如 `CI_CACHE_ROOT=${{ runner.temp }}/ci-cache`、`UV_CACHE_DIR=${{ runner.temp }}/ci-cache/uv`、`PRE_COMMIT_HOME=${{ runner.temp }}/ci-cache/pre-commit`、`PLAYWRIGHT_BROWSERS_PATH=${{ runner.temp }}/ci-cache/ms-playwright`；测试与 e2e 产物统一写入 repo 内的 `.runtime-cache` 并作为 artifact 上传。
+- CI 缓存策略：工具缓存统一收口在 `/tmp/ci-cache` 及其派生路径（`UV_CACHE_DIR=/tmp/ci-cache/uv`、`PRE_COMMIT_HOME=/tmp/ci-cache/pre-commit`、`PLAYWRIGHT_BROWSERS_PATH=/tmp/ci-cache/ms-playwright`）；测试与 e2e 产物统一写入 repo 内的 `.runtime-cache` 并作为 artifact 上传。
 - 禁止项：`actions/cache` 或工具缓存环境变量不得指向 `~/.cache/**`、`${{ github.workspace }}/**`、相对 repo 路径（如 `.runtime-cache/**`、`.cache/**`、`cache/**`、`.venv`）。这些路径会在 shared self-hosted runner 上制造工作区污染。
 - Checkout 规则：所有 workflow 中的 `actions/checkout` 必须显式声明 `with.clean: true`，不能依赖默认值。
 

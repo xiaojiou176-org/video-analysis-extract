@@ -3,6 +3,7 @@ set -euo pipefail
 
 SCRIPT_NAME="api_real_smoke_local"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+VD_IN_STANDARD_ENV="${VD_IN_STANDARD_ENV:-0}"
 ENV_PROFILE="${ENV_PROFILE:-local}"
 API_HOST="127.0.0.1"
 API_PORT="18080"
@@ -490,7 +491,9 @@ require_command uv
 require_command psql
 require_command curl
 
-preflight_loopback_ipv4_connectivity
+if [[ "$VD_IN_STANDARD_ENV" != "1" ]]; then
+  preflight_loopback_ipv4_connectivity
+fi
 
 DATABASE_URL="${DATABASE_URL:-}"
 [[ -n "$DATABASE_URL" ]] || fail_with_kind "config_error" "DATABASE_URL is required"

@@ -1,6 +1,6 @@
-# Local Runbook (Non-Docker, Phase3)
+# Local Runbook (Container-First, Phase3)
 
-本文是本仓库本地运行的权威步骤文档，和 `README.md` 保持同一套 6 步口径。
+本文是本仓库本地运行的权威步骤文档。标准镜像路径是 CI 等价验收真相源，宿主机路径仅作为故障应急。
 
 ## 标准环境约束（AI/自动化必须）
 
@@ -104,7 +104,7 @@ pre-commit autoupdate
 pre-commit run --all-files
 ```
 
-### 2) 启动基础服务
+### 2) 启动基础服务（Host Fallback，仅故障应急）
 
 ```bash
 brew services start postgresql@16

@@ -17,6 +17,7 @@ CHANGED_MIGRATIONS_INPUT="auto"
 CI_DEDUPE="0"
 SKIP_MUTATION="0"
 STRICT_FULL_RUN="0"
+CONTAINERIZED="auto"
 CHANGED_BACKEND="true"
 CHANGED_WEB="true"
 CHANGED_DEPS="true"
@@ -35,7 +36,7 @@ usage() {
 Usage:
   scripts/quality_gate.sh [--mode pre-commit|pre-push] [--heartbeat-seconds N] [--mutation-min-score N] [--profile NAME ...] [--profile-only] \
     [--changed-backend true|false|auto] [--changed-web true|false|auto] [--changed-deps true|false|auto] [--changed-migrations true|false|auto] [--ci-dedupe 0|1] [--skip-mutation 0|1] [--strict-full-run 0|1] \
-    [--mutation-min-effective-ratio N] [--mutation-max-no-tests-ratio N]
+    [--containerized 0|1|auto] [--mutation-min-effective-ratio N] [--mutation-max-no-tests-ratio N]
   scripts/quality_gate.sh --final-check [--skip-prepush] [--heartbeat-seconds N] [--mutation-min-score N]
 
 Modes:
@@ -129,6 +130,10 @@ while (($# > 0)); do
       STRICT_FULL_RUN="${2:-}"
       shift 2
       ;;
+    --containerized)
+      CONTAINERIZED="${2:-}"
+      shift 2
+      ;;
     --final-check)
       FINAL_CHECK="1"
       shift
@@ -202,6 +207,11 @@ fi
 
 if [[ "$STRICT_FULL_RUN" != "0" && "$STRICT_FULL_RUN" != "1" ]]; then
   echo "[quality-gate] invalid --strict-full-run: $STRICT_FULL_RUN (expected 0|1)" >&2
+  exit 2
+fi
+
+if [[ "$CONTAINERIZED" != "0" && "$CONTAINERIZED" != "1" && "$CONTAINERIZED" != "auto" ]]; then
+  echo "[quality-gate] invalid --containerized: $CONTAINERIZED (expected 0|1|auto)" >&2
   exit 2
 fi
 
