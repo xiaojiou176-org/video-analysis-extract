@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import subprocess
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
 
 def _repo_root() -> Path:
@@ -43,14 +44,59 @@ printf 'TEMPORAL_TARGET_HOST=%s\\n' \"$route_temporal_target_host\"
     )
 
 
+def _run_standard_env_detection_probe(
+    *,
+    github_actions: str,
+    marker_exists: bool,
+    dockerenv_exists: bool,
+) -> subprocess.CompletedProcess[str]:
+    root = _repo_root()
+    with TemporaryDirectory() as tmp_dir:
+        marker_path = Path(tmp_dir) / "strict-env-marker"
+        dockerenv_path = Path(tmp_dir) / "dockerenv"
+        if marker_exists:
+            marker_path.write_text("marker", encoding="utf-8")
+        if dockerenv_exists:
+            dockerenv_path.write_text("dockerenv", encoding="utf-8")
+        script = """source scripts/lib/standard_env.sh
+if is_running_inside_standard_env; then
+  printf 'INSIDE=1\\n'
+else
+  printf 'INSIDE=0\\n'
+fi
+"""
+        env = {
+            "PATH": os.environ.get("PATH", ""),
+            "VD_IN_STANDARD_ENV": "0",
+            "GITHUB_ACTIONS": github_actions,
+            "VD_STANDARD_ENV_MARKER_PATH": str(marker_path),
+            "VD_STANDARD_ENV_DOCKERENV_PATH": str(dockerenv_path),
+        }
+        return subprocess.run(
+            ["bash", "-lc", script],
+            cwd=root,
+            env=env,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+
 def test_standard_env_wrapper_and_helper_contract_exist() -> None:
     root = _repo_root()
+    strict_entry = (root / "scripts" / "strict_ci_entry.sh").read_text(encoding="utf-8")
     runner = (root / "scripts" / "run_in_standard_env.sh").read_text(encoding="utf-8")
     helper = (root / "scripts" / "lib" / "standard_env.sh").read_text(encoding="utf-8")
+    bootstrap = (root / "scripts" / "bootstrap_strict_ci_runtime.sh").read_text(encoding="utf-8")
+
+    assert 'source "$ROOT_DIR/scripts/lib/standard_env.sh"' in strict_entry
+    assert "if is_running_inside_standard_env; then" in strict_entry
+    assert "run_with_strict_bootstrap() {" in strict_entry
+    assert "source ./scripts/bootstrap_strict_ci_runtime.sh" in strict_entry
 
     assert 'source "$ROOT_DIR/scripts/lib/standard_env.sh"' in runner
     assert 'ALLOW_LOCAL_BUILD="${VD_STANDARD_ENV_ALLOW_LOCAL_BUILD:-0}"' in runner
-    assert 'if [[ "${VD_IN_STANDARD_ENV:-0}" == "1" ]]; then' in runner
+    assert "if is_running_inside_standard_env; then" in runner
     assert 'if [[ "$ALLOW_LOCAL_BUILD" == "1" ]]; then' in runner
     assert 'run_in_standard_env "$@"' in runner
 
@@ -59,8 +105,12 @@ def test_standard_env_wrapper_and_helper_contract_exist() -> None:
     assert 'STANDARD_ENV_DOCKERFILE="${VD_STANDARD_ENV_DOCKERFILE:-$ROOT_DIR/$STRICT_CI_STANDARD_IMAGE_DOCKERFILE}"' in helper
     assert 'STANDARD_ENV_WORKDIR="${VD_STANDARD_ENV_WORKDIR:-$STRICT_CI_STANDARD_IMAGE_WORKDIR}"' in helper
     assert 'docker pull "$STANDARD_ENV_IMAGE"' in helper
+    assert 'STANDARD_ENV_MARKER_PATH="${VD_STANDARD_ENV_MARKER_PATH:-/etc/video-analysis-extract-strict-ci-standard-env}"' in helper
+    assert 'STANDARD_ENV_DOCKERENV_PATH="${VD_STANDARD_ENV_DOCKERENV_PATH:-/.dockerenv}"' in helper
     assert "-e VD_IN_STANDARD_ENV=1" in helper
     assert 'STANDARD_ENV_HOST_GATEWAY="${VD_STANDARD_ENV_HOST_GATEWAY:-host.docker.internal}"' in helper
+    assert "is_truthy_env() {" in helper
+    assert "is_running_inside_standard_env() {" in helper
     assert "resolve_standard_env_runtime_value() {" in helper
     assert 'runtime_database_url="$(resolve_standard_env_runtime_value DATABASE_URL "${DATABASE_URL:-}")"' in helper
     assert 'runtime_temporal_target_host="$(resolve_standard_env_runtime_value TEMPORAL_TARGET_HOST "${TEMPORAL_TARGET_HOST:-}")"' in helper
@@ -69,6 +119,43 @@ def test_standard_env_wrapper_and_helper_contract_exist() -> None:
     assert '-e PYTHONPATH="${PYTHONPATH:-}"' in helper
     assert '-e TEMPORAL_NAMESPACE="${TEMPORAL_NAMESPACE:-}"' in helper
     assert '-e TEMPORAL_TASK_QUEUE="${TEMPORAL_TASK_QUEUE:-}"' in helper
+
+    assert "uv sync --frozen --extra dev --extra e2e" in bootstrap
+    assert "npm --prefix apps/web ci --no-audit --no-fund" in bootstrap
+    assert 'DATABASE_URL="${DATABASE_URL:-' not in bootstrap
+
+
+def test_standard_env_detection_uses_marker_file_short_circuit() -> None:
+    result = _run_standard_env_detection_probe(
+        github_actions="",
+        marker_exists=True,
+        dockerenv_exists=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "INSIDE=1" in result.stdout
+
+
+def test_standard_env_detection_uses_github_actions_container_fallback() -> None:
+    result = _run_standard_env_detection_probe(
+        github_actions="true",
+        marker_exists=False,
+        dockerenv_exists=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "INSIDE=1" in result.stdout
+
+
+def test_standard_env_detection_ignores_container_file_without_github_actions() -> None:
+    result = _run_standard_env_detection_probe(
+        github_actions="",
+        marker_exists=False,
+        dockerenv_exists=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "INSIDE=0" in result.stdout
 
 
 def test_standard_env_wrapper_rewrites_loopback_backend_targets_for_container_runtime() -> None:

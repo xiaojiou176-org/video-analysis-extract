@@ -17,6 +17,7 @@ WORKER_READINESS_TIMEOUT_SECONDS="45"
 
 API_PID=""
 WORKER_PID=""
+TEMPORAL_PID=""
 SMOKE_DATABASE_NAME=""
 SMOKE_DATABASE_URL=""
 ADMIN_DATABASE_URL=""
@@ -206,7 +207,64 @@ raise SystemExit(asyncio.run(main()))
 PY
 }
 
+temporal_server_is_reachable() {
+  TEMPORAL_TARGET_HOST="$TEMPORAL_TARGET_HOST" \
+  TEMPORAL_NAMESPACE="$TEMPORAL_NAMESPACE" \
+    uv run python - <<'PY' >/dev/null 2>&1
+import asyncio
+import os
+
+from temporalio.client import Client
+
+
+async def main() -> int:
+    await Client.connect(
+        os.environ["TEMPORAL_TARGET_HOST"],
+        namespace=os.environ["TEMPORAL_NAMESPACE"],
+    )
+    return 0
+
+
+raise SystemExit(asyncio.run(main()))
+PY
+}
+
+ensure_temporal_server_online() {
+  if temporal_server_is_reachable; then
+    log "detected reachable temporal server at ${TEMPORAL_TARGET_HOST}; reusing existing server"
+    return 0
+  fi
+
+  if [[ "$VD_IN_STANDARD_ENV" != "1" ]]; then
+    fail_with_kind "temporal_unreachable" "Temporal server is not reachable at ${TEMPORAL_TARGET_HOST}"
+  fi
+
+  command -v temporal >/dev/null 2>&1 || fail_with_kind "tooling_missing" "required command not found: temporal"
+
+  log "temporal target ${TEMPORAL_TARGET_HOST} unreachable; starting temporary temporal dev server inside standard env"
+  export TEMPORAL_TARGET_HOST="127.0.0.1:7233"
+  (cd "$ROOT_DIR" && temporal server start-dev --ip 127.0.0.1 --port 7233 >"$TEMPORAL_LOG" 2>&1) &
+  TEMPORAL_PID="$!"
+
+  for _ in $(seq 1 "$WORKER_READINESS_TIMEOUT_SECONDS"); do
+    if ! kill -0 "$TEMPORAL_PID" >/dev/null 2>&1; then
+      tail -n 80 "$TEMPORAL_LOG" >&2 || true
+      fail_with_kind "temporal_boot_error" "temporary temporal dev server exited before reaching readiness"
+    fi
+    if temporal_server_is_reachable; then
+      log "temporary temporal dev server is online at ${TEMPORAL_TARGET_HOST}"
+      return 0
+    fi
+    sleep 1
+  done
+
+  tail -n 80 "$TEMPORAL_LOG" >&2 || true
+  fail_with_kind "temporal_boot_error" "timed out waiting for temporal server readiness at ${TEMPORAL_TARGET_HOST}"
+}
+
 ensure_cleanup_worker_online() {
+  ensure_temporal_server_online
+
   if temporal_task_queue_has_worker_pollers; then
     log "detected existing temporal worker pollers on task queue ${TEMPORAL_TASK_QUEUE}; reusing running worker"
     return 0
@@ -373,6 +431,11 @@ cleanup() {
   if [[ -n "$WORKER_PID" ]] && kill -0 "$WORKER_PID" >/dev/null 2>&1; then
     kill "$WORKER_PID" >/dev/null 2>&1 || true
     wait "$WORKER_PID" 2>/dev/null || true
+  fi
+
+  if [[ -n "$TEMPORAL_PID" ]] && kill -0 "$TEMPORAL_PID" >/dev/null 2>&1; then
+    kill "$TEMPORAL_PID" >/dev/null 2>&1 || true
+    wait "$TEMPORAL_PID" 2>/dev/null || true
   fi
 
   if [[ -n "$SMOKE_DATABASE_NAME" && -n "$ADMIN_DATABASE_PG_URL" ]]; then
@@ -592,8 +655,9 @@ done
 mkdir -p "$ROOT_DIR/.runtime-cache"
 API_LOG="$ROOT_DIR/.runtime-cache/api-real-smoke-local.log"
 WORKER_LOG="$ROOT_DIR/.runtime-cache/api-real-smoke-local-worker.log"
+TEMPORAL_LOG="$ROOT_DIR/.runtime-cache/api-real-smoke-local-temporal.log"
 STATE_DB_PATH="$ROOT_DIR/.runtime-cache/api-real-smoke-local-state.sqlite3"
-rm -f "$API_LOG" "$WORKER_LOG" "$STATE_DB_PATH"
+rm -f "$API_LOG" "$WORKER_LOG" "$TEMPORAL_LOG" "$STATE_DB_PATH"
 
 if port_is_listening "$API_PORT"; then
   if [[ "$API_PORT_EXPLICIT" == "1" ]]; then
@@ -617,6 +681,8 @@ export UI_AUDIT_GEMINI_ENABLED="${UI_AUDIT_GEMINI_ENABLED:-false}"
 export NOTIFICATION_ENABLED="${NOTIFICATION_ENABLED:-0}"
 export VD_ALLOW_UNAUTH_WRITE="${VD_ALLOW_UNAUTH_WRITE:-true}"
 export PYTHONPATH="$ROOT_DIR:$ROOT_DIR/apps/worker:${PYTHONPATH:-}"
+
+ensure_temporal_server_online
 
 # Keep pytest in unauth-write mode. dev_api.sh will provision its own local token
 # for the spawned API process when no explicit token is exported.

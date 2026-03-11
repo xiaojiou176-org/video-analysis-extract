@@ -3,7 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
-eval "$(python3 scripts/ci_contract.py shell-exports)"
+source "$ROOT_DIR/scripts/lib/standard_env.sh"
 
 MODE=""
 DEBUG_BUILD="0"
@@ -53,7 +53,7 @@ FORWARDED_ARGS="$(quoted_forward_args || true)"
 
 run_inside_standard_env() {
   local command=("$@")
-  if [[ "${VD_IN_STANDARD_ENV:-0}" == "1" ]]; then
+  if is_running_inside_standard_env; then
     exec "${command[@]}"
   fi
 
@@ -64,28 +64,33 @@ run_inside_standard_env() {
   exec "$ROOT_DIR/scripts/run_in_standard_env.sh" "${command[@]}"
 }
 
+run_with_strict_bootstrap() {
+  local inner_command="$1"
+  run_inside_standard_env bash -lc "source ./scripts/bootstrap_strict_ci_runtime.sh && ${inner_command}"
+}
+
 case "$MODE" in
   pre-push)
-    run_inside_standard_env bash -lc \
+    run_with_strict_bootstrap \
       "./scripts/quality_gate.sh --mode pre-push --profile ci --profile live-smoke --heartbeat-seconds 20 --mutation-min-score ${STRICT_CI_MUTATION_MIN_SCORE} --mutation-min-effective-ratio ${STRICT_CI_MUTATION_MIN_EFFECTIVE_RATIO} --mutation-max-no-tests-ratio ${STRICT_CI_MUTATION_MAX_NO_TESTS_RATIO} ${FORWARDED_ARGS}"
     ;;
   python-tests)
-    run_inside_standard_env bash -lc "./scripts/ci_python_tests.sh ${FORWARDED_ARGS}"
+    run_with_strict_bootstrap "./scripts/ci_python_tests.sh ${FORWARDED_ARGS}"
     ;;
   api-real-smoke)
-    run_inside_standard_env bash -lc "./scripts/ci_api_real_smoke.sh ${FORWARDED_ARGS}"
+    run_with_strict_bootstrap "./scripts/ci_api_real_smoke.sh ${FORWARDED_ARGS}"
     ;;
   pr-llm-real-smoke)
-    run_inside_standard_env bash -lc "./scripts/ci_pr_llm_real_smoke.sh ${FORWARDED_ARGS}"
+    run_with_strict_bootstrap "./scripts/ci_pr_llm_real_smoke.sh ${FORWARDED_ARGS}"
     ;;
   web-test-build)
-    run_inside_standard_env bash -lc "./scripts/ci_web_test_build.sh ${FORWARDED_ARGS}"
+    run_with_strict_bootstrap "./scripts/ci_web_test_build.sh ${FORWARDED_ARGS}"
     ;;
   web-e2e)
-    run_inside_standard_env bash -lc "./scripts/ci_web_e2e.sh ${FORWARDED_ARGS}"
+    run_with_strict_bootstrap "./scripts/ci_web_e2e.sh ${FORWARDED_ARGS}"
     ;;
   live-smoke)
-    run_inside_standard_env bash -lc "./scripts/ci_live_smoke.sh ${FORWARDED_ARGS}"
+    run_with_strict_bootstrap "./scripts/ci_live_smoke.sh ${FORWARDED_ARGS}"
     ;;
   *)
     echo "[strict-ci-entry] unsupported mode: $MODE" >&2

@@ -213,6 +213,7 @@ Exception detail sanitization contract:
 - `scripts/recreate_gce_instance.sh` now uses CLI flags only (no GCE recreate env contract vars)
 - `CORE_POSTGRES_PORT`, `CORE_POSTGRES_PASSWORD` (docker compose core-services overrides)
 - `GHCR_USERNAME`, `GHCR_TOKEN` are optional local-only credentials for pulling the private strict CI standard image from `ghcr.io` during `scripts/strict_ci_entry.sh` runs.
+- `VD_STANDARD_ENV_MARKER_PATH`, `VD_STANDARD_ENV_DOCKERENV_PATH` are optional strict-container detection probe overrides for local debugging; defaults are `/etc/video-analysis-extract-strict-ci-standard-env` and `/.dockerenv`.
 - `GCP_PROJECT_ID`, `GCP_ZONE` are optional defaults for runner maintenance helpers:
   - `scripts/audit_github_runner_host.sh`
   - `scripts/apply_github_runner_startup_metadata.sh`

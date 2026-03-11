@@ -642,6 +642,7 @@ run_contract_diff_local_gate() {
   local head_json="$contract_dir/contract-head.json"
   local report_md="$contract_dir/contract-diff.md"
   local report_json="$contract_dir/contract-diff.json"
+  local contract_database_url="${DATABASE_URL:-sqlite+pysqlite:///:memory:}"
 
   mkdir -p "$contract_dir"
   rm -rf "$base_tree"
@@ -654,11 +655,11 @@ run_contract_diff_local_gate() {
 
   git worktree add --detach "$base_tree" "$base_sha" >/dev/null
 
-  if ! uv run python scripts/export_api_contract.py --repo-root "$ROOT_DIR" --output "$head_json"; then
+  if ! DATABASE_URL="$contract_database_url" uv run python scripts/export_api_contract.py --repo-root "$ROOT_DIR" --output "$head_json"; then
     git worktree remove --force "$base_tree" >/dev/null 2>&1 || true
     return 1
   fi
-  if ! uv run python scripts/export_api_contract.py --repo-root "$base_tree" --output "$base_json"; then
+  if ! DATABASE_URL="$contract_database_url" uv run python scripts/export_api_contract.py --repo-root "$base_tree" --output "$base_json"; then
     git worktree remove --force "$base_tree" >/dev/null 2>&1 || true
     return 1
   fi
@@ -829,7 +830,32 @@ PY
 }
 
 run_api_real_smoke_local_gate() {
-  ./scripts/api_real_smoke_local.sh
+  local smoke_database_url="${DATABASE_URL:-}"
+  local smoke_temporal_target_host="${TEMPORAL_TARGET_HOST:-}"
+  local smoke_workspace_dir="${PIPELINE_WORKSPACE_DIR:-$ROOT_DIR/.runtime-cache/api-real-smoke-workspace}"
+  local smoke_artifact_root="${PIPELINE_ARTIFACT_ROOT:-$ROOT_DIR/.runtime-cache/api-real-smoke-artifacts}"
+
+  if [[ -z "$smoke_database_url" ]]; then
+    if [[ "${VD_IN_STANDARD_ENV:-0}" == "1" ]]; then
+      smoke_database_url="postgresql+psycopg://postgres:postgres@host.docker.internal:5432/video_analysis"
+    else
+      smoke_database_url="postgresql+psycopg://postgres:postgres@127.0.0.1:5432/video_analysis"
+    fi
+  fi
+
+  if [[ -z "$smoke_temporal_target_host" ]]; then
+    if [[ "${VD_IN_STANDARD_ENV:-0}" == "1" ]]; then
+      smoke_temporal_target_host="host.docker.internal:7233"
+    else
+      smoke_temporal_target_host="127.0.0.1:7233"
+    fi
+  fi
+
+  DATABASE_URL="$smoke_database_url" \
+  TEMPORAL_TARGET_HOST="$smoke_temporal_target_host" \
+  PIPELINE_WORKSPACE_DIR="$smoke_workspace_dir" \
+  PIPELINE_ARTIFACT_ROOT="$smoke_artifact_root" \
+    ./scripts/api_real_smoke_local.sh
 }
 
 run_web_dependency_policy_gate() {
