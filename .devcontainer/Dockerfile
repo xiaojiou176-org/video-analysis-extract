@@ -18,8 +18,7 @@ RUN rm -f /etc/apt/sources.list.d/yarn.list \
     redis-tools \
     unzip \
   && rm -rf /var/lib/apt/lists/* \
-  && curl -LsSf https://astral.sh/uv/install.sh | sh -s -- --version "${STRICT_CI_UV_VERSION}" \
-  && export PATH="/root/.local/bin:$PATH" \
+  && python3 -m pip install --no-cache-dir "uv==${STRICT_CI_UV_VERSION}" \
   && arch="$(uname -m)" \
   && case "$arch" in \
       x86_64|amd64) temporal_arch="amd64"; expected_sha="${STRICT_CI_TEMPORAL_CLI_SHA256_LINUX_AMD64}" ;; \
@@ -39,4 +38,4 @@ RUN rm -f /etc/apt/sources.list.d/yarn.list \
   && npm --version \
   && temporal --version
 
-ENV PATH="/root/.local/bin:${PATH}"
+ENV PATH="${PATH}"

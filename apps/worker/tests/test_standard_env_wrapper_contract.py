@@ -126,8 +126,7 @@ def test_devcontainer_dockerfile_mitigates_broken_yarn_apt_source_before_update(
 def test_devcontainer_dockerfile_installs_uv_for_repo_owned_wrapper_scripts() -> None:
     dockerfile = (_repo_root() / ".devcontainer" / "Dockerfile").read_text(encoding="utf-8")
 
-    assert 'curl -LsSf https://astral.sh/uv/install.sh | sh -s -- --version "${STRICT_CI_UV_VERSION}"' in dockerfile
-    assert 'export PATH="/root/.local/bin:$PATH"' in dockerfile
+    assert 'python3 -m pip install --no-cache-dir "uv==${STRICT_CI_UV_VERSION}"' in dockerfile
     assert 'uv --version' in dockerfile
 
 
