@@ -513,6 +513,30 @@ def _check_global_rules(
 
 
 def _check_ci_specific_rules(blocks: dict[str, str], failures: list[str]) -> None:
+    runner_bootstrap = blocks.get("runner-bootstrap", "")
+    if not runner_bootstrap:
+        failures.append("ci.yml: runner-bootstrap: missing job")
+    else:
+        if (
+            "EXPECTED_RUNNERS_SORTED=" in runner_bootstrap
+            or "EXPECTED_RUNNERS_JSON=" in runner_bootstrap
+            or "exactly match expected" in runner_bootstrap
+        ):
+            failures.append(
+                "ci.yml: runner-bootstrap: must not hardcode exact org runner name lists; use label/pattern online thresholds"
+            )
+        if "MIN_ONLINE_CORE_RUNNERS" not in runner_bootstrap:
+            failures.append(
+                "ci.yml: runner-bootstrap: missing pool-core online threshold guard (MIN_ONLINE_CORE_RUNNERS)"
+            )
+        if (
+            "MIN_ONLINE_LABEL_RUNNERS" not in runner_bootstrap
+            or "video-analysis-extract" not in runner_bootstrap
+        ):
+            failures.append(
+                "ci.yml: runner-bootstrap: missing label-route online threshold guard for video-analysis-extract"
+            )
+
     standard_env_jobs = (
         "quality-gate-pre-push",
         "python-tests",

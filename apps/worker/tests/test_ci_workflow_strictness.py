@@ -369,6 +369,81 @@ jobs:
     )
 
 
+def test_ci_specific_rules_reject_runner_bootstrap_exact_name_pinning() -> None:
+    module = _load_module()
+    blocks = {
+        "runner-bootstrap": """  runner-bootstrap:
+    runs-on: [self-hosted, video-analysis-extract]
+    timeout-minutes: 30
+    steps:
+      - run: |
+          EXPECTED_RUNNERS_SORTED="pool-core01-01,pool-core01-02"
+          echo "must exactly match expected"
+""",
+    }
+    failures: list[str] = []
+
+    module._check_ci_specific_rules(blocks, failures)
+
+    assert (
+        "ci.yml: runner-bootstrap: must not hardcode exact org runner name lists; use label/pattern online thresholds"
+        in failures
+    )
+
+
+def test_ci_specific_rules_require_runner_bootstrap_label_threshold_guard() -> None:
+    module = _load_module()
+    blocks = {
+        "runner-bootstrap": """  runner-bootstrap:
+    runs-on: [self-hosted, video-analysis-extract]
+    timeout-minutes: 30
+    steps:
+      - run: |
+          MIN_ONLINE_CORE_RUNNERS=3
+          online_count=3
+""",
+    }
+    failures: list[str] = []
+
+    module._check_ci_specific_rules(blocks, failures)
+
+    assert (
+        "ci.yml: runner-bootstrap: missing label-route online threshold guard for video-analysis-extract"
+        in failures
+    )
+
+
+def test_ci_specific_rules_accept_runner_bootstrap_label_threshold_policy() -> None:
+    module = _load_module()
+    blocks = {
+        "runner-bootstrap": """  runner-bootstrap:
+    runs-on: [self-hosted, video-analysis-extract]
+    timeout-minutes: 30
+    steps:
+      - run: |
+          MIN_ONLINE_CORE_RUNNERS="${MIN_ONLINE_CORE_RUNNERS:-3}"
+          MIN_ONLINE_LABEL_RUNNERS="${MIN_ONLINE_LABEL_RUNNERS:-1}"
+          label_online_count="$(gh api "orgs/${GH_ORG}/actions/runners" --jq "[.runners[] | select((.labels | map(.name) | index(\\"video-analysis-extract\\")) and .status==\\"online\\")] | length")"
+""",
+    }
+    failures: list[str] = []
+
+    module._check_ci_specific_rules(blocks, failures)
+
+    assert (
+        "ci.yml: runner-bootstrap: must not hardcode exact org runner name lists; use label/pattern online thresholds"
+        not in failures
+    )
+    assert (
+        "ci.yml: runner-bootstrap: missing pool-core online threshold guard (MIN_ONLINE_CORE_RUNNERS)"
+        not in failures
+    )
+    assert (
+        "ci.yml: runner-bootstrap: missing label-route online threshold guard for video-analysis-extract"
+        not in failures
+    )
+
+
 def test_ci_specific_rules_aggregate_needs_must_not_be_satisfied_by_comment_text() -> None:
     module = _load_module()
     aggregate_block = """  aggregate-gate:
@@ -620,9 +695,11 @@ def test_quality_gate_and_live_smoke_jobs_use_strict_ci_entry_and_contract_conta
 def test_runner_bootstrap_uses_minimum_online_runner_capacity_instead_of_exact_name_match() -> None:
     workflow = (_repo_root() / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
 
-    assert 'MIN_ONLINE_RUNNERS=9' in workflow
+    assert 'MIN_ONLINE_CORE_RUNNERS="${MIN_ONLINE_CORE_RUNNERS:-3}"' in workflow
+    assert 'MIN_ONLINE_LABEL_RUNNERS="${MIN_ONLINE_LABEL_RUNNERS:-1}"' in workflow
     assert "RUNNER_NAME_REGEX='^pool-core[0-9]{2}-0[1-3]$'" in workflow
-    assert '[[ "${online_count}" -ge "${MIN_ONLINE_RUNNERS}" ]]' in workflow
+    assert '[[ "${online_count}" -ge "${MIN_ONLINE_CORE_RUNNERS}" && "${label_online_count}" -ge "${MIN_ONLINE_LABEL_RUNNERS}" ]]' in workflow
+    assert "video-analysis-extract" in workflow
     assert "EXPECTED_RUNNERS_SORTED" not in workflow
 
 

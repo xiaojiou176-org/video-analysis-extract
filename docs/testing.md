@@ -46,6 +46,7 @@
 - 允许精细调度：如需额外分流，只能追加标签，不允许使用 runner 名称直绑。
 - 关键约束：组织共享 runner 名称由治理侧统一维护，仓库 workflow 仅通过 label 调度。
 - 禁止硬编码 runner 实例名（例如 `github-runner-core-03`）；统一用标签路由，避免扩缩容后工作流失效。
+- `runner-bootstrap` 仅做健康阈值检查：验证 `pool-core..` 命名 runner 在线数量达到最小值，且 `video-analysis-extract` 标签路由目标在线可用；不得要求组织 runner 名单“精确匹配”。
 
 ## Runner 宿主机健康巡检
 
