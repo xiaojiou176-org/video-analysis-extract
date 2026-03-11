@@ -617,6 +617,15 @@ def test_quality_gate_and_live_smoke_jobs_use_strict_ci_entry_and_contract_conta
     assert "image: ${{ needs.ci-contract.outputs.standard_image_ref }}" in workflow
 
 
+def test_runner_bootstrap_uses_minimum_online_runner_capacity_instead_of_exact_name_match() -> None:
+    workflow = (_repo_root() / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+
+    assert 'MIN_ONLINE_RUNNERS=9' in workflow
+    assert "RUNNER_NAME_REGEX='^pool-core[0-9]{2}-0[1-3]$'" in workflow
+    assert '[[ "${online_count}" -ge "${MIN_ONLINE_RUNNERS}" ]]' in workflow
+    assert "EXPECTED_RUNNERS_SORTED" not in workflow
+
+
 def test_global_rules_rejects_resolver_without_hosted_or_fallback_success_checks() -> None:
     module = _load_module()
     required_ci_secrets_block = """  required-ci-secrets:
