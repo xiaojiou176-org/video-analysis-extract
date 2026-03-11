@@ -3,7 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 HEARTBEAT_SECONDS="25"
-MUTATION_MIN_SCORE="0.62"
+MUTATION_MIN_SCORE="0.64"
 SKIP_PREPUSH="0"
 
 usage() {
@@ -115,9 +115,11 @@ fi
 
 run_phase_with_heartbeat \
   "pre-push" \
-  "quality gate pre-push" \
-  bash scripts/quality_gate.sh \
+  "strict ci entry pre-push" \
+  bash scripts/strict_ci_entry.sh \
     --mode pre-push \
+    --strict-full-run 1 \
+    --ci-dedupe 0 \
     --heartbeat-seconds "$HEARTBEAT_SECONDS" \
     --mutation-min-score "$MUTATION_MIN_SCORE"
 

@@ -22,7 +22,7 @@ def test_quality_gate_preserves_required_existing_semantics() -> None:
 def test_quality_gate_remains_a_pure_gate_runner_without_owning_container_reexec() -> None:
     script = (_repo_root() / "scripts" / "quality_gate.sh").read_text(encoding="utf-8")
 
-    assert "CONTAINERIZED=\"auto\"" in script
+    assert 'CONTAINERIZED="auto"' in script
     assert "--containerized 0|1|auto" in script
     assert 'if [[ "$CONTAINERIZED" != "0" && "$CONTAINERIZED" != "1" && "$CONTAINERIZED" != "auto" ]]; then' in script
     assert 'exec "$ROOT_DIR/scripts/run_in_standard_env.sh"' not in script

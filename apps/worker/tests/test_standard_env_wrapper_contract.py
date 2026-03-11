@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import os
-from pathlib import Path
 import subprocess
+from pathlib import Path
 
 
 def _repo_root() -> Path:
@@ -59,9 +59,9 @@ def test_standard_env_wrapper_and_helper_contract_exist() -> None:
     assert 'STANDARD_ENV_DOCKERFILE="${VD_STANDARD_ENV_DOCKERFILE:-$ROOT_DIR/$STRICT_CI_STANDARD_IMAGE_DOCKERFILE}"' in helper
     assert 'STANDARD_ENV_WORKDIR="${VD_STANDARD_ENV_WORKDIR:-$STRICT_CI_STANDARD_IMAGE_WORKDIR}"' in helper
     assert 'docker pull "$STANDARD_ENV_IMAGE"' in helper
-    assert '-e VD_IN_STANDARD_ENV=1' in helper
+    assert "-e VD_IN_STANDARD_ENV=1" in helper
     assert 'STANDARD_ENV_HOST_GATEWAY="${VD_STANDARD_ENV_HOST_GATEWAY:-host.docker.internal}"' in helper
-    assert 'resolve_standard_env_runtime_value() {' in helper
+    assert "resolve_standard_env_runtime_value() {" in helper
     assert 'runtime_database_url="$(resolve_standard_env_runtime_value DATABASE_URL "${DATABASE_URL:-}")"' in helper
     assert 'runtime_temporal_target_host="$(resolve_standard_env_runtime_value TEMPORAL_TARGET_HOST "${TEMPORAL_TARGET_HOST:-}")"' in helper
     assert '-e DATABASE_URL="$runtime_database_url"' in helper
@@ -119,21 +119,21 @@ def test_standard_env_wrapper_preserves_loopback_targets_on_linux() -> None:
 def test_devcontainer_dockerfile_mitigates_broken_yarn_apt_source_before_update() -> None:
     dockerfile = (_repo_root() / ".devcontainer" / "Dockerfile").read_text(encoding="utf-8")
 
-    assert 'rm -f /etc/apt/sources.list.d/yarn.list' in dockerfile
-    assert dockerfile.index('rm -f /etc/apt/sources.list.d/yarn.list') < dockerfile.index('apt-get update')
+    assert "rm -f /etc/apt/sources.list.d/yarn.list" in dockerfile
+    assert dockerfile.index("rm -f /etc/apt/sources.list.d/yarn.list") < dockerfile.index("apt-get update")
 
 
 def test_devcontainer_dockerfile_installs_uv_for_repo_owned_wrapper_scripts() -> None:
     dockerfile = (_repo_root() / ".devcontainer" / "Dockerfile").read_text(encoding="utf-8")
 
     assert 'python3 -m pip install --no-cache-dir "uv==${STRICT_CI_UV_VERSION}"' in dockerfile
-    assert 'uv --version' in dockerfile
+    assert "uv --version" in dockerfile
 
 
 def test_devcontainer_dockerfile_pins_nodesource_node_22_for_standard_env() -> None:
     dockerfile = (_repo_root() / ".devcontainer" / "Dockerfile").read_text(encoding="utf-8")
 
-    assert 'STRICT_CI_NODE_MAJOR=22' in dockerfile
-    assert 'https://deb.nodesource.com/setup_${STRICT_CI_NODE_MAJOR}.x' in dockerfile
-    assert dockerfile.index('https://deb.nodesource.com/setup_${STRICT_CI_NODE_MAJOR}.x') < dockerfile.index('apt-get install -y --no-install-recommends \\\n    nodejs')
-    assert 'nodejs' in dockerfile
+    assert "STRICT_CI_NODE_MAJOR=22" in dockerfile
+    assert "https://deb.nodesource.com/setup_${STRICT_CI_NODE_MAJOR}.x" in dockerfile
+    assert dockerfile.index("https://deb.nodesource.com/setup_${STRICT_CI_NODE_MAJOR}.x") < dockerfile.index("apt-get install -y --no-install-recommends \\\n    nodejs")
+    assert "nodejs" in dockerfile

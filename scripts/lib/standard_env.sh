@@ -8,6 +8,51 @@ STANDARD_ENV_DOCKERFILE="${VD_STANDARD_ENV_DOCKERFILE:-$ROOT_DIR/$STRICT_CI_STAN
 STANDARD_ENV_WORKDIR="${VD_STANDARD_ENV_WORKDIR:-$STRICT_CI_STANDARD_IMAGE_WORKDIR}"
 STANDARD_ENV_HOST_GATEWAY="${VD_STANDARD_ENV_HOST_GATEWAY:-host.docker.internal}"
 
+append_standard_env_git_mounts() {
+  local -n mounts_ref="$1"
+  local git_file="$ROOT_DIR/.git"
+  local git_dir=""
+  local git_common_dir=""
+
+  if [[ -d "$git_file" ]]; then
+    return 0
+  fi
+  if [[ ! -f "$git_file" ]]; then
+    return 0
+  fi
+
+  git_dir="$(git -C "$ROOT_DIR" rev-parse --absolute-git-dir 2>/dev/null || true)"
+  git_common_dir="$(git -C "$ROOT_DIR" rev-parse --git-common-dir 2>/dev/null || true)"
+  [[ -n "$git_dir" ]] || return 0
+
+  if [[ "$git_dir" != "$ROOT_DIR/.git" ]]; then
+    mounts_ref+=(-v "$git_dir:$git_dir")
+  fi
+  if [[ -n "$git_common_dir" ]]; then
+    git_common_dir="$(cd "$ROOT_DIR" && python3 - <<'PY' "$git_common_dir"
+from pathlib import Path
+import sys
+print(Path(sys.argv[1]).resolve())
+PY
+)"
+    if [[ "$git_common_dir" != "$ROOT_DIR/.git" && "$git_common_dir" != "$git_dir" ]]; then
+      mounts_ref+=(-v "$git_common_dir:$git_common_dir")
+    fi
+  fi
+}
+
+ensure_standard_env_registry_login() {
+  local registry="ghcr.io"
+  local username="${GHCR_USERNAME:-}"
+  local token="${GHCR_TOKEN:-}"
+
+  if [[ -z "$username" || -z "$token" ]]; then
+    return 0
+  fi
+
+  printf '%s' "$token" | docker login "$registry" -u "$username" --password-stdin >/dev/null
+}
+
 standard_env_needs_host_gateway() {
   case "$(uname -s)" in
     Darwin*|MINGW*|MSYS*|CYGWIN*) return 0 ;;
@@ -68,15 +113,19 @@ build_standard_env_image() {
 run_in_standard_env() {
   local command=("$@")
   local runtime_database_url runtime_temporal_target_host
+  local extra_mounts=()
 
   runtime_database_url="$(resolve_standard_env_runtime_value DATABASE_URL "${DATABASE_URL:-}")"
   runtime_temporal_target_host="$(resolve_standard_env_runtime_value TEMPORAL_TARGET_HOST "${TEMPORAL_TARGET_HOST:-}")"
 
+  append_standard_env_git_mounts extra_mounts
+  ensure_standard_env_registry_login
   docker pull "$STANDARD_ENV_IMAGE" >/dev/null 2>&1 || true
 
   docker run --rm --init \
     --network host \
     -v "$ROOT_DIR:$STANDARD_ENV_WORKDIR" \
+    "${extra_mounts[@]}" \
     -w "$STANDARD_ENV_WORKDIR" \
     -e VD_IN_STANDARD_ENV=1 \
     -e CI="${CI:-}" \

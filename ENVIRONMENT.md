@@ -212,6 +212,7 @@ Exception detail sanitization contract:
 - Script entry controls for `dev_api/dev_worker/dev_mcp/init_env_example` are CLI-only after Batch C (see `docs/reference/env-script-overrides.md`)
 - `scripts/recreate_gce_instance.sh` now uses CLI flags only (no GCE recreate env contract vars)
 - `CORE_POSTGRES_PORT`, `CORE_POSTGRES_PASSWORD` (docker compose core-services overrides)
+- `GHCR_USERNAME`, `GHCR_TOKEN` are optional local-only credentials for pulling the private strict CI standard image from `ghcr.io` during `scripts/strict_ci_entry.sh` runs.
 - `GCP_PROJECT_ID`, `GCP_ZONE` are optional defaults for runner maintenance helpers:
   - `scripts/audit_github_runner_host.sh`
   - `scripts/apply_github_runner_startup_metadata.sh`

@@ -4,8 +4,7 @@ import importlib.util
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
-from types import TracebackType
-from types import ModuleType, SimpleNamespace
+from types import ModuleType, SimpleNamespace, TracebackType
 from typing import Any
 
 import pytest
@@ -605,8 +604,8 @@ def test_web_e2e_job_calls_repo_script_inside_strict_ci_entry() -> None:
     assert "./scripts/ci_web_e2e.sh" in strict_entry
     assert 'DATABASE_URL="${DATABASE_URL:-}"' in script
     assert 'db_url="postgresql+psycopg://' not in script
-    assert 'ensure_node_toolchain' in script
-    assert 'npm --prefix apps/web ci' in script
+    assert "ensure_node_toolchain" in script
+    assert "npm --prefix apps/web ci" in script
 
 
 def test_quality_gate_and_live_smoke_jobs_use_strict_ci_entry_and_contract_container() -> None:
