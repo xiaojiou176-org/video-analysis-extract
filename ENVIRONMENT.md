@@ -159,7 +159,7 @@ Default model lane:
 - `UI_AUDIT_RUN_STORE_DIR` (persisted UI audit run snapshot directory, default `.runtime-cache/ui-audit-runs`)
 - `VD_MCP_MAX_BASE64_BYTES` (MCP base64 payload size limit, bytes)
 - `WEB_ACTION_SESSION_TOKEN` (optional server-action session secret)
-- `GEMINI_UI_UX_AUDIT_REPORT_PATH` (CI UI/UX audit report output path, default `.runtime-cache/ui-audit/gemini-ui-ux-audit-report.json`)
+- CI UI/UX audit report output path is fixed to `.runtime-cache/ui-audit/gemini-ui-ux-audit-report.json` in the strict CI workflow.
 
 Write auth behavior contract (`apps/api/app/security.py`):
 

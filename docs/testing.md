@@ -96,7 +96,7 @@ scripts/e2e_live_smoke.sh \
   --diagnostics-json ".runtime-cache/e2e-live-smoke-result.json"
 ```
 
-说明：`scripts/quality_gate.sh` 的 live-smoke profile gate 会校验 `scripts/e2e_live_smoke.sh` 默认值，其中 `LIVE_SMOKE_REQUIRE_SECRETS` 必须保持为 `1`（与 D1 强制 secrets 口径一致）。
+说明：`scripts/quality_gate.sh` 的 live-smoke profile gate 会校验 `scripts/e2e_live_smoke.sh` 默认值，其中 secrets requirement 必须保持为强制开启（与 D1 强制 secrets 口径一致）。
 
 - D2 mutation 硬门禁阈值 `0.64`（并新增结构质量约束）：
 
@@ -134,7 +134,7 @@ python3 scripts/check_web_coverage_threshold.py \
 - `scripts/smoke_full_stack.sh` 负责本地联调与 live smoke 相关检查，不是 `api-real-smoke` 的替代品。
 - `UI Audit` 结果现会落盘到 `UI_AUDIT_RUN_STORE_DIR`（默认 `.runtime-cache/ui-audit-runs/`），避免 API 重启后审查记录丢失。
 - `POST /api/v1/ui-audit/run` 的响应会携带 `gemini_review` 元信息；若返回 `status=completed_with_gemini_failure`，表示证据采集完成但 Gemini 深审失败，不能当作 UI 深审通过。
-- UI Audit 高级运行时调优（`UI_AUDIT_MODEL_TIMEOUT_SECONDS` / `UI_AUDIT_MODEL_MAX_RETRIES` 与 `GEMINI_UI_UX_AUDIT_MODEL` 等）当前仅作为运行时可选覆盖，不属于 `.env.example` 的 strict contract 白名单。
+- UI Audit 高级运行时调优当前仅作为运行时可选覆盖，不属于 `.env.example` 的 strict contract 白名单；如需调整，请以服务端实现与严格 CI 契约为准。
 - `POST /api/v1/ui-audit/{run_id}/autofix` 当前只会返回“持久化 dry-run 计划”；即使请求 `mode=apply`，响应中的 `mode` 也会明确回退到 `dry-run`，并在 `guardrails.requested_mode/effective_mode` 里说明。
 
 ## 测试类型与依赖边界（避免误解）
