@@ -768,6 +768,26 @@ def test_runner_bootstrap_uses_minimum_online_runner_capacity_instead_of_exact_n
     assert "EXPECTED_RUNNERS_SORTED" not in workflow
 
 
+def test_docker_dependent_required_jobs_route_to_core02_runner_subset() -> None:
+    workflow = (_repo_root() / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+
+    expected = "runs-on: [self-hosted, video-analysis-extract, core02]"
+    for job_name in (
+        "quality-gate-pre-push",
+        "db-migration-smoke",
+        "python-tests",
+        "api-real-smoke",
+        "pr-llm-real-smoke",
+        "web-test-build",
+        "web-e2e",
+        "web-e2e-perceived",
+        "live-smoke",
+    ):
+        anchor = workflow.index(f"  {job_name}:")
+        window = workflow[anchor : anchor + 220]
+        assert expected in window
+
+
 def test_global_rules_rejects_resolver_without_hosted_or_fallback_success_checks() -> None:
     module = _load_module()
     required_ci_secrets_block = """  required-ci-secrets:

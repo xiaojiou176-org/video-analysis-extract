@@ -589,7 +589,7 @@ jobs:
           fi
 
   quality-gate-pre-push:
-    runs-on: [self-hosted, video-analysis-extract]
+    runs-on: [self-hosted, video-analysis-extract, core02]
     timeout-minutes: 90
     needs: [preflight-heavy, changes, ci-contract]
     container:
@@ -768,7 +768,7 @@ jobs:
             .runtime-cache/ui-audit/gemini-ui-ux-audit.log
 
   db-migration-smoke:
-    runs-on: [self-hosted, video-analysis-extract]
+    runs-on: [self-hosted, video-analysis-extract, core02]
     timeout-minutes: 20
     needs: [preflight-fast, changes]
     if: ${{ always() && needs.preflight-fast.result == 'success' && needs.changes.result == 'success' && (github.event_name != 'pull_request' || needs.changes.outputs.migrations_changed == 'true') }}
@@ -988,7 +988,7 @@ jobs:
           if-no-files-found: warn
 
   python-tests:
-    runs-on: [self-hosted, video-analysis-extract]
+    runs-on: [self-hosted, video-analysis-extract, core02]
     timeout-minutes: 45
     needs: [preflight-fast, changes, ci-contract]
     if: ${{ always() && needs.preflight-fast.result == 'success' && needs.changes.result == 'success' && (github.event_name != 'pull_request' || needs.changes.outputs.backend_changed == 'true') }}
@@ -1091,7 +1091,7 @@ jobs:
             .runtime-cache/python-coverage.xml
 
   api-real-smoke:
-    runs-on: [self-hosted, video-analysis-extract]
+    runs-on: [self-hosted, video-analysis-extract, core02]
     timeout-minutes: 25
     needs: [preflight-fast, changes, ci-contract]
     if: ${{ always() && needs.preflight-fast.result == 'success' && needs.changes.result == 'success' && (github.event_name != 'pull_request' || needs.changes.outputs.backend_changed == 'true') }}
@@ -1173,7 +1173,7 @@ jobs:
             .runtime-cache/api-real-smoke.log
 
   pr-llm-real-smoke:
-    runs-on: [self-hosted, video-analysis-extract]
+    runs-on: [self-hosted, video-analysis-extract, core02]
     timeout-minutes: 35
     needs: [preflight-fast, changes, ci-contract]
     if: >-
@@ -1249,7 +1249,7 @@ jobs:
             .runtime-cache/pr-llm-real-smoke-result.json
 
   web-test-build:
-    runs-on: [self-hosted, video-analysis-extract]
+    runs-on: [self-hosted, video-analysis-extract, core02]
     timeout-minutes: 25
     needs: [preflight-fast, changes, ci-contract]
     if: ${{ always() && needs.preflight-fast.result == 'success' && needs.changes.result == 'success' }}
@@ -1314,7 +1314,7 @@ jobs:
         run: ./scripts/strict_ci_entry.sh --mode web-test-build
 
   web-e2e:
-    runs-on: [self-hosted, video-analysis-extract]
+    runs-on: [self-hosted, video-analysis-extract, core02]
     timeout-minutes: 45
     needs: [preflight-fast, changes, ci-contract]
     if: ${{ always() && needs.preflight-fast.result == 'success' && needs.changes.result == 'success' && (github.event_name != 'pull_request' || needs.changes.outputs.backend_changed == 'true' || needs.changes.outputs.web_changed == 'true' || needs.changes.outputs.deps_changed == 'true') }}
@@ -1536,7 +1536,7 @@ jobs:
             .runtime-cache/external-playwright-smoke-result.json
 
   web-e2e-perceived:
-    runs-on: [self-hosted, video-analysis-extract]
+    runs-on: [self-hosted, video-analysis-extract, core02]
     timeout-minutes: 40
     needs: [preflight-fast, changes]
     if: ${{ always() && needs.preflight-fast.result == 'success' && needs.changes.result == 'success' && (github.event_name != 'pull_request' || needs.changes.outputs.backend_changed == 'true' || needs.changes.outputs.web_changed == 'true' || needs.changes.outputs.deps_changed == 'true') }}
@@ -2377,7 +2377,7 @@ jobs:
 
   live-smoke:
     needs: [aggregate-gate, ci-contract]
-    runs-on: [self-hosted, video-analysis-extract]
+    runs-on: [self-hosted, video-analysis-extract, core02]
     timeout-minutes: 40
     if: >-
       always() &&
