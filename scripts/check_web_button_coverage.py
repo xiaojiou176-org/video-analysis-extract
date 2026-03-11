@@ -45,9 +45,7 @@ def should_track_label(raw: str, normalized: str) -> bool:
         return False
     if normalized in {"（在新标签页打开）", "(在新标签页打开)"}:
         return False
-    if re.fullmatch(r"[^\w\u4e00-\u9fff]+", normalized):
-        return False
-    return True
+    return re.fullmatch(r"[^\w\u4e00-\u9fff]+", normalized) is None
 
 
 def _extract_aria_label(attrs: str) -> str | None:

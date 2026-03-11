@@ -4,6 +4,7 @@ import importlib.util
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
+from types import TracebackType
 from types import ModuleType, SimpleNamespace
 from typing import Any
 
@@ -34,10 +35,18 @@ def _install_web_e2e_import_stubs() -> None:
         def __enter__(self) -> Any:
             raise AssertionError("sync_playwright stub should not be entered in collection hook contract test")
 
-        def __exit__(self, exc_type: Any, exc: Any, tb: Any) -> bool:
+        def __exit__(
+            self,
+            exc_type: type[BaseException] | None,
+            exc: BaseException | None,
+            tb: TracebackType | None,
+        ) -> bool:
             return False
 
-    sync_api_module.sync_playwright = lambda: _SyncPlaywrightContext()
+    def _sync_playwright_stub() -> _SyncPlaywrightContext:
+        return _SyncPlaywrightContext()
+
+    sync_api_module.sync_playwright = _sync_playwright_stub
     playwright_module.sync_api = sync_api_module
     sys.modules.setdefault("playwright", playwright_module)
     sys.modules.setdefault("playwright.sync_api", sync_api_module)
@@ -726,8 +735,11 @@ def test_web_e2e_mock_only_cases_are_deselected_for_real_api_collection() -> Non
     spec.loader.exec_module(module)
 
     deselected: list[_CollectedTestItem] = []
+    def _pytest_deselected(items: list[_CollectedTestItem]) -> None:
+        deselected.extend(items)
+
     config = _CollectionConfig(
-        hook=SimpleNamespace(pytest_deselected=lambda items: deselected.extend(items))
+        hook=SimpleNamespace(pytest_deselected=_pytest_deselected)
     )
     items = [
         _CollectedTestItem(
