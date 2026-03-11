@@ -244,6 +244,62 @@ jobs:
     )
 
 
+def test_global_rules_require_pre_checkout_normalization_for_self_hosted_checkout() -> None:
+    module = _load_module()
+    workflow = """name: pre-commit
+on:
+  pull_request:
+jobs:
+  pre-commit-hosted:
+    runs-on: [self-hosted, video-analysis-extract]
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@1234567890abcdef1234567890abcdef12345678
+        with:
+          clean: true
+"""
+    failures: list[str] = []
+
+    module._check_global_rules(
+        Path("pre-commit.yml"), workflow, dict(module._job_blocks(workflow)), failures
+    )
+
+    assert (
+        "pre-commit.yml:10: self-hosted checkout must be preceded by "
+        "`Normalize self-hosted workspace (pre-checkout)`"
+    ) in failures
+
+
+def test_global_rules_accept_pre_checkout_normalization_for_self_hosted_checkout() -> None:
+    module = _load_module()
+    workflow = """name: pre-commit
+on:
+  pull_request:
+jobs:
+  pre-commit-hosted:
+    runs-on: [self-hosted, video-analysis-extract]
+    timeout-minutes: 5
+    steps:
+      - name: Normalize self-hosted workspace (pre-checkout)
+        run: echo normalize
+      - name: Checkout
+        uses: actions/checkout@1234567890abcdef1234567890abcdef12345678
+        with:
+          clean: true
+"""
+    failures: list[str] = []
+
+    module._check_global_rules(
+        Path("pre-commit.yml"), workflow, dict(module._job_blocks(workflow)), failures
+    )
+
+    assert (
+        "self-hosted checkout must be preceded by "
+        "`Normalize self-hosted workspace (pre-checkout)`"
+    ) not in "\n".join(failures)
+
+
 def test_global_rules_forbid_checkout_workspace_tool_cache_paths() -> None:
     module = _load_module()
     workflow = """name: CI

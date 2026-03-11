@@ -8,6 +8,12 @@ WORKFLOW_DIR = Path(".github/workflows")
 WORKFLOW_PATH = WORKFLOW_DIR / "ci.yml"
 CHECKOUT_ACTION = "actions/checkout@"
 CACHE_ACTION = "actions/cache@"
+PRE_CHECKOUT_NORMALIZATION_STEP = "Normalize self-hosted workspace (pre-checkout)"
+SELF_HOSTED_RUNS_ON_MARKERS = (
+    "runs-on: [self-hosted",
+    "runs-on: '[\"self-hosted\"",
+    "runs-on: ${{ fromJSON(inputs.runs-on) }}",
+)
 SAFE_CACHE_PATH_MARKERS = (
     "${{ runner.temp }}",
     "${{ env.CI_CACHE_ROOT }}",
@@ -221,8 +227,40 @@ def _collect_step_block(lines: list[str], start_index: int) -> list[str]:
     return block
 
 
+def _self_hosted_job_ranges(text: str) -> list[tuple[int, int]]:
+    lines = text.splitlines()
+    jobs_start_index: int | None = None
+    for index, line in enumerate(lines):
+        if re.match(r"^jobs:\s*$", line):
+            jobs_start_index = index
+            break
+    if jobs_start_index is None:
+        return []
+
+    job_positions: list[int] = []
+    for index in range(jobs_start_index + 1, len(lines)):
+        line = lines[index]
+        if re.match(r"^[A-Za-z0-9_-]+:\s*$", line):
+            break
+        if re.match(r"^  [A-Za-z0-9_-]+:\s*$", line):
+            job_positions.append(index)
+
+    ranges: list[tuple[int, int]] = []
+    for idx, start in enumerate(job_positions):
+        end = job_positions[idx + 1] if idx + 1 < len(job_positions) else len(lines)
+        block = "\n".join(lines[start:end])
+        if any(marker in block for marker in SELF_HOSTED_RUNS_ON_MARKERS):
+            ranges.append((start + 1, end))
+    return ranges
+
+
+def _line_in_ranges(lineno: int, ranges: list[tuple[int, int]]) -> bool:
+    return any(start <= lineno <= end for start, end in ranges)
+
+
 def _check_checkout_clean_rule(workflow_path: Path, text: str, failures: list[str]) -> None:
     lines = text.splitlines()
+    self_hosted_ranges = _self_hosted_job_ranges(text)
     for lineno, line in enumerate(lines, start=1):
         if CHECKOUT_ACTION not in line:
             continue
@@ -230,6 +268,22 @@ def _check_checkout_clean_rule(workflow_path: Path, text: str, failures: list[st
         if "clean: true" not in block:
             failures.append(
                 f"{workflow_path.name}:{lineno}: actions/checkout must declare with.clean: true on shared self-hosted runners"
+            )
+
+        if not _line_in_ranges(lineno, self_hosted_ranges):
+            continue
+
+        step_start = lineno - 1
+        while step_start >= 0 and not re.match(r"^\s*-\s+", lines[step_start]):
+            step_start -= 1
+
+        prev_step = step_start - 1
+        while prev_step >= 0 and not re.match(r"^\s*-\s+", lines[prev_step]):
+            prev_step -= 1
+
+        if prev_step < 0 or PRE_CHECKOUT_NORMALIZATION_STEP not in lines[prev_step]:
+            failures.append(
+                f"{workflow_path.name}:{lineno}: self-hosted checkout must be preceded by `{PRE_CHECKOUT_NORMALIZATION_STEP}`"
             )
 
 
