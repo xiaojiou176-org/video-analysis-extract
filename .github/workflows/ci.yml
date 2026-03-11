@@ -1060,6 +1060,7 @@ jobs:
           PIPELINE_WORKSPACE_DIR: /tmp/video-digestor-workspace-smoke
           PIPELINE_ARTIFACT_ROOT: /tmp/video-digestor-artifacts-smoke
         run: |
+          uv sync --frozen --extra dev --extra e2e
           uv run pytest \
             apps/worker/tests/test_runner_modes.py::test_run_pipeline_text_only_mode_skips_media_steps \
             apps/worker/tests/test_runner_modes.py::test_run_pipeline_refresh_llm_forces_only_llm_steps \

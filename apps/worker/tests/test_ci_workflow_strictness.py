@@ -701,6 +701,15 @@ def test_python_tests_job_calls_repo_script_inside_strict_ci_entry() -> None:
     assert "./scripts/strict_ci_entry.sh --mode python-tests" in workflow
 
 
+def test_python_tests_pipeline_smoke_syncs_dependencies_before_pytest() -> None:
+    workflow = (_repo_root() / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+
+    pipeline_smoke_anchor = workflow.index("- name: Pipeline smoke")
+    sync_index = workflow.index("uv sync --frozen --extra dev --extra e2e", pipeline_smoke_anchor)
+    pytest_index = workflow.index("uv run pytest \\", pipeline_smoke_anchor)
+    assert sync_index < pytest_index
+
+
 def test_ci_python_tests_script_preserves_backend_coverage_and_junit_contract() -> None:
     script = (_repo_root() / "scripts" / "ci_python_tests.sh").read_text(encoding="utf-8")
 
