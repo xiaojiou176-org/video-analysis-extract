@@ -2,14 +2,6 @@ name: build-ci-standard-image
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
-    paths:
-      - ".devcontainer/Dockerfile"
-      - "infra/config/strict_ci_contract.json"
-      - "scripts/build_ci_standard_image.sh"
-      - "scripts/ci_contract.py"
 
 permissions:
   contents: write
