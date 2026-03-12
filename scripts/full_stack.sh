@@ -49,6 +49,8 @@ done
 
 # shellcheck source=./scripts/lib/load_env.sh
 source "$ROOT_DIR/scripts/lib/load_env.sh"
+# shellcheck source=./scripts/lib/temporal_ready.sh
+source "$ROOT_DIR/scripts/lib/temporal_ready.sh"
 load_repo_env "$ROOT_DIR" "$SCRIPT_NAME" "$ENV_PROFILE"
 
 api_port_cli=""
@@ -553,6 +555,20 @@ worker_temporal_preflight_check() {
   return 0
 }
 
+worker_temporal_pollers_ready_check() {
+  local timeout="${FULL_STACK_TEMPORAL_POLLER_READY_TIMEOUT_SECONDS:-45}"
+  if wait_for_temporal_worker_pollers \
+    "${TEMPORAL_TARGET_HOST:-localhost:7233}" \
+    "${TEMPORAL_NAMESPACE:-default}" \
+    "${TEMPORAL_TASK_QUEUE:-video-analysis-worker}" \
+    "$timeout"; then
+    log "worker temporal pollers ready on task queue ${TEMPORAL_TASK_QUEUE}"
+    return 0
+  fi
+  log "DIAGNOSE stage=worker_temporal_pollers conclusion=pollers_not_ready task_queue=${TEMPORAL_TASK_QUEUE}"
+  return 1
+}
+
 STARTED_THIS_RUN=()
 
 rollback_started_services() {
@@ -635,6 +651,11 @@ run_up() {
   fi
   if ! sync_pid_meta_if_needed "worker" >/dev/null 2>&1; then
     emit_failure_diagnostics "worker_start" "worker_process_not_detected" "worker"
+    rollback_started_services
+    return 1
+  fi
+  if ! worker_temporal_pollers_ready_check; then
+    emit_failure_diagnostics "worker_temporal_pollers" "pollers_not_ready" "worker"
     rollback_started_services
     return 1
   fi

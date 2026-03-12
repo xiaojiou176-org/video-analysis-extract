@@ -63,12 +63,17 @@ def test_full_stack_status_handles_stale_pid_metadata(tmp_path: Path) -> None:
 
     full_stack_target = target_script_dir / "full_stack.sh"
     load_env_target = target_lib_dir / "load_env.sh"
+    temporal_ready_target = target_lib_dir / "temporal_ready.sh"
     full_stack_target.write_text(
         (root / "scripts" / "full_stack.sh").read_text(encoding="utf-8"),
         encoding="utf-8",
     )
     load_env_target.write_text(
         (root / "scripts" / "lib" / "load_env.sh").read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+    temporal_ready_target.write_text(
+        (root / "scripts" / "lib" / "temporal_ready.sh").read_text(encoding="utf-8"),
         encoding="utf-8",
     )
     full_stack_target.chmod(0o755)

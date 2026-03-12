@@ -82,17 +82,20 @@
 - Docker Compose（基础设施真相源）：`infra/compose/core-services.compose.yml`（使用 `pgvector/pgvector:pg16` 镜像支持向量检索）、`infra/compose/miniflux-nextflux.compose.yml`
 - DevContainer（AI/自动化标准执行环境）：`.devcontainer/devcontainer.json`
 
-推荐进入标准环境后再执行 lint/test/live smoke：
+推荐先进入标准环境，再执行本地联调或严格验收。严格验收的唯一权威入口是仓库标准镜像，不是宿主机命令：
 
 ```bash
 # 1) 在 VS Code 里执行: Dev Containers: Reopen in Container
 # 或使用 devcontainer CLI:
 devcontainer up --workspace-folder .
 
-# 2) 在容器内执行（统一口径）
+# 2) 在容器内执行（开发/联调）
 ./scripts/bootstrap_full_stack.sh
 ./scripts/full_stack.sh up
 ./scripts/smoke_full_stack.sh --offline-fallback 0
+
+# 3) 在容器镜像内执行（CI 等价严格验收）
+./scripts/strict_ci_entry.sh --mode pre-push --strict-full-run 1 --ci-dedupe 0
 ```
 
 运行风险说明：
@@ -100,7 +103,7 @@ devcontainer up --workspace-folder .
 - 现有 `scripts/deploy_core_services.sh` 与 `scripts/deploy_reader_stack.sh` 已直接绑定上述 compose 文件，不需要改脚本。
 - 风险 1：DevContainer 依赖宿主 Docker（通过 `/var/run/docker.sock`），若宿主未启动 Docker，容器内 compose 无法拉起。
 - 风险 2：live smoke 依赖真实外部 API Key（如 `GEMINI_API_KEY`），标准环境只保证执行一致性，不保证外部资源可用。
-- 风险 3：本地裸机与容器混用时，端口/数据库残留状态可能不一致；建议同一轮验证只使用一种环境执行。
+- 风险 3：本地裸机与容器路径不得在同一轮验收中混用，否则端口、数据库与缓存残留会破坏 CI 等价性。
 
 ## 处理流程（统一口径）
 
@@ -186,7 +189,7 @@ uv sync --frozen --extra dev --extra e2e
 npm --prefix apps/web ci
 ```
 
-### 2) 启动基础服务
+### 2) 启动基础服务（Host Fallback，仅故障应急）
 
 ```bash
 brew services start postgresql@16
@@ -282,8 +285,8 @@ uv run --with pytest --with playwright pytest \
 
 测试与门禁口径更新（2026-02）：
 
-- 远程 CI 成本治理：触发或重跑 GitHub Actions 前，必须先本地跑通 `./scripts/quality_gate.sh --mode pre-push --heartbeat-seconds 20 --mutation-min-score 0.64 --mutation-min-effective-ratio 0.27 --mutation-max-no-tests-ratio 0.72 --profile ci --profile live-smoke --ci-dedupe 0`。
-- 如需本地拿到与 CI `api-real-smoke` 同语义的最终后端验收，请额外执行 `./scripts/api_real_smoke_local.sh`，或直接执行 `./scripts/quality_gate.sh --mode pre-push --strict-full-run 1 --profile ci --profile live-smoke --ci-dedupe 0`。
+- 远程 CI 成本治理：触发或重跑 GitHub Actions 前，必须先本地跑通 `./scripts/strict_ci_entry.sh --mode pre-push --strict-full-run 1 --ci-dedupe 0`。
+- 如需本地拿到与 CI 同语义的最终验收，使用 `./scripts/strict_ci_entry.sh --mode pre-push --strict-full-run 1 --ci-dedupe 0`；Host Fallback 与 sqlite 快速回归都不能作为 CI 等价证据。
 - `strict-full-run=1` 会强制关闭 `ci-dedupe` 且禁止 `skip-mutation`，确保本地跑的是完整门禁而非裁剪版。
 - 远程失败后必须先本地复现与修复，再触发下一次远程运行；禁止连续重跑碰运气。
 - CI 预检拆分为 `preflight-fast` + `preflight-heavy`，多数 job 先依赖 fast 以减少起跑阻塞，最终由 aggregate gate 同时约束两者成功。

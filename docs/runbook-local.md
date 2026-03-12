@@ -1,6 +1,6 @@
-# Local Runbook (Non-Docker, Phase3)
+# Local Runbook (Container-First, Phase3)
 
-本文是本仓库本地运行的权威步骤文档，和 `README.md` 保持同一套 6 步口径。
+本文是本仓库本地运行的权威步骤文档。标准镜像路径是 CI 等价验收真相源，宿主机路径仅作为故障应急。
 
 ## 标准环境约束（AI/自动化必须）
 
@@ -104,7 +104,7 @@ pre-commit autoupdate
 pre-commit run --all-files
 ```
 
-### 2) 启动基础服务
+### 2) 启动基础服务（Host Fallback，仅故障应急）
 
 ```bash
 brew services start postgresql@16
@@ -305,7 +305,7 @@ bash -n scripts/start_ops_workflows.sh
 - `scripts/dev_mcp.sh`：交互式 stdio MCP 入口，不由 `full_stack.sh` 作为后台守护进程管理。
 - `full_stack.sh` 启动 Web 时会显式注入 `NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:${API_PORT}`，避免开发日志继续回落到 `127.0.0.1:9000`。
 - 本地路由真相源是 `API_PORT/WEB_PORT`；`VD_API_BASE_URL` 与 `NEXT_PUBLIC_API_BASE_URL` 为派生地址。
-- `full_stack.sh` 的启动顺序是“API health -> Web -> Worker”；Worker 启动前会先做 Temporal preflight（`TEMPORAL_TARGET_HOST`，默认 `localhost:7233`），不可达时直接 fail-fast。
+- `full_stack.sh` 的启动顺序是“API health -> Web -> Worker”；Worker 启动前会先做 stronger Temporal readiness：先校验 worker 必需环境，再对 `TEMPORAL_TARGET_HOST`（默认 `localhost:7233`）做 `host:port` 解析与 TCP 探测；不可达时直接以 `stage=worker_preflight_temporal` / `conclusion=temporal_not_ready` fail-fast，不会先把 API/Web 拉起来。
 - `smoke_full_stack.sh`：执行端到端 smoke（含 feed/web 检查，可选 reader 检查）。
 - `smoke_full_stack.sh` 不是 `api-real-smoke` 替代；后端真实 Postgres integration smoke 需单独执行 `scripts/api_real_smoke_local.sh`。
 - `scripts/api_real_smoke_local.sh` 默认监听 `127.0.0.1:18080`；若该默认端口被其他本地服务占用且未显式传 `--api-port`，脚本会自动选择下一个空闲端口。

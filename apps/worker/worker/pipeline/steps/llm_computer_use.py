@@ -15,6 +15,10 @@ def _coerce_dict(value: Any) -> dict[str, Any]:
     return {}
 
 
+def _base64_png(data: bytes) -> str:
+    return base64.b64encode(data).decode()
+
+
 def _resolve_computer_use_payload(
     *,
     state: dict[str, Any],
@@ -156,14 +160,16 @@ def _execute_playwright(
                 "message": "computer_use_playwright_executed",
                 "action": {"name": action_name, "args": action_args},
                 "current_url": current_url,
-                "screenshot_base64": base64.b64encode(screenshot_bytes).decode("ascii"),
+                "screenshot_base64": _base64_png(screenshot_bytes),
             }
     except Exception as exc:
         return {"ok": False, "status": "error", "error": f"computer_use_playwright_failed:{exc}"}
 
 
 def _executor_name(raw: Any) -> str:
-    candidate = str(raw or "").strip().lower()
+    if raw is None:
+        return "no_op"
+    candidate = str(raw).strip().lower()
     if candidate in {"playwright", "browser_playwright"}:
         return "playwright"
     if candidate in {"browser", "browser_stub"}:
@@ -200,7 +206,8 @@ def build_default_computer_use_handler(
                 action_args=action_args,
                 url=url,
             )
-            if str(result.get("status") or "").strip().lower() == "error":
+            status_value = result.get("status")
+            if isinstance(status_value, str) and status_value.strip().lower() == "error":
                 fallback = _execute_browser_stub(action_name, action_args)
                 result = {
                     **fallback,

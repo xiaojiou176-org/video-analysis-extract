@@ -128,8 +128,6 @@ class SQLiteStateStore:
                 );
                 CREATE INDEX IF NOT EXISTS idx_step_runs_job_id_step_name
                     ON step_runs(job_id, step_name);
-                CREATE INDEX IF NOT EXISTS idx_step_runs_job_id_step_name_cache_key
-                    ON step_runs(job_id, step_name, cache_key);
 
                 CREATE TABLE IF NOT EXISTS locks (
                     lock_key TEXT PRIMARY KEY,
@@ -152,6 +150,12 @@ class SQLiteStateStore:
             self._ensure_column(conn, "step_runs", "result_json", "TEXT")
             self._ensure_column(conn, "step_runs", "cache_key", "TEXT")
             self._ensure_column(conn, "checkpoints", "payload_json", "TEXT")
+            conn.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_step_runs_job_id_step_name_cache_key
+                    ON step_runs(job_id, step_name, cache_key)
+                """
+            )
 
     def next_attempt(self, *, job_id: str) -> int:
         with self._connect() as conn:

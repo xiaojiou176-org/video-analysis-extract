@@ -1,12 +1,23 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_NAME="smoke_computer_use_local"
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+# shellcheck source=./scripts/lib/load_env.sh
+source "$ROOT_DIR/scripts/lib/load_env.sh"
+load_repo_env "$ROOT_DIR" "$SCRIPT_NAME"
+
 API_BASE_URL="http://127.0.0.1:9000"
 RETRIES="2"
 HEARTBEAT_SECONDS="30"
 ALLOW_UNSUPPORTED_SKIP="0"
 heartbeat_pid=""
 TMP_FILES=()
+
+if [[ -z "${VD_API_KEY:-}" && -z "${CI:-}" && -z "${GITHUB_ACTIONS:-}" ]]; then
+  export VD_API_KEY="video-digestor-local-dev-token"
+fi
 
 log() {
   printf '[smoke_computer_use_local] %s\n' "$*" >&2

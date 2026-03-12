@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import asyncio
+import subprocess
 from pathlib import Path
 from typing import Any
 
 from worker.config import Settings
-from worker.pipeline import runner
+from worker.pipeline import runner, step_executor
 from worker.pipeline.steps import llm_steps
 
 
@@ -95,6 +96,111 @@ def test_step_llm_outline_fails_when_provider_unavailable_by_default(tmp_path: P
 
     assert execution.status == "failed"
     assert execution.reason == "gemini_api_key_missing"
+
+
+def test_apply_state_updates_preserves_exact_values() -> None:
+    state = {"existing": "value"}
+    updates = {
+        "flag": True,
+        "count": 3,
+        "nested": {"status": "ok"},
+        "items": ["a", "b"],
+        "nothing": None,
+    }
+
+    step_executor.apply_state_updates(state, updates)
+
+    assert state == {
+        "existing": "value",
+        "flag": True,
+        "count": 3,
+        "nested": {"status": "ok"},
+        "items": ["a", "b"],
+        "nothing": None,
+    }
+
+
+def test_run_command_once_success_sets_fields_and_subprocess_options(
+    monkeypatch: Any,
+) -> None:
+    called: dict[str, Any] = {}
+
+    def _fake_run(*args: Any, **kwargs: Any) -> subprocess.CompletedProcess[str]:
+        called["args"] = args
+        called["kwargs"] = kwargs
+        return subprocess.CompletedProcess(
+            args=["echo", "ok"],
+            returncode=0,
+            stdout="ok\n",
+            stderr="",
+        )
+
+    monkeypatch.setattr(step_executor.subprocess, "run", _fake_run)
+    result = step_executor.run_command_once(["echo", "ok"], timeout_seconds=7)
+
+    assert called["args"] == (["echo", "ok"],)
+    assert called["kwargs"] == {
+        "capture_output": True,
+        "text": True,
+        "timeout": 7,
+        "check": False,
+    }
+    assert result.ok is True
+    assert result.returncode == 0
+    assert result.stdout == "ok\n"
+    assert result.stderr == ""
+    assert result.reason is None
+
+
+def test_run_command_once_non_zero_exit_returns_failure_with_reason(monkeypatch: Any) -> None:
+    monkeypatch.setattr(
+        step_executor.subprocess,
+        "run",
+        lambda *args, **kwargs: subprocess.CompletedProcess(
+            args=["cmd"],
+            returncode=3,
+            stdout="partial-output",
+            stderr="boom",
+        ),
+    )
+
+    result = step_executor.run_command_once(["cmd"], timeout_seconds=3)
+
+    assert result.ok is False
+    assert result.returncode == 3
+    assert result.stdout == "partial-output"
+    assert result.stderr == "boom"
+    assert result.reason == "non_zero_exit"
+
+
+def test_run_command_once_binary_missing_returns_binary_not_found(monkeypatch: Any) -> None:
+    def _raise_file_not_found(*_args: Any, **_kwargs: Any) -> Any:
+        raise FileNotFoundError
+
+    monkeypatch.setattr(step_executor.subprocess, "run", _raise_file_not_found)
+
+    result = step_executor.run_command_once(["missing-binary"], timeout_seconds=1)
+
+    assert result.ok is False
+    assert result.returncode is None
+    assert result.stdout == ""
+    assert result.stderr == ""
+    assert result.reason == "binary_not_found"
+
+
+def test_run_command_once_timeout_returns_timeout_reason(monkeypatch: Any) -> None:
+    def _raise_timeout(*_args: Any, **_kwargs: Any) -> Any:
+        raise subprocess.TimeoutExpired(cmd=["sleep", "5"], timeout=1)
+
+    monkeypatch.setattr(step_executor.subprocess, "run", _raise_timeout)
+
+    result = step_executor.run_command_once(["sleep", "5"], timeout_seconds=1)
+
+    assert result.ok is False
+    assert result.returncode is None
+    assert result.stdout == ""
+    assert result.stderr == ""
+    assert result.reason == "timeout"
 
 
 def test_step_llm_outline_still_fails_when_flags_disable_provider_soft_fail(

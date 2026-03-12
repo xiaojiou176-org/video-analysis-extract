@@ -17,7 +17,7 @@ ALTER TABLE jobs
     ADD CONSTRAINT jobs_pipeline_final_status_check
     CHECK (
         pipeline_final_status IS NULL
-        OR pipeline_final_status IN ('succeeded', 'partial', 'failed')
+        OR pipeline_final_status IN ('succeeded', 'degraded', 'failed')
     );
 
 ALTER TABLE jobs

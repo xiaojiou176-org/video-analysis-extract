@@ -2,6 +2,13 @@ import path from "node:path";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vitest/config";
 
+const coverageDirectory = path.resolve(__dirname, "coverage");
+const coverageRuntimeDirectory = path.resolve(__dirname, ".vitest-coverage");
+const coverageSummaryFile = path.relative(
+	coverageRuntimeDirectory,
+	path.join(coverageDirectory, "coverage-summary.json"),
+);
+
 export default defineConfig({
 	plugins: [react()],
 	test: {
@@ -12,7 +19,8 @@ export default defineConfig({
 		exclude: ["node_modules", ".next", "tests/e2e/**"],
 		coverage: {
 			provider: "v8",
-			reporter: ["text", "json-summary"],
+			reportsDirectory: coverageRuntimeDirectory,
+			reporter: ["text", ["json-summary", { file: coverageSummaryFile }]],
 			include: ["components/**/*.tsx", "lib/**/*.ts"],
 			exclude: ["**/*.d.ts", "tests/**", "**/__tests__/**", "next-env.d.ts", "lib/api/types.ts"],
 			thresholds: {

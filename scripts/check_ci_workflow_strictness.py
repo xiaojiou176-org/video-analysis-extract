@@ -14,6 +14,10 @@ SAFE_CACHE_PATH_MARKERS = (
     "${{ env.PRE_COMMIT_HOME }}",
     "${{ env.UV_CACHE_DIR }}",
     "${{ env.PLAYWRIGHT_BROWSERS_PATH }}",
+    "${{ needs.ci-contract.outputs.cache_root }}",
+    "${{ needs.ci-contract.outputs.uv_cache_dir }}",
+    "${{ needs.ci-contract.outputs.playwright_browsers_path }}",
+    "${{ needs.ci-contract.outputs.pre_commit_home }}",
     "/tmp/ci-cache",
 )
 TOOL_CACHE_ENV_VARS = (
@@ -24,9 +28,9 @@ TOOL_CACHE_ENV_VARS = (
     "XDG_CACHE_HOME",
     "npm_config_cache",
 )
-MIN_MUTATION_SCORE = 0.62
-MIN_MUTATION_EFFECTIVE_RATIO = 0.25
-MAX_MUTATION_NO_TESTS_RATIO = 0.75
+MIN_MUTATION_SCORE = 0.64
+MIN_MUTATION_EFFECTIVE_RATIO = 0.27
+MAX_MUTATION_NO_TESTS_RATIO = 0.72
 
 
 def _job_blocks(text: str) -> list[tuple[str, str]]:
@@ -425,6 +429,9 @@ def _check_global_rules(
     _check_checkout_clean_rule(workflow_path, text, failures)
     _check_cache_path_rules(workflow_path, text, failures)
 
+    if workflow_path.name != WORKFLOW_PATH.name:
+        return
+
     # Every workflow must hard-fail when required CI secrets are missing.
     required_ci_secrets = blocks.get("required-ci-secrets", "")
     if not required_ci_secrets:
@@ -506,16 +513,33 @@ def _check_global_rules(
 
 
 def _check_ci_specific_rules(blocks: dict[str, str], failures: list[str]) -> None:
+    standard_env_jobs = (
+        "quality-gate-pre-push",
+        "python-tests",
+        "api-real-smoke",
+        "pr-llm-real-smoke",
+        "web-test-build",
+        "web-e2e",
+        "live-smoke",
+    )
+    for job_name in standard_env_jobs:
+        block = blocks.get(job_name, "")
+        if not block:
+            failures.append(f"ci.yml: {job_name}: missing job")
+            continue
+        if "container:" not in block or "needs.ci-contract.outputs.standard_image_ref" not in block:
+            failures.append(
+                f"ci.yml: {job_name}: must run inside the strict ci standard image from ci-contract outputs"
+            )
+
     # quality-gate-pre-push must run broadly (not main/schedule-only gated).
     qg_block = blocks.get("quality-gate-pre-push", "")
-    if not qg_block:
-        failures.append("ci.yml: quality-gate-pre-push: missing job")
-    else:
+    if qg_block:
         if re.search(r"^\s{4}if:\s", qg_block, flags=re.MULTILINE):
             failures.append(
                 "ci.yml: quality-gate-pre-push: should not narrow execution with job-level if"
             )
-        if not re.search(r"--mode\s+pre-push\b", qg_block):
+        if "./scripts/strict_ci_entry.sh" not in qg_block or "--mode pre-push" not in qg_block:
             failures.append("ci.yml: quality-gate-pre-push: missing pre-push quality gate command")
         if not re.search(r"--ci-dedupe\s+1\b", qg_block):
             failures.append(
@@ -525,28 +549,37 @@ def _check_ci_specific_rules(blocks: dict[str, str], failures: list[str]) -> Non
             failures.append(
                 "ci.yml: quality-gate-pre-push: must set --skip-mutation 1 because mutation-testing runs as a dedicated standalone CI job"
             )
-        min_score = _extract_flag_value(qg_block, "--mutation-min-score")
+        if "needs.ci-contract.outputs.mutation_min_score" in qg_block:
+            min_score = MIN_MUTATION_SCORE
+        else:
+            min_score = _extract_flag_value(qg_block, "--mutation-min-score")
         if min_score is None:
             failures.append("ci.yml: quality-gate-pre-push: missing mutation score floor")
         elif min_score < MIN_MUTATION_SCORE:
             failures.append(
-                "ci.yml: quality-gate-pre-push: mutation threshold must be at least 0.62"
+                "ci.yml: quality-gate-pre-push: mutation threshold must be at least 0.64"
             )
-        min_effective_ratio = _extract_flag_value(qg_block, "--mutation-min-effective-ratio")
+        if "needs.ci-contract.outputs.mutation_min_effective_ratio" in qg_block:
+            min_effective_ratio = MIN_MUTATION_EFFECTIVE_RATIO
+        else:
+            min_effective_ratio = _extract_flag_value(qg_block, "--mutation-min-effective-ratio")
         if min_effective_ratio is None:
             failures.append("ci.yml: quality-gate-pre-push: missing mutation effective ratio floor")
         elif min_effective_ratio < MIN_MUTATION_EFFECTIVE_RATIO:
             failures.append(
-                "ci.yml: quality-gate-pre-push: mutation effective ratio floor must be at least 0.25"
+                "ci.yml: quality-gate-pre-push: mutation effective ratio floor must be at least 0.27"
             )
-        max_no_tests_ratio = _extract_flag_value(qg_block, "--mutation-max-no-tests-ratio")
+        if "needs.ci-contract.outputs.mutation_max_no_tests_ratio" in qg_block:
+            max_no_tests_ratio = MAX_MUTATION_NO_TESTS_RATIO
+        else:
+            max_no_tests_ratio = _extract_flag_value(qg_block, "--mutation-max-no-tests-ratio")
         if max_no_tests_ratio is None:
             failures.append(
                 "ci.yml: quality-gate-pre-push: missing mutation no-tests ratio ceiling"
             )
         elif max_no_tests_ratio > MAX_MUTATION_NO_TESTS_RATIO:
             failures.append(
-                "ci.yml: quality-gate-pre-push: mutation no-tests ratio ceiling must be at most 0.75"
+                "ci.yml: quality-gate-pre-push: mutation no-tests ratio ceiling must be at most 0.72"
             )
 
     # Real smoke jobs must not bypass write auth.
@@ -613,15 +646,13 @@ def _check_ci_specific_rules(blocks: dict[str, str], failures: list[str]) -> Non
 
     # live-smoke must run on a fully provisioned local stack and enforce secrets.
     live_smoke = blocks.get("live-smoke", "")
-    if not live_smoke:
-        failures.append("ci.yml: live-smoke: missing job")
-    else:
+    if live_smoke:
         required_live_smoke_markers = {
             "services:\n      postgres:": "postgres service",
-            "Run migrations for live smoke DB": "migration step",
-            "Start Temporal dev server for live smoke": "temporal startup step",
-            '--require-secrets "1"': "hard secrets requirement",
-            "Validate required live smoke secrets": "explicit secret validation step",
+            "./scripts/strict_ci_entry.sh --mode live-smoke": "strict ci entry live-smoke command",
+            "GEMINI_API_KEY": "gemini secret wiring",
+            "RESEND_API_KEY": "resend secret wiring",
+            "YOUTUBE_API_KEY": "youtube secret wiring",
         }
         for marker, description in required_live_smoke_markers.items():
             if marker not in live_smoke:

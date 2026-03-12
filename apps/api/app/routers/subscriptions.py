@@ -48,6 +48,8 @@ class SubscriptionResponse(BaseModel):
 def _to_subscription_response(row) -> SubscriptionResponse:
     source_type = str(getattr(row, "source_type", "") or "")
     source_value = str(getattr(row, "source_value", "") or "")
+    priority_value = getattr(row, "priority", None)
+    resolved_priority = 50 if priority_value is None else int(priority_value)
     return SubscriptionResponse(
         id=row.id,
         platform=row.platform,
@@ -61,7 +63,7 @@ def _to_subscription_response(row) -> SubscriptionResponse:
         rsshub_route=row.rsshub_route,
         category=getattr(row, "category", "misc"),
         tags=list(getattr(row, "tags", []) or []),
-        priority=int(getattr(row, "priority", 50) or 50),
+        priority=resolved_priority,
         enabled=row.enabled,
         created_at=row.created_at,
         updated_at=row.updated_at,

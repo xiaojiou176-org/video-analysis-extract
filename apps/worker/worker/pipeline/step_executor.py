@@ -29,6 +29,8 @@ from worker.pipeline.types import (
     StepExecution,
 )
 
+_DEFAULT_ARG_UNSET = object()
+
 
 def utc_now_iso() -> str:
     return datetime.now(UTC).replace(microsecond=0).isoformat()
@@ -81,8 +83,9 @@ def _legacy_step_cache_path(ctx: PipelineContext, step_name: str) -> Path:
     return ctx.cache_dir / f"{step_name}.json"
 
 
-def _truncate_text(value: str, *, keep: int = 240) -> str:
-    if len(value) <= keep:
+def _truncate_text(value: str, *, keep: int | None = None) -> str:
+    resolved_keep = 240 if keep is None else keep
+    if len(value) <= resolved_keep:
         return value
     digest = hashlib.sha256(value.encode("utf-8", errors="ignore")).hexdigest()[:16]
     return f"<<sha256:{digest}|len:{len(value)}>>"
@@ -267,12 +270,15 @@ async def execute_step(
     *,
     step_name: str,
     step_func: Callable[[PipelineContext, dict[str, Any]], asyncio.Future | Any],
-    critical: bool = False,
-    resume_hint: bool = False,
-    force_run: bool = False,
+    critical: bool | object = _DEFAULT_ARG_UNSET,
+    resume_hint: bool | object = _DEFAULT_ARG_UNSET,
+    force_run: bool | object = _DEFAULT_ARG_UNSET,
 ) -> dict[str, Any]:
     sqlite_store = ctx.sqlite_store
     cache_info = build_step_cache_info(ctx, state, step_name)
+    critical = _resolve_optional_flag(critical)
+    resume_hint = _resolve_optional_flag(resume_hint)
+    force_run = _resolve_force_run_flag(force_run)
     llm_policy = (
         dict(state.get("llm_policy") or {}) if step_name in {"llm_outline", "llm_digest"} else None
     )
@@ -349,10 +355,10 @@ async def execute_step(
                         execution = None
 
         if execution is None:
-            execution = StepExecution(status="failed", error="step_not_executed", degraded=True)
             retry_delays: list[float] = []
             retry_categories: list[RetryCategory] = []
             attempts = 0
+            failed_attempts = 0
             configured_retries = 0
 
             while True:
@@ -378,12 +384,13 @@ async def execute_step(
                     execution = current
                     break
 
+                failed_attempts += 1
                 category = current.error_kind or classify_error(current.reason, current.error)
                 current.error_kind = category
                 retry_categories.append(category)
                 policy = retry_policy.get(category, retry_policy["fatal"])
                 configured_retries = max(configured_retries, int(policy.get("retries", 0)))
-                retries_used = attempts - 1
+                retries_used = max(0, failed_attempts - 1)
                 if retries_used >= int(policy.get("retries", 0)):
                     execution = current
                     break
@@ -393,12 +400,14 @@ async def execute_step(
                 if delay > 0:
                     await asyncio.sleep(delay)
 
-            if execution.status == "failed" and execution.error_kind is None:
-                execution.error_kind = classify_error(execution.reason, execution.error)
+            assert execution is not None
 
+            retries_used_total = (
+                max(0, failed_attempts - 1) if execution.status == "failed" else failed_attempts
+            )
             execution.retry_meta = {
                 "attempts": attempts,
-                "retries_used": max(0, attempts - 1),
+                "retries_used": retries_used_total,
                 "retries_configured": configured_retries,
                 "classification": execution.error_kind,
                 "history": retry_categories,
@@ -406,18 +415,6 @@ async def execute_step(
                 "strategy": "retry_wrapper",
                 "resume_hint": resume_hint,
             }
-        elif not execution.retry_meta:
-            execution.retry_meta = {
-                "attempts": 0,
-                "retries_used": 0,
-                "retries_configured": 0,
-                "classification": execution.error_kind,
-                "history": [],
-                "delays_seconds": [],
-                "strategy": "none",
-                "resume_hint": resume_hint,
-            }
-
         apply_state_updates(state, execution.state_updates)
         refresh_llm_media_input_dimension(state)
 
@@ -551,6 +548,22 @@ def run_command_once(cmd: list[str], timeout_seconds: int) -> CommandResult:
     )
 
 
+def _decode_subprocess_stream(raw: bytes | None) -> str:
+    if not raw:
+        return ""
+    return str(raw, "utf-8", "ignore")
+
+
+def _resolve_optional_flag(value: bool | object) -> bool:
+    return value is not _DEFAULT_ARG_UNSET and bool(value)
+
+
+def _resolve_force_run_flag(value: bool | object) -> bool:
+    if value is _DEFAULT_ARG_UNSET:
+        return False
+    return bool(value)
+
+
 async def run_command(ctx: PipelineContext, cmd: list[str]) -> CommandResult:
     timeout = max(1, int(ctx.settings.pipeline_subprocess_timeout_seconds))
     try:
@@ -572,8 +585,8 @@ async def run_command(ctx: PipelineContext, cmd: list[str]) -> CommandResult:
         await _terminate_subprocess(process)
         raise
 
-    stdout = stdout_raw.decode("utf-8", errors="ignore") if stdout_raw else ""
-    stderr = stderr_raw.decode("utf-8", errors="ignore") if stderr_raw else ""
+    stdout = _decode_subprocess_stream(stdout_raw)
+    stderr = _decode_subprocess_stream(stderr_raw)
     return CommandResult(
         ok=process.returncode == 0,
         returncode=process.returncode,

@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
+import types
 from pathlib import Path
 from typing import Any
 
 import pytest
 from worker.config import Settings
-from worker.pipeline import step_executor
 from worker.pipeline.types import PipelineContext, StepExecution
+
+from apps.worker.worker.pipeline import step_executor
 
 
 class _FakeProcess:
@@ -63,12 +66,22 @@ def _build_ctx(tmp_path: Path, *, timeout: int) -> PipelineContext:
 
 def test_run_command_kills_subprocess_on_timeout(monkeypatch, tmp_path: Path) -> None:
     fake_process = _FakeProcess()
+    captured: dict[str, Any] = {}
 
-    async def _fake_create_subprocess_exec(*_args, **_kwargs):
+    async def _fake_create_subprocess_exec(*args, **kwargs):
+        captured["args"] = args
+        captured["kwargs"] = kwargs
         return fake_process
 
     monkeypatch.setattr(asyncio, "create_subprocess_exec", _fake_create_subprocess_exec)
-    monkeypatch.setattr(step_executor.os, "killpg", lambda *_args, **_kwargs: (_ for _ in ()).throw(ProcessLookupError()))
+    monkeypatch.setattr(
+        step_executor,
+        "os",
+        types.SimpleNamespace(
+            killpg=lambda *_args, **_kwargs: (_ for _ in ()).throw(ProcessLookupError())
+        ),
+        raising=False,
+    )
     ctx = _build_ctx(tmp_path, timeout=1)
 
     result = asyncio.run(step_executor.run_command(ctx, ["sleep", "30"]))
@@ -77,13 +90,20 @@ def test_run_command_kills_subprocess_on_timeout(monkeypatch, tmp_path: Path) ->
     assert result.reason == "timeout"
     assert fake_process.killed is True
     assert fake_process.waited is True
+    assert captured["args"] == ("sleep", "30")
+    assert captured["kwargs"]["start_new_session"] is True
+    assert captured["kwargs"]["stdout"] is asyncio.subprocess.PIPE
+    assert captured["kwargs"]["stderr"] is asyncio.subprocess.PIPE
 
 
 def test_run_command_terminates_process_group_on_timeout(monkeypatch, tmp_path: Path) -> None:
     fake_process = _FakeProcess()
     signals: list[int] = []
+    captured: dict[str, Any] = {}
 
-    async def _fake_create_subprocess_exec(*_args, **_kwargs):
+    async def _fake_create_subprocess_exec(*args, **kwargs):
+        captured["args"] = args
+        captured["kwargs"] = kwargs
         return fake_process
 
     def _fake_killpg(_pid: int, sig: int) -> None:
@@ -91,7 +111,12 @@ def test_run_command_terminates_process_group_on_timeout(monkeypatch, tmp_path: 
         fake_process.returncode = -sig
 
     monkeypatch.setattr(asyncio, "create_subprocess_exec", _fake_create_subprocess_exec)
-    monkeypatch.setattr(step_executor.os, "killpg", _fake_killpg)
+    monkeypatch.setattr(
+        step_executor,
+        "os",
+        types.SimpleNamespace(killpg=_fake_killpg),
+        raising=False,
+    )
     ctx = _build_ctx(tmp_path, timeout=1)
 
     result = asyncio.run(step_executor.run_command(ctx, ["sleep", "30"]))
@@ -100,12 +125,17 @@ def test_run_command_terminates_process_group_on_timeout(monkeypatch, tmp_path: 
     assert result.reason == "timeout"
     assert signals
     assert fake_process.waited is True
+    assert captured["args"] == ("sleep", "30")
+    assert captured["kwargs"]["start_new_session"] is True
 
 
 def test_run_command_kills_subprocess_on_cancellation(monkeypatch, tmp_path: Path) -> None:
     fake_process = _FakeProcess()
+    captured: dict[str, Any] = {}
 
-    async def _fake_create_subprocess_exec(*_args, **_kwargs):
+    async def _fake_create_subprocess_exec(*args, **kwargs):
+        captured["args"] = args
+        captured["kwargs"] = kwargs
         return fake_process
 
     monkeypatch.setattr(asyncio, "create_subprocess_exec", _fake_create_subprocess_exec)
@@ -126,6 +156,131 @@ def test_run_command_kills_subprocess_on_cancellation(monkeypatch, tmp_path: Pat
 
     assert fake_process.killed is True
     assert fake_process.waited is True
+    assert captured["args"] == ("sleep", "30")
+    assert captured["kwargs"]["start_new_session"] is True
+
+
+def test_run_command_non_zero_exit_decodes_output(monkeypatch, tmp_path: Path) -> None:
+    class _FinishedProcess:
+        returncode = 7
+        pid = 67890
+
+        async def communicate(self) -> tuple[bytes, bytes]:
+            return (b"\xffstdout", b"\xfestderr")
+
+    created: dict[str, Any] = {}
+    wait_for_timeouts: list[int] = []
+
+    async def _fake_create_subprocess_exec(*args, **kwargs):
+        created["args"] = args
+        created["kwargs"] = kwargs
+        return _FinishedProcess()
+
+    async def _fake_wait_for(awaitable: Any, timeout: int) -> Any:
+        wait_for_timeouts.append(timeout)
+        return await awaitable
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", _fake_create_subprocess_exec)
+    monkeypatch.setattr(step_executor.asyncio, "wait_for", _fake_wait_for)
+    ctx = _build_ctx(tmp_path, timeout=5)
+
+    result = asyncio.run(step_executor.run_command(ctx, ["echo", "demo"]))
+
+    assert result.ok is False
+    assert result.returncode == 7
+    assert result.reason == "non_zero_exit"
+    assert result.stdout == "stdout"
+    assert result.stderr == "stderr"
+    assert created["args"] == ("echo", "demo")
+    assert created["kwargs"]["start_new_session"] is True
+    assert wait_for_timeouts == [5]
+
+
+def test_run_command_binary_missing_sets_ok_false(monkeypatch, tmp_path: Path) -> None:
+    async def _raise_missing(*_args, **_kwargs):
+        raise FileNotFoundError
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", _raise_missing)
+    ctx = _build_ctx(tmp_path, timeout=5)
+
+    result = asyncio.run(step_executor.run_command(ctx, ["missing-binary"]))
+
+    assert result.ok is False
+    assert result.reason == "binary_not_found"
+
+
+def test_run_command_enforces_minimum_timeout_of_one_second(monkeypatch, tmp_path: Path) -> None:
+    class _FastProcess:
+        returncode = 0
+        pid = 22222
+
+        async def communicate(self) -> tuple[bytes, bytes]:
+            return (b"ok", b"")
+
+    timeouts: list[int] = []
+
+    async def _fake_create_subprocess_exec(*_args, **_kwargs):
+        return _FastProcess()
+
+    async def _fake_wait_for(awaitable: Any, timeout: int) -> Any:
+        timeouts.append(timeout)
+        return await awaitable
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", _fake_create_subprocess_exec)
+    monkeypatch.setattr(step_executor.asyncio, "wait_for", _fake_wait_for)
+    ctx = _build_ctx(tmp_path, timeout=0)
+
+    result = asyncio.run(step_executor.run_command(ctx, ["echo", "ok"]))
+
+    assert result.ok is True
+    assert result.reason is None
+    assert timeouts == [1]
+
+
+def test_run_command_treats_returncode_one_as_non_zero_exit(monkeypatch, tmp_path: Path) -> None:
+    class _ReturnCodeOneProcess:
+        returncode = 1
+        pid = 33333
+
+        async def communicate(self) -> tuple[bytes, bytes]:
+            return (b"one", b"")
+
+    async def _fake_create_subprocess_exec(*_args, **_kwargs):
+        return _ReturnCodeOneProcess()
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", _fake_create_subprocess_exec)
+    ctx = _build_ctx(tmp_path, timeout=3)
+
+    result = asyncio.run(step_executor.run_command(ctx, ["echo", "one"]))
+
+    assert result.returncode == 1
+    assert result.ok is False
+    assert result.reason == "non_zero_exit"
+    assert result.stdout == "one"
+    assert result.stderr == ""
+
+
+def test_run_command_empty_streams_stay_empty_strings(monkeypatch, tmp_path: Path) -> None:
+    class _EmptyOutputProcess:
+        returncode = 0
+        pid = 44444
+
+        async def communicate(self) -> tuple[bytes, bytes]:
+            return (b"", b"")
+
+    async def _fake_create_subprocess_exec(*_args, **_kwargs):
+        return _EmptyOutputProcess()
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", _fake_create_subprocess_exec)
+    ctx = _build_ctx(tmp_path, timeout=2)
+
+    result = asyncio.run(step_executor.run_command(ctx, ["echo", ""]))
+
+    assert result.ok is True
+    assert result.returncode == 0
+    assert result.stdout == ""
+    assert result.stderr == ""
+    assert result.reason is None
 
 
 class _FakeSQLiteStore:
@@ -163,6 +318,9 @@ def test_execute_step_marks_failed_when_cancelled(monkeypatch, tmp_path: Path) -
         artifacts_dir=ctx.artifacts_dir,
     )
     state: dict[str, Any] = {"degradations": [], "steps": {}}
+    expected_cache_key = step_executor.build_step_cache_info(ctx, state, "fetch_metadata")["cache_key"]
+    signature = inspect.signature(step_executor.execute_step)
+    assert signature.parameters["critical"].default is step_executor._DEFAULT_ARG_UNSET
 
     async def _cancelled_step(_ctx: PipelineContext, _state: dict[str, Any]) -> StepExecution:
         raise asyncio.CancelledError
@@ -180,5 +338,126 @@ def test_execute_step_marks_failed_when_cancelled(monkeypatch, tmp_path: Path) -
 
     assert len(sqlite_store.started) == 1
     assert len(sqlite_store.finished) == 1
+    assert sqlite_store.finished[0]["job_id"] == ctx.job_id
+    assert sqlite_store.finished[0]["step_name"] == "fetch_metadata"
+    assert sqlite_store.finished[0]["attempt"] == ctx.attempt
     assert sqlite_store.finished[0]["status"] == "failed"
     assert sqlite_store.finished[0]["error_payload"]["reason"] == "cancelled"
+    assert sqlite_store.finished[0]["error_payload"]["error"] == "step_cancelled"
+    assert sqlite_store.finished[0]["error_payload"]["error_kind"] == "fatal"
+    assert sqlite_store.finished[0]["error_payload"]["retry_meta"]["strategy"] == "cancelled"
+    assert sqlite_store.finished[0]["error_kind"] == "fatal"
+    assert sqlite_store.finished[0]["result_payload"]["status"] == "failed"
+    assert sqlite_store.finished[0]["result_payload"]["reason"] == "cancelled"
+    assert sqlite_store.finished[0]["result_payload"]["error"] == "step_cancelled"
+    assert sqlite_store.finished[0]["result_payload"]["error_kind"] == "fatal"
+    assert sqlite_store.finished[0]["result_payload"]["degraded"] is True
+    assert sqlite_store.finished[0]["cache_key"] == expected_cache_key
+    retry_meta = sqlite_store.finished[0]["retry_meta"]
+    assert retry_meta["strategy"] == "cancelled"
+    assert retry_meta["classification"] == "fatal"
+    assert retry_meta["attempts"] == 1
+    assert retry_meta["retries_used"] == 0
+    assert retry_meta["retries_configured"] == 0
+    assert retry_meta["history"] == ["fatal"]
+    assert retry_meta["delays_seconds"] == []
+    assert retry_meta["resume_hint"] is False
+    assert state["steps"]["fetch_metadata"]["status"] == "failed"
+    assert state["steps"]["fetch_metadata"]["reason"] == "cancelled"
+    assert state["steps"]["fetch_metadata"]["retry_meta"]["strategy"] == "cancelled"
+    assert state["steps"]["fetch_metadata"]["retry_meta"]["delays_seconds"] == []
+    assert state["steps"]["fetch_metadata"]["retry_meta"]["resume_hint"] is False
+    assert len(state["degradations"]) == 1
+    degradation = state["degradations"][0]
+    assert degradation["step"] == "fetch_metadata"
+    assert degradation["status"] == "failed"
+    assert degradation["reason"] == "cancelled"
+    assert degradation["error"] == "step_cancelled"
+    assert degradation["error_kind"] == "fatal"
+    assert degradation["retry_meta"]["delays_seconds"] == []
+    assert degradation["retry_meta"]["resume_hint"] is False
+    assert degradation["cache_meta"] == {}
+
+
+def test_execute_step_cancelled_initializes_steps_bucket_when_missing(tmp_path: Path) -> None:
+    sqlite_store = _FakeSQLiteStore()
+    base_ctx = _build_ctx(tmp_path, timeout=30)
+    ctx = PipelineContext(
+        settings=base_ctx.settings,
+        sqlite_store=sqlite_store,  # type: ignore[arg-type]
+        pg_store=base_ctx.pg_store,  # type: ignore[arg-type]
+        job_id=base_ctx.job_id,
+        attempt=base_ctx.attempt,
+        job_record=base_ctx.job_record,
+        work_dir=base_ctx.work_dir,
+        cache_dir=base_ctx.cache_dir,
+        download_dir=base_ctx.download_dir,
+        frames_dir=base_ctx.frames_dir,
+        artifacts_dir=base_ctx.artifacts_dir,
+    )
+    state: dict[str, Any] = {"degradations": []}
+
+    async def _cancelled_step(_ctx: PipelineContext, _state: dict[str, Any]) -> StepExecution:
+        raise asyncio.CancelledError
+
+    with pytest.raises(asyncio.CancelledError):
+        asyncio.run(
+            step_executor.execute_step(
+                ctx,
+                state,
+                step_name="fetch_metadata",
+                step_func=_cancelled_step,
+                critical=False,
+            )
+        )
+
+    assert "steps" in state
+    assert state["steps"]["fetch_metadata"]["status"] == "failed"
+    assert state["steps"]["fetch_metadata"]["reason"] == "cancelled"
+    assert len(state["degradations"]) == 1
+    assert state["degradations"][0]["status"] == "failed"
+
+
+def test_execute_step_cancelled_passes_cache_meta_to_append_degradation(
+    monkeypatch, tmp_path: Path
+) -> None:
+    sqlite_store = _FakeSQLiteStore()
+    base_ctx = _build_ctx(tmp_path, timeout=30)
+    ctx = PipelineContext(
+        settings=base_ctx.settings,
+        sqlite_store=sqlite_store,  # type: ignore[arg-type]
+        pg_store=base_ctx.pg_store,  # type: ignore[arg-type]
+        job_id=base_ctx.job_id,
+        attempt=base_ctx.attempt,
+        job_record=base_ctx.job_record,
+        work_dir=base_ctx.work_dir,
+        cache_dir=base_ctx.cache_dir,
+        download_dir=base_ctx.download_dir,
+        frames_dir=base_ctx.frames_dir,
+        artifacts_dir=base_ctx.artifacts_dir,
+    )
+    state: dict[str, Any] = {"degradations": [], "steps": {}}
+    captured: dict[str, Any] = {}
+    original_append_degradation = step_executor.append_degradation
+
+    def _capture_append_degradation(*args: Any, **kwargs: Any) -> Any:
+        captured["cache_meta"] = kwargs.get("cache_meta", "<missing>")
+        return original_append_degradation(*args, **kwargs)
+
+    monkeypatch.setattr(step_executor, "append_degradation", _capture_append_degradation)
+
+    async def _cancelled_step(_ctx: PipelineContext, _state: dict[str, Any]) -> StepExecution:
+        raise asyncio.CancelledError
+
+    with pytest.raises(asyncio.CancelledError):
+        asyncio.run(
+            step_executor.execute_step(
+                ctx,
+                state,
+                step_name="fetch_metadata",
+                step_func=_cancelled_step,
+                critical=False,
+            )
+        )
+
+    assert captured["cache_meta"] == {}

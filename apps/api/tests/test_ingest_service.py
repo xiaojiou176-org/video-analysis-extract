@@ -18,9 +18,11 @@ class _ScalarDB:
     def __init__(self, *, exists: bool = True) -> None:
         self.exists = exists
         self.scalar_calls = 0
+        self.last_scalar_stmt: Any | None = None
 
-    def scalar(self, _stmt: Any) -> Any:
+    def scalar(self, stmt: Any) -> Any:
         self.scalar_calls += 1
+        self.last_scalar_stmt = stmt
         return uuid.uuid4() if self.exists else None
 
 
@@ -38,9 +40,11 @@ class _PollDB:
         self.rows = rows or []
         self.scalar_calls = 0
         self.execute_calls = 0
+        self.last_scalar_stmt: Any | None = None
 
-    def scalar(self, _stmt: Any) -> Any:
+    def scalar(self, stmt: Any) -> Any:
         self.scalar_calls += 1
+        self.last_scalar_stmt = stmt
         return uuid.uuid4() if self.exists else None
 
     def execute(self, _stmt: Any) -> _RowsResult:
@@ -49,8 +53,9 @@ class _PollDB:
 
 
 class _FakeHandle:
-    def __init__(self, payload: dict[str, Any]) -> None:
+    def __init__(self, payload: dict[str, Any], *, workflow_id: str) -> None:
         self.payload = payload
+        self.id = workflow_id
 
     async def result(self) -> dict[str, Any]:
         return self.payload
@@ -77,17 +82,24 @@ class _FakeTemporalClient:
                 "task_queue": task_queue,
             }
         )
-        return _FakeHandle(self.result_payload)
+        return _FakeHandle(self.result_payload, workflow_id=id)
 
 
-def _install_temporal_client(monkeypatch: pytest.MonkeyPatch, client: _FakeTemporalClient) -> None:
+def _install_temporal_client(
+    monkeypatch: pytest.MonkeyPatch,
+    client: _FakeTemporalClient,
+    *,
+    connect_calls: list[tuple[str, str]] | None = None,
+) -> None:
     temporalio_mod = types.ModuleType("temporalio")
     temporal_client_mod = types.ModuleType("temporalio.client")
 
     class _Client:
         @staticmethod
-        async def connect(_target_host: str, *, namespace: str) -> _FakeTemporalClient:
+        async def connect(target_host: str, *, namespace: str) -> _FakeTemporalClient:
             assert namespace
+            if connect_calls is not None:
+                connect_calls.append((target_host, namespace))
             return client
 
     temporal_client_mod.Client = _Client
@@ -110,25 +122,76 @@ class _WaitForSequence:
         return await awaitable
 
 
+class _WaitForRecorder:
+    def __init__(self, steps: list[str]) -> None:
+        self._steps = iter(steps)
+        self.timeouts: list[float | None] = []
+
+    async def __call__(self, awaitable: Any, timeout: float | None) -> Any:
+        self.timeouts.append(timeout)
+        step = next(self._steps, "await")
+        if step == "timeout":
+            close = getattr(awaitable, "close", None)
+            if callable(close):
+                close()
+            raise TimeoutError
+        return await awaitable
+
+
 async def _run_poll(
     service: IngestService,
     *,
     subscription_id: uuid.UUID | None = None,
     platform: str | None = "youtube",
     max_new_videos: int = 10,
+    trace_id: str | None = None,
+    user: str | None = None,
 ) -> tuple[int, list[dict[str, object]]]:
     return await service.poll(
         subscription_id=subscription_id,
         platform=platform,
         max_new_videos=max_new_videos,
+        trace_id=trace_id,
+        user=user,
     )
 
 
 def test_poll_raises_when_subscription_not_found() -> None:
-    service = IngestService(_ScalarDB(exists=False))  # type: ignore[arg-type]
+    db = _ScalarDB(exists=False)
+    service = IngestService(db)  # type: ignore[arg-type]
 
-    with pytest.raises(ValueError, match="subscription does not exist"):
+    with pytest.raises(ValueError, match=r"^subscription does not exist$"):
         asyncio.run(_run_poll(service, subscription_id=uuid.uuid4()))
+
+    assert db.scalar_calls == 1
+    assert db.last_scalar_stmt is not None
+    sql = str(db.last_scalar_stmt)
+    assert "SELECT subscriptions.id" in sql
+    assert "subscriptions.id =" in sql
+    assert "!=" not in sql
+    assert "<>" not in sql
+    assert "WHERE" in sql
+    assert "=" in sql
+
+
+def test_poll_connects_to_temporal_with_expected_host_and_namespace(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = _FakeTemporalClient(result_payload={"created_job_ids": []})
+    connect_calls: list[tuple[str, str]] = []
+    _install_temporal_client(monkeypatch, client, connect_calls=connect_calls)
+    service = IngestService(_PollDB(exists=True))  # type: ignore[arg-type]
+
+    total, candidates = asyncio.run(_run_poll(service))
+
+    assert total == 0
+    assert candidates == []
+    assert connect_calls == [
+        (
+            ingest_module.settings.temporal_target_host,
+            ingest_module.settings.temporal_namespace,
+        )
+    ]
 
 
 def test_poll_returns_empty_when_temporal_creates_no_jobs(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -233,6 +296,30 @@ def test_poll_maps_connect_timeout_to_api_timeout(monkeypatch: pytest.MonkeyPatc
     assert "temporal connect timed out after" in exc_info.value.detail
 
 
+def test_poll_logs_connect_timeout_with_context(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    client = _FakeTemporalClient(result_payload={"created_job_ids": []})
+    _install_temporal_client(monkeypatch, client)
+    monkeypatch.setattr(
+        "apps.api.app.services.ingest.asyncio.wait_for", _WaitForSequence(["timeout"])
+    )
+
+    service = IngestService(_PollDB(exists=True))  # type: ignore[arg-type]
+
+    caplog.set_level("ERROR", logger="apps.api.app.services.ingest")
+    with pytest.raises(ApiTimeoutError):
+        asyncio.run(_run_poll(service, trace_id="trace-connect", user="operator"))
+
+    timeout_logs = [r for r in caplog.records if r.message == "ingest_temporal_connect_timeout"]
+    assert timeout_logs
+    timeout_log = timeout_logs[-1]
+    assert timeout_log.trace_id == "trace-connect"
+    assert timeout_log.user == "operator"
+    assert timeout_log.timeout_seconds == ingest_module.settings.api_temporal_connect_timeout_seconds
+    assert timeout_log.error == ""
+
+
 def test_poll_maps_workflow_start_timeout_to_api_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
     client = _FakeTemporalClient(result_payload={"created_job_ids": []})
     _install_temporal_client(monkeypatch, client)
@@ -248,6 +335,107 @@ def test_poll_maps_workflow_start_timeout_to_api_timeout(monkeypatch: pytest.Mon
 
     assert exc_info.value.error_code == "TEMPORAL_WORKFLOW_START_TIMEOUT"
     assert "temporal workflow start timed out after" in exc_info.value.detail
+
+
+def test_poll_passes_temporal_wait_for_timeouts_from_settings(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = _FakeTemporalClient(result_payload={"created_job_ids": []})
+    _install_temporal_client(monkeypatch, client)
+    wait_for = _WaitForRecorder(["await", "await"])
+    monkeypatch.setattr("apps.api.app.services.ingest.asyncio.wait_for", wait_for)
+    service = IngestService(_PollDB(exists=True))  # type: ignore[arg-type]
+
+    total, candidates = asyncio.run(_run_poll(service))
+
+    assert total == 0
+    assert candidates == []
+    assert wait_for.timeouts == [
+        ingest_module.settings.api_temporal_connect_timeout_seconds,
+        ingest_module.settings.api_temporal_start_timeout_seconds,
+    ]
+
+
+def test_poll_logs_default_trace_actor_and_workflow_id(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    client = _FakeTemporalClient(result_payload={"created_job_ids": []})
+    _install_temporal_client(monkeypatch, client)
+    service = IngestService(_PollDB(exists=True))  # type: ignore[arg-type]
+
+    caplog.set_level("INFO", logger="apps.api.app.services.ingest")
+    total, candidates = asyncio.run(_run_poll(service, trace_id=None, user=None))
+
+    assert total == 0
+    assert candidates == []
+    start_logs = [r for r in caplog.records if r.message == "ingest_poll_started"]
+    assert start_logs
+    assert start_logs[-1].trace_id == "missing_trace"
+    assert start_logs[-1].user == "system"
+    complete_logs = [r for r in caplog.records if r.message == "ingest_poll_completed"]
+    assert complete_logs
+    complete_log = complete_logs[-1]
+    assert complete_log.trace_id == "missing_trace"
+    assert complete_log.user == "system"
+    assert complete_log.workflow_id == client.calls[0]["id"]
+    assert complete_log.enqueued == 0
+    assert complete_log.candidates == 0
+
+
+def test_poll_logs_started_fields_with_explicit_payload(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    client = _FakeTemporalClient(result_payload={"created_job_ids": []})
+    _install_temporal_client(monkeypatch, client)
+    service = IngestService(_PollDB(exists=True))  # type: ignore[arg-type]
+    subscription_id = uuid.uuid4()
+
+    caplog.set_level("INFO", logger="apps.api.app.services.ingest")
+    total, candidates = asyncio.run(
+        _run_poll(
+            service,
+            subscription_id=subscription_id,
+            platform="bilibili",
+            max_new_videos=17,
+            trace_id="trace-start",
+            user="reviewer",
+        )
+    )
+
+    assert total == 0
+    assert candidates == []
+    start_logs = [r for r in caplog.records if r.message == "ingest_poll_started"]
+    assert start_logs
+    start_log = start_logs[-1]
+    assert start_log.trace_id == "trace-start"
+    assert start_log.user == "reviewer"
+    assert start_log.subscription_id == str(subscription_id)
+    assert start_log.platform == "bilibili"
+    assert start_log.max_new_videos == 17
+
+
+def test_poll_logs_start_timeout_with_context(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    client = _FakeTemporalClient(result_payload={"created_job_ids": []})
+    _install_temporal_client(monkeypatch, client)
+    monkeypatch.setattr(
+        "apps.api.app.services.ingest.asyncio.wait_for",
+        _WaitForSequence(["await", "timeout"]),
+    )
+    service = IngestService(_PollDB(exists=True))  # type: ignore[arg-type]
+
+    caplog.set_level("ERROR", logger="apps.api.app.services.ingest")
+    with pytest.raises(ApiTimeoutError):
+        asyncio.run(_run_poll(service, trace_id="trace-1", user="alice"))
+
+    timeout_logs = [r for r in caplog.records if r.message == "ingest_temporal_start_timeout"]
+    assert timeout_logs
+    timeout_log = timeout_logs[-1]
+    assert timeout_log.trace_id == "trace-1"
+    assert timeout_log.user == "alice"
+    assert timeout_log.timeout_seconds == ingest_module.settings.api_temporal_start_timeout_seconds
+    assert timeout_log.error == ""
 
 
 def test_poll_returns_degraded_empty_result_when_workflow_result_times_out(
@@ -269,7 +457,7 @@ def test_poll_returns_degraded_empty_result_when_workflow_result_times_out(
 
 
 def test_poll_raises_runtime_error_when_temporal_client_import_fails(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
     temporalio_mod = types.ModuleType("temporalio")
     temporal_client_mod = types.ModuleType("temporalio.client")
@@ -278,5 +466,15 @@ def test_poll_raises_runtime_error_when_temporal_client_import_fails(
 
     service = IngestService(_PollDB(exists=True))  # type: ignore[arg-type]
 
-    with pytest.raises(RuntimeError, match="temporal client not available"):
+    caplog.set_level("ERROR", logger="apps.api.app.services.ingest")
+    with pytest.raises(RuntimeError, match="temporal client not available") as exc_info:
         asyncio.run(_run_poll(service))
+
+    error_logs = [r for r in caplog.records if r.message == "ingest_temporal_client_import_failed"]
+    assert error_logs
+    error_log = error_logs[-1]
+    cause = exc_info.value.__cause__
+    assert cause is not None
+    assert error_log.trace_id == "missing_trace"
+    assert error_log.user == "system"
+    assert error_log.error == str(cause)

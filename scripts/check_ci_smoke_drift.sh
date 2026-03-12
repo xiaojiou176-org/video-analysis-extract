@@ -10,11 +10,7 @@ workflow_file=".github/workflows/ci.yml"
 
 required_patterns=(
   "pr-llm-real-smoke:"
-  "scripts/smoke_llm_real_local.sh"
-  "--api-base-url \"http://127.0.0.1:18081\""
-  "--diagnostics-json \".runtime-cache/pr-llm-real-smoke-result.json\""
-  "--heartbeat-seconds \"30\""
-  "--max-retries \"2\""
+  "./scripts/strict_ci_entry.sh --mode pr-llm-real-smoke"
   "ci-failure-diagnostics-pr-llm-real-smoke"
   "external-playwright-smoke:"
   "scripts/external_playwright_smoke.sh"
@@ -23,15 +19,10 @@ required_patterns=(
   "--timeout-ms \"\${{ vars.EXTERNAL_SMOKE_TIMEOUT_MS || '45000' }}\""
   "--retries \"\${{ vars.EXTERNAL_SMOKE_RETRIES || '2' }}\""
   "live-smoke:"
-  "scripts/e2e_live_smoke.sh"
-  "--api-base-url \"http://127.0.0.1:18080\""
-  "--require-api \"1\""
-  "--require-secrets \"1\""
-  "--computer-use-strict \"1\""
-  "--computer-use-skip \"0\""
-  "--timeout-seconds \"600\""
-  "--diagnostics-json \".runtime-cache/e2e-live-smoke-result.json\""
-  "--heartbeat-seconds \"30\""
+  "./scripts/strict_ci_entry.sh --mode live-smoke"
+  "GEMINI_API_KEY"
+  "RESEND_API_KEY"
+  "YOUTUBE_API_KEY"
 )
 
 forbidden_patterns=(
@@ -66,6 +57,17 @@ if [[ ${#missing[@]} -gt 0 ]]; then
   } >&2
   exit 1
 fi
+
+required_repo_scripts=(
+  "scripts/ci_pr_llm_real_smoke.sh"
+  "scripts/ci_live_smoke.sh"
+)
+for path in "${required_repo_scripts[@]}"; do
+  if [[ ! -f "$path" ]]; then
+    echo "[check_ci_smoke_drift] missing required repo smoke script: $path" >&2
+    exit 1
+  fi
+done
 
 unexpected=()
 for pattern in "${forbidden_patterns[@]}"; do

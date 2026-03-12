@@ -6,7 +6,9 @@ from datetime import UTC, datetime, timedelta
 from typing import Any, Self
 
 import pytest
-from worker.state.sqlite_store import SQLiteStateStore
+
+from apps.worker.worker.state import sqlite_store
+from apps.worker.worker.state.sqlite_store import SQLiteStateStore
 
 
 def test_sqlite_lock_conflict_then_recovery_after_expiry(tmp_path) -> None:
@@ -64,6 +66,47 @@ def test_sqlite_release_lock_enforces_owner_match(tmp_path) -> None:
 
     store.release_lock("phase2.poll_feeds", "worker-A")
     assert store.acquire_lock("phase2.poll_feeds", "worker-C", 60) is True
+
+
+def test_sqlite_acquire_lock_refreshes_expiry_for_same_owner(tmp_path) -> None:
+    db_path = tmp_path / "state.db"
+    store = SQLiteStateStore(str(db_path))
+    lock_key = "phase2.poll_feeds.refresh"
+
+    assert store.acquire_lock(lock_key, "worker-A", 1) is True
+    with sqlite3.connect(str(db_path)) as conn:
+        first_expiry = conn.execute(
+            "SELECT expires_at FROM locks WHERE lock_key = ?",
+            (lock_key,),
+        ).fetchone()
+
+    assert store.acquire_lock(lock_key, "worker-A", 3600) is True
+    with sqlite3.connect(str(db_path)) as conn:
+        refreshed_expiry = conn.execute(
+            "SELECT expires_at FROM locks WHERE lock_key = ?",
+            (lock_key,),
+        ).fetchone()
+
+    assert first_expiry is not None
+    assert refreshed_expiry is not None
+    assert datetime.fromisoformat(str(refreshed_expiry[0])) > datetime.fromisoformat(
+        str(first_expiry[0])
+    )
+
+
+def test_sqlite_acquire_lock_normalizes_expiry_microseconds_to_zero(tmp_path) -> None:
+    db_path = tmp_path / "state.db"
+    store = SQLiteStateStore(str(db_path))
+
+    assert store.acquire_lock("phase2.poll_feeds.microseconds", "worker-A", 60) is True
+    with sqlite3.connect(str(db_path)) as conn:
+        expires_at = conn.execute(
+            "SELECT expires_at FROM locks WHERE lock_key = ?",
+            ("phase2.poll_feeds.microseconds",),
+        ).fetchone()
+
+    assert expires_at is not None
+    assert datetime.fromisoformat(str(expires_at[0])).microsecond == 0
 
 
 def test_sqlite_acquire_lock_handles_insert_race(tmp_path, monkeypatch) -> None:
@@ -155,6 +198,194 @@ def test_sqlite_mark_step_running_and_finished_are_idempotent_with_readback(tmp_
     assert succeeded["retry_meta"] is None
     assert succeeded["result"] == {"ok": True}
     assert succeeded["cache_key"] == "k2"
+
+
+def test_sqlite_mark_step_finished_rejects_invalid_status_with_exact_message(tmp_path) -> None:
+    store = SQLiteStateStore(str(tmp_path / "state.db"))
+
+    with pytest.raises(ValueError) as exc_info:
+        store.mark_step_finished(
+            job_id="job-invalid",
+            step_name="collect_comments",
+            attempt=1,
+            status="running",
+        )
+
+    assert exc_info.value.args == ("status must be succeeded, failed, or skipped",)
+
+
+def test_sqlite_mark_step_running_clears_previous_terminal_fields(tmp_path) -> None:
+    store = SQLiteStateStore(str(tmp_path / "state.db"))
+
+    store.mark_step_finished(
+        job_id="job-restart",
+        step_name="collect_comments",
+        attempt=1,
+        status="failed",
+        error_payload={"reason": "timeout"},
+        error_kind="timeout",
+        retry_meta={"retry": 1},
+        result_payload={"ok": False},
+        cache_key="old-key",
+    )
+    store.mark_step_running(
+        job_id="job-restart",
+        step_name="collect_comments",
+        attempt=1,
+        cache_key="new-key",
+    )
+
+    restarted = store.get_latest_step_run(job_id="job-restart", step_name="collect_comments")
+    assert restarted is not None
+    assert restarted["status"] == "running"
+    assert restarted["finished_at"] is None
+    assert restarted["error"] is None
+    assert restarted["error_kind"] is None
+    assert restarted["retry_meta"] is None
+    assert restarted["result"] is None
+    assert restarted["cache_key"] == "new-key"
+
+
+def test_sqlite_mark_step_running_reuses_attempt_with_fresh_started_at(monkeypatch, tmp_path) -> None:
+    store = SQLiteStateStore(str(tmp_path / "state.db"))
+    timestamps = iter(["2026-03-10T12:00:00+00:00", "2026-03-10T12:00:05+00:00"])
+    monkeypatch.setattr(sqlite_store, "_utc_now_iso", lambda: next(timestamps))
+
+    store.mark_step_running(job_id="job-retry", step_name="collect_comments", attempt=1, cache_key="k1")
+    store.mark_step_running(job_id="job-retry", step_name="collect_comments", attempt=1, cache_key="k2")
+
+    row = store.get_latest_step_run(job_id="job-retry", step_name="collect_comments")
+    assert row is not None
+    assert row["started_at"] == "2026-03-10T12:00:05+00:00"
+    assert row["finished_at"] is None
+    assert row["cache_key"] == "k2"
+
+
+def test_sqlite_mark_step_finished_supports_insert_without_prior_running(tmp_path) -> None:
+    store = SQLiteStateStore(str(tmp_path / "state.db"))
+
+    store.mark_step_finished(
+        job_id="job-skip",
+        step_name="collect_comments",
+        attempt=2,
+        status="skipped",
+        cache_key="skip-key",
+    )
+
+    skipped = store.get_latest_step_run(job_id="job-skip", step_name="collect_comments")
+    assert skipped is not None
+    assert skipped["status"] == "skipped"
+    assert skipped["started_at"] == skipped["finished_at"]
+    assert skipped["error"] is None
+    assert skipped["retry_meta"] is None
+    assert skipped["result"] is None
+    assert skipped["cache_key"] == "skip-key"
+
+
+def test_sqlite_mark_step_finished_persists_serialized_columns(monkeypatch, tmp_path) -> None:
+    db_path = tmp_path / "state.db"
+    store = SQLiteStateStore(str(db_path))
+    monkeypatch.setattr(sqlite_store, "_utc_now_iso", lambda: "2026-03-10T12:00:10+00:00")
+
+    store.mark_step_finished(
+        job_id="job-serialized",
+        step_name="collect_comments",
+        attempt=4,
+        status="failed",
+        error_payload={"reason": "timeout", "retryable": True},
+        error_kind="timeout",
+        retry_meta={"retry": 2},
+        result_payload={"ok": False, "frames": 0},
+        cache_key="cache-v1",
+    )
+
+    with sqlite3.connect(str(db_path)) as conn:
+        row = conn.execute(
+            """
+            SELECT status, started_at, finished_at, error_json, error_kind, retry_meta_json, result_json, cache_key
+            FROM step_runs
+            WHERE job_id = ? AND step_name = ? AND attempt = ?
+            """,
+            ("job-serialized", "collect_comments", 4),
+        ).fetchone()
+
+    assert row is not None
+    assert tuple(row) == (
+        "failed",
+        "2026-03-10T12:00:10+00:00",
+        "2026-03-10T12:00:10+00:00",
+        '{"reason": "timeout", "retryable": true}',
+        "timeout",
+        '{"retry": 2}',
+        '{"frames": 0, "ok": false}',
+        "cache-v1",
+    )
+
+
+def test_sqlite_get_latest_step_run_filters_by_status_and_cache_key(tmp_path) -> None:
+    store = SQLiteStateStore(str(tmp_path / "state.db"))
+
+    store.mark_step_running(job_id="job-filters", step_name="collect_comments", attempt=1, cache_key="k1")
+    store.mark_step_finished(
+        job_id="job-filters",
+        step_name="collect_comments",
+        attempt=1,
+        status="failed",
+        error_payload={"reason": "timeout"},
+        cache_key="k1",
+    )
+    store.mark_step_running(job_id="job-filters", step_name="collect_comments", attempt=2, cache_key="k2")
+    store.mark_step_finished(
+        job_id="job-filters",
+        step_name="collect_comments",
+        attempt=2,
+        status="succeeded",
+        result_payload={"ok": True},
+        cache_key="k2",
+    )
+    store.mark_step_running(job_id="job-filters", step_name="collect_comments", attempt=3, cache_key="k3")
+
+    latest_any = store.get_latest_step_run(job_id="job-filters", step_name="collect_comments")
+    assert latest_any is not None
+    assert latest_any["attempt"] == 3
+    assert latest_any["status"] == "running"
+
+    latest_failed = store.get_latest_step_run(
+        job_id="job-filters",
+        step_name="collect_comments",
+        status="failed",
+    )
+    assert latest_failed is not None
+    assert latest_failed["attempt"] == 1
+    assert latest_failed["cache_key"] == "k1"
+
+    latest_cache = store.get_latest_step_run(
+        job_id="job-filters",
+        step_name="collect_comments",
+        cache_key="k2",
+    )
+    assert latest_cache is not None
+    assert latest_cache["attempt"] == 2
+    assert latest_cache["status"] == "succeeded"
+
+    assert (
+        store.get_latest_step_run(
+            job_id="job-filters",
+            step_name="collect_comments",
+            status="failed",
+            cache_key="k2",
+        )
+        is None
+    )
+
+    latest_with_empty_filters = store.get_latest_step_run(
+        job_id="job-filters",
+        step_name="collect_comments",
+        status="",
+        cache_key="",
+    )
+    assert latest_with_empty_filters is not None
+    assert latest_with_empty_filters["attempt"] == 3
 
 
 def test_sqlite_checkpoint_update_and_read_are_idempotent(tmp_path) -> None:

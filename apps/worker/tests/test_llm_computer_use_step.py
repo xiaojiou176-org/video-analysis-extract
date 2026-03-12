@@ -1,12 +1,22 @@
 from __future__ import annotations
 
+import importlib
 import sys
 import types
 from typing import Any
 
-from worker.pipeline.steps import llm_computer_use
+import pytest
 
-sys.modules["apps.worker.worker.pipeline.steps.llm_computer_use"] = llm_computer_use
+from apps.worker.worker.pipeline.steps import llm_computer_use
+
+
+def _fresh_llm_computer_use():
+    return importlib.reload(llm_computer_use)
+
+
+@pytest.fixture(autouse=True)
+def _reload_llm_module_for_each_test() -> None:
+    globals()["llm_computer_use"] = _fresh_llm_computer_use()
 
 
 def test_coerce_dict_returns_copy_for_dict_and_empty_for_non_dict() -> None:
@@ -56,6 +66,103 @@ def test_resolve_computer_use_payload_prefers_section_then_llm_then_state() -> N
     }
 
 
+def test_apps_module_resolve_payload_and_normalize_action_are_mapped() -> None:
+    fresh = _fresh_llm_computer_use()
+
+    payload = fresh._resolve_computer_use_payload(
+        state={"source_url": "https://state.example/video", "computer_use": {"executor": "browser_stub"}},
+        llm_policy={"computer_use_executor": "playwright"},
+        section_policy={"computer_use": {"url": "https://section.example/video"}},
+    )
+    action_name, action_args = fresh._normalize_action(
+        {"action": "CLICK", "selector": "#cta", "url": "https://ignored.example"}
+    )
+
+    assert payload["executor"] == "playwright"
+    assert payload["url"] == "https://section.example/video"
+    assert action_name == "click"
+    assert action_args == {"selector": "#cta"}
+
+
+def test_resolve_computer_use_payload_uses_nested_llm_payload_before_state_payload() -> None:
+    fresh = _fresh_llm_computer_use()
+
+    payload = fresh._resolve_computer_use_payload(
+        state={
+            "computer_use": {
+                "executor": "browser_stub",
+                "url": "https://state.example/video",
+                "screenshot": "state-shot",
+                "context": {"from": "state"},
+            }
+        },
+        llm_policy={
+            "computer_use": {
+                "executor": "playwright",
+                "url": "https://llm.example/video",
+                "screenshot": "llm-shot",
+                "context": {"from": "llm"},
+            }
+        },
+        section_policy={},
+    )
+
+    assert payload == {
+        "executor": "playwright",
+        "url": "https://llm.example/video",
+        "screenshot": "llm-shot",
+        "context": {"from": "llm"},
+    }
+
+
+def test_resolve_computer_use_payload_uses_top_level_section_url_before_llm_values() -> None:
+    fresh = _fresh_llm_computer_use()
+
+    payload = fresh._resolve_computer_use_payload(
+        state={"computer_use": {"url": "https://state.example/video"}},
+        llm_policy={"computer_use": {"url": "https://llm.example/video"}},
+        section_policy={"computer_use_url": "https://section.example/video"},
+    )
+
+    assert payload["url"] == "https://section.example/video"
+
+
+def test_resolve_computer_use_payload_uses_top_level_section_screenshot_before_llm_values() -> None:
+    fresh = _fresh_llm_computer_use()
+
+    payload = fresh._resolve_computer_use_payload(
+        state={"computer_use": {"screenshot": "state-shot"}},
+        llm_policy={"computer_use": {"screenshot": "llm-shot"}},
+        section_policy={"computer_use_screenshot": "section-shot"},
+    )
+
+    assert payload["screenshot"] == "section-shot"
+
+
+def test_resolve_computer_use_payload_uses_top_level_section_context_before_llm_values() -> None:
+    fresh = _fresh_llm_computer_use()
+
+    payload = fresh._resolve_computer_use_payload(
+        state={"computer_use": {"context": {"from": "state"}}},
+        llm_policy={"computer_use": {"context": {"from": "llm"}}},
+        section_policy={"computer_use_context": {"from": "section"}},
+    )
+
+    assert payload["context"] == {"from": "section"}
+
+
+def test_resolve_computer_use_payload_uses_top_level_section_executor_before_llm_values() -> None:
+    fresh = _fresh_llm_computer_use()
+
+    payload = fresh._resolve_computer_use_payload(
+        state={"computer_use": {"executor": "browser_stub"}},
+        llm_policy={"computer_use": {"executor": "playwright"}},
+        section_policy={"computer_use_executor": "no_op"},
+    )
+
+    assert payload["executor"] == "no_op"
+
+
 def test_resolve_computer_use_payload_defaults_and_url_fallback_order() -> None:
     payload = llm_computer_use._resolve_computer_use_payload(
         state={"metadata": {"webpage_url": "https://meta.example/video"}},
@@ -86,6 +193,8 @@ def test_executor_name_normalizes_known_values_and_defaults_to_no_op() -> None:
     assert llm_computer_use._executor_name("browser_stub") == "browser_stub"
     assert llm_computer_use._executor_name("browser") == "browser_stub"
     assert llm_computer_use._executor_name(" Browser ") == "browser_stub"
+    assert llm_computer_use._executor_name(None) == "no_op"
+    assert llm_computer_use._executor_name("") == "no_op"
     assert llm_computer_use._executor_name("something-else") == "no_op"
 
 
@@ -103,13 +212,34 @@ def test_normalize_action_and_stub_handlers_cover_success_and_error() -> None:
 
     assert action_name == "click"
     assert action_args == {"selector": "#cta"}
-    assert llm_computer_use._execute_noop("", {})["error"] == "computer_use_action_missing"
-    assert llm_computer_use._execute_browser_stub("", {})["error"] == "computer_use_action_missing"
-    assert llm_computer_use._execute_noop("tap", {"selector": "#cta"})["message"] == "computer_use_noop_executed"
-    assert (
-        llm_computer_use._execute_browser_stub("tap", {"selector": "#cta"})["message"]
-        == "computer_use_browser_stub_executed"
-    )
+    noop_error = llm_computer_use._execute_noop("", {})
+    stub_error = llm_computer_use._execute_browser_stub("", {})
+    noop_ok = llm_computer_use._execute_noop("tap", {"selector": "#cta"})
+    stub_ok = llm_computer_use._execute_browser_stub("tap", {"selector": "#cta"})
+
+    assert noop_error == {
+        "ok": False,
+        "status": "error",
+        "error": "computer_use_action_missing",
+    }
+    assert stub_error == {
+        "ok": False,
+        "status": "error",
+        "error": "computer_use_action_missing",
+    }
+    assert noop_ok == {
+        "ok": True,
+        "status": "ok",
+        "message": "computer_use_noop_executed",
+        "action": {"name": "tap", "args": {"selector": "#cta"}},
+    }
+    assert stub_ok == {
+        "ok": True,
+        "status": "ok",
+        "message": "computer_use_browser_stub_executed",
+        "action": {"name": "tap", "args": {"selector": "#cta"}},
+    }
+    assert llm_computer_use._normalize_action({}) == ("", {})
 
 
 def test_build_default_handler_uses_browser_stub_and_target_payload() -> None:
@@ -129,6 +259,7 @@ def test_build_default_handler_uses_browser_stub_and_target_payload() -> None:
     result = handler(action="click", selector="#cta")
 
     assert result["status"] == "ok"
+    assert result["message"] == "computer_use_browser_stub_executed"
     assert result["executor"] == "browser_stub"
     assert result["action"] == {"name": "click", "args": {"selector": "#cta"}}
     assert result["target"] == {
@@ -158,6 +289,54 @@ def test_build_default_handler_falls_back_when_playwright_execution_errors(monke
     assert result["fallback_from"] == "playwright"
     assert result["playwright_error"] == "playwright-boom"
     assert result["action"] == {"name": "click", "args": {"selector": "#retry"}}
+
+
+def test_build_default_handler_empty_playwright_error_stays_empty(monkeypatch: Any) -> None:
+    fresh = _fresh_llm_computer_use()
+
+    monkeypatch.setattr(
+        fresh,
+        "_execute_playwright",
+        lambda **_: {"ok": False, "status": "error", "error": ""},
+    )
+
+    handler = fresh.build_default_computer_use_handler(
+        state={"computer_use": {"executor": "playwright", "url": "https://example.com"}},
+        llm_policy={},
+        section_policy={},
+    )
+
+    result = handler(action="click", selector="#retry")
+
+    assert result["fallback_from"] == "playwright"
+    assert result["playwright_error"] == ""
+
+
+def test_apps_module_handler_path_is_mapped(monkeypatch: Any) -> None:
+    fresh = _fresh_llm_computer_use()
+
+    monkeypatch.setattr(
+        fresh,
+        "_execute_playwright",
+        lambda **kwargs: {
+            "ok": True,
+            "status": "ok",
+            "action": {"name": kwargs["action_name"], "args": kwargs["action_args"]},
+            "current_url": kwargs["url"],
+            "screenshot_base64": "shot",
+        },
+    )
+
+    handler = fresh.build_default_computer_use_handler(
+        state={"computer_use": {"executor": "playwright", "url": "https://example.com"}},
+        llm_policy={},
+        section_policy={},
+    )
+    result = handler(action="click", selector="#cta")
+
+    assert result["status"] == "ok"
+    assert result["executor"] == "playwright"
+    assert result["action"] == {"name": "click", "args": {"selector": "#cta"}}
 
 
 def test_build_default_handler_wraps_non_dict_context_without_fallback_on_playwright_success(
@@ -237,6 +416,8 @@ def test_execute_playwright_reports_import_failure_as_unavailable(monkeypatch: A
         url="https://example.com/start",
     )
 
+    assert set(result) == {"ok", "status", "error"}
+    assert result["ok"] is False
     assert result["status"] == "error"
     assert str(result["error"]).startswith("computer_use_playwright_unavailable:")
 
@@ -304,19 +485,42 @@ def test_execute_playwright_click_and_navigate_paths(monkeypatch: Any) -> None:
         action_args={"selector": "#go"},
         url="https://example.com/start",
     )
+    tap_result = llm_computer_use._execute_playwright(
+        action_name="tap",
+        action_args={"selector": "#tap"},
+        url="https://example.com/start",
+    )
     navigate_result = llm_computer_use._execute_playwright(
         action_name="navigate",
         action_args={"url": "https://example.com/next"},
         url="https://example.com/start",
     )
+    goto_result = llm_computer_use._execute_playwright(
+        action_name="goto",
+        action_args={"url": "https://example.com/goto"},
+        url="https://example.com/start",
+    )
 
-    assert click_result["status"] == "ok"
+    assert click_result == {
+        "ok": True,
+        "status": "ok",
+        "message": "computer_use_playwright_executed",
+        "action": {"name": "click", "args": {"selector": "#go"}},
+        "current_url": "https://example.com/start",
+        "screenshot_base64": "cG5nLWJ5dGVz",
+    }
     assert click_result["current_url"] == "https://example.com/start"
-    assert click_result["screenshot_base64"]
+    assert tap_result["status"] == "ok"
     assert navigate_result["status"] == "ok"
     assert navigate_result["current_url"] == "https://example.com/next"
+    assert goto_result["status"] == "ok"
+    assert goto_result["current_url"] == "https://example.com/goto"
+    assert ("launch", True) in recorded
     assert ("click", "#go", 8000) in recorded
+    assert ("click", "#tap", 8000) in recorded
     assert ("goto", "https://example.com/next", 8000, "domcontentloaded") in recorded
+    assert ("goto", "https://example.com/goto", 8000, "domcontentloaded") in recorded
+    assert ("screenshot", "png", False) in recorded
 
 
 def test_execute_playwright_fill_wait_scroll_and_unknown_paths(monkeypatch: Any) -> None:
@@ -457,8 +661,7 @@ def test_execute_playwright_navigate_requires_url(monkeypatch: Any) -> None:
     )
 
     assert result["status"] == "error"
-    assert str(result["error"]).startswith("computer_use_playwright_failed:")
-    assert "navigate action requires url" in str(result["error"])
+    assert result["error"] == "computer_use_playwright_failed:navigate action requires url"
 
 
 def test_execute_playwright_fill_uses_element_and_text_alias_with_default_timeout(
@@ -518,8 +721,228 @@ def test_execute_playwright_fill_uses_element_and_text_alias_with_default_timeou
     assert result["status"] == "ok"
     assert result["action"] == {"name": "fill", "args": {"element": "#query", "text": "hello"}}
     assert result["screenshot_base64"] == "cG5nLWJ5dGVz"
+    assert ("launch", True) in recorded
     assert ("goto", "https://example.com/start", 8000, "domcontentloaded") in recorded
     assert ("fill", "#query", "hello", 8000) in recorded
+    assert ("screenshot", "png", False) in recorded
+
+
+def test_execute_playwright_fill_without_text_keeps_empty_text(monkeypatch: Any) -> None:
+    recorded: list[tuple[str, Any]] = []
+
+    class FakePage:
+        def __init__(self) -> None:
+            self.url = "https://example.com/original"
+
+        def goto(self, url: str, *, timeout: int, wait_until: str) -> None:
+            recorded.append(("goto", url, timeout, wait_until))
+            self.url = url
+
+        def fill(self, selector: str, text: str, *, timeout: int) -> None:
+            recorded.append(("fill", selector, text, timeout))
+
+        def screenshot(self, *, type: str, full_page: bool) -> bytes:
+            return b"png-bytes"
+
+    class FakeBrowser:
+        def __init__(self) -> None:
+            self.page = FakePage()
+
+        def new_page(self) -> FakePage:
+            return self.page
+
+        def close(self) -> None:
+            return None
+
+    class FakeChromium:
+        def launch(self, *, headless: bool) -> FakeBrowser:
+            recorded.append(("launch", headless))
+            return FakeBrowser()
+
+    class FakePlaywright:
+        def __enter__(self) -> types.SimpleNamespace:
+            return types.SimpleNamespace(chromium=FakeChromium())
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            return None
+
+    monkeypatch.setitem(
+        sys.modules,
+        "playwright.sync_api",
+        types.SimpleNamespace(sync_playwright=FakePlaywright),
+    )
+
+    result = llm_computer_use._execute_playwright(
+        action_name="fill",
+        action_args={"element": "#query"},
+        url="https://example.com/start",
+    )
+
+    assert result["status"] == "ok"
+    assert ("fill", "#query", "", 8000) in recorded
+
+
+def test_execute_playwright_type_alias_uses_fill_branch(monkeypatch: Any) -> None:
+    recorded: list[tuple[str, Any]] = []
+
+    class FakePage:
+        def __init__(self) -> None:
+            self.url = "https://example.com/original"
+
+        def goto(self, url: str, *, timeout: int, wait_until: str) -> None:
+            recorded.append(("goto", url, timeout, wait_until))
+            self.url = url
+
+        def fill(self, selector: str, text: str, *, timeout: int) -> None:
+            recorded.append(("fill", selector, text, timeout))
+
+        def screenshot(self, *, type: str, full_page: bool) -> bytes:
+            return b"png-bytes"
+
+    class FakeBrowser:
+        def __init__(self) -> None:
+            self.page = FakePage()
+
+        def new_page(self) -> FakePage:
+            return self.page
+
+        def close(self) -> None:
+            return None
+
+    class FakeChromium:
+        def launch(self, *, headless: bool) -> FakeBrowser:
+            return FakeBrowser()
+
+    class FakePlaywright:
+        def __enter__(self) -> types.SimpleNamespace:
+            return types.SimpleNamespace(chromium=FakeChromium())
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            return None
+
+    monkeypatch.setitem(
+        sys.modules,
+        "playwright.sync_api",
+        types.SimpleNamespace(sync_playwright=FakePlaywright),
+    )
+
+    result = llm_computer_use._execute_playwright(
+        action_name="type",
+        action_args={"target": "#query", "input_text": "typed"},
+        url="https://example.com/start",
+    )
+
+    assert result["status"] == "ok"
+    assert ("fill", "#query", "typed", 8000) in recorded
+
+
+def test_execute_playwright_input_alias_uses_fill_branch(monkeypatch: Any) -> None:
+    recorded: list[tuple[str, Any]] = []
+
+    class FakePage:
+        def __init__(self) -> None:
+            self.url = "https://example.com/original"
+
+        def goto(self, url: str, *, timeout: int, wait_until: str) -> None:
+            recorded.append(("goto", url, timeout, wait_until))
+            self.url = url
+
+        def fill(self, selector: str, text: str, *, timeout: int) -> None:
+            recorded.append(("fill", selector, text, timeout))
+
+        def screenshot(self, *, type: str, full_page: bool) -> bytes:
+            return b"png-bytes"
+
+    class FakeBrowser:
+        def __init__(self) -> None:
+            self.page = FakePage()
+
+        def new_page(self) -> FakePage:
+            return self.page
+
+        def close(self) -> None:
+            return None
+
+    class FakeChromium:
+        def launch(self, *, headless: bool) -> FakeBrowser:
+            return FakeBrowser()
+
+    class FakePlaywright:
+        def __enter__(self) -> types.SimpleNamespace:
+            return types.SimpleNamespace(chromium=FakeChromium())
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            return None
+
+    monkeypatch.setitem(
+        sys.modules,
+        "playwright.sync_api",
+        types.SimpleNamespace(sync_playwright=FakePlaywright),
+    )
+
+    result = llm_computer_use._execute_playwright(
+        action_name="input",
+        action_args={"target": "#query", "input_text": "typed"},
+        url="https://example.com/start",
+    )
+
+    assert result["status"] == "ok"
+    assert ("fill", "#query", "typed", 8000) in recorded
+
+
+def test_execute_playwright_click_without_selector_keeps_empty_selector(monkeypatch: Any) -> None:
+    recorded: list[tuple[str, Any]] = []
+
+    class FakePage:
+        def __init__(self) -> None:
+            self.url = "https://example.com/original"
+
+        def goto(self, url: str, *, timeout: int, wait_until: str) -> None:
+            recorded.append(("goto", url, timeout, wait_until))
+            self.url = url
+
+        def click(self, selector: str, *, timeout: int) -> None:
+            recorded.append(("click", selector, timeout))
+
+        def screenshot(self, *, type: str, full_page: bool) -> bytes:
+            return b"png-bytes"
+
+    class FakeBrowser:
+        def __init__(self) -> None:
+            self.page = FakePage()
+
+        def new_page(self) -> FakePage:
+            return self.page
+
+        def close(self) -> None:
+            return None
+
+    class FakeChromium:
+        def launch(self, *, headless: bool) -> FakeBrowser:
+            recorded.append(("launch", headless))
+            return FakeBrowser()
+
+    class FakePlaywright:
+        def __enter__(self) -> types.SimpleNamespace:
+            return types.SimpleNamespace(chromium=FakeChromium())
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            return None
+
+    monkeypatch.setitem(
+        sys.modules,
+        "playwright.sync_api",
+        types.SimpleNamespace(sync_playwright=FakePlaywright),
+    )
+
+    result = llm_computer_use._execute_playwright(
+        action_name="click",
+        action_args={},
+        url="https://example.com/start",
+    )
+
+    assert result["status"] == "ok"
+    assert ("click", "", 8000) in recorded
 
 
 def test_execute_playwright_wait_uses_default_wait_ms(monkeypatch: Any) -> None:
@@ -578,6 +1001,60 @@ def test_execute_playwright_wait_uses_default_wait_ms(monkeypatch: Any) -> None:
     assert ("wait", 800) in recorded
 
 
+def test_execute_playwright_sleep_alias_uses_wait_branch(monkeypatch: Any) -> None:
+    recorded: list[tuple[str, Any]] = []
+
+    class FakePage:
+        def __init__(self) -> None:
+            self.url = "https://example.com/original"
+
+        def goto(self, url: str, *, timeout: int, wait_until: str) -> None:
+            recorded.append(("goto", url, timeout, wait_until))
+            self.url = url
+
+        def wait_for_timeout(self, wait_ms: int) -> None:
+            recorded.append(("wait", wait_ms))
+
+        def screenshot(self, *, type: str, full_page: bool) -> bytes:
+            return b"png-bytes"
+
+    class FakeBrowser:
+        def __init__(self) -> None:
+            self.page = FakePage()
+
+        def new_page(self) -> FakePage:
+            return self.page
+
+        def close(self) -> None:
+            return None
+
+    class FakeChromium:
+        def launch(self, *, headless: bool) -> FakeBrowser:
+            return FakeBrowser()
+
+    class FakePlaywright:
+        def __enter__(self) -> types.SimpleNamespace:
+            return types.SimpleNamespace(chromium=FakeChromium())
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            return None
+
+    monkeypatch.setitem(
+        sys.modules,
+        "playwright.sync_api",
+        types.SimpleNamespace(sync_playwright=FakePlaywright),
+    )
+
+    result = llm_computer_use._execute_playwright(
+        action_name="sleep",
+        action_args={"wait_ms": 123},
+        url="https://example.com/start",
+    )
+
+    assert result["status"] == "ok"
+    assert ("wait", 123) in recorded
+
+
 def test_execute_playwright_runtime_exception_returns_failed(monkeypatch: Any) -> None:
     class FakePage:
         def __init__(self) -> None:
@@ -624,6 +1101,8 @@ def test_execute_playwright_runtime_exception_returns_failed(monkeypatch: Any) -
         url="https://example.com/start",
     )
 
+    assert set(result) == {"ok", "status", "error"}
+    assert result["ok"] is False
     assert result["status"] == "error"
     assert str(result["error"]).startswith("computer_use_playwright_failed:")
     assert "fill exploded" in str(result["error"])
@@ -698,6 +1177,20 @@ def test_build_default_handler_wraps_base_non_dict_context() -> None:
     assert result["target"]["context"] == {"value": "raw-base-context"}
 
 
+def test_build_default_handler_uses_empty_url_when_no_source_exists() -> None:
+    fresh = _fresh_llm_computer_use()
+
+    handler = fresh.build_default_computer_use_handler(
+        state={"computer_use": {"executor": "no_op"}},
+        llm_policy={},
+        section_policy={},
+    )
+    result = handler(action="click", selector="#cta")
+
+    assert result["target"]["url"] == ""
+    assert result["target"]["screenshot"] == ""
+
+
 def test_resolve_computer_use_payload_uses_top_level_llm_fields_and_state_fallback() -> None:
     payload = llm_computer_use._resolve_computer_use_payload(
         state={
@@ -766,3 +1259,28 @@ def test_normalize_action_prefers_action_key_and_filters_transport_fields() -> N
 
     assert action_name == "fill"
     assert action_args == {"selector": "#query", "text": "hello"}
+
+
+def test_build_default_handler_missing_playwright_status_does_not_trigger_fallback(
+    monkeypatch: Any,
+) -> None:
+    fresh = _fresh_llm_computer_use()
+
+    monkeypatch.setattr(
+        fresh,
+        "_execute_playwright",
+        lambda **kwargs: {
+            "ok": True,
+            "action": {"name": kwargs["action_name"], "args": kwargs["action_args"]},
+        },
+    )
+
+    handler = fresh.build_default_computer_use_handler(
+        state={"computer_use": {"executor": "playwright", "url": "https://example.com"}},
+        llm_policy={},
+        section_policy={},
+    )
+    result = handler(action="click", selector="#cta")
+
+    assert "fallback_from" not in result
+    assert result["executor"] == "playwright"

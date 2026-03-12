@@ -140,9 +140,10 @@ class VideosService:
         self.jobs_repo = JobsRepository(db)
 
     def list_videos(
-        self, *, platform: str | None = None, status: str | None = None, limit: int = 50
+        self, *, platform: str | None = None, status: str | None = None, limit: int | None = None
     ):
-        return self.video_repo.list(platform=platform, status=status, limit=limit)
+        resolved_limit = 50 if limit is None else limit
+        return self.video_repo.list(platform=platform, status=status, limit=resolved_limit)
 
     async def process_video(
         self,

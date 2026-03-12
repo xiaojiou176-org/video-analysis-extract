@@ -6,14 +6,9 @@ ROOT_DIR="$(cd "$HOOK_DIR/.." && pwd)"
 cd "$ROOT_DIR"
 
 echo "[pre-push] quality gate (mode=pre-push)"
-"$ROOT_DIR/scripts/quality_gate.sh" \
+"$ROOT_DIR/scripts/strict_ci_entry.sh" \
   --mode pre-push \
-  --profile ci \
-  --profile live-smoke \
   --heartbeat-seconds 20 \
-  --mutation-min-score 0.62 \
-  --mutation-min-effective-ratio 0.25 \
-  --mutation-max-no-tests-ratio 0.75 \
   --ci-dedupe 0
 
 echo "[pre-push] passed"

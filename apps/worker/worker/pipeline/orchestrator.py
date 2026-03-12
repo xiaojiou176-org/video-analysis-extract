@@ -4,13 +4,15 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from worker.comments import (
+from ..comments import (
     BilibiliCommentCollector,
     YouTubeCommentCollector,
     empty_comments_payload,
 )
-from worker.config import Settings
-from worker.pipeline.policies import (
+from ..config import Settings
+from ..state.postgres_store import PostgresBusinessStore
+from ..state.sqlite_store import SQLiteStateStore
+from .policies import (
     build_comments_policy,
     build_frame_policy,
     build_llm_policy,
@@ -20,14 +22,14 @@ from worker.pipeline.policies import (
     pipeline_llm_hard_required,
     refresh_llm_media_input_dimension,
 )
-from worker.pipeline.step_executor import (
+from .step_executor import (
     build_mode_skip_step,
     ensure_dir,
     execute_step,
     run_command,
     utc_now_iso,
 )
-from worker.pipeline.steps import (
+from .steps import (
     step_build_embeddings,
     step_collect_comments,
     step_collect_subtitles,
@@ -38,19 +40,25 @@ from worker.pipeline.steps import (
     step_llm_outline,
     step_write_artifacts,
 )
-from worker.pipeline.steps.llm import gemini_generate
-from worker.pipeline.steps.subtitles import fetch_youtube_transcript_text
-from worker.pipeline.types import (
+from .steps.llm import gemini_generate
+from .steps.subtitles import fetch_youtube_transcript_text
+from .types import (
     PIPELINE_MODE_FORCE_STEPS,
     PIPELINE_MODE_SKIP_STEPS,
     PIPELINE_STEPS,
     PipelineContext,
     PipelineStatus,
 )
-from worker.state.postgres_store import PostgresBusinessStore
-from worker.state.sqlite_store import SQLiteStateStore
 
 StepHandler = Callable[[PipelineContext, dict[str, Any]], Any]
+_DEFAULT_MODE_UNSET = object()
+
+
+def _normalized_step_status(record: dict[str, Any]) -> str:
+    raw_status = record.get("status")
+    if raw_status is None:
+        return ""
+    return str(raw_status).strip().lower()
 
 
 def build_context(
@@ -93,7 +101,7 @@ def resolve_pipeline_status(
     step_records: dict[str, dict[str, Any]],
     degradations: list[dict[str, Any]] | None = None,
     *,
-    pipeline_llm_hard_required: bool | None = True,
+    pipeline_llm_hard_required: bool | None,
 ) -> PipelineStatus:
     if not step_records:
         return "failed"
@@ -101,19 +109,25 @@ def resolve_pipeline_status(
     llm_required = (
         True if pipeline_llm_hard_required is None else bool(pipeline_llm_hard_required)
     )
-    soft_llm_failed = False
     for step_name, record in step_records.items():
-        status = str(record.get("status") or "").strip().lower()
+        status = _normalized_step_status(record)
         if status in {"succeeded", "skipped"}:
             continue
         if status == "failed":
             if step_name in {"llm_outline", "llm_digest"} and not llm_required:
-                soft_llm_failed = True
                 continue
             return "failed"
         return "failed"
 
-    if degradations or soft_llm_failed:
+    has_soft_llm_failure = (
+        not llm_required
+        and any(
+            step_name in {"llm_outline", "llm_digest"} and _normalized_step_status(record) == "failed"
+            for step_name, record in step_records.items()
+        )
+    )
+
+    if degradations or has_soft_llm_failure:
         return "degraded"
 
     return "succeeded"
@@ -122,7 +136,7 @@ def resolve_pipeline_status(
 def resolve_llm_gate(
     step_records: dict[str, dict[str, Any]],
     *,
-    pipeline_llm_hard_required: bool | None = True,
+    pipeline_llm_hard_required: bool | None,
 ) -> tuple[bool, bool, str | None]:
     llm_steps = ("llm_outline", "llm_digest")
     llm_required = (
@@ -131,11 +145,9 @@ def resolve_llm_gate(
     if not llm_required:
         return llm_required, True, None
 
-    hard_fail_reason: str | None = None
-
     for step_name in llm_steps:
         record = dict(step_records.get(step_name) or {})
-        status = str(record.get("status") or "").strip().lower()
+        status = _normalized_step_status(record)
         if status == "failed":
             hard_fail_reason = (
                 str(record.get("reason") or record.get("error") or "llm_step_failed").strip()
@@ -145,8 +157,7 @@ def resolve_llm_gate(
 
     all_present = all(step_name in step_records for step_name in llm_steps)
     all_passed = all(
-        str((step_records.get(step_name) or {}).get("status") or "").strip().lower()
-        in {"succeeded", "skipped"}
+        _normalized_step_status(dict(step_records.get(step_name) or {})) in {"succeeded", "skipped"}
         for step_name in llm_steps
     )
     if all_present and all_passed:
@@ -161,12 +172,13 @@ async def run_pipeline(
     *,
     job_id: str,
     attempt: int,
-    mode: str = "full",
+    mode: str | object = _DEFAULT_MODE_UNSET,
     overrides: dict[str, Any] | None = None,
     step_handlers: list[tuple[str, StepHandler, bool]] | None = None,
     pipeline_steps: list[str] | None = None,
 ) -> dict[str, Any]:
-    pipeline_mode = normalize_pipeline_mode(mode)
+    raw_mode = "full" if mode is _DEFAULT_MODE_UNSET else mode
+    pipeline_mode = normalize_pipeline_mode(raw_mode)
     llm_input_mode = normalize_llm_input_mode(getattr(settings, "pipeline_llm_input_mode", "auto"))
     ctx = build_context(settings, sqlite_store, pg_store, job_id=job_id, attempt=attempt)
 

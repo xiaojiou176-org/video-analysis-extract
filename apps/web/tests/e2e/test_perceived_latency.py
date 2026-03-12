@@ -36,12 +36,12 @@ def _delay_poll_ingest(route: Route) -> None:
 def test_perceived_latency_pending_feedback_with_cpu_throttle(page: Page) -> None:
     _goto_feed_ready(page)
     page.route("**/api/v1/ingest/poll", _delay_poll_ingest)
-    sync_now_button = page.locator("button.sync-now-button")
+    sync_now_button = page.locator("button[data-feedback-state]")
     expect(sync_now_button).to_have_attribute("data-state", re.compile(r"idle|done|error"))
     page.evaluate(
         """
         () => {
-            const btn = document.querySelector("button.sync-now-button");
+            const btn = document.querySelector("button[data-feedback-state]");
             if (!(btn instanceof HTMLButtonElement)) {
                 return;
             }

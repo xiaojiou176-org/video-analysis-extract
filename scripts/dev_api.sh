@@ -97,7 +97,7 @@ if [[ "$ENABLE_RELOAD" == "1" ]]; then
 fi
 
 if command -v uv >/dev/null 2>&1; then
-  exec uv run python -m uvicorn "${uvicorn_args[@]}"
+  exec uv run uvicorn "${uvicorn_args[@]}"
 fi
 
 exec python -m uvicorn "${uvicorn_args[@]}"

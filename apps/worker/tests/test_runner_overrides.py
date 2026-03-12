@@ -8,11 +8,8 @@ from typing import Any
 
 from worker.config import Settings
 from worker.pipeline import runner
-from worker.pipeline.steps.llm_computer_use import build_default_computer_use_handler
 
-sys.modules["apps.worker.worker.pipeline.steps.llm_computer_use"] = sys.modules[
-    "worker.pipeline.steps.llm_computer_use"
-]
+from apps.worker.worker.pipeline.steps.llm_computer_use import build_default_computer_use_handler
 
 
 def _build_ctx(tmp_path: Path, *, settings: Settings | None = None) -> runner.PipelineContext:

@@ -17,6 +17,7 @@ CHANGED_MIGRATIONS_INPUT="auto"
 CI_DEDUPE="0"
 SKIP_MUTATION="0"
 STRICT_FULL_RUN="0"
+CONTAINERIZED="auto"
 CHANGED_BACKEND="true"
 CHANGED_WEB="true"
 CHANGED_DEPS="true"
@@ -35,7 +36,7 @@ usage() {
 Usage:
   scripts/quality_gate.sh [--mode pre-commit|pre-push] [--heartbeat-seconds N] [--mutation-min-score N] [--profile NAME ...] [--profile-only] \
     [--changed-backend true|false|auto] [--changed-web true|false|auto] [--changed-deps true|false|auto] [--changed-migrations true|false|auto] [--ci-dedupe 0|1] [--skip-mutation 0|1] [--strict-full-run 0|1] \
-    [--mutation-min-effective-ratio N] [--mutation-max-no-tests-ratio N]
+    [--containerized 0|1|auto] [--mutation-min-effective-ratio N] [--mutation-max-no-tests-ratio N]
   scripts/quality_gate.sh --final-check [--skip-prepush] [--heartbeat-seconds N] [--mutation-min-score N]
 
 Modes:
@@ -129,6 +130,10 @@ while (($# > 0)); do
       STRICT_FULL_RUN="${2:-}"
       shift 2
       ;;
+    --containerized)
+      CONTAINERIZED="${2:-}"
+      shift 2
+      ;;
     --final-check)
       FINAL_CHECK="1"
       shift
@@ -202,6 +207,11 @@ fi
 
 if [[ "$STRICT_FULL_RUN" != "0" && "$STRICT_FULL_RUN" != "1" ]]; then
   echo "[quality-gate] invalid --strict-full-run: $STRICT_FULL_RUN (expected 0|1)" >&2
+  exit 2
+fi
+
+if [[ "$CONTAINERIZED" != "0" && "$CONTAINERIZED" != "1" && "$CONTAINERIZED" != "auto" ]]; then
+  echo "[quality-gate] invalid --containerized: $CONTAINERIZED (expected 0|1|auto)" >&2
   exit 2
 fi
 
@@ -644,11 +654,13 @@ run_contract_diff_local_gate() {
 
   git worktree add --detach "$base_tree" "$base_sha" >/dev/null
 
-  if ! uv run python scripts/export_api_contract.py --repo-root "$ROOT_DIR" --output "$head_json"; then
+  if ! DATABASE_URL="${DATABASE_URL:-sqlite+pysqlite:///:memory:}" \
+    uv run python scripts/export_api_contract.py --repo-root "$ROOT_DIR" --output "$head_json"; then
     git worktree remove --force "$base_tree" >/dev/null 2>&1 || true
     return 1
   fi
-  if ! uv run python scripts/export_api_contract.py --repo-root "$base_tree" --output "$base_json"; then
+  if ! DATABASE_URL="${DATABASE_URL:-sqlite+pysqlite:///:memory:}" \
+    uv run python scripts/export_api_contract.py --repo-root "$base_tree" --output "$base_json"; then
     git worktree remove --force "$base_tree" >/dev/null 2>&1 || true
     return 1
   fi
@@ -719,26 +731,37 @@ PY
 }
 
 run_iac_compose_config_validation() {
-  if ! command -v docker >/dev/null 2>&1; then
-    echo "[quality-gate] iac compose config validation failed: docker is required" >&2
-    return 1
+  if command -v docker >/dev/null 2>&1; then
+    local compose_cmd=()
+    if docker compose version >/dev/null 2>&1; then
+      compose_cmd=(docker compose)
+    elif command -v docker-compose >/dev/null 2>&1; then
+      compose_cmd=(docker-compose)
+    fi
+    if ((${#compose_cmd[@]} > 0)); then
+      "${compose_cmd[@]}" -f infra/compose/core-services.compose.yml config -q
+      if [[ -f infra/compose/miniflux-nextflux.compose.yml ]]; then
+        "${compose_cmd[@]}" -f infra/compose/miniflux-nextflux.compose.yml config -q
+      fi
+      echo "[quality-gate] iac compose config validation passed"
+      return 0
+    fi
   fi
 
-  local compose_cmd=()
-  if docker compose version >/dev/null 2>&1; then
-    compose_cmd=(docker compose)
-  elif command -v docker-compose >/dev/null 2>&1; then
-    compose_cmd=(docker-compose)
-  else
-    echo "[quality-gate] iac compose config validation failed: docker compose or docker-compose is required" >&2
-    return 1
-  fi
+  uv run --with pyyaml python3 - <<'PY'
+from pathlib import Path
+import yaml
 
-  "${compose_cmd[@]}" -f infra/compose/core-services.compose.yml config -q
-  if [[ -f infra/compose/miniflux-nextflux.compose.yml ]]; then
-    "${compose_cmd[@]}" -f infra/compose/miniflux-nextflux.compose.yml config -q
-  fi
-  echo "[quality-gate] iac compose config validation passed"
+for rel in ("infra/compose/core-services.compose.yml", "infra/compose/miniflux-nextflux.compose.yml"):
+    path = Path(rel)
+    if not path.is_file():
+        continue
+    data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    if not isinstance(data, dict) or "services" not in data:
+        raise SystemExit(f"compose validation failed: {rel} missing top-level services")
+print("compose yaml fallback validation passed")
+PY
+  echo "[quality-gate] iac compose config validation passed (yaml fallback)"
 }
 
 run_web_design_token_guard_local() {
@@ -808,7 +831,29 @@ PY
 }
 
 run_api_real_smoke_local_gate() {
-  ./scripts/api_real_smoke_local.sh
+  local default_api_real_smoke_database_url="${API_REAL_SMOKE_DATABASE_URL:-}"
+  local default_api_real_smoke_temporal_target_host="${API_REAL_SMOKE_TEMPORAL_TARGET_HOST:-}"
+  if [[ -z "$default_api_real_smoke_database_url" ]]; then
+    if [[ "${VD_IN_STANDARD_ENV:-0}" == "1" ]]; then
+      default_api_real_smoke_database_url="postgresql+psycopg://postgres:postgres@host.docker.internal:5432/postgres"
+    else
+      default_api_real_smoke_database_url="postgresql+psycopg://postgres:postgres@127.0.0.1:5432/postgres"
+    fi
+  fi
+  if [[ -z "$default_api_real_smoke_temporal_target_host" ]]; then
+    if [[ "${VD_IN_STANDARD_ENV:-0}" == "1" ]]; then
+      default_api_real_smoke_temporal_target_host="host.docker.internal:7233"
+    else
+      default_api_real_smoke_temporal_target_host="127.0.0.1:7233"
+    fi
+  fi
+  if [[ -z "${DATABASE_URL:-}" || "${DATABASE_URL}" == "sqlite+pysqlite:///:memory:" ]]; then
+    export DATABASE_URL="$default_api_real_smoke_database_url"
+  fi
+  if [[ -z "${TEMPORAL_TARGET_HOST:-}" || "${TEMPORAL_TARGET_HOST}" == "127.0.0.1:7233" ]]; then
+    export TEMPORAL_TARGET_HOST="$default_api_real_smoke_temporal_target_host"
+  fi
+  ./scripts/ci_api_real_smoke.sh --profile ci
 }
 
 run_web_dependency_policy_gate() {

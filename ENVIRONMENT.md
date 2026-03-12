@@ -159,7 +159,7 @@ Default model lane:
 - `UI_AUDIT_RUN_STORE_DIR` (persisted UI audit run snapshot directory, default `.runtime-cache/ui-audit-runs`)
 - `VD_MCP_MAX_BASE64_BYTES` (MCP base64 payload size limit, bytes)
 - `WEB_ACTION_SESSION_TOKEN` (optional server-action session secret)
-- `GEMINI_UI_UX_AUDIT_REPORT_PATH` (CI UI/UX audit report output path, default `.runtime-cache/ui-audit/gemini-ui-ux-audit-report.json`)
+- CI UI/UX audit report output path is fixed to `.runtime-cache/ui-audit/gemini-ui-ux-audit-report.json` in the strict CI workflow.
 
 Write auth behavior contract (`apps/api/app/security.py`):
 
@@ -212,6 +212,9 @@ Exception detail sanitization contract:
 - Script entry controls for `dev_api/dev_worker/dev_mcp/init_env_example` are CLI-only after Batch C (see `docs/reference/env-script-overrides.md`)
 - `scripts/recreate_gce_instance.sh` now uses CLI flags only (no GCE recreate env contract vars)
 - `CORE_POSTGRES_PORT`, `CORE_POSTGRES_PASSWORD` (docker compose core-services overrides)
+- `GHCR_USERNAME`, `GHCR_TOKEN` are optional local-only credentials for pulling the private strict CI standard image from `ghcr.io` during `scripts/strict_ci_entry.sh` runs.
+- `VD_STANDARD_ENV_LOAD_PLATFORM_ARCH`, `API_REAL_SMOKE_DATABASE_URL`, `API_REAL_SMOKE_TEMPORAL_TARGET_HOST`, and `FULL_STACK_TEMPORAL_POLLER_READY_TIMEOUT_SECONDS` are optional script/runtime overrides for strict standard image loading, API real-smoke targeting, and full-stack Temporal readiness waits.
+- `TMPDIR`, `UV_LINK_MODE`, `UV_PROJECT_ENVIRONMENT` are optional local strict-runtime overrides used by `scripts/bootstrap_strict_ci_runtime.sh` and `scripts/ci_web_e2e.sh` to place uv-managed environments under a stable temp root instead of mutating the workspace `.venv`.
 - `GCP_PROJECT_ID`, `GCP_ZONE` are optional defaults for runner maintenance helpers:
   - `scripts/audit_github_runner_host.sh`
   - `scripts/apply_github_runner_startup_metadata.sh`

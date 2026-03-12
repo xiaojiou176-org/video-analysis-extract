@@ -73,7 +73,7 @@ export function ReadingPane({
 		let cancelled = false;
 		queueMicrotask(() => {
 			setLoading(true);
-			setError(null);
+			setError(false);
 		});
 		apiClient
 			.getArtifactMarkdown({ job_id: jobId, include_meta: true })

@@ -443,7 +443,9 @@ class JobsService:
             candidates.append(Path(digest_path).expanduser().parent / "meta.json")
 
         for candidate in candidates:
-            if not candidate.exists() or not candidate.is_file():
+            if not candidate.exists():
+                continue
+            if not candidate.is_file():
                 continue
             try:
                 payload = json.loads(candidate.read_text(encoding="utf-8"))

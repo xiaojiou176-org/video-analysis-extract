@@ -8,19 +8,28 @@ from worker.config import Settings
 PipelineMode = Literal["full", "text_only", "refresh_comments", "refresh_llm"]
 LLMInputMode = Literal["auto", "text", "video_text", "frames_text"]
 MediaResolution = Literal["low", "medium", "high", "ultra_high"]
+_STRING_ITEM_KEYS = ("text", "summary", "title", "content", "label", "value")
+_DEFAULT_LIST_LIMIT = 12
+_COMMENT_SORTS = {"hot", "new"}
+_PIPELINE_MODES = {"text_only", "refresh_comments", "refresh_llm"}
 
 
 def coerce_bool(value: Any, default: bool = False) -> bool:
+    fallback = bool(default)
     if isinstance(value, bool):
         return value
     if value is None:
-        return default
+        return fallback
     text = str(value).strip().lower()
     if text in {"1", "true", "yes", "on", "y"}:
         return True
     if text in {"0", "false", "no", "off", "n"}:
         return False
-    return default
+    return fallback
+
+
+def _coerce_optional_float(value: Any) -> float | None:
+    return coerce_float(value, None)
 
 
 def coerce_int(value: Any, default: int = 0) -> int:
@@ -77,6 +86,29 @@ def override_section(overrides: dict[str, Any], section: str) -> dict[str, Any]:
     return dict(value)
 
 
+def _coerce_positive_int(value: Any) -> int | None:
+    parsed = coerce_int(value)
+    if parsed <= 0:
+        return None
+    return parsed
+
+
+def _coerce_timeout_seconds(value: Any, *, default: float) -> float:
+    parsed = _coerce_optional_float(value)
+    if parsed is None or parsed == 0:
+        return default
+    return max(0.1, parsed)
+
+
+def _normalize_comment_sort(value: Any) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip().lower()
+    if text in _COMMENT_SORTS:
+        return text
+    return None
+
+
 def default_comment_sort_for_platform(platform: str) -> str:
     if platform == "youtube":
         return "hot"
@@ -92,8 +124,8 @@ def build_comments_policy(
         0,
         coerce_int(section.get("replies_per_comment"), settings.comments_replies_per_comment),
     )
-    sort_text = str(section.get("sort") or "").strip().lower()
-    if sort_text not in {"hot", "new"}:
+    sort_text = _normalize_comment_sort(section.get("sort"))
+    if sort_text is None:
         sort_text = default_comment_sort_for_platform(platform)
     return {
         "top_n": top_n,
@@ -118,31 +150,24 @@ def build_llm_policy_section(
     allow_computer_use: bool,
 ) -> dict[str, Any]:
     model = str(section.get("model") or default_model).strip() or default_model
-    temperature = coerce_float(section.get("temperature"), None)
+    temperature = _coerce_optional_float(section.get("temperature"))
     if temperature is not None:
         temperature = min(2.0, max(0.0, temperature))
-    max_output_tokens_raw = section.get("max_output_tokens")
-    max_output_tokens: int | None = None
-    if max_output_tokens_raw is not None:
-        parsed = coerce_int(max_output_tokens_raw, 0)
-        if parsed > 0:
-            max_output_tokens = parsed
+    max_output_tokens = _coerce_positive_int(section.get("max_output_tokens"))
     max_function_call_rounds = max(0, coerce_int(section.get("max_function_call_rounds"), 2))
-    include_thoughts = coerce_bool(section.get("include_thoughts"), default=False)
-    requested_computer_use = coerce_bool(section.get("enable_computer_use"), default=False)
+    include_thoughts = coerce_bool(section.get("include_thoughts"))
+    requested_computer_use = coerce_bool(section.get("enable_computer_use"))
     enable_computer_use = bool(allow_computer_use and requested_computer_use)
     computer_use_require_confirmation = coerce_bool(
         section.get("computer_use_require_confirmation"),
         default=True,
     )
-    computer_use_max_steps = max(0, coerce_int(section.get("computer_use_max_steps"), 0))
-    computer_use_timeout_seconds = max(
-        0.1,
-        coerce_float(section.get("computer_use_timeout_seconds"), 30.0) or 30.0,
+    computer_use_max_steps = max(0, coerce_int(section.get("computer_use_max_steps")))
+    computer_use_timeout_seconds = _coerce_timeout_seconds(
+        section.get("computer_use_timeout_seconds"),
+        default=30.0,
     )
-    media_resolution = _normalize_media_resolution_policy(
-        section.get("media_resolution"), default="medium"
-    )
+    media_resolution = _normalize_media_resolution_policy(section.get("media_resolution"))
     return {
         "model": model,
         "temperature": temperature,
@@ -159,7 +184,7 @@ def build_llm_policy_section(
 
 def build_llm_policy(settings: Settings, overrides: dict[str, Any]) -> dict[str, Any]:
     section = override_section(overrides, "llm")
-    speed_priority = coerce_bool(section.get("speed_priority"), default=False)
+    speed_priority = coerce_bool(section.get("speed_priority"))
     thinking_level = str(section.get("thinking_level") or "").strip().lower()
     if thinking_level not in {"minimal", "low", "medium", "high"}:
         thinking_level = "low" if speed_priority else "high"
@@ -202,15 +227,10 @@ def build_llm_policy(settings: Settings, overrides: dict[str, Any]) -> dict[str,
         allow_computer_use=allow_computer_use,
     )
     model = str(section.get("model") or default_model).strip() or default_model
-    temperature = coerce_float(section.get("temperature"), None)
+    temperature = _coerce_optional_float(section.get("temperature"))
     if temperature is not None:
         temperature = min(2.0, max(0.0, temperature))
-    max_output_tokens_raw = section.get("max_output_tokens")
-    max_output_tokens: int | None = None
-    if max_output_tokens_raw is not None:
-        parsed = coerce_int(max_output_tokens_raw, 0)
-        if parsed > 0:
-            max_output_tokens = parsed
+    max_output_tokens = _coerce_positive_int(section.get("max_output_tokens"))
     max_function_call_rounds = max(0, coerce_int(section.get("max_function_call_rounds"), 2))
     requested_computer_use = coerce_bool(
         section.get("enable_computer_use"),
@@ -227,13 +247,9 @@ def build_llm_policy(settings: Settings, overrides: dict[str, Any]) -> dict[str,
             section.get("computer_use_max_steps"), int(settings.gemini_computer_use_max_steps)
         ),
     )
-    computer_use_timeout_seconds = max(
-        0.1,
-        coerce_float(
-            section.get("computer_use_timeout_seconds"),
-            float(settings.gemini_computer_use_timeout_seconds),
-        )
-        or float(settings.gemini_computer_use_timeout_seconds),
+    computer_use_timeout_seconds = _coerce_timeout_seconds(
+        section.get("computer_use_timeout_seconds"),
+        default=float(settings.gemini_computer_use_timeout_seconds),
     )
     return {
         "model": model,
@@ -267,9 +283,10 @@ def apply_comments_policy(
             coerce_int(comments_payload.get("replies_per_comment"), 10),
         ),
     )
-    requested_sort = str(policy.get("sort") or "").strip().lower()
-    if requested_sort not in {"hot", "new"}:
-        requested_sort = str(comments_payload.get("sort") or "").strip().lower()
+    requested_sort = _normalize_comment_sort(policy.get("sort"))
+    if requested_sort is None:
+        raw_payload_sort = comments_payload.get("sort")
+        requested_sort = "" if raw_payload_sort is None else str(raw_payload_sort).strip().lower()
     if not requested_sort:
         requested_sort = default_comment_sort_for_platform(platform)
 
@@ -311,8 +328,10 @@ def apply_comments_policy(
 
 
 def normalize_pipeline_mode(value: Any) -> PipelineMode:
-    text = str(value or "full").strip().lower()
-    if text in {"full", "text_only", "refresh_comments", "refresh_llm"}:
+    text = "" if value is None else str(value).strip().lower()
+    if text == "full":
+        return "full"
+    if text in _PIPELINE_MODES:
         return text  # type: ignore[return-value]
     return "full"
 
@@ -354,30 +373,44 @@ def refresh_llm_media_input_dimension(state: dict[str, Any]) -> None:
     state["llm_media_input"] = llm_media_input_dimension(state)
 
 
-def coerce_str_list(values: Any, *, limit: int = 12) -> list[str]:
-    if not isinstance(values, list):
+def _coerce_str_item(item: Any) -> str | None:
+    if isinstance(item, str):
+        text = item.strip()
+        return text or None
+    if isinstance(item, dict):
+        for key in _STRING_ITEM_KEYS:
+            candidate = item.get(key)
+            if not isinstance(candidate, str):
+                continue
+            text = candidate.strip()
+            if text:
+                return text
+        return None
+    if isinstance(item, (int, float)):
+        text = str(item).strip()
+        return text or None
+    return None
+
+
+def coerce_str_list(values: Any, *, limit: int | None = None) -> list[str]:
+    effective_limit = _DEFAULT_LIST_LIMIT if limit is None else limit
+    if not isinstance(values, list) or effective_limit <= 0:
         return []
     normalized: list[str] = []
     for item in values:
-        text = ""
-        if isinstance(item, str):
-            text = item.strip()
-        elif isinstance(item, dict):
-            for key in ("text", "summary", "title", "content", "label", "value"):
-                candidate = item.get(key)
-                if isinstance(candidate, str) and candidate.strip():
-                    text = candidate.strip()
-                    break
-        elif isinstance(item, (int, float)):
-            text = str(item).strip()
-        if text:
-            normalized.append(text)
-        if len(normalized) >= limit:
+        text = _coerce_str_item(item)
+        if text is None:
+            continue
+        normalized.append(text)
+        if len(normalized) == effective_limit:
             break
     return normalized
 
 
-def dedupe_keep_order(values: list[str], *, limit: int = 12) -> list[str]:
+def dedupe_keep_order(values: list[str], *, limit: int | None = None) -> list[str]:
+    effective_limit = _DEFAULT_LIST_LIMIT if limit is None else limit
+    if effective_limit <= 0:
+        return []
     seen: set[str] = set()
     result: list[str] = []
     for value in values:
@@ -386,7 +419,7 @@ def dedupe_keep_order(values: list[str], *, limit: int = 12) -> list[str]:
             continue
         seen.add(key)
         result.append(key)
-        if len(result) >= limit:
+        if len(result) == effective_limit:
             break
     return result
 

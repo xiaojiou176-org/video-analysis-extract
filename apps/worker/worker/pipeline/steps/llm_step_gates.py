@@ -2,14 +2,12 @@ from __future__ import annotations
 
 from typing import Any
 
-from worker.pipeline.policies import coerce_float, coerce_int
+from worker.pipeline.policies import coerce_int
 from worker.pipeline.types import PipelineContext
 
 
 def _semantic_len(text: str) -> int:
-    content = "".join(
-        ch for ch in str(text or "").strip() if ch.isalnum() or ("\u4e00" <= ch <= "\u9fff")
-    )
+    content = "".join(ch for ch in str(text or "").strip() if ch.isalnum())
     return len(content)
 
 
@@ -44,16 +42,20 @@ def _digest_quality_ok(payload: dict[str, Any]) -> bool:
 
 def _thinking_level_from_policy(llm_policy: dict[str, Any]) -> str:
     speed_priority = bool(llm_policy.get("speed_priority"))
-    raw = (
-        str(llm_policy.get("thinking_level") or ("low" if speed_priority else "high"))
-        .strip()
-        .lower()
-    )
-    if raw not in {"minimal", "low", "medium", "high"}:
-        return "high"
+    raw_value = llm_policy.get("thinking_level")
+    if raw_value is None:
+        return "low" if speed_priority else "high"
+
+    raw = str(raw_value).strip().lower()
+    if not raw:
+        return "low" if speed_priority else "high"
     if raw == "minimal":
         return "low"
-    return raw
+    if raw == "low":
+        return "low"
+    if raw == "medium":
+        return "medium"
+    return "high"
 
 
 def _coerce_bool(value: Any, default: bool) -> bool:
@@ -70,9 +72,10 @@ def _coerce_bool(value: Any, default: bool) -> bool:
 
 
 def _max_function_call_rounds(llm_policy: dict[str, Any], section_policy: dict[str, Any]) -> int:
-    raw = section_policy.get(
-        "max_function_call_rounds", llm_policy.get("max_function_call_rounds", 2)
-    )
+    if "max_function_call_rounds" in section_policy:
+        raw = section_policy.get("max_function_call_rounds")
+    else:
+        raw = llm_policy.get("max_function_call_rounds")
     parsed = coerce_int(raw, 2)
     return max(0, parsed)
 
@@ -128,17 +131,20 @@ def build_computer_use_options(
         section_policy.get("computer_use_max_steps", llm_policy.get("computer_use_max_steps")),
         max_steps_default,
     )
-    timeout_seconds = coerce_float(
-        section_policy.get(
-            "computer_use_timeout_seconds",
-            llm_policy.get("computer_use_timeout_seconds"),
-        ),
-        timeout_default,
+    timeout_raw = section_policy.get(
+        "computer_use_timeout_seconds",
+        llm_policy.get("computer_use_timeout_seconds"),
     )
+    try:
+        timeout_seconds = float(timeout_raw)
+    except (TypeError, ValueError):
+        timeout_seconds = None
+    if timeout_seconds is None or timeout_seconds == 0:
+        timeout_seconds = timeout_default
 
     return {
         "enable_computer_use": bool(enable_computer_use),
         "computer_use_require_confirmation": bool(require_confirmation),
         "computer_use_max_steps": max(0, int(max_steps)),
-        "computer_use_timeout_seconds": max(0.1, float(timeout_seconds or timeout_default)),
+        "computer_use_timeout_seconds": max(0.1, timeout_seconds),
     }

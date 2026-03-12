@@ -110,6 +110,10 @@ if [[ -n "${GEMINI_API_KEY:-}" ]]; then
   KEY_SOURCE="repo_env"
 fi
 
+if [[ -z "${VD_API_KEY:-}" && -z "${CI:-}" && -z "${GITHUB_ACTIONS:-}" ]]; then
+  export VD_API_KEY="video-digestor-local-dev-token"
+fi
+
 if [[ -z "${GEMINI_API_KEY:-}" ]]; then
   run_teardown_phase
   DIAGNOSTICS_JSON="$DIAGNOSTICS_JSON" API_BASE_URL="$API_BASE_URL" STARTED_AT_UTC="$STARTED_AT_UTC" TEARDOWN_TRACE="$TEARDOWN_TRACE" MAX_RETRIES="$MAX_RETRIES" python3 - <<'PY'

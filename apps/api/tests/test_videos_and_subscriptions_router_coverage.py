@@ -1,16 +1,19 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import sys
 import types
 import uuid
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
 
 from apps.api.app.errors import ApiTimeoutError
+from apps.api.app.routers.subscriptions import _to_subscription_response
 from apps.api.app.services.videos import (
     VideosService,
     _build_process_idempotency_key,
@@ -116,23 +119,35 @@ async def _run_process(service: VideosService) -> dict[str, Any]:
 
 
 def test_videos_helpers_cover_hash_uid_mode_and_serialization_guards() -> None:
-    assert len(_url_hash(" https://youtu.be/abc123 ")) == 64
+    assert _url_hash(" https://youtu.be/abc123 ") == hashlib.sha256(
+        b"https://youtu.be/abc123"
+    ).hexdigest()
 
-    assert _extract_video_uid(platform="youtube", url="https://youtu.be/") == _url_hash(
-        "https://youtu.be/"
-    )
+    assert _extract_video_uid(platform="youtube", url="https://youtu.be/") == hashlib.sha256(
+        b"https://youtu.be/"
+    ).hexdigest()
+    assert _extract_video_uid(platform="youtube", url="https://youtu.be") == hashlib.sha256(
+        b"https://youtu.be"
+    ).hexdigest()
     assert _extract_video_uid(
         platform="bilibili", url="https://www.bilibili.com/video/not-bv"
-    ) == _url_hash("https://www.bilibili.com/video/not-bv")
-    assert _extract_video_uid(platform="other", url="https://example.com/v") == _url_hash(
-        "https://example.com/v"
-    )
+    ) == hashlib.sha256(b"https://www.bilibili.com/video/not-bv").hexdigest()
+    assert _extract_video_uid(
+        platform="youtube", url="https://www.bilibili.com/video/BV1xx411c7mD"
+    ) == _url_hash("https://www.bilibili.com/video/BV1xx411c7mD")
+    assert _extract_video_uid(platform="other", url="https://www.youtube.com/watch?v=abc123") == hashlib.sha256(
+        b"https://www.youtube.com/watch?v=abc123"
+    ).hexdigest()
+    assert _extract_video_uid(platform="other", url="https://example.com/v") == hashlib.sha256(
+        b"https://example.com/v"
+    ).hexdigest()
 
+    assert _normalize_mode(" FULL ") == "full"
     assert _normalize_mode(" refresh-comments ") == "refresh_comments"
     with pytest.raises(ValueError, match="unsupported mode"):
         _normalize_mode("invalid")
 
-    with pytest.raises(ValueError, match="JSON-serializable"):
+    with pytest.raises(ValueError, match=r"^overrides must be JSON-serializable$"):
         _build_process_idempotency_key(
             platform="youtube",
             video_uid="abc",
@@ -243,3 +258,153 @@ def test_subscriptions_router_delete_returns_404_when_missing(
     response = api_client.delete(f"/api/v1/subscriptions/{uuid.uuid4()}")
     assert response.status_code == 404
     assert response.json()["detail"] == "subscription not found"
+
+
+def test_to_subscription_response_applies_defaults_for_missing_optional_fields() -> None:
+    source_value = "UNMAPPED-SOURCE-VALUE-98765"
+    row = types.SimpleNamespace(
+        id=uuid.uuid4(),
+        platform="youtube",
+        source_type="youtube_channel_id",
+        source_value=source_value,
+        rsshub_route="/youtube/channel/UC999",
+        enabled=True,
+        created_at=datetime(2026, 1, 1, tzinfo=UTC),
+        updated_at=datetime(2026, 1, 1, tzinfo=UTC),
+    )
+
+    payload = _to_subscription_response(row)
+
+    assert payload.source_type == "youtube_channel_id"
+    assert payload.source_value == source_value
+    assert payload.source_name == source_value
+    assert payload.adapter_type == "rsshub_route"
+    assert payload.source_url is None
+    assert payload.category == "misc"
+    assert payload.tags == []
+    assert payload.priority == 50
+
+
+def test_to_subscription_response_handles_missing_or_none_source_fields_and_keeps_zero_priority() -> None:
+    created_at = datetime(2026, 1, 3, tzinfo=UTC)
+    updated_at = datetime(2026, 1, 4, tzinfo=UTC)
+
+    missing_row = types.SimpleNamespace(
+        id=uuid.uuid4(),
+        platform="youtube",
+        rsshub_route="/youtube/channel/fallback",
+        enabled=True,
+        created_at=created_at,
+        updated_at=updated_at,
+    )
+    missing_payload = _to_subscription_response(missing_row)
+    assert missing_payload.source_type == ""
+    assert missing_payload.source_value == ""
+    assert missing_payload.source_name == "Unknown"
+
+    none_row = types.SimpleNamespace(
+        id=uuid.uuid4(),
+        platform="youtube",
+        source_type=None,
+        source_value=None,
+        rsshub_route="/youtube/channel/fallback-none",
+        tags=("tag-a", "tag-b"),
+        priority=0,
+        enabled=False,
+        created_at=created_at,
+        updated_at=updated_at,
+    )
+    none_payload = _to_subscription_response(none_row)
+    assert none_payload.source_type == ""
+    assert none_payload.source_value == ""
+    assert none_payload.source_name == "Unknown"
+    assert none_payload.tags == ["tag-a", "tag-b"]
+    assert none_payload.priority == 0
+
+
+def test_subscriptions_router_list_and_upsert_success_paths(
+    api_client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    created_at = datetime(2026, 2, 1, tzinfo=UTC)
+    updated_at = datetime(2026, 2, 2, tzinfo=UTC)
+    list_row = types.SimpleNamespace(
+        id=uuid.uuid4(),
+        platform="youtube",
+        source_type="youtube_channel_id",
+        source_value="UC-LIST-001",
+        rsshub_route="/youtube/channel/UC-LIST-001",
+        enabled=True,
+        created_at=created_at,
+        updated_at=updated_at,
+    )
+    upsert_row = types.SimpleNamespace(
+        id=uuid.uuid4(),
+        platform="youtube",
+        source_type="url",
+        source_value="https://example.com/feed.xml",
+        rsshub_route="https://example.com/feed.xml",
+        adapter_type="rss_generic",
+        source_url="https://example.com/feed.xml",
+        category="news",
+        tags=["a", "b"],
+        priority=100,
+        enabled=False,
+        created_at=created_at,
+        updated_at=updated_at,
+    )
+    captured_list_kwargs: dict[str, Any] = {}
+
+    def _list_subscriptions(self, **kwargs: Any) -> list[Any]:
+        captured_list_kwargs.update(kwargs)
+        return [list_row]
+
+    monkeypatch.setattr(
+        "apps.api.app.services.subscriptions.SubscriptionsService.list_subscriptions",
+        _list_subscriptions,
+    )
+    monkeypatch.setattr(
+        "apps.api.app.services.subscriptions.SubscriptionsService.upsert_subscription",
+        lambda self, **kwargs: (upsert_row, False),
+    )
+    monkeypatch.setattr(
+        "apps.api.app.services.subscriptions.SubscriptionsService.batch_update_category",
+        lambda self, **kwargs: 3,
+    )
+
+    list_response = api_client.get(
+        "/api/v1/subscriptions",
+        params={"platform": "youtube", "category": "news", "enabled_only": "true"},
+    )
+    assert list_response.status_code == 200
+    assert captured_list_kwargs == {"platform": "youtube", "category": "news", "enabled_only": True}
+    assert list_response.json()[0]["source_type"] == "youtube_channel_id"
+    assert list_response.json()[0]["adapter_type"] == "rsshub_route"
+    assert list_response.json()[0]["priority"] == 50
+
+    upsert_response = api_client.post(
+        "/api/v1/subscriptions",
+        json={
+            "platform": "youtube",
+            "source_type": "url",
+            "source_value": "https://example.com/feed.xml",
+            "adapter_type": "rss_generic",
+            "source_url": "https://example.com/feed.xml",
+            "rsshub_route": "https://example.com/feed.xml",
+            "category": "news",
+            "tags": ["a", "b"],
+            "priority": 100,
+            "enabled": False,
+        },
+    )
+    assert upsert_response.status_code == 200
+    assert upsert_response.json()["created"] is False
+    assert upsert_response.json()["subscription"]["adapter_type"] == "rss_generic"
+    assert upsert_response.json()["subscription"]["priority"] == 100
+    assert upsert_response.json()["subscription"]["enabled"] is False
+
+    batch_response = api_client.post(
+        "/api/v1/subscriptions/batch-update-category",
+        json={"ids": [str(uuid.uuid4())], "category": "fresh"},
+    )
+    assert batch_response.status_code == 200
+    assert batch_response.json() == {"updated": 3}

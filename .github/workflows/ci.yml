@@ -19,6 +19,7 @@ permissions:
   contents: read
   pull-requests: read
   id-token: write
+  packages: read
 
 env:
   CI_CACHE_ROOT: /tmp/ci-cache
@@ -156,6 +157,32 @@ jobs:
             --required RESEND_API_KEY \
             --required RESEND_FROM_EMAIL \
             --required YOUTUBE_API_KEY
+
+  ci-contract:
+    runs-on: [self-hosted, video-analysis-extract]
+    timeout-minutes: 5
+    needs: [required-ci-secrets]
+    outputs:
+      standard_image_ref: ${{ steps.contract.outputs.standard_image_ref }}
+      mutation_min_score: ${{ steps.contract.outputs.mutation_min_score }}
+      mutation_min_effective_ratio: ${{ steps.contract.outputs.mutation_min_effective_ratio }}
+      mutation_max_no_tests_ratio: ${{ steps.contract.outputs.mutation_max_no_tests_ratio }}
+      cache_root: ${{ steps.contract.outputs.cache_root }}
+      uv_cache_dir: ${{ steps.contract.outputs.uv_cache_dir }}
+      playwright_browsers_path: ${{ steps.contract.outputs.playwright_browsers_path }}
+      pre_commit_home: ${{ steps.contract.outputs.pre_commit_home }}
+      profile_governance_push_release: ${{ steps.contract.outputs.profile_governance_push_release }}
+      live_smoke_push_release: ${{ steps.contract.outputs.live_smoke_push_release }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          clean: true
+
+      - name: Read strict CI contract
+        id: contract
+        run: |
+          python3 scripts/ci_contract.py github-outputs >> "$GITHUB_OUTPUT"
 
   changes-hosted:
     runs-on: [self-hosted, video-analysis-extract]
@@ -363,7 +390,7 @@ jobs:
   profile-governance:
     runs-on: [self-hosted, video-analysis-extract]
     timeout-minutes: 20
-    if: ${{ always() && needs.preflight-heavy.result == 'success' && (github.event_name == 'schedule' || (github.event_name == 'push' && github.ref == 'refs/heads/main')) }}
+    if: ${{ always() && needs.preflight-heavy.result == 'success' && (github.event_name == 'schedule' || (github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/')))) }}
     needs: preflight-heavy
     strategy:
       fail-fast: false
@@ -397,43 +424,21 @@ jobs:
   quality-gate-pre-push:
     runs-on: [self-hosted, video-analysis-extract]
     timeout-minutes: 90
-    needs: [preflight-heavy, changes]
+    needs: [preflight-heavy, changes, ci-contract]
+    container:
+      image: ${{ needs.ci-contract.outputs.standard_image_ref }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    env:
+      CI_CACHE_ROOT: ${{ needs.ci-contract.outputs.cache_root }}
+      UV_CACHE_DIR: ${{ needs.ci-contract.outputs.uv_cache_dir }}
+      PLAYWRIGHT_BROWSERS_PATH: ${{ needs.ci-contract.outputs.playwright_browsers_path }}
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           clean: true
-
-      - name: Setup Python
-        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
-        with:
-          python-version: "3.12"
-
-      - name: Setup uv
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install "uv==${UV_PIP_VERSION}"
-
-      - name: Cache uv
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
-        with:
-          path: ${{ env.UV_CACHE_DIR }}
-          key: ${{ runner.os }}-uv-${{ hashFiles('uv.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-uv-
-
-      - name: Sync Python deps (locked)
-        run: uv sync --frozen --extra dev --extra e2e
-
-      - name: Setup Node
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version: "20"
-          cache: "npm"
-          cache-dependency-path: apps/web/package-lock.json
-
-      - name: Install web deps
-        run: npm --prefix apps/web ci
 
       - name: Gemini UI/UX audit (blocking)
         if: ${{ needs.changes.outputs.web_changed == 'true' || needs.changes.outputs.deps_changed == 'true' }}
@@ -543,20 +548,18 @@ jobs:
 
       - name: Full quality gate (pre-push, mutation handled by dedicated job)
         run: |
-            ./scripts/quality_gate.sh \
-              --mode pre-push \
-              --profile ci \
-              --profile live-smoke \
-              --ci-dedupe 1 \
-              --skip-mutation 1 \
-              --changed-backend "${{ needs.changes.outputs.backend_changed }}" \
-              --changed-web "${{ needs.changes.outputs.web_changed }}" \
-              --changed-deps "${{ needs.changes.outputs.deps_changed }}" \
-              --changed-migrations "${{ needs.changes.outputs.migrations_changed }}" \
-              --heartbeat-seconds 25 \
-              --mutation-min-score 0.64 \
-              --mutation-min-effective-ratio 0.27 \
-              --mutation-max-no-tests-ratio 0.72
+          ./scripts/strict_ci_entry.sh \
+            --mode pre-push \
+            --ci-dedupe 1 \
+            --skip-mutation 1 \
+            --changed-backend "${{ needs.changes.outputs.backend_changed }}" \
+            --changed-web "${{ needs.changes.outputs.web_changed }}" \
+            --changed-deps "${{ needs.changes.outputs.deps_changed }}" \
+            --changed-migrations "${{ needs.changes.outputs.migrations_changed }}" \
+            --heartbeat-seconds 25 \
+            --mutation-min-score "${{ needs.ci-contract.outputs.mutation_min_score }}" \
+            --mutation-min-effective-ratio "${{ needs.ci-contract.outputs.mutation_min_effective_ratio }}" \
+            --mutation-max-no-tests-ratio "${{ needs.ci-contract.outputs.mutation_max_no_tests_ratio }}"
 
       - name: Upload Gemini UI audit artifact
         if: always()
@@ -733,11 +736,19 @@ jobs:
   python-tests:
     runs-on: [self-hosted, video-analysis-extract]
     timeout-minutes: 45
-    needs: [preflight-fast, changes]
+    needs: [preflight-fast, changes, ci-contract]
     if: ${{ always() && needs.preflight-fast.result == 'success' && needs.changes.result == 'success' && (github.event_name != 'pull_request' || needs.changes.outputs.backend_changed == 'true') }}
+    container:
+      image: ${{ needs.ci-contract.outputs.standard_image_ref }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    env:
+      CI_CACHE_ROOT: ${{ needs.ci-contract.outputs.cache_root }}
+      UV_CACHE_DIR: ${{ needs.ci-contract.outputs.uv_cache_dir }}
     services:
       postgres:
-        image: pgvector/pgvector:pg16
+        image: pgvector/pgvector:pg16@sha256:7d400e340efb42f4d8c9c12c6427adb253f726881a9985d2a471bf0eed824dff
         env:
           POSTGRES_DB: video_analysis_pytests
           POSTGRES_USER: postgres
@@ -755,31 +766,10 @@ jobs:
         with:
           clean: true
 
-      - name: Setup Python
-        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
-        with:
-          python-version: "3.12"
-
-      - name: Setup uv
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install "uv==${UV_PIP_VERSION}"
-
-      - name: Cache uv
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
-        with:
-          path: ${{ env.UV_CACHE_DIR }}
-          key: ${{ runner.os }}-uv-${{ hashFiles('uv.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-uv-
-
-      - name: Sync Python deps (locked)
-        run: uv sync --frozen --extra dev --extra e2e
-
       - name: Pipeline smoke
         env:
           PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/apps/worker
-          DATABASE_URL: "postgresql+psycopg://postgres:postgres@127.0.0.1:${{ job.services.postgres.ports['5432'] }}/video_analysis_pytests"
+          DATABASE_URL: "postgresql+psycopg://postgres:postgres@postgres:5432/video_analysis_pytests"
           TEMPORAL_TARGET_HOST: 127.0.0.1:7233
           TEMPORAL_NAMESPACE: default
           TEMPORAL_TASK_QUEUE: video-analysis-worker
@@ -795,7 +785,7 @@ jobs:
       - name: Run Python tests
         env:
           PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/apps/worker
-          DATABASE_URL: "postgresql+psycopg://postgres:postgres@127.0.0.1:${{ job.services.postgres.ports['5432'] }}/video_analysis_pytests"
+          DATABASE_URL: "postgresql+psycopg://postgres:postgres@postgres:5432/video_analysis_pytests"
           TEMPORAL_TARGET_HOST: 127.0.0.1:7233
           TEMPORAL_NAMESPACE: default
           TEMPORAL_TASK_QUEUE: video-analysis-worker
@@ -803,69 +793,7 @@ jobs:
           SQLITE_PATH: /tmp/video-digestor-worker-tests.db
           PIPELINE_WORKSPACE_DIR: /tmp/video-digestor-workspace-tests
           PIPELINE_ARTIFACT_ROOT: /tmp/video-digestor-artifacts-tests
-        run: |
-          mkdir -p .runtime-cache
-          set -o pipefail
-          (
-	            uv run pytest apps/worker/tests apps/api/tests apps/mcp/tests -q -rA -n 2 \
-	              --cov=apps/worker/worker \
-	              --cov=apps/api/app \
-	              --cov=apps/mcp/server.py \
-	              --cov=apps/mcp/tools \
-	              --cov-report=term-missing:skip-covered \
-	              --cov-report=xml:.runtime-cache/python-coverage.xml \
-              --cov-fail-under=95 \
-              --junitxml=.runtime-cache/python-tests-junit.xml \
-              2>&1 | tee .runtime-cache/python-tests.log
-          ) &
-          test_pid=$!
-
-          while kill -0 "${test_pid}" >/dev/null 2>&1; do
-            echo "[heartbeat] python tests still running ($(date -u +'%Y-%m-%dT%H:%M:%SZ'))"
-            sleep 25
-          done
-
-          wait "${test_pid}"
-
-      - name: Worker core pipeline coverage gate (>=95%)
-        run: |
-          set -o pipefail
-          uv run coverage report \
-            --include="*/apps/worker/worker/pipeline/orchestrator.py,*/apps/worker/worker/pipeline/policies.py,*/apps/worker/worker/pipeline/runner.py,*/apps/worker/worker/pipeline/types.py" \
-            --show-missing \
-            --fail-under=95 \
-            2>&1 | tee .runtime-cache/python-coverage-worker-core.log
-
-      - name: API core route + service coverage gate (>=95%)
-        run: |
-          set -o pipefail
-          uv run coverage report \
-            --include="*/apps/api/app/routers/ingest.py,*/apps/api/app/routers/jobs.py,*/apps/api/app/routers/subscriptions.py,*/apps/api/app/routers/videos.py,*/apps/api/app/services/jobs.py,*/apps/api/app/services/subscriptions.py,*/apps/api/app/services/videos.py" \
-            --show-missing \
-            --fail-under=95 \
-            2>&1 | tee .runtime-cache/python-coverage-api-core.log
-
-      - name: Python tests skip guard (no silent skip)
-        run: |
-          python - <<'PY'
-          import xml.etree.ElementTree as ET
-          from pathlib import Path
-
-          report = Path(".runtime-cache/python-tests-junit.xml")
-          if not report.is_file():
-              raise SystemExit("python skip guard failed: junit report missing")
-
-          root = ET.parse(report).getroot()
-          suites = [root] if root.tag == "testsuite" else root.findall("testsuite")
-          tests = sum(int(suite.attrib.get("tests", "0")) for suite in suites)
-          skipped = sum(int(suite.attrib.get("skipped", "0")) for suite in suites)
-
-          if tests == 0:
-              raise SystemExit("python skip guard failed: collected 0 tests")
-          if skipped > 0:
-              raise SystemExit(f"python skip guard failed: skipped={skipped} (no silent skip allowed)")
-          print(f"python skip guard passed: tests={tests}, skipped={skipped}")
-          PY
+        run: ./scripts/strict_ci_entry.sh --mode python-tests
 
       - name: Upload CI failure diagnostics (python)
         if: always()
@@ -881,11 +809,19 @@ jobs:
   api-real-smoke:
     runs-on: [self-hosted, video-analysis-extract]
     timeout-minutes: 25
-    needs: [preflight-fast, changes]
+    needs: [preflight-fast, changes, ci-contract]
     if: ${{ always() && needs.preflight-fast.result == 'success' && needs.changes.result == 'success' && (github.event_name != 'pull_request' || needs.changes.outputs.backend_changed == 'true') }}
+    container:
+      image: ${{ needs.ci-contract.outputs.standard_image_ref }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    env:
+      CI_CACHE_ROOT: ${{ needs.ci-contract.outputs.cache_root }}
+      UV_CACHE_DIR: ${{ needs.ci-contract.outputs.uv_cache_dir }}
     services:
       postgres:
-        image: pgvector/pgvector:pg16
+        image: pgvector/pgvector:pg16@sha256:7d400e340efb42f4d8c9c12c6427adb253f726881a9985d2a471bf0eed824dff
         env:
           POSTGRES_DB: video_analysis_api_smoke
           POSTGRES_USER: postgres
@@ -902,58 +838,9 @@ jobs:
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           clean: true
-
-      - name: Setup Python
-        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
-        with:
-          python-version: "3.12"
-
-      - name: Setup uv
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install "uv==${UV_PIP_VERSION}"
-
-      - name: Cache uv
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
-        with:
-          path: ${{ env.UV_CACHE_DIR }}
-          key: ${{ runner.os }}-uv-${{ hashFiles('uv.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-uv-
-
-      - name: Sync Python deps (locked)
-        run: uv sync --frozen --extra dev --extra e2e
-
-      - name: Install PostgreSQL client
-        run: |
-          for attempt in $(seq 1 20); do
-            if sudo apt-get update && sudo apt-get install -y postgresql-client; then
-              exit 0
-            fi
-            echo "apt install attempt ${attempt}/20 failed, retrying..."
-            sleep 5
-          done
-          echo "apt install failed after retries"
-          exit 1
-
-      - name: Run migrations for API smoke DB
-        env:
-          PGPASSWORD: postgres
-          PGPORT: ${{ job.services.postgres.ports['5432'] }}
-        run: |
-          for _ in $(seq 1 30); do
-            if pg_isready -h 127.0.0.1 -p "$PGPORT" -U postgres -d video_analysis_api_smoke >/dev/null 2>&1; then
-              break
-            fi
-            sleep 1
-          done
-          for migration in $(find infra/migrations -maxdepth 1 -type f -name '*.sql' | sort); do
-            psql "postgresql://postgres:postgres@127.0.0.1:${PGPORT}/video_analysis_api_smoke" -v ON_ERROR_STOP=1 -f "$migration"
-          done
-
       - name: Real API smoke (HTTP + DB path, no provider secret)
         env:
-          DATABASE_URL: "postgresql+psycopg://postgres:postgres@127.0.0.1:${{ job.services.postgres.ports['5432'] }}/video_analysis_api_smoke"
+          DATABASE_URL: "postgresql+psycopg://postgres:postgres@postgres:5432/video_analysis_api_smoke"
           TEMPORAL_TARGET_HOST: 127.0.0.1:7233
           TEMPORAL_NAMESPACE: default
           TEMPORAL_TASK_QUEUE: video-analysis-worker
@@ -961,130 +848,7 @@ jobs:
           UI_AUDIT_GEMINI_ENABLED: "false"
           NOTIFICATION_ENABLED: "0"
           VD_API_KEY: "ci-smoke-write-token"
-        run: |
-          mkdir -p .runtime-cache
-          uv run python - <<'PY'
-          import os
-          token = (os.getenv("VD_API_KEY") or "").strip()
-          assert token, "VD_API_KEY must be non-empty for api-real-smoke"
-          PY
-          uv run --with uvicorn uvicorn apps.api.app.main:app --host 127.0.0.1 --port 18080 > .runtime-cache/api-real-smoke.log 2>&1 &
-          api_pid=$!
-          trap 'kill ${api_pid} >/dev/null 2>&1 || true' EXIT
-
-          for _ in $(seq 1 30); do
-            if curl -fsS "http://127.0.0.1:18080/healthz" >/dev/null; then
-              break
-            fi
-            sleep 1
-          done
-          curl -fsS "http://127.0.0.1:18080/healthz" >/dev/null
-
-          python - <<'PY'
-          import json
-          import urllib.error
-          import urllib.request
-
-          base = "http://127.0.0.1:18080"
-          valid_headers = {
-              "Authorization": "Bearer ci-smoke-write-token",
-              "X-API-Key": "ci-smoke-write-token",
-          }
-          wrong_headers = {
-              "Authorization": "Bearer wrong-token",
-              "X-API-Key": "wrong-token",
-          }
-
-          def request_json(
-              path: str,
-              method: str = "GET",
-              payload: dict | None = None,
-              extra_headers: dict[str, str] | None = None,
-          ):
-              data = None
-              headers = {"Content-Type": "application/json"}
-              if extra_headers:
-                  headers.update(extra_headers)
-              if payload is not None:
-                  data = json.dumps(payload).encode("utf-8")
-              req = urllib.request.Request(f"{base}{path}", data=data, method=method, headers=headers)
-              with urllib.request.urlopen(req, timeout=20) as resp:
-                  body = resp.read().decode("utf-8")
-                  if body:
-                      return json.loads(body)
-                  return None
-
-          def assert_http_error(path: str, code: int, payload: dict | None = None):
-              try:
-                  request_json(path, method="POST", payload=payload)
-                  raise AssertionError(f"{path} expected HTTP {code} but request succeeded")
-              except urllib.error.HTTPError as exc:
-                  assert exc.code == code, f"{path} expected HTTP {code}, got {exc.code}"
-
-          health = request_json("/healthz")
-          assert health.get("status") == "ok", f"healthz unexpected payload: {health}"
-
-          source_value = "ci-smoke-channel"
-          payload = {
-              "platform": "youtube",
-              "source_type": "youtube_channel_id",
-              "source_value": source_value,
-              "enabled": True,
-          }
-          assert_http_error("/api/v1/subscriptions", 401, payload=payload)
-
-          try:
-              request_json(
-                  "/api/v1/subscriptions",
-                  method="POST",
-                  payload=payload,
-                  extra_headers=wrong_headers,
-              )
-              raise AssertionError("expected HTTP 403 with wrong token")
-          except urllib.error.HTTPError as exc:
-              assert exc.code == 403, f"expected 403 with wrong token, got {exc.code}"
-
-          created = request_json(
-              "/api/v1/subscriptions",
-              method="POST",
-              payload=payload,
-              extra_headers=valid_headers,
-          )
-          assert created.get("created") is True, f"subscription create failed: {created}"
-          created_id = created["subscription"]["id"]
-
-          rows = request_json(
-              "/api/v1/subscriptions?platform=youtube&enabled_only=true",
-              extra_headers=valid_headers,
-          )
-          assert isinstance(rows, list) and rows, f"subscription list is empty: {rows}"
-          assert any(row.get("source_value") == source_value for row in rows), rows
-
-          assert_http_error("/api/v1/ingest/poll", 401, payload={"platform": "youtube", "max_new_videos": 1})
-          try:
-              request_json(
-                  "/api/v1/ingest/poll",
-                  method="POST",
-                  payload={"platform": "youtube", "max_new_videos": 1},
-                  extra_headers=wrong_headers,
-              )
-              raise AssertionError("expected HTTP 403 on ingest with wrong token")
-          except urllib.error.HTTPError as exc:
-              assert exc.code == 403, f"expected 403 on ingest with wrong token, got {exc.code}"
-
-          request_json(
-              f"/api/v1/subscriptions/{created_id}",
-              method="DELETE",
-              extra_headers=valid_headers,
-          )
-          rows_after_delete = request_json(
-              "/api/v1/subscriptions?platform=youtube&enabled_only=true",
-              extra_headers=valid_headers,
-          )
-          assert all(row.get("id") != created_id for row in rows_after_delete), rows_after_delete
-
-          print("api-real-smoke passed: auth + subscriptions CRUD + ingest auth contract")
-          PY
+        run: ./scripts/strict_ci_entry.sh --mode api-real-smoke
 
       - name: Upload CI failure diagnostics (api-real-smoke)
         if: always()
@@ -1098,37 +862,24 @@ jobs:
   pr-llm-real-smoke:
     runs-on: [self-hosted, video-analysis-extract]
     timeout-minutes: 35
-    needs: [preflight-fast, changes]
+    needs: [preflight-fast, changes, ci-contract]
     if: >-
       github.event_name == 'pull_request' &&
       needs.changes.outputs.backend_changed == 'true' &&
       github.event.pull_request.head.repo.full_name == github.repository
+    container:
+      image: ${{ needs.ci-contract.outputs.standard_image_ref }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    env:
+      CI_CACHE_ROOT: ${{ needs.ci-contract.outputs.cache_root }}
+      UV_CACHE_DIR: ${{ needs.ci-contract.outputs.uv_cache_dir }}
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           clean: true
-
-      - name: Setup Python
-        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
-        with:
-          python-version: "3.12"
-
-      - name: Setup uv
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install "uv==${UV_PIP_VERSION}"
-
-      - name: Cache uv
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
-        with:
-          path: ${{ env.UV_CACHE_DIR }}
-          key: ${{ runner.os }}-uv-${{ hashFiles('uv.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-uv-
-
-      - name: Sync Python deps (locked)
-        run: uv sync --frozen --extra dev --extra e2e
 
       - name: Run PR real LLM smoke (/api/v1/computer-use/run)
         env:
@@ -1143,24 +894,7 @@ jobs:
           VD_API_KEY: "ci-pr-llm-write-token"
           COMPUTER_USE_MODEL_TIMEOUT_SECONDS: "30"
           COMPUTER_USE_MODEL_MAX_RETRIES: "2"
-        run: |
-          mkdir -p .runtime-cache
-          uv run --with uvicorn uvicorn apps.api.app.main:app --host 127.0.0.1 --port 18081 > .runtime-cache/pr-llm-real-smoke.log 2>&1 &
-          api_pid=$!
-          trap 'kill ${api_pid} >/dev/null 2>&1 || true' EXIT
-
-          for _ in $(seq 1 30); do
-            if curl -fsS "http://127.0.0.1:18081/healthz" >/dev/null; then
-              break
-            fi
-            sleep 1
-          done
-
-          scripts/smoke_llm_real_local.sh \
-            --api-base-url "http://127.0.0.1:18081" \
-            --diagnostics-json ".runtime-cache/pr-llm-real-smoke-result.json" \
-            --heartbeat-seconds "30" \
-            --max-retries "2"
+        run: ./scripts/strict_ci_entry.sh --mode pr-llm-real-smoke
 
       - name: Upload CI failure diagnostics (pr-llm-real-smoke)
         if: always()
@@ -1175,73 +909,56 @@ jobs:
   web-test-build:
     runs-on: [self-hosted, video-analysis-extract]
     timeout-minutes: 25
-    needs: [preflight-fast, changes]
+    needs: [preflight-fast, changes, ci-contract]
     if: ${{ always() && needs.preflight-fast.result == 'success' && needs.changes.result == 'success' }}
+    container:
+      image: ${{ needs.ci-contract.outputs.standard_image_ref }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    env:
+      CI_CACHE_ROOT: ${{ needs.ci-contract.outputs.cache_root }}
+      UV_CACHE_DIR: ${{ needs.ci-contract.outputs.uv_cache_dir }}
+      PLAYWRIGHT_BROWSERS_PATH: ${{ needs.ci-contract.outputs.playwright_browsers_path }}
+      CI_HEAD_SHA: ${{ github.sha }}
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           clean: true
+      - name: Resolve web diff base
+        if: ${{ github.event_name == 'pull_request' }}
+        run: echo "CI_BASE_REF=${{ github.event.pull_request.base.sha }}" >> "$GITHUB_ENV"
 
-      - name: Setup Node
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version: "20"
-          cache: "npm"
-          cache-dependency-path: apps/web/package-lock.json
-
-      - name: Install web deps
-        run: npm --prefix apps/web ci
-
-      - name: Web design token guard (changed lines)
+      - name: Resolve web diff base (push/schedule)
+        if: ${{ github.event_name != 'pull_request' }}
         run: |
-          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
-            python3 scripts/check_design_tokens.py \
-              --from-ref "${{ github.event.pull_request.base.sha }}" \
-              --to-ref "${{ github.sha }}" \
-              apps/web
-          else
-            before="${{ github.event.before }}"
-            if [[ -z "$before" || "$before" == "0000000000000000000000000000000000000000" ]]; then
-              before="$(git rev-list --max-count=1 HEAD^ 2>/dev/null || true)"
-            fi
-            if [[ -n "$before" ]]; then
-              python3 scripts/check_design_tokens.py \
-                --from-ref "$before" \
-                --to-ref "${{ github.sha }}" \
-                apps/web
-            else
-              python3 scripts/check_design_tokens.py --all-lines apps/web
-            fi
+          before="${{ github.event.before }}"
+          if [[ -z "$before" || "$before" == "0000000000000000000000000000000000000000" ]]; then
+            before="$(git rev-list --max-count=1 HEAD^ 2>/dev/null || true)"
           fi
+          echo "CI_BASE_REF=${before}" >> "$GITHUB_ENV"
 
-      - name: Web unit tests (vitest + coverage gate)
-        run: npm --prefix apps/web run test:coverage
-
-      - name: Web coverage threshold gate (lines/functions/branches global>=95, core>=95)
-        run: |
-          python3 scripts/check_web_coverage_threshold.py \
-            --summary-path apps/web/coverage/coverage-summary.json \
-            --global-threshold 95 \
-            --core-threshold 95 \
-            --metric lines \
-            --metric functions \
-            --metric branches
-
-      - name: Web build
-        run: npm --prefix apps/web run build
-
-      - name: Web interactive coverage check
-        run: python3 scripts/check_web_button_coverage.py --threshold 1.0 --e2e-threshold 0.6 --unit-threshold 0.93
+      - name: Web test/build strict entry
+        run: ./scripts/strict_ci_entry.sh --mode web-test-build
 
   web-e2e:
     runs-on: [self-hosted, video-analysis-extract]
     timeout-minutes: 45
-    needs: [preflight-fast, changes]
+    needs: [preflight-fast, changes, ci-contract]
     if: ${{ always() && needs.preflight-fast.result == 'success' && needs.changes.result == 'success' && (github.event_name != 'pull_request' || needs.changes.outputs.backend_changed == 'true' || needs.changes.outputs.web_changed == 'true' || needs.changes.outputs.deps_changed == 'true') }}
+    container:
+      image: ${{ needs.ci-contract.outputs.standard_image_ref }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    env:
+      CI_CACHE_ROOT: ${{ needs.ci-contract.outputs.cache_root }}
+      UV_CACHE_DIR: ${{ needs.ci-contract.outputs.uv_cache_dir }}
+      PLAYWRIGHT_BROWSERS_PATH: ${{ needs.ci-contract.outputs.playwright_browsers_path }}
     services:
       postgres:
-        image: pgvector/pgvector:pg16
+        image: pgvector/pgvector:pg16@sha256:7d400e340efb42f4d8c9c12c6427adb253f726881a9985d2a471bf0eed824dff
         env:
           POSTGRES_DB: video_analysis_web_e2e
           POSTGRES_USER: postgres
@@ -1263,31 +980,6 @@ jobs:
         with:
           clean: true
 
-      - name: Setup Node
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version: "20"
-          cache: "npm"
-          cache-dependency-path: apps/web/package-lock.json
-
-      - name: Setup Python
-        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
-        with:
-          python-version: "3.12"
-
-      - name: Setup uv
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install "uv==${UV_PIP_VERSION}"
-
-      - name: Cache uv
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
-        with:
-          path: ${{ env.UV_CACHE_DIR }}
-          key: ${{ runner.os }}-uv-${{ hashFiles('uv.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-uv-
-
       - name: Cache Playwright browsers
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
@@ -1296,266 +988,11 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-playwright-${{ matrix.browser }}-
 
-      - name: Sync Python deps (locked)
-        run: uv sync --frozen --extra dev --extra e2e
-
-      - name: Install web deps
-        run: npm --prefix apps/web ci
-
-      - name: Install PostgreSQL client
-        run: |
-          for attempt in $(seq 1 20); do
-            if sudo apt-get update && sudo apt-get install -y postgresql-client; then
-              exit 0
-            fi
-            echo "apt install attempt ${attempt}/20 failed, retrying..."
-            sleep 5
-          done
-          echo "apt install failed after retries"
-          exit 1
-
-      - name: Install Temporal CLI
-        run: |
-          arch="$(uname -m)"
-          case "$arch" in
-            x86_64|amd64)
-              temporal_arch="amd64"
-              expected_sha="${TEMPORAL_CLI_SHA256_LINUX_AMD64}"
-              ;;
-            aarch64|arm64)
-              temporal_arch="arm64"
-              expected_sha="${TEMPORAL_CLI_SHA256_LINUX_ARM64}"
-              ;;
-            *)
-              echo "Unsupported architecture for Temporal CLI: ${arch}" >&2
-              exit 1
-              ;;
-          esac
-          tmpdir="$(mktemp -d "/tmp/temporal-cli-web-e2e-${{ matrix.browser }}-XXXXXX")"
-          archive="temporal_cli_${TEMPORAL_CLI_VERSION}_linux_${temporal_arch}.tar.gz"
-          archive_path="${tmpdir}/${archive}"
-          url="https://github.com/temporalio/cli/releases/download/v${TEMPORAL_CLI_VERSION}/${archive}"
-          trap 'rm -rf "${tmpdir}"' EXIT
-          curl --retry 5 --retry-all-errors --retry-delay 2 --connect-timeout 15 -fL "$url" -o "${archive_path}"
-          echo "${expected_sha}  ${archive_path}" | sha256sum -c -
-          tar -tzf "${archive_path}" temporal >/dev/null
-          tar -xzf "${archive_path}" -C "${tmpdir}" temporal
-          mkdir -p "$HOME/.local/bin"
-          install -m 0755 "${tmpdir}/temporal" "$HOME/.local/bin/temporal"
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-
-      - name: Allocate isolated web e2e runtime resources
-        run: |
-          python - <<'PY'
-          import os
-          import socket
-          import uuid
-
-          browser = "${{ matrix.browser }}"
-          run_id = "${{ github.run_id }}"
-          attempt = "${{ github.run_attempt }}"
-          suffix = f"{browser}-{run_id}-{attempt}-{uuid.uuid4().hex[:8]}"
-
-          def pick_port() -> int:
-              with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-                  sock.bind(("127.0.0.1", 0))
-                  return int(sock.getsockname()[1])
-
-          api_port = pick_port()
-          temporal_port = pick_port()
-
-          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as fh:
-              fh.write(f"WEB_E2E_API_PORT={api_port}\n")
-              fh.write(f"WEB_E2E_TEMPORAL_PORT={temporal_port}\n")
-              fh.write(f"WEB_E2E_SQLITE_STATE_PATH=/tmp/video-digestor-api-web-e2e-{suffix}.db\n")
-              fh.write(f"WEB_E2E_SQLITE_PATH=/tmp/video-digestor-worker-web-e2e-{suffix}.db\n")
-              fh.write(f"WEB_E2E_WORKSPACE_DIR=/tmp/video-digestor-worker-web-e2e-workspace-{suffix}\n")
-              fh.write(f"WEB_E2E_ARTIFACT_ROOT=/tmp/video-digestor-worker-web-e2e-artifacts-{suffix}\n")
-
-          print(f"allocated web-e2e ports: api={api_port}, temporal={temporal_port}")
-          PY
-
-      - name: Run migrations for web e2e DB
+      - name: Run web e2e in standard env
         env:
-          PGPASSWORD: postgres
-          PGPORT: ${{ job.services.postgres.ports['5432'] }}
-        run: |
-          for _ in $(seq 1 30); do
-            if pg_isready -h 127.0.0.1 -p "$PGPORT" -U postgres -d video_analysis_web_e2e >/dev/null 2>&1; then
-              break
-            fi
-            sleep 1
-          done
-          for migration in $(find infra/migrations -maxdepth 1 -type f -name '*.sql' | sort); do
-            psql "postgresql://postgres:postgres@127.0.0.1:${PGPORT}/video_analysis_web_e2e" -v ON_ERROR_STOP=1 -f "$migration"
-          done
-
-      - name: Start Temporal dev server for web e2e (127.0.0.1:${{ env.WEB_E2E_TEMPORAL_PORT }})
-        run: |
-          mkdir -p .runtime-cache
-          temporal server start-dev --ip 127.0.0.1 --port "${WEB_E2E_TEMPORAL_PORT}" > .runtime-cache/web-e2e-temporal.log 2>&1 &
-          echo "WEB_E2E_TEMPORAL_PID=$!" >> "$GITHUB_ENV"
-
-          python - <<'PY'
-          import os
-          import socket
-          import sys
-          import time
-
-          port = int(os.environ["WEB_E2E_TEMPORAL_PORT"])
-          for _ in range(60):
-              sock = socket.socket()
-              sock.settimeout(1)
-              try:
-                  sock.connect(("127.0.0.1", port))
-                  sock.close()
-                  print(f"temporal web-e2e ready on 127.0.0.1:{port}")
-                  sys.exit(0)
-              except OSError:
-                  time.sleep(1)
-              finally:
-                  sock.close()
-
-          print(f"temporal web-e2e failed to become ready on 127.0.0.1:{port}", file=sys.stderr)
-          sys.exit(1)
-          PY
-
-      - name: Start real API for web e2e (127.0.0.1:${{ env.WEB_E2E_API_PORT }})
-        env:
-          DATABASE_URL: "postgresql+psycopg://postgres:postgres@127.0.0.1:${{ job.services.postgres.ports['5432'] }}/video_analysis_web_e2e"
-          VD_API_KEY: video-digestor-local-dev-token
-          WEB_ACTION_SESSION_TOKEN: video-digestor-local-dev-token
-          TEMPORAL_TARGET_HOST: 127.0.0.1:${{ env.WEB_E2E_TEMPORAL_PORT }}
-          TEMPORAL_NAMESPACE: default
-          TEMPORAL_TASK_QUEUE: video-analysis-worker
-          SQLITE_STATE_PATH: ${{ env.WEB_E2E_SQLITE_STATE_PATH }}
-          UI_AUDIT_GEMINI_ENABLED: "false"
-          NOTIFICATION_ENABLED: "0"
-        run: |
-          mkdir -p .runtime-cache
-          start_web_e2e_api() {
-            local port="$1"
-            : > .runtime-cache/web-e2e-api.log
-            uv run --with uvicorn uvicorn apps.api.app.main:app --host 127.0.0.1 --port "${port}" > .runtime-cache/web-e2e-api.log 2>&1 &
-            echo "$!"
-          }
-
-          api_port="${WEB_E2E_API_PORT}"
-          for attempt in $(seq 1 5); do
-            api_pid="$(start_web_e2e_api "${api_port}")"
-            echo "WEB_E2E_API_PID=${api_pid}" >> "$GITHUB_ENV"
-            echo "WEB_E2E_API_PORT=${api_port}" >> "$GITHUB_ENV"
-
-            for _ in $(seq 1 120); do
-              if curl -fsS "http://127.0.0.1:${api_port}/healthz" >/dev/null; then
-                echo "web-e2e api ready on port ${api_port} (attempt ${attempt})"
-                exit 0
-              fi
-              if ! kill -0 "${api_pid}" >/dev/null 2>&1; then
-                echo "web-e2e api exited early on attempt ${attempt} (port ${api_port})"
-                break
-              fi
-              sleep 1
-            done
-
-            if kill -0 "${api_pid}" >/dev/null 2>&1; then
-              kill "${api_pid}" || true
-            fi
-            tail -n 120 .runtime-cache/web-e2e-api.log || true
-
-            if [[ "${attempt}" -lt 5 ]]; then
-              api_port="$(python3 -c "import socket; sock=socket.socket(socket.AF_INET, socket.SOCK_STREAM); sock.bind(('127.0.0.1', 0)); print(sock.getsockname()[1]); sock.close()")"
-              echo "retrying web-e2e api startup with new port ${api_port}"
-            fi
-          done
-
-          echo "web-e2e api failed to start after 5 attempts"
-          exit 1
-
-      - name: Start worker for web e2e (same DB/Temporal/queue)
-        env:
-          DATABASE_URL: "postgresql+psycopg://postgres:postgres@127.0.0.1:${{ job.services.postgres.ports['5432'] }}/video_analysis_web_e2e"
-          TEMPORAL_TARGET_HOST: 127.0.0.1:${{ env.WEB_E2E_TEMPORAL_PORT }}
-          TEMPORAL_NAMESPACE: default
-          TEMPORAL_TASK_QUEUE: video-analysis-worker
-          SQLITE_PATH: ${{ env.WEB_E2E_SQLITE_PATH }}
-          PIPELINE_WORKSPACE_DIR: ${{ env.WEB_E2E_WORKSPACE_DIR }}
-          PIPELINE_ARTIFACT_ROOT: ${{ env.WEB_E2E_ARTIFACT_ROOT }}
-          UI_AUDIT_GEMINI_ENABLED: "false"
-          NOTIFICATION_ENABLED: "0"
-        run: |
-          mkdir -p .runtime-cache
-          ./scripts/dev_worker.sh --no-show-hints > .runtime-cache/web-e2e-worker.log 2>&1 &
-          echo "WEB_E2E_WORKER_PID=$!" >> "$GITHUB_ENV"
-          for _ in $(seq 1 30); do
-            if ! kill -0 "${WEB_E2E_WORKER_PID:-$!}" >/dev/null 2>&1; then
-              echo "web-e2e worker exited unexpectedly"
-              tail -n 80 .runtime-cache/web-e2e-worker.log || true
-              exit 1
-            fi
-            if [[ -s .runtime-cache/web-e2e-worker.log ]]; then
-              echo "web-e2e worker process is up and producing logs"
-              exit 0
-            fi
-            sleep 1
-          done
-          echo "web-e2e worker failed readiness probe (no log output within 30s)"
-          exit 1
-
-      - name: Install Playwright browser (${{ matrix.browser }})
-        run: |
-          for attempt in $(seq 1 8); do
-            if uv run --with playwright python -m playwright install --with-deps ${{ matrix.browser }}; then
-              exit 0
-            fi
-            if sudo fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 || sudo fuser /var/lib/apt/lists/lock >/dev/null 2>&1 || sudo fuser /var/cache/apt/archives/lock >/dev/null 2>&1; then
-              echo "playwright dependency install hit apt/dpkg lock, retrying (${attempt}/8)..."
-              sleep 8
-              continue
-            fi
-            echo "playwright install failed without apt lock contention"
-            exit 1
-          done
-          echo "playwright install failed after retries"
-          exit 1
-
-      - name: Web E2E gate (no silent skip)
-        run: |
-          mkdir -p .runtime-cache
-          BROWSER="${{ matrix.browser }}"
-
-          set -o pipefail
-          # 感知/移动专项用例由 web-e2e-perceived 承担；subscriptions 纳入主线 web-e2e。
-          uv run --with pytest --with playwright \
-            pytest apps/web/tests/e2e \
-            --ignore=apps/web/tests/e2e/test_mobile_breakpoints.py \
-            --ignore=apps/web/tests/e2e/test_perceived_latency.py \
-            --ignore=apps/web/tests/e2e/test_reduced_motion.py \
-            -q --junitxml=".runtime-cache/web-e2e-junit-${BROWSER}.xml" -rA \
-            --web-e2e-browser "$BROWSER" \
-            --web-e2e-api-base-url "http://127.0.0.1:${WEB_E2E_API_PORT}" \
-            2>&1 | tee ".runtime-cache/web-e2e-${BROWSER}.log"
-
-          python - <<'PY'
-          import xml.etree.ElementTree as ET
-          from pathlib import Path
-
-          browser = "${{ matrix.browser }}"
-          report = Path(f".runtime-cache/web-e2e-junit-{browser}.xml")
-          if not report.is_file():
-              raise SystemExit("web e2e gate failed: junit report missing")
-
-          root = ET.parse(report).getroot()
-          suites = [root] if root.tag == "testsuite" else root.findall("testsuite")
-          tests = sum(int(suite.attrib.get("tests", "0")) for suite in suites)
-          skipped = sum(int(suite.attrib.get("skipped", "0")) for suite in suites)
-
-          if tests == 0:
-              raise SystemExit("web e2e gate failed: collected 0 tests")
-          if skipped > 0:
-              raise SystemExit(f"web e2e gate failed: skipped={skipped} (no silent skip allowed)")
-          print(f"web e2e gate passed ({browser}): tests={tests}, skipped={skipped}")
-          PY
+          DATABASE_URL: postgresql+psycopg://postgres:postgres@postgres:5432/video_analysis_web_e2e
+          WEB_E2E_DB_PORT: "5432"
+        run: ./scripts/strict_ci_entry.sh --mode web-e2e ${{ matrix.browser }}
 
       - name: Upload web e2e artifacts
         if: failure()
@@ -1589,26 +1026,6 @@ jobs:
           path: |
             .runtime-cache/web-e2e-worker.log
 
-      - name: Stop web e2e API
-        if: always()
-        run: |
-          if [[ -n "${WEB_E2E_API_PID:-}" ]]; then
-            kill "${WEB_E2E_API_PID}" >/dev/null 2>&1 || true
-          fi
-
-      - name: Stop web e2e worker
-        if: always()
-        run: |
-          if [[ -n "${WEB_E2E_WORKER_PID:-}" ]]; then
-            kill "${WEB_E2E_WORKER_PID}" >/dev/null 2>&1 || true
-          fi
-
-      - name: Stop web e2e Temporal dev server
-        if: always()
-        run: |
-          if [[ -n "${WEB_E2E_TEMPORAL_PID:-}" ]]; then
-            kill "${WEB_E2E_TEMPORAL_PID}" >/dev/null 2>&1 || true
-          fi
 
   external-playwright-smoke:
     runs-on: [self-hosted, video-analysis-extract]
@@ -2385,21 +1802,29 @@ jobs:
           path: .runtime-cache/autofix-report.json
 
   live-smoke:
-    needs: aggregate-gate
+    needs: [aggregate-gate, ci-contract]
     runs-on: [self-hosted, video-analysis-extract]
     timeout-minutes: 40
     if: >-
       always() &&
       needs['aggregate-gate'].result == 'success' &&
       (github.event_name == 'schedule' || (github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/'))))
+    container:
+      image: ${{ needs.ci-contract.outputs.standard_image_ref }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
     env:
+      CI_CACHE_ROOT: ${{ needs.ci-contract.outputs.cache_root }}
+      UV_CACHE_DIR: ${{ needs.ci-contract.outputs.uv_cache_dir }}
+      PLAYWRIGHT_BROWSERS_PATH: ${{ needs.ci-contract.outputs.playwright_browsers_path }}
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
       RESEND_FROM_EMAIL: ${{ secrets.RESEND_FROM_EMAIL }}
       YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
     services:
       postgres:
-        image: pgvector/pgvector:pg16
+        image: pgvector/pgvector:pg16@sha256:7d400e340efb42f4d8c9c12c6427adb253f726881a9985d2a471bf0eed824dff
         env:
           POSTGRES_DB: video_analysis_live_smoke
           POSTGRES_USER: postgres
@@ -2416,200 +1841,18 @@ jobs:
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           clean: true
-
-      - name: Setup Python
-        uses: actions/setup-python@42375524e23c412d93fb67b49958b491fce71c38 # v5
-        with:
-          python-version: "3.11"
-
-      - name: Setup uv
-        uses: astral-sh/setup-uv@e58605a9b6da7c637471fab8847a5e5a6b8df081 # v5
-        with:
-          version: ${{ env.UV_PIP_VERSION }}
-
-      - name: Cache uv
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
-        with:
-          path: ${{ env.UV_CACHE_DIR }}
-          key: ${{ runner.os }}-uv-live-smoke-${{ hashFiles('uv.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-uv-live-smoke-
-
-      - name: Sync Python deps (locked)
-        run: uv sync --frozen --extra dev --extra e2e
-
-      - name: Install PostgreSQL client
-        run: |
-          for attempt in $(seq 1 20); do
-            if sudo apt-get update && sudo apt-get install -y postgresql-client; then
-              exit 0
-            fi
-            echo "apt install attempt ${attempt}/20 failed, retrying..."
-            sleep 5
-          done
-          echo "apt install failed after retries"
-          exit 1
-
-      - name: Install Temporal CLI
-        run: |
-          arch="$(uname -m)"
-          case "$arch" in
-            x86_64|amd64)
-              temporal_arch="amd64"
-              expected_sha="${TEMPORAL_CLI_SHA256_LINUX_AMD64}"
-              ;;
-            aarch64|arm64)
-              temporal_arch="arm64"
-              expected_sha="${TEMPORAL_CLI_SHA256_LINUX_ARM64}"
-              ;;
-            *)
-              echo "Unsupported architecture for Temporal CLI: ${arch}" >&2
-              exit 1
-              ;;
-          esac
-          tmpdir="$(mktemp -d "/tmp/temporal-cli-live-smoke-XXXXXX")"
-          archive="temporal_cli_${TEMPORAL_CLI_VERSION}_linux_${temporal_arch}.tar.gz"
-          archive_path="${tmpdir}/${archive}"
-          url="https://github.com/temporalio/cli/releases/download/v${TEMPORAL_CLI_VERSION}/${archive}"
-          trap 'rm -rf "${tmpdir}"' EXIT
-          curl --retry 5 --retry-all-errors --retry-delay 2 --connect-timeout 15 -fL "$url" -o "${archive_path}"
-          echo "${expected_sha}  ${archive_path}" | sha256sum -c -
-          tar -tzf "${archive_path}" temporal >/dev/null
-          tar -xzf "${archive_path}" -C "${tmpdir}" temporal
-          mkdir -p "$HOME/.local/bin"
-          install -m 0755 "${tmpdir}/temporal" "$HOME/.local/bin/temporal"
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-
-      - name: Run migrations for live smoke DB
+      - name: Run live smoke strict entry
         env:
-          PGPASSWORD: postgres
-          PGPORT: ${{ job.services.postgres.ports['5432'] }}
-        run: |
-          for _ in $(seq 1 30); do
-            if pg_isready -h 127.0.0.1 -p "$PGPORT" -U postgres -d video_analysis_live_smoke >/dev/null 2>&1; then
-              break
-            fi
-            sleep 1
-          done
-          for migration in $(find infra/migrations -maxdepth 1 -type f -name '*.sql' | sort); do
-            psql "postgresql://postgres:postgres@127.0.0.1:${PGPORT}/video_analysis_live_smoke" -v ON_ERROR_STOP=1 -f "$migration"
-          done
-
-      - name: Start Temporal dev server for live smoke (127.0.0.1:7233)
-        run: |
-          mkdir -p .runtime-cache
-          temporal server start-dev --ip 127.0.0.1 --port 7233 > .runtime-cache/live-smoke-temporal.log 2>&1 &
-          echo "LIVE_SMOKE_TEMPORAL_PID=$!" >> "$GITHUB_ENV"
-
-          python - <<'PY'
-          import socket
-          import sys
-          import time
-
-          port = 7233
-          for _ in range(60):
-              sock = socket.socket()
-              sock.settimeout(1)
-              try:
-                  sock.connect(("127.0.0.1", port))
-                  sock.close()
-                  print(f"temporal live-smoke ready on 127.0.0.1:{port}")
-                  sys.exit(0)
-              except OSError:
-                  time.sleep(1)
-              finally:
-                  sock.close()
-
-          print(f"temporal live-smoke failed to become ready on 127.0.0.1:{port}", file=sys.stderr)
-          sys.exit(1)
-          PY
-
-      - name: Validate required live smoke secrets
-        env:
-          HAS_GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY != '' }}
-          HAS_RESEND_API_KEY: ${{ secrets.RESEND_API_KEY != '' }}
-          HAS_RESEND_FROM_EMAIL: ${{ secrets.RESEND_FROM_EMAIL != '' }}
-          HAS_YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY != '' }}
-        run: |
-          missing=()
-          [[ "$HAS_GEMINI_API_KEY" != "true" ]] && missing+=("GEMINI_API_KEY")
-          [[ "$HAS_RESEND_API_KEY" != "true" ]] && missing+=("RESEND_API_KEY")
-          [[ "$HAS_RESEND_FROM_EMAIL" != "true" ]] && missing+=("RESEND_FROM_EMAIL")
-          [[ "$HAS_YOUTUBE_API_KEY" != "true" ]] && missing+=("YOUTUBE_API_KEY")
-          if [[ "${#missing[@]}" -gt 0 ]]; then
-            echo "live smoke is required on main/release/schedule but missing secrets: ${missing[*]}"
-            exit 1
-          fi
-
-      - name: Start local API and Worker for live smoke target
-        env:
-          DATABASE_URL: "postgresql+psycopg://postgres:postgres@127.0.0.1:${{ job.services.postgres.ports['5432'] }}/video_analysis_live_smoke"
+          DATABASE_URL: "postgresql+psycopg://postgres:postgres@postgres:5432/video_analysis_live_smoke"
           TEMPORAL_TARGET_HOST: 127.0.0.1:7233
           TEMPORAL_NAMESPACE: default
           TEMPORAL_TASK_QUEUE: video-analysis-worker
-          SQLITE_STATE_PATH: /tmp/video-digestor-api-live-smoke-${{ github.run_id }}-${{ github.run_attempt }}.db
           SQLITE_PATH: /tmp/video-digestor-live-smoke-${{ github.run_id }}-${{ github.run_attempt }}.db
           PIPELINE_WORKSPACE_DIR: /tmp/video-digestor-live-smoke-workspace-${{ github.run_id }}-${{ github.run_attempt }}
           PIPELINE_ARTIFACT_ROOT: /tmp/video-digestor-live-smoke-artifacts-${{ github.run_id }}-${{ github.run_attempt }}
           VD_ALLOW_UNAUTH_WRITE: "true"
           VD_CI_ALLOW_UNAUTH_WRITE: "true"
-        run: |
-          mkdir -p .runtime-cache
-          scripts/dev_api.sh --host 127.0.0.1 --port 18080 --no-reload > .runtime-cache/live-smoke-api.log 2>&1 &
-          LIVE_SMOKE_API_PID="$!"
-          echo "LIVE_SMOKE_API_PID=${LIVE_SMOKE_API_PID}" >> "$GITHUB_ENV"
-          scripts/dev_worker.sh --no-show-hints > .runtime-cache/live-smoke-worker.log 2>&1 &
-          LIVE_SMOKE_WORKER_PID="$!"
-          echo "LIVE_SMOKE_WORKER_PID=${LIVE_SMOKE_WORKER_PID}" >> "$GITHUB_ENV"
-
-          api_ready=0
-          for _ in $(seq 1 60); do
-            if curl -fsS "http://127.0.0.1:18080/healthz" >/dev/null 2>&1; then
-              api_ready=1
-              break
-            fi
-            sleep 1
-          done
-
-          if [[ "$api_ready" != "1" ]]; then
-            echo "local live smoke API failed to become ready"
-            tail -n 120 .runtime-cache/live-smoke-api.log || true
-            tail -n 120 .runtime-cache/live-smoke-worker.log || true
-            exit 1
-          fi
-          echo "local live smoke API is ready"
-
-          if ! kill -0 "${LIVE_SMOKE_WORKER_PID}" >/dev/null 2>&1; then
-            echo "live smoke worker process exited unexpectedly"
-            tail -n 120 .runtime-cache/live-smoke-worker.log || true
-            exit 1
-          fi
-
-          if ! kill -0 "${LIVE_SMOKE_TEMPORAL_PID}" >/dev/null 2>&1; then
-            echo "live smoke temporal process exited unexpectedly"
-            tail -n 120 .runtime-cache/live-smoke-temporal.log || true
-            exit 1
-          fi
-
-      - name: Run live smoke
-        env:
-          DATABASE_URL: "postgresql+psycopg://postgres:postgres@127.0.0.1:${{ job.services.postgres.ports['5432'] }}/video_analysis_live_smoke"
-          TEMPORAL_TARGET_HOST: 127.0.0.1:7233
-          TEMPORAL_NAMESPACE: default
-          TEMPORAL_TASK_QUEUE: video-analysis-worker
-          SQLITE_PATH: /tmp/video-digestor-live-smoke-${{ github.run_id }}-${{ github.run_attempt }}.db
-          PIPELINE_WORKSPACE_DIR: /tmp/video-digestor-live-smoke-workspace-${{ github.run_id }}-${{ github.run_attempt }}
-          PIPELINE_ARTIFACT_ROOT: /tmp/video-digestor-live-smoke-artifacts-${{ github.run_id }}-${{ github.run_attempt }}
-        run: |
-          scripts/e2e_live_smoke.sh \
-            --api-base-url "http://127.0.0.1:18080" \
-            --require-api "1" \
-            --require-secrets "1" \
-            --computer-use-strict "1" \
-            --computer-use-skip "0" \
-            --timeout-seconds "600" \
-            --heartbeat-seconds "30" \
-            --diagnostics-json ".runtime-cache/e2e-live-smoke-result.json"
+        run: ./scripts/strict_ci_entry.sh --mode live-smoke
 
       - name: Upload live smoke diagnostics
         if: always()
@@ -2625,16 +1868,7 @@ jobs:
 
       - name: Stop live smoke services
         if: always()
-        run: |
-          if [[ -n "${LIVE_SMOKE_API_PID:-}" ]]; then
-            kill "${LIVE_SMOKE_API_PID}" >/dev/null 2>&1 || true
-          fi
-          if [[ -n "${LIVE_SMOKE_WORKER_PID:-}" ]]; then
-            kill "${LIVE_SMOKE_WORKER_PID}" >/dev/null 2>&1 || true
-          fi
-          if [[ -n "${LIVE_SMOKE_TEMPORAL_PID:-}" ]]; then
-            kill "${LIVE_SMOKE_TEMPORAL_PID}" >/dev/null 2>&1 || true
-          fi
+        run: true
 
   ci-final-gate:
     runs-on: [self-hosted, video-analysis-extract]

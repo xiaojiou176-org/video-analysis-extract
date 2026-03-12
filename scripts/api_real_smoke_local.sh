@@ -3,6 +3,7 @@ set -euo pipefail
 
 SCRIPT_NAME="api_real_smoke_local"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+VD_IN_STANDARD_ENV="${VD_IN_STANDARD_ENV:-0}"
 ENV_PROFILE="${ENV_PROFILE:-local}"
 API_HOST="127.0.0.1"
 API_PORT="18080"
@@ -211,8 +212,13 @@ ensure_cleanup_worker_online() {
     return 0
   fi
 
-  log "no active temporal worker pollers detected on ${TEMPORAL_TASK_QUEUE}; starting temporary worker for cleanup workflow probe"
-  (cd "$ROOT_DIR" && ./scripts/dev_worker.sh --no-show-hints >"$WORKER_LOG" 2>&1) &
+log "no active temporal worker pollers detected on ${TEMPORAL_TASK_QUEUE}; starting temporary worker for cleanup workflow probe"
+  (
+    cd "$ROOT_DIR"
+    export DATABASE_URL TEMPORAL_TARGET_HOST TEMPORAL_NAMESPACE TEMPORAL_TASK_QUEUE
+    export SQLITE_PATH UI_AUDIT_GEMINI_ENABLED NOTIFICATION_ENABLED PYTHONPATH
+    ./scripts/dev_worker.sh --no-show-hints >"$WORKER_LOG" 2>&1
+  ) &
   WORKER_PID="$!"
   for _ in $(seq 1 "$WORKER_READINESS_TIMEOUT_SECONDS"); do
     if ! kill -0 "$WORKER_PID" >/dev/null 2>&1; then
@@ -490,7 +496,9 @@ require_command uv
 require_command psql
 require_command curl
 
-preflight_loopback_ipv4_connectivity
+if [[ "$VD_IN_STANDARD_ENV" != "1" ]]; then
+  preflight_loopback_ipv4_connectivity
+fi
 
 DATABASE_URL="${DATABASE_URL:-}"
 [[ -n "$DATABASE_URL" ]] || fail_with_kind "config_error" "DATABASE_URL is required"
@@ -621,7 +629,12 @@ unset VD_API_KEY
 unset WEB_ACTION_SESSION_TOKEN
 
 log "starting API smoke server: http://${API_HOST}:${API_PORT}"
-(cd "$ROOT_DIR" && ./scripts/dev_api.sh --host "$API_HOST" --port "$API_PORT" --no-reload >"$API_LOG" 2>&1) &
+(
+  cd "$ROOT_DIR"
+  export DATABASE_URL TEMPORAL_TARGET_HOST TEMPORAL_NAMESPACE TEMPORAL_TASK_QUEUE
+  export SQLITE_STATE_PATH UI_AUDIT_GEMINI_ENABLED NOTIFICATION_ENABLED VD_ALLOW_UNAUTH_WRITE PYTHONPATH
+  ./scripts/dev_api.sh --host "$API_HOST" --port "$API_PORT" --no-reload >"$API_LOG" 2>&1
+) &
 API_PID="$!"
 
 API_BASE_URL="http://${API_HOST}:${API_PORT}"

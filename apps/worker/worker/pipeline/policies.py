@@ -61,13 +61,68 @@ __all__ = [
 ]
 
 
+_RATE_LIMIT_ERROR_TOKENS = ("429", "rate limit", "too many request")
+_AUTH_ERROR_TOKENS = (
+    "401",
+    "403",
+    "unauthorized",
+    "forbidden",
+    "invalid api key",
+    "authentication",
+    "permission denied",
+    "api_key_missing",
+)
+_TRANSIENT_ERROR_TOKENS = (
+    "timeout",
+    "timed out",
+    "econn",
+    "connection reset",
+    "network",
+    "temporary",
+    "service unavailable",
+    "non_zero_exit",
+    "provider_unavailable",
+    "gemini_error",
+    "provider_error",
+    "llm_provider",
+    "llm_output_invalid",
+)
+
+
+def _normalized_error_parts(*values: str | None) -> tuple[str, ...]:
+    parts: list[str] = []
+    for value in values:
+        if not isinstance(value, str):
+            continue
+        normalized = value.strip().lower()
+        if normalized:
+            parts.append(normalized)
+    if len(parts) > 1:
+        parts.append(" ".join(parts))
+    return tuple(parts)
+
+
+def _contains_error_token(parts: tuple[str, ...], tokens: tuple[str, ...]) -> bool:
+    return any(token in part for part in parts for token in tokens)
+
+
+def _coerce_non_negative_backoff(value: Any, default: float) -> float:
+    parsed = coerce_float(value, default)
+    if parsed is None:
+        return max(0.0, default)
+    return max(0.0, parsed)
+
+
 def pipeline_llm_hard_required(
     settings: Settings, llm_policy: dict[str, Any] | None = None
 ) -> bool:
     policy = dict(llm_policy or {})
     if "hard_required" in policy:
         return coerce_bool(policy.get("hard_required"), default=True)
-    return coerce_bool(getattr(settings, "pipeline_llm_hard_required", True), default=True)
+    if not hasattr(settings, "pipeline_llm_hard_required"):
+        return True
+    raw_value = settings.pipeline_llm_hard_required
+    return coerce_bool(raw_value, default=True)
 
 
 def pipeline_llm_fail_on_provider_error(
@@ -77,7 +132,10 @@ def pipeline_llm_fail_on_provider_error(
     policy = dict(llm_policy or {})
     if "fail_on_provider_error" in policy:
         return coerce_bool(policy.get("fail_on_provider_error"), default=True)
-    return coerce_bool(getattr(settings, "pipeline_llm_fail_on_provider_error", True), default=True)
+    if not hasattr(settings, "pipeline_llm_fail_on_provider_error"):
+        return True
+    raw_value = settings.pipeline_llm_fail_on_provider_error
+    return coerce_bool(raw_value, default=True)
 
 
 def pipeline_llm_max_retries(
@@ -85,13 +143,20 @@ def pipeline_llm_max_retries(
 ) -> int | None:
     policy = dict(llm_policy or {})
     if "max_retries" in policy:
-        retries = coerce_int(policy.get("max_retries"), -1)
+        try:
+            retries = int(policy.get("max_retries"))
+        except (TypeError, ValueError):
+            return None
         return retries if retries >= 0 else None
 
     raw = getattr(settings, "pipeline_llm_max_retries", None)
     if raw is None:
         return None
-    return max(0, coerce_int(raw, 0))
+    try:
+        parsed = int(raw)
+    except (TypeError, ValueError):
+        parsed = 0
+    return max(0, parsed)
 
 
 def build_llm_policy(settings: Settings, overrides: dict[str, Any]) -> dict[str, Any]:
@@ -109,8 +174,11 @@ def build_retry_policy(
     step_name: str,
     llm_policy: dict[str, Any] | None = None,
 ) -> dict[RetryCategory, dict[str, float | int]]:
-    base_retries = max(0, int(getattr(settings, "pipeline_retry_attempts", 2)))
-    base_backoff = max(0.0, float(getattr(settings, "pipeline_retry_backoff_seconds", 1.0)))
+    base_retries = max(0, coerce_int(getattr(settings, "pipeline_retry_attempts", None), 2))
+    base_backoff = _coerce_non_negative_backoff(
+        getattr(settings, "pipeline_retry_backoff_seconds", None),
+        1.0,
+    )
 
     policy: dict[RetryCategory, dict[str, float | int]] = {
         "transient": {
@@ -161,7 +229,7 @@ def build_retry_policy(
         "auth": {
             "retries": max(
                 0,
-                coerce_int(getattr(settings, "pipeline_retry_auth_attempts", None), 0),
+                coerce_int(getattr(settings, "pipeline_retry_auth_attempts", None)),
             ),
             "backoff": max(
                 0.0,
@@ -179,7 +247,7 @@ def build_retry_policy(
         },
         "fatal": {
             "retries": max(
-                0, coerce_int(getattr(settings, "pipeline_retry_fatal_attempts", None), 0)
+                0, coerce_int(getattr(settings, "pipeline_retry_fatal_attempts", None))
             ),
             "backoff": 0.0,
             "max_backoff": 0.0,
@@ -198,8 +266,8 @@ def build_retry_policy(
 
 
 def retry_delay_seconds(policy: dict[str, float | int], retries_used: int) -> float:
-    backoff = float(policy.get("backoff", 0.0))
-    if backoff <= 0:
+    backoff = max(0.0, float(policy.get("backoff", 0.0)))
+    if backoff == 0:
         return 0.0
     max_backoff = max(0.0, float(policy.get("max_backoff", backoff)))
     delay = backoff * (2 ** max(0, retries_used))
@@ -207,44 +275,15 @@ def retry_delay_seconds(policy: dict[str, float | int], retries_used: int) -> fl
 
 
 def classify_error(reason: str | None, error: str | None) -> RetryCategory:
-    combined = f"{reason or ''} {error or ''}".lower()
+    parts = _normalized_error_parts(reason, error)
 
-    if any(token in combined for token in ("429", "rate limit", "too many request")):
+    if _contains_error_token(parts, _RATE_LIMIT_ERROR_TOKENS):
         return "rate_limit"
 
-    if any(
-        token in combined
-        for token in (
-            "401",
-            "403",
-            "unauthorized",
-            "forbidden",
-            "invalid api key",
-            "authentication",
-            "permission denied",
-            "api_key_missing",
-        )
-    ):
+    if _contains_error_token(parts, _AUTH_ERROR_TOKENS):
         return "auth"
 
-    if any(
-        token in combined
-        for token in (
-            "timeout",
-            "timed out",
-            "econn",
-            "connection reset",
-            "network",
-            "temporary",
-            "service unavailable",
-            "non_zero_exit",
-            "provider_unavailable",
-            "gemini_error",
-            "provider_error",
-            "llm_provider",
-            "llm_output_invalid",
-        )
-    ):
+    if _contains_error_token(parts, _TRANSIENT_ERROR_TOKENS):
         return "transient"
 
     return "fatal"

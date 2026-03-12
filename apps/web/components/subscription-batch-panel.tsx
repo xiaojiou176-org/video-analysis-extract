@@ -215,7 +215,7 @@ export function SubscriptionBatchPanel({ subscriptions, sessionToken }: Props) {
 				next.delete(id);
 				return next;
 			});
-			setApplyResult("订阅已删除。");
+			setApplyResult(null);
 			setDeleteStatusMessage(`已删除「${targetName}」。`);
 			router.replace("/subscriptions?status=success&code=SUBSCRIPTION_DELETED");
 			router.refresh();
