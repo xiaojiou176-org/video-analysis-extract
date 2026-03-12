@@ -264,6 +264,13 @@ def test_api_real_smoke_script_enforces_real_postgres_and_strict_mode() -> None:
     assert "TASK_QUEUE_TYPE_ACTIVITY" in script
     assert "detected existing temporal worker pollers on task queue" in script
     assert "timed out waiting for worker pollers on task queue" in script
+    assert "temporal_server_is_reachable()" in script
+    assert "ensure_temporal_server_online()" in script
+    assert "starting temporary temporal dev server inside standard env" in script
+    assert "temporary temporal dev server is online" in script
+    assert "temporary temporal dev server exited before reaching readiness" in script
+    assert "timed out waiting for temporal server readiness" in script
+    assert "temporal server start-dev --ip 127.0.0.1 --port 7233" in script
     assert "preflight_loopback_ipv4_connectivity" in script
     assert "host_loopback_ipv4_exhausted" in script
     assert "EADDRNOTAVAIL (Errno 49)" in script

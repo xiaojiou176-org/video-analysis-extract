@@ -244,6 +244,62 @@ jobs:
     )
 
 
+def test_global_rules_require_pre_checkout_normalization_for_self_hosted_checkout() -> None:
+    module = _load_module()
+    workflow = """name: pre-commit
+on:
+  pull_request:
+jobs:
+  pre-commit-hosted:
+    runs-on: [self-hosted, video-analysis-extract]
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@1234567890abcdef1234567890abcdef12345678
+        with:
+          clean: true
+"""
+    failures: list[str] = []
+
+    module._check_global_rules(
+        Path("pre-commit.yml"), workflow, dict(module._job_blocks(workflow)), failures
+    )
+
+    assert (
+        "pre-commit.yml:10: self-hosted checkout must be preceded by "
+        "`Normalize self-hosted workspace (pre-checkout)`"
+    ) in failures
+
+
+def test_global_rules_accept_pre_checkout_normalization_for_self_hosted_checkout() -> None:
+    module = _load_module()
+    workflow = """name: pre-commit
+on:
+  pull_request:
+jobs:
+  pre-commit-hosted:
+    runs-on: [self-hosted, video-analysis-extract]
+    timeout-minutes: 5
+    steps:
+      - name: Normalize self-hosted workspace (pre-checkout)
+        run: echo normalize
+      - name: Checkout
+        uses: actions/checkout@1234567890abcdef1234567890abcdef12345678
+        with:
+          clean: true
+"""
+    failures: list[str] = []
+
+    module._check_global_rules(
+        Path("pre-commit.yml"), workflow, dict(module._job_blocks(workflow)), failures
+    )
+
+    assert (
+        "self-hosted checkout must be preceded by "
+        "`Normalize self-hosted workspace (pre-checkout)`"
+    ) not in "\n".join(failures)
+
+
 def test_global_rules_forbid_checkout_workspace_tool_cache_paths() -> None:
     module = _load_module()
     workflow = """name: CI
@@ -365,6 +421,81 @@ jobs:
 
     assert (
         "ci.yml: top-level concurrency.group must not include github.sha; use a stable workflow/event/ref key"
+        not in failures
+    )
+
+
+def test_ci_specific_rules_reject_runner_bootstrap_exact_name_pinning() -> None:
+    module = _load_module()
+    blocks = {
+        "runner-bootstrap": """  runner-bootstrap:
+    runs-on: [self-hosted, video-analysis-extract]
+    timeout-minutes: 30
+    steps:
+      - run: |
+          EXPECTED_RUNNERS_SORTED="pool-core01-01,pool-core01-02"
+          echo "must exactly match expected"
+""",
+    }
+    failures: list[str] = []
+
+    module._check_ci_specific_rules(blocks, failures)
+
+    assert (
+        "ci.yml: runner-bootstrap: must not hardcode exact org runner name lists; use label/pattern online thresholds"
+        in failures
+    )
+
+
+def test_ci_specific_rules_require_runner_bootstrap_label_threshold_guard() -> None:
+    module = _load_module()
+    blocks = {
+        "runner-bootstrap": """  runner-bootstrap:
+    runs-on: [self-hosted, video-analysis-extract]
+    timeout-minutes: 30
+    steps:
+      - run: |
+          MIN_ONLINE_CORE_RUNNERS=3
+          online_count=3
+""",
+    }
+    failures: list[str] = []
+
+    module._check_ci_specific_rules(blocks, failures)
+
+    assert (
+        "ci.yml: runner-bootstrap: missing label-route online threshold guard for video-analysis-extract"
+        in failures
+    )
+
+
+def test_ci_specific_rules_accept_runner_bootstrap_label_threshold_policy() -> None:
+    module = _load_module()
+    blocks = {
+        "runner-bootstrap": """  runner-bootstrap:
+    runs-on: [self-hosted, video-analysis-extract]
+    timeout-minutes: 30
+    steps:
+      - run: |
+          MIN_ONLINE_CORE_RUNNERS="${MIN_ONLINE_CORE_RUNNERS:-3}"
+          MIN_ONLINE_LABEL_RUNNERS="${MIN_ONLINE_LABEL_RUNNERS:-1}"
+          label_online_count="$(gh api "orgs/${GH_ORG}/actions/runners" --jq "[.runners[] | select((.labels | map(.name) | index(\\"video-analysis-extract\\")) and .status==\\"online\\")] | length")"
+""",
+    }
+    failures: list[str] = []
+
+    module._check_ci_specific_rules(blocks, failures)
+
+    assert (
+        "ci.yml: runner-bootstrap: must not hardcode exact org runner name lists; use label/pattern online thresholds"
+        not in failures
+    )
+    assert (
+        "ci.yml: runner-bootstrap: missing pool-core online threshold guard (MIN_ONLINE_CORE_RUNNERS)"
+        not in failures
+    )
+    assert (
+        "ci.yml: runner-bootstrap: missing label-route online threshold guard for video-analysis-extract"
         not in failures
     )
 
@@ -570,6 +701,15 @@ def test_python_tests_job_calls_repo_script_inside_strict_ci_entry() -> None:
     assert "./scripts/strict_ci_entry.sh --mode python-tests" in workflow
 
 
+def test_python_tests_pipeline_smoke_syncs_dependencies_before_pytest() -> None:
+    workflow = (_repo_root() / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+
+    pipeline_smoke_anchor = workflow.index("- name: Pipeline smoke")
+    sync_index = workflow.index("uv sync --frozen --extra dev --extra e2e", pipeline_smoke_anchor)
+    pytest_index = workflow.index("uv run pytest \\", pipeline_smoke_anchor)
+    assert sync_index < pytest_index
+
+
 def test_ci_python_tests_script_preserves_backend_coverage_and_junit_contract() -> None:
     script = (_repo_root() / "scripts" / "ci_python_tests.sh").read_text(encoding="utf-8")
 
@@ -623,6 +763,37 @@ def test_quality_gate_and_live_smoke_jobs_use_strict_ci_entry_and_contract_conta
     assert "--mode pre-push" in workflow
     assert "--mode live-smoke" in workflow
     assert "image: ${{ needs.ci-contract.outputs.standard_image_ref }}" in workflow
+
+
+def test_runner_bootstrap_uses_minimum_online_runner_capacity_instead_of_exact_name_match() -> None:
+    workflow = (_repo_root() / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+
+    assert 'MIN_ONLINE_CORE_RUNNERS="${MIN_ONLINE_CORE_RUNNERS:-3}"' in workflow
+    assert 'MIN_ONLINE_LABEL_RUNNERS="${MIN_ONLINE_LABEL_RUNNERS:-1}"' in workflow
+    assert "RUNNER_NAME_REGEX='^pool-core[0-9]{2}-0[1-3]$'" in workflow
+    assert '[[ "${online_count}" -ge "${MIN_ONLINE_CORE_RUNNERS}" && "${label_online_count}" -ge "${MIN_ONLINE_LABEL_RUNNERS}" ]]' in workflow
+    assert "video-analysis-extract" in workflow
+    assert "EXPECTED_RUNNERS_SORTED" not in workflow
+
+
+def test_docker_dependent_required_jobs_route_to_core02_runner_subset() -> None:
+    workflow = (_repo_root() / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+
+    expected = "runs-on: [self-hosted, video-analysis-extract, core02]"
+    for job_name in (
+        "quality-gate-pre-push",
+        "db-migration-smoke",
+        "python-tests",
+        "api-real-smoke",
+        "pr-llm-real-smoke",
+        "web-test-build",
+        "web-e2e",
+        "web-e2e-perceived",
+        "live-smoke",
+    ):
+        anchor = workflow.index(f"  {job_name}:")
+        window = workflow[anchor : anchor + 220]
+        assert expected in window
 
 
 def test_global_rules_rejects_resolver_without_hosted_or_fallback_success_checks() -> None:

@@ -17,7 +17,7 @@ if (($# == 0)); then
   exit 2
 fi
 
-if [[ "${VD_IN_STANDARD_ENV:-0}" == "1" ]]; then
+if is_running_inside_standard_env; then
   exec "$@"
 fi
 

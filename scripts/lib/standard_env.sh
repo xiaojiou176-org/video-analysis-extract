@@ -7,6 +7,33 @@ STANDARD_ENV_IMAGE="${VD_STANDARD_ENV_IMAGE:-$STRICT_CI_STANDARD_IMAGE_REF}"
 STANDARD_ENV_DOCKERFILE="${VD_STANDARD_ENV_DOCKERFILE:-$ROOT_DIR/$STRICT_CI_STANDARD_IMAGE_DOCKERFILE}"
 STANDARD_ENV_WORKDIR="${VD_STANDARD_ENV_WORKDIR:-$STRICT_CI_STANDARD_IMAGE_WORKDIR}"
 STANDARD_ENV_HOST_GATEWAY="${VD_STANDARD_ENV_HOST_GATEWAY:-host.docker.internal}"
+STANDARD_ENV_MARKER_PATH="${VD_STANDARD_ENV_MARKER_PATH:-/etc/video-analysis-extract-strict-ci-standard-env}"
+STANDARD_ENV_DOCKERENV_PATH="${VD_STANDARD_ENV_DOCKERENV_PATH:-/.dockerenv}"
+
+is_truthy_env() {
+  case "${1:-}" in
+    1|true|TRUE|True|yes|YES|on|ON) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+is_running_inside_standard_env() {
+  if [[ "${VD_IN_STANDARD_ENV:-0}" == "1" ]]; then
+    return 0
+  fi
+
+  if [[ -f "$STANDARD_ENV_MARKER_PATH" ]]; then
+    return 0
+  fi
+
+  # Legacy fallback: CI container jobs in GitHub Actions may run in the strict
+  # image without propagating VD_IN_STANDARD_ENV.
+  if is_truthy_env "${GITHUB_ACTIONS:-}" && [[ -f "$STANDARD_ENV_DOCKERENV_PATH" ]]; then
+    return 0
+  fi
+
+  return 1
+}
 
 append_standard_env_git_mounts() {
   local -n mounts_ref="$1"

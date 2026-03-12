@@ -78,7 +78,8 @@ jobs:
 
           GCP_ZONE="${GCP_ZONE:-us-central1-a}"
           INSTANCES=("github-runner-core-01" "github-runner-core-02" "github-runner-core-03")
-          EXPECTED_RUNNERS_JSON='["pool-core01-01","pool-core01-02","pool-core01-03","pool-core02-01","pool-core02-02","pool-core02-03","pool-core03-01","pool-core03-02","pool-core03-03"]'
+          MIN_ONLINE_CORE_RUNNERS="${MIN_ONLINE_CORE_RUNNERS:-3}"
+          MIN_ONLINE_LABEL_RUNNERS="${MIN_ONLINE_LABEL_RUNNERS:-1}"
 
           echo "Checking GCE instances in ${GCP_PROJECT_ID}/${GCP_ZONE}..."
           for instance in "${INSTANCES[@]}"; do
@@ -108,29 +109,21 @@ jobs:
             sleep 10
           done
 
-          echo "Waiting for organization runner set to exactly match expected 9 names and be online..."
-          EXPECTED_RUNNERS_SORTED="pool-core01-01,pool-core01-02,pool-core01-03,pool-core02-01,pool-core02-02,pool-core02-03,pool-core03-01,pool-core03-02,pool-core03-03"
-          RUNNER_NAME_REGEX='^pool-(core01|core02|core03)-0[1-3]$'
+          echo "Waiting for organization runners to satisfy label-based routing health checks..."
+          RUNNER_NAME_REGEX='^pool-core[0-9]{2}-0[1-3]$'
           for attempt in $(seq 1 40); do
-            actual_sorted="$(gh api "orgs/${GH_ORG}/actions/runners" --jq '[.runners[].name] | sort | join(",")')"
             online_count="$(gh api "orgs/${GH_ORG}/actions/runners" --jq "[.runners[] | select((.name|test(\"${RUNNER_NAME_REGEX}\")) and .status==\"online\")] | length")"
-            check_result="pending"
-            if [[ "${actual_sorted}" != "${EXPECTED_RUNNERS_SORTED}" ]]; then
-              check_result="mismatch"
-            elif [[ "${online_count}" == "9" ]]; then
-              check_result="ok"
-            fi
-            echo "  runner set status: ${check_result} (attempt ${attempt}/40)"
-            if [[ "$check_result" == "ok" ]]; then
-              echo "Organization runners exactly match expected names and all are online."
+            label_online_count="$(gh api "orgs/${GH_ORG}/actions/runners" --jq "[.runners[] | select((.labels | map(.name) | index(\"video-analysis-extract\")) and .status==\"online\")] | length")"
+            echo "  online runners: pool-core*=${online_count} (min ${MIN_ONLINE_CORE_RUNNERS}), label video-analysis-extract=${label_online_count} (min ${MIN_ONLINE_LABEL_RUNNERS}) [attempt ${attempt}/40]"
+            if [[ "${online_count}" -ge "${MIN_ONLINE_CORE_RUNNERS}" && "${label_online_count}" -ge "${MIN_ONLINE_LABEL_RUNNERS}" ]]; then
+              echo "Runner bootstrap passed: label-routed runners are online (no exact instance-name binding)."
               exit 0
             fi
             if [[ "$attempt" -eq 40 ]]; then
-              echo "Runner bootstrap failed: org runner list must be exactly the expected 9 names and all online."
-              echo "Expected runner names:"
-              echo "${EXPECTED_RUNNERS_JSON}" | jq -r '.[]'
-              echo "Actual org runner names and status:"
-              gh api "orgs/${GH_ORG}/actions/runners" --jq '.runners[] | "\(.name)=\(.status), busy=\(.busy)"'
+              echo "Runner bootstrap failed: online runner counts did not reach thresholds."
+              echo "Thresholds: pool-core*=>=${MIN_ONLINE_CORE_RUNNERS}, label(video-analysis-extract)>=${MIN_ONLINE_LABEL_RUNNERS}"
+              echo "Actual org runner names/status/labels:"
+              gh api "orgs/${GH_ORG}/actions/runners" --jq '.runners[] | "\(.name)=\(.status), busy=\(.busy), labels=\([.labels[].name] | join(","))"'
               exit 1
             fi
             sleep 15
@@ -146,6 +139,35 @@ jobs:
       RESEND_FROM_EMAIL: ${{ secrets.RESEND_FROM_EMAIL }}
       YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
     steps:
+      - name: Normalize self-hosted workspace (pre-checkout)
+        shell: bash
+        run: |
+          set -euo pipefail
+          workspace="${GITHUB_WORKSPACE:?}"
+          uid="$(id -u)"
+          gid="$(id -g)"
+          stale_paths=(
+            "$workspace/.runtime-cache"
+            "$workspace/.venv"
+            "$workspace/apps/web/node_modules"
+          )
+          if command -v sudo >/dev/null 2>&1; then
+            if sudo find "$workspace" -mindepth 1 -uid 0 -print -quit | grep -q .; then
+              echo "Detected root-owned residue under $workspace; normalizing ownership"
+              sudo chown -R "$uid:$gid" "$workspace"
+            fi
+            for path in "${stale_paths[@]}"; do
+              if sudo test -e "$path"; then
+                echo "Removing stale workspace path: $path"
+                sudo rm -rf "$path"
+              fi
+            done
+          else
+            for path in "${stale_paths[@]}"; do
+              rm -rf "$path" || true
+            done
+          fi
+
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
@@ -174,6 +196,35 @@ jobs:
       profile_governance_push_release: ${{ steps.contract.outputs.profile_governance_push_release }}
       live_smoke_push_release: ${{ steps.contract.outputs.live_smoke_push_release }}
     steps:
+      - name: Normalize self-hosted workspace (pre-checkout)
+        shell: bash
+        run: |
+          set -euo pipefail
+          workspace="${GITHUB_WORKSPACE:?}"
+          uid="$(id -u)"
+          gid="$(id -g)"
+          stale_paths=(
+            "$workspace/.runtime-cache"
+            "$workspace/.venv"
+            "$workspace/apps/web/node_modules"
+          )
+          if command -v sudo >/dev/null 2>&1; then
+            if sudo find "$workspace" -mindepth 1 -uid 0 -print -quit | grep -q .; then
+              echo "Detected root-owned residue under $workspace; normalizing ownership"
+              sudo chown -R "$uid:$gid" "$workspace"
+            fi
+            for path in "${stale_paths[@]}"; do
+              if sudo test -e "$path"; then
+                echo "Removing stale workspace path: $path"
+                sudo rm -rf "$path"
+              fi
+            done
+          else
+            for path in "${stale_paths[@]}"; do
+              rm -rf "$path" || true
+            done
+          fi
+
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
@@ -196,6 +247,35 @@ jobs:
       migrations_changed: ${{ github.event_name == 'pull_request' && steps.filter.outputs.migrations_changed || steps.non_pr_defaults.outputs.migrations_changed }}
       hosted_ok: ${{ steps.hosted_status.outputs.hosted_ok }}
     steps:
+      - name: Normalize self-hosted workspace (pre-checkout)
+        shell: bash
+        run: |
+          set -euo pipefail
+          workspace="${GITHUB_WORKSPACE:?}"
+          uid="$(id -u)"
+          gid="$(id -g)"
+          stale_paths=(
+            "$workspace/.runtime-cache"
+            "$workspace/.venv"
+            "$workspace/apps/web/node_modules"
+          )
+          if command -v sudo >/dev/null 2>&1; then
+            if sudo find "$workspace" -mindepth 1 -uid 0 -print -quit | grep -q .; then
+              echo "Detected root-owned residue under $workspace; normalizing ownership"
+              sudo chown -R "$uid:$gid" "$workspace"
+            fi
+            for path in "${stale_paths[@]}"; do
+              if sudo test -e "$path"; then
+                echo "Removing stale workspace path: $path"
+                sudo rm -rf "$path"
+              fi
+            done
+          else
+            for path in "${stale_paths[@]}"; do
+              rm -rf "$path" || true
+            done
+          fi
+
       - name: Checkout
         if: ${{ github.event_name == 'pull_request' }}
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -262,6 +342,35 @@ jobs:
       deps_changed: ${{ github.event_name == 'pull_request' && steps.filter.outputs.deps_changed || steps.non_pr_defaults.outputs.deps_changed }}
       migrations_changed: ${{ github.event_name == 'pull_request' && steps.filter.outputs.migrations_changed || steps.non_pr_defaults.outputs.migrations_changed }}
     steps:
+      - name: Normalize self-hosted workspace (pre-checkout)
+        shell: bash
+        run: |
+          set -euo pipefail
+          workspace="${GITHUB_WORKSPACE:?}"
+          uid="$(id -u)"
+          gid="$(id -g)"
+          stale_paths=(
+            "$workspace/.runtime-cache"
+            "$workspace/.venv"
+            "$workspace/apps/web/node_modules"
+          )
+          if command -v sudo >/dev/null 2>&1; then
+            if sudo find "$workspace" -mindepth 1 -uid 0 -print -quit | grep -q .; then
+              echo "Detected root-owned residue under $workspace; normalizing ownership"
+              sudo chown -R "$uid:$gid" "$workspace"
+            fi
+            for path in "${stale_paths[@]}"; do
+              if sudo test -e "$path"; then
+                echo "Removing stale workspace path: $path"
+                sudo rm -rf "$path"
+              fi
+            done
+          else
+            for path in "${stale_paths[@]}"; do
+              rm -rf "$path" || true
+            done
+          fi
+
       - name: Checkout
         if: ${{ github.event_name == 'pull_request' }}
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -358,6 +467,35 @@ jobs:
     needs: preflight-fast
     if: ${{ always() && needs.preflight-fast.result == 'success' }}
     steps:
+      - name: Normalize self-hosted workspace (pre-checkout)
+        shell: bash
+        run: |
+          set -euo pipefail
+          workspace="${GITHUB_WORKSPACE:?}"
+          uid="$(id -u)"
+          gid="$(id -g)"
+          stale_paths=(
+            "$workspace/.runtime-cache"
+            "$workspace/.venv"
+            "$workspace/apps/web/node_modules"
+          )
+          if command -v sudo >/dev/null 2>&1; then
+            if sudo find "$workspace" -mindepth 1 -uid 0 -print -quit | grep -q .; then
+              echo "Detected root-owned residue under $workspace; normalizing ownership"
+              sudo chown -R "$uid:$gid" "$workspace"
+            fi
+            for path in "${stale_paths[@]}"; do
+              if sudo test -e "$path"; then
+                echo "Removing stale workspace path: $path"
+                sudo rm -rf "$path"
+              fi
+            done
+          else
+            for path in "${stale_paths[@]}"; do
+              rm -rf "$path" || true
+            done
+          fi
+
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
@@ -397,6 +535,35 @@ jobs:
       matrix:
         gate_profile: [local, ci-live-smoke]
     steps:
+      - name: Normalize self-hosted workspace (pre-checkout)
+        shell: bash
+        run: |
+          set -euo pipefail
+          workspace="${GITHUB_WORKSPACE:?}"
+          uid="$(id -u)"
+          gid="$(id -g)"
+          stale_paths=(
+            "$workspace/.runtime-cache"
+            "$workspace/.venv"
+            "$workspace/apps/web/node_modules"
+          )
+          if command -v sudo >/dev/null 2>&1; then
+            if sudo find "$workspace" -mindepth 1 -uid 0 -print -quit | grep -q .; then
+              echo "Detected root-owned residue under $workspace; normalizing ownership"
+              sudo chown -R "$uid:$gid" "$workspace"
+            fi
+            for path in "${stale_paths[@]}"; do
+              if sudo test -e "$path"; then
+                echo "Removing stale workspace path: $path"
+                sudo rm -rf "$path"
+              fi
+            done
+          else
+            for path in "${stale_paths[@]}"; do
+              rm -rf "$path" || true
+            done
+          fi
+
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
@@ -422,7 +589,7 @@ jobs:
           fi
 
   quality-gate-pre-push:
-    runs-on: [self-hosted, video-analysis-extract]
+    runs-on: [self-hosted, video-analysis-extract, core02]
     timeout-minutes: 90
     needs: [preflight-heavy, changes, ci-contract]
     container:
@@ -435,6 +602,35 @@ jobs:
       UV_CACHE_DIR: ${{ needs.ci-contract.outputs.uv_cache_dir }}
       PLAYWRIGHT_BROWSERS_PATH: ${{ needs.ci-contract.outputs.playwright_browsers_path }}
     steps:
+      - name: Normalize self-hosted workspace (pre-checkout)
+        shell: bash
+        run: |
+          set -euo pipefail
+          workspace="${GITHUB_WORKSPACE:?}"
+          uid="$(id -u)"
+          gid="$(id -g)"
+          stale_paths=(
+            "$workspace/.runtime-cache"
+            "$workspace/.venv"
+            "$workspace/apps/web/node_modules"
+          )
+          if command -v sudo >/dev/null 2>&1; then
+            if sudo find "$workspace" -mindepth 1 -uid 0 -print -quit | grep -q .; then
+              echo "Detected root-owned residue under $workspace; normalizing ownership"
+              sudo chown -R "$uid:$gid" "$workspace"
+            fi
+            for path in "${stale_paths[@]}"; do
+              if sudo test -e "$path"; then
+                echo "Removing stale workspace path: $path"
+                sudo rm -rf "$path"
+              fi
+            done
+          else
+            for path in "${stale_paths[@]}"; do
+              rm -rf "$path" || true
+            done
+          fi
+
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
@@ -572,7 +768,7 @@ jobs:
             .runtime-cache/ui-audit/gemini-ui-ux-audit.log
 
   db-migration-smoke:
-    runs-on: [self-hosted, video-analysis-extract]
+    runs-on: [self-hosted, video-analysis-extract, core02]
     timeout-minutes: 20
     needs: [preflight-fast, changes]
     if: ${{ always() && needs.preflight-fast.result == 'success' && needs.changes.result == 'success' && (github.event_name != 'pull_request' || needs.changes.outputs.migrations_changed == 'true') }}
@@ -591,6 +787,35 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     steps:
+      - name: Normalize self-hosted workspace (pre-checkout)
+        shell: bash
+        run: |
+          set -euo pipefail
+          workspace="${GITHUB_WORKSPACE:?}"
+          uid="$(id -u)"
+          gid="$(id -g)"
+          stale_paths=(
+            "$workspace/.runtime-cache"
+            "$workspace/.venv"
+            "$workspace/apps/web/node_modules"
+          )
+          if command -v sudo >/dev/null 2>&1; then
+            if sudo find "$workspace" -mindepth 1 -uid 0 -print -quit | grep -q .; then
+              echo "Detected root-owned residue under $workspace; normalizing ownership"
+              sudo chown -R "$uid:$gid" "$workspace"
+            fi
+            for path in "${stale_paths[@]}"; do
+              if sudo test -e "$path"; then
+                echo "Removing stale workspace path: $path"
+                sudo rm -rf "$path"
+              fi
+            done
+          else
+            for path in "${stale_paths[@]}"; do
+              rm -rf "$path" || true
+            done
+          fi
+
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
@@ -629,6 +854,35 @@ jobs:
     needs: [preflight-fast, changes]
     if: ${{ always() && needs.preflight-fast.result == 'success' && needs.changes.result == 'success' && (github.event_name != 'pull_request' || needs.changes.outputs.backend_changed == 'true') }}
     steps:
+      - name: Normalize self-hosted workspace (pre-checkout)
+        shell: bash
+        run: |
+          set -euo pipefail
+          workspace="${GITHUB_WORKSPACE:?}"
+          uid="$(id -u)"
+          gid="$(id -g)"
+          stale_paths=(
+            "$workspace/.runtime-cache"
+            "$workspace/.venv"
+            "$workspace/apps/web/node_modules"
+          )
+          if command -v sudo >/dev/null 2>&1; then
+            if sudo find "$workspace" -mindepth 1 -uid 0 -print -quit | grep -q .; then
+              echo "Detected root-owned residue under $workspace; normalizing ownership"
+              sudo chown -R "$uid:$gid" "$workspace"
+            fi
+            for path in "${stale_paths[@]}"; do
+              if sudo test -e "$path"; then
+                echo "Removing stale workspace path: $path"
+                sudo rm -rf "$path"
+              fi
+            done
+          else
+            for path in "${stale_paths[@]}"; do
+              rm -rf "$path" || true
+            done
+          fi
+
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
@@ -734,7 +988,7 @@ jobs:
           if-no-files-found: warn
 
   python-tests:
-    runs-on: [self-hosted, video-analysis-extract]
+    runs-on: [self-hosted, video-analysis-extract, core02]
     timeout-minutes: 45
     needs: [preflight-fast, changes, ci-contract]
     if: ${{ always() && needs.preflight-fast.result == 'success' && needs.changes.result == 'success' && (github.event_name != 'pull_request' || needs.changes.outputs.backend_changed == 'true') }}
@@ -761,6 +1015,35 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     steps:
+      - name: Normalize self-hosted workspace (pre-checkout)
+        shell: bash
+        run: |
+          set -euo pipefail
+          workspace="${GITHUB_WORKSPACE:?}"
+          uid="$(id -u)"
+          gid="$(id -g)"
+          stale_paths=(
+            "$workspace/.runtime-cache"
+            "$workspace/.venv"
+            "$workspace/apps/web/node_modules"
+          )
+          if command -v sudo >/dev/null 2>&1; then
+            if sudo find "$workspace" -mindepth 1 -uid 0 -print -quit | grep -q .; then
+              echo "Detected root-owned residue under $workspace; normalizing ownership"
+              sudo chown -R "$uid:$gid" "$workspace"
+            fi
+            for path in "${stale_paths[@]}"; do
+              if sudo test -e "$path"; then
+                echo "Removing stale workspace path: $path"
+                sudo rm -rf "$path"
+              fi
+            done
+          else
+            for path in "${stale_paths[@]}"; do
+              rm -rf "$path" || true
+            done
+          fi
+
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
@@ -777,6 +1060,7 @@ jobs:
           PIPELINE_WORKSPACE_DIR: /tmp/video-digestor-workspace-smoke
           PIPELINE_ARTIFACT_ROOT: /tmp/video-digestor-artifacts-smoke
         run: |
+          uv sync --frozen --extra dev --extra e2e
           uv run pytest \
             apps/worker/tests/test_runner_modes.py::test_run_pipeline_text_only_mode_skips_media_steps \
             apps/worker/tests/test_runner_modes.py::test_run_pipeline_refresh_llm_forces_only_llm_steps \
@@ -807,7 +1091,7 @@ jobs:
             .runtime-cache/python-coverage.xml
 
   api-real-smoke:
-    runs-on: [self-hosted, video-analysis-extract]
+    runs-on: [self-hosted, video-analysis-extract, core02]
     timeout-minutes: 25
     needs: [preflight-fast, changes, ci-contract]
     if: ${{ always() && needs.preflight-fast.result == 'success' && needs.changes.result == 'success' && (github.event_name != 'pull_request' || needs.changes.outputs.backend_changed == 'true') }}
@@ -834,6 +1118,35 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     steps:
+      - name: Normalize self-hosted workspace (pre-checkout)
+        shell: bash
+        run: |
+          set -euo pipefail
+          workspace="${GITHUB_WORKSPACE:?}"
+          uid="$(id -u)"
+          gid="$(id -g)"
+          stale_paths=(
+            "$workspace/.runtime-cache"
+            "$workspace/.venv"
+            "$workspace/apps/web/node_modules"
+          )
+          if command -v sudo >/dev/null 2>&1; then
+            if sudo find "$workspace" -mindepth 1 -uid 0 -print -quit | grep -q .; then
+              echo "Detected root-owned residue under $workspace; normalizing ownership"
+              sudo chown -R "$uid:$gid" "$workspace"
+            fi
+            for path in "${stale_paths[@]}"; do
+              if sudo test -e "$path"; then
+                echo "Removing stale workspace path: $path"
+                sudo rm -rf "$path"
+              fi
+            done
+          else
+            for path in "${stale_paths[@]}"; do
+              rm -rf "$path" || true
+            done
+          fi
+
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
@@ -860,7 +1173,7 @@ jobs:
             .runtime-cache/api-real-smoke.log
 
   pr-llm-real-smoke:
-    runs-on: [self-hosted, video-analysis-extract]
+    runs-on: [self-hosted, video-analysis-extract, core02]
     timeout-minutes: 35
     needs: [preflight-fast, changes, ci-contract]
     if: >-
@@ -876,6 +1189,35 @@ jobs:
       CI_CACHE_ROOT: ${{ needs.ci-contract.outputs.cache_root }}
       UV_CACHE_DIR: ${{ needs.ci-contract.outputs.uv_cache_dir }}
     steps:
+      - name: Normalize self-hosted workspace (pre-checkout)
+        shell: bash
+        run: |
+          set -euo pipefail
+          workspace="${GITHUB_WORKSPACE:?}"
+          uid="$(id -u)"
+          gid="$(id -g)"
+          stale_paths=(
+            "$workspace/.runtime-cache"
+            "$workspace/.venv"
+            "$workspace/apps/web/node_modules"
+          )
+          if command -v sudo >/dev/null 2>&1; then
+            if sudo find "$workspace" -mindepth 1 -uid 0 -print -quit | grep -q .; then
+              echo "Detected root-owned residue under $workspace; normalizing ownership"
+              sudo chown -R "$uid:$gid" "$workspace"
+            fi
+            for path in "${stale_paths[@]}"; do
+              if sudo test -e "$path"; then
+                echo "Removing stale workspace path: $path"
+                sudo rm -rf "$path"
+              fi
+            done
+          else
+            for path in "${stale_paths[@]}"; do
+              rm -rf "$path" || true
+            done
+          fi
+
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
@@ -907,7 +1249,7 @@ jobs:
             .runtime-cache/pr-llm-real-smoke-result.json
 
   web-test-build:
-    runs-on: [self-hosted, video-analysis-extract]
+    runs-on: [self-hosted, video-analysis-extract, core02]
     timeout-minutes: 25
     needs: [preflight-fast, changes, ci-contract]
     if: ${{ always() && needs.preflight-fast.result == 'success' && needs.changes.result == 'success' }}
@@ -922,6 +1264,35 @@ jobs:
       PLAYWRIGHT_BROWSERS_PATH: ${{ needs.ci-contract.outputs.playwright_browsers_path }}
       CI_HEAD_SHA: ${{ github.sha }}
     steps:
+      - name: Normalize self-hosted workspace (pre-checkout)
+        shell: bash
+        run: |
+          set -euo pipefail
+          workspace="${GITHUB_WORKSPACE:?}"
+          uid="$(id -u)"
+          gid="$(id -g)"
+          stale_paths=(
+            "$workspace/.runtime-cache"
+            "$workspace/.venv"
+            "$workspace/apps/web/node_modules"
+          )
+          if command -v sudo >/dev/null 2>&1; then
+            if sudo find "$workspace" -mindepth 1 -uid 0 -print -quit | grep -q .; then
+              echo "Detected root-owned residue under $workspace; normalizing ownership"
+              sudo chown -R "$uid:$gid" "$workspace"
+            fi
+            for path in "${stale_paths[@]}"; do
+              if sudo test -e "$path"; then
+                echo "Removing stale workspace path: $path"
+                sudo rm -rf "$path"
+              fi
+            done
+          else
+            for path in "${stale_paths[@]}"; do
+              rm -rf "$path" || true
+            done
+          fi
+
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
@@ -943,7 +1314,7 @@ jobs:
         run: ./scripts/strict_ci_entry.sh --mode web-test-build
 
   web-e2e:
-    runs-on: [self-hosted, video-analysis-extract]
+    runs-on: [self-hosted, video-analysis-extract, core02]
     timeout-minutes: 45
     needs: [preflight-fast, changes, ci-contract]
     if: ${{ always() && needs.preflight-fast.result == 'success' && needs.changes.result == 'success' && (github.event_name != 'pull_request' || needs.changes.outputs.backend_changed == 'true' || needs.changes.outputs.web_changed == 'true' || needs.changes.outputs.deps_changed == 'true') }}
@@ -975,6 +1346,35 @@ jobs:
       matrix:
         browser: ${{ fromJSON('["chromium","firefox","webkit"]') }}
     steps:
+      - name: Normalize self-hosted workspace (pre-checkout)
+        shell: bash
+        run: |
+          set -euo pipefail
+          workspace="${GITHUB_WORKSPACE:?}"
+          uid="$(id -u)"
+          gid="$(id -g)"
+          stale_paths=(
+            "$workspace/.runtime-cache"
+            "$workspace/.venv"
+            "$workspace/apps/web/node_modules"
+          )
+          if command -v sudo >/dev/null 2>&1; then
+            if sudo find "$workspace" -mindepth 1 -uid 0 -print -quit | grep -q .; then
+              echo "Detected root-owned residue under $workspace; normalizing ownership"
+              sudo chown -R "$uid:$gid" "$workspace"
+            fi
+            for path in "${stale_paths[@]}"; do
+              if sudo test -e "$path"; then
+                echo "Removing stale workspace path: $path"
+                sudo rm -rf "$path"
+              fi
+            done
+          else
+            for path in "${stale_paths[@]}"; do
+              rm -rf "$path" || true
+            done
+          fi
+
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
@@ -1033,6 +1433,35 @@ jobs:
     if: ${{ github.event_name == 'schedule' || (github.event_name == 'push' && github.ref == 'refs/heads/main') }}
     needs: preflight-fast
     steps:
+      - name: Normalize self-hosted workspace (pre-checkout)
+        shell: bash
+        run: |
+          set -euo pipefail
+          workspace="${GITHUB_WORKSPACE:?}"
+          uid="$(id -u)"
+          gid="$(id -g)"
+          stale_paths=(
+            "$workspace/.runtime-cache"
+            "$workspace/.venv"
+            "$workspace/apps/web/node_modules"
+          )
+          if command -v sudo >/dev/null 2>&1; then
+            if sudo find "$workspace" -mindepth 1 -uid 0 -print -quit | grep -q .; then
+              echo "Detected root-owned residue under $workspace; normalizing ownership"
+              sudo chown -R "$uid:$gid" "$workspace"
+            fi
+            for path in "${stale_paths[@]}"; do
+              if sudo test -e "$path"; then
+                echo "Removing stale workspace path: $path"
+                sudo rm -rf "$path"
+              fi
+            done
+          else
+            for path in "${stale_paths[@]}"; do
+              rm -rf "$path" || true
+            done
+          fi
+
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
@@ -1107,7 +1536,7 @@ jobs:
             .runtime-cache/external-playwright-smoke-result.json
 
   web-e2e-perceived:
-    runs-on: [self-hosted, video-analysis-extract]
+    runs-on: [self-hosted, video-analysis-extract, core02]
     timeout-minutes: 40
     needs: [preflight-fast, changes]
     if: ${{ always() && needs.preflight-fast.result == 'success' && needs.changes.result == 'success' && (github.event_name != 'pull_request' || needs.changes.outputs.backend_changed == 'true' || needs.changes.outputs.web_changed == 'true' || needs.changes.outputs.deps_changed == 'true') }}
@@ -1126,6 +1555,35 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     steps:
+      - name: Normalize self-hosted workspace (pre-checkout)
+        shell: bash
+        run: |
+          set -euo pipefail
+          workspace="${GITHUB_WORKSPACE:?}"
+          uid="$(id -u)"
+          gid="$(id -g)"
+          stale_paths=(
+            "$workspace/.runtime-cache"
+            "$workspace/.venv"
+            "$workspace/apps/web/node_modules"
+          )
+          if command -v sudo >/dev/null 2>&1; then
+            if sudo find "$workspace" -mindepth 1 -uid 0 -print -quit | grep -q .; then
+              echo "Detected root-owned residue under $workspace; normalizing ownership"
+              sudo chown -R "$uid:$gid" "$workspace"
+            fi
+            for path in "${stale_paths[@]}"; do
+              if sudo test -e "$path"; then
+                echo "Removing stale workspace path: $path"
+                sudo rm -rf "$path"
+              fi
+            done
+          else
+            for path in "${stale_paths[@]}"; do
+              rm -rf "$path" || true
+            done
+          fi
+
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
@@ -1405,6 +1863,35 @@ jobs:
     needs: [preflight-fast, changes]
     if: ${{ always() && needs.preflight-fast.result == 'success' && needs.changes.result == 'success' && (github.event_name != 'pull_request' || needs.changes.outputs.deps_changed == 'true') }}
     steps:
+      - name: Normalize self-hosted workspace (pre-checkout)
+        shell: bash
+        run: |
+          set -euo pipefail
+          workspace="${GITHUB_WORKSPACE:?}"
+          uid="$(id -u)"
+          gid="$(id -g)"
+          stale_paths=(
+            "$workspace/.runtime-cache"
+            "$workspace/.venv"
+            "$workspace/apps/web/node_modules"
+          )
+          if command -v sudo >/dev/null 2>&1; then
+            if sudo find "$workspace" -mindepth 1 -uid 0 -print -quit | grep -q .; then
+              echo "Detected root-owned residue under $workspace; normalizing ownership"
+              sudo chown -R "$uid:$gid" "$workspace"
+            fi
+            for path in "${stale_paths[@]}"; do
+              if sudo test -e "$path"; then
+                echo "Removing stale workspace path: $path"
+                sudo rm -rf "$path"
+              fi
+            done
+          else
+            for path in "${stale_paths[@]}"; do
+              rm -rf "$path" || true
+            done
+          fi
+
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
@@ -1639,6 +2126,35 @@ jobs:
     if: ${{ github.event_name == 'schedule' }}
     needs: preflight-fast
     steps:
+      - name: Normalize self-hosted workspace (pre-checkout)
+        shell: bash
+        run: |
+          set -euo pipefail
+          workspace="${GITHUB_WORKSPACE:?}"
+          uid="$(id -u)"
+          gid="$(id -g)"
+          stale_paths=(
+            "$workspace/.runtime-cache"
+            "$workspace/.venv"
+            "$workspace/apps/web/node_modules"
+          )
+          if command -v sudo >/dev/null 2>&1; then
+            if sudo find "$workspace" -mindepth 1 -uid 0 -print -quit | grep -q .; then
+              echo "Detected root-owned residue under $workspace; normalizing ownership"
+              sudo chown -R "$uid:$gid" "$workspace"
+            fi
+            for path in "${stale_paths[@]}"; do
+              if sudo test -e "$path"; then
+                echo "Removing stale workspace path: $path"
+                sudo rm -rf "$path"
+              fi
+            done
+          else
+            for path in "${stale_paths[@]}"; do
+              rm -rf "$path" || true
+            done
+          fi
+
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
@@ -1698,6 +2214,35 @@ jobs:
       matrix:
         browser: [chromium, firefox, webkit]
     steps:
+      - name: Normalize self-hosted workspace (pre-checkout)
+        shell: bash
+        run: |
+          set -euo pipefail
+          workspace="${GITHUB_WORKSPACE:?}"
+          uid="$(id -u)"
+          gid="$(id -g)"
+          stale_paths=(
+            "$workspace/.runtime-cache"
+            "$workspace/.venv"
+            "$workspace/apps/web/node_modules"
+          )
+          if command -v sudo >/dev/null 2>&1; then
+            if sudo find "$workspace" -mindepth 1 -uid 0 -print -quit | grep -q .; then
+              echo "Detected root-owned residue under $workspace; normalizing ownership"
+              sudo chown -R "$uid:$gid" "$workspace"
+            fi
+            for path in "${stale_paths[@]}"; do
+              if sudo test -e "$path"; then
+                echo "Removing stale workspace path: $path"
+                sudo rm -rf "$path"
+              fi
+            done
+          else
+            for path in "${stale_paths[@]}"; do
+              rm -rf "$path" || true
+            done
+          fi
+
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
@@ -1776,6 +2321,35 @@ jobs:
     needs: [python-tests, web-e2e]
     if: ${{ always() && (needs.python-tests.result == 'failure' || needs.web-e2e.result == 'failure') }}
     steps:
+      - name: Normalize self-hosted workspace (pre-checkout)
+        shell: bash
+        run: |
+          set -euo pipefail
+          workspace="${GITHUB_WORKSPACE:?}"
+          uid="$(id -u)"
+          gid="$(id -g)"
+          stale_paths=(
+            "$workspace/.runtime-cache"
+            "$workspace/.venv"
+            "$workspace/apps/web/node_modules"
+          )
+          if command -v sudo >/dev/null 2>&1; then
+            if sudo find "$workspace" -mindepth 1 -uid 0 -print -quit | grep -q .; then
+              echo "Detected root-owned residue under $workspace; normalizing ownership"
+              sudo chown -R "$uid:$gid" "$workspace"
+            fi
+            for path in "${stale_paths[@]}"; do
+              if sudo test -e "$path"; then
+                echo "Removing stale workspace path: $path"
+                sudo rm -rf "$path"
+              fi
+            done
+          else
+            for path in "${stale_paths[@]}"; do
+              rm -rf "$path" || true
+            done
+          fi
+
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
@@ -1803,7 +2377,7 @@ jobs:
 
   live-smoke:
     needs: [aggregate-gate, ci-contract]
-    runs-on: [self-hosted, video-analysis-extract]
+    runs-on: [self-hosted, video-analysis-extract, core02]
     timeout-minutes: 40
     if: >-
       always() &&
@@ -1837,6 +2411,35 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     steps:
+      - name: Normalize self-hosted workspace (pre-checkout)
+        shell: bash
+        run: |
+          set -euo pipefail
+          workspace="${GITHUB_WORKSPACE:?}"
+          uid="$(id -u)"
+          gid="$(id -g)"
+          stale_paths=(
+            "$workspace/.runtime-cache"
+            "$workspace/.venv"
+            "$workspace/apps/web/node_modules"
+          )
+          if command -v sudo >/dev/null 2>&1; then
+            if sudo find "$workspace" -mindepth 1 -uid 0 -print -quit | grep -q .; then
+              echo "Detected root-owned residue under $workspace; normalizing ownership"
+              sudo chown -R "$uid:$gid" "$workspace"
+            fi
+            for path in "${stale_paths[@]}"; do
+              if sudo test -e "$path"; then
+                echo "Removing stale workspace path: $path"
+                sudo rm -rf "$path"
+              fi
+            done
+          else
+            for path in "${stale_paths[@]}"; do
+              rm -rf "$path" || true
+            done
+          fi
+
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
@@ -1939,6 +2542,35 @@ jobs:
     needs: [preflight-fast, changes]
     if: ${{ github.event_name != 'pull_request' || needs.changes.outputs.backend_changed == 'true' }}
     steps:
+      - name: Normalize self-hosted workspace (pre-checkout)
+        shell: bash
+        run: |
+          set -euo pipefail
+          workspace="${GITHUB_WORKSPACE:?}"
+          uid="$(id -u)"
+          gid="$(id -g)"
+          stale_paths=(
+            "$workspace/.runtime-cache"
+            "$workspace/.venv"
+            "$workspace/apps/web/node_modules"
+          )
+          if command -v sudo >/dev/null 2>&1; then
+            if sudo find "$workspace" -mindepth 1 -uid 0 -print -quit | grep -q .; then
+              echo "Detected root-owned residue under $workspace; normalizing ownership"
+              sudo chown -R "$uid:$gid" "$workspace"
+            fi
+            for path in "${stale_paths[@]}"; do
+              if sudo test -e "$path"; then
+                echo "Removing stale workspace path: $path"
+                sudo rm -rf "$path"
+              fi
+            done
+          else
+            for path in "${stale_paths[@]}"; do
+              rm -rf "$path" || true
+            done
+          fi
+
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
@@ -1980,6 +2612,35 @@ jobs:
     needs: [preflight-fast, changes, backend-lint-hosted]
     if: ${{ (github.event_name != 'pull_request' || needs.changes.outputs.backend_changed == 'true') && always() && needs['backend-lint-hosted'].result != 'success' }}
     steps:
+      - name: Normalize self-hosted workspace (pre-checkout)
+        shell: bash
+        run: |
+          set -euo pipefail
+          workspace="${GITHUB_WORKSPACE:?}"
+          uid="$(id -u)"
+          gid="$(id -g)"
+          stale_paths=(
+            "$workspace/.runtime-cache"
+            "$workspace/.venv"
+            "$workspace/apps/web/node_modules"
+          )
+          if command -v sudo >/dev/null 2>&1; then
+            if sudo find "$workspace" -mindepth 1 -uid 0 -print -quit | grep -q .; then
+              echo "Detected root-owned residue under $workspace; normalizing ownership"
+              sudo chown -R "$uid:$gid" "$workspace"
+            fi
+            for path in "${stale_paths[@]}"; do
+              if sudo test -e "$path"; then
+                echo "Removing stale workspace path: $path"
+                sudo rm -rf "$path"
+              fi
+            done
+          else
+            for path in "${stale_paths[@]}"; do
+              rm -rf "$path" || true
+            done
+          fi
+
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
@@ -2038,6 +2699,35 @@ jobs:
     needs: [preflight-fast, changes]
     if: ${{ github.event_name != 'pull_request' || needs.changes.outputs.web_changed == 'true' }}
     steps:
+      - name: Normalize self-hosted workspace (pre-checkout)
+        shell: bash
+        run: |
+          set -euo pipefail
+          workspace="${GITHUB_WORKSPACE:?}"
+          uid="$(id -u)"
+          gid="$(id -g)"
+          stale_paths=(
+            "$workspace/.runtime-cache"
+            "$workspace/.venv"
+            "$workspace/apps/web/node_modules"
+          )
+          if command -v sudo >/dev/null 2>&1; then
+            if sudo find "$workspace" -mindepth 1 -uid 0 -print -quit | grep -q .; then
+              echo "Detected root-owned residue under $workspace; normalizing ownership"
+              sudo chown -R "$uid:$gid" "$workspace"
+            fi
+            for path in "${stale_paths[@]}"; do
+              if sudo test -e "$path"; then
+                echo "Removing stale workspace path: $path"
+                sudo rm -rf "$path"
+              fi
+            done
+          else
+            for path in "${stale_paths[@]}"; do
+              rm -rf "$path" || true
+            done
+          fi
+
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
@@ -2065,6 +2755,35 @@ jobs:
     needs: [preflight-fast, changes, frontend-lint-hosted]
     if: ${{ (github.event_name != 'pull_request' || needs.changes.outputs.web_changed == 'true') && always() && needs['frontend-lint-hosted'].result != 'success' }}
     steps:
+      - name: Normalize self-hosted workspace (pre-checkout)
+        shell: bash
+        run: |
+          set -euo pipefail
+          workspace="${GITHUB_WORKSPACE:?}"
+          uid="$(id -u)"
+          gid="$(id -g)"
+          stale_paths=(
+            "$workspace/.runtime-cache"
+            "$workspace/.venv"
+            "$workspace/apps/web/node_modules"
+          )
+          if command -v sudo >/dev/null 2>&1; then
+            if sudo find "$workspace" -mindepth 1 -uid 0 -print -quit | grep -q .; then
+              echo "Detected root-owned residue under $workspace; normalizing ownership"
+              sudo chown -R "$uid:$gid" "$workspace"
+            fi
+            for path in "${stale_paths[@]}"; do
+              if sudo test -e "$path"; then
+                echo "Removing stale workspace path: $path"
+                sudo rm -rf "$path"
+              fi
+            done
+          else
+            for path in "${stale_paths[@]}"; do
+              rm -rf "$path" || true
+            done
+          fi
+
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
