@@ -923,6 +923,7 @@ jobs:
           UI_AUDIT_GEMINI_ENABLED: "false"
           NOTIFICATION_ENABLED: "0"
           VD_API_KEY: "ci-smoke-write-token"
+          WEB_ACTION_SESSION_TOKEN: "ci-smoke-write-token"
         run: ./scripts/strict_ci_entry.sh --mode api-real-smoke
 
       - name: Upload CI failure diagnostics (api-real-smoke)
@@ -1479,6 +1480,7 @@ jobs:
           exit 1
 
       - name: Start worker for perceived e2e
+        shell: bash
         env:
           DATABASE_URL: "postgresql+psycopg://postgres:postgres@postgres:5432/video_analysis_web_e2e_perceived"
           TEMPORAL_TARGET_HOST: 127.0.0.1:${{ env.WEB_E2E_PERCEIVED_TEMPORAL_PORT }}
