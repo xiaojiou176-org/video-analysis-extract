@@ -729,7 +729,6 @@ if ! (
   cd "$ROOT_DIR" && \
   env -u VD_API_KEY -u WEB_ACTION_SESSION_TOKEN \
   VD_ALLOW_UNAUTH_WRITE="true" \
-  VD_CI_ALLOW_UNAUTH_WRITE="true" \
   API_INTEGRATION_SMOKE_STRICT="1" \
   uv run pytest apps/api/tests/test_api_integration_smoke.py -q -rA
 ); then

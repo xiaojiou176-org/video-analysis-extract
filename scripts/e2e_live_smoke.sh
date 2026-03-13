@@ -661,11 +661,15 @@ PY
   printf '%s' "$resolved"
 }
 
-resolve_local_write_token() {
+resolve_local_web_session_token() {
   if [[ -n "${WEB_ACTION_SESSION_TOKEN:-}" ]]; then
     printf '%s' "$WEB_ACTION_SESSION_TOKEN"
     return 0
   fi
+  printf ''
+}
+
+resolve_local_api_write_token() {
   if [[ -n "${VD_API_KEY:-}" ]]; then
     printf '%s' "$VD_API_KEY"
     return 0
@@ -683,11 +687,15 @@ api_post() {
   local tmp_body
   tmp_body="$(mktemp)"
   local -a auth_headers=()
-  local write_token
-  write_token="$(resolve_local_write_token)"
+  local write_token web_session_token
+  write_token="$(resolve_local_api_write_token)"
+  web_session_token="$(resolve_local_web_session_token)"
   if [[ -n "$write_token" ]]; then
     auth_headers+=(-H "X-API-Key: ${write_token}")
     auth_headers+=(-H "Authorization: Bearer ${write_token}")
+  fi
+  if [[ -n "$web_session_token" ]]; then
+    auth_headers+=(-H "X-Web-Session: ${web_session_token}")
   fi
   local status
   status="$(
@@ -710,11 +718,15 @@ api_get() {
   local tmp_body
   tmp_body="$(mktemp)"
   local -a auth_headers=()
-  local write_token
-  write_token="$(resolve_local_write_token)"
+  local write_token web_session_token
+  write_token="$(resolve_local_api_write_token)"
+  web_session_token="$(resolve_local_web_session_token)"
   if [[ -n "$write_token" ]]; then
     auth_headers+=(-H "X-API-Key: ${write_token}")
     auth_headers+=(-H "Authorization: Bearer ${write_token}")
+  fi
+  if [[ -n "$web_session_token" ]]; then
+    auth_headers+=(-H "X-Web-Session: ${web_session_token}")
   fi
   local status
   status="$(

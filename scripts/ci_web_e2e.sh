@@ -386,11 +386,6 @@ require_command npm
 
 if [[ "${STRICT_CI_BOOTSTRAP_RUNTIME_READY:-0}" != "1" ]]; then
   source "$ROOT_DIR/scripts/bootstrap_strict_ci_runtime.sh"
-elif ! declare -F install_web_npm_wrapper >/dev/null || ! declare -F ensure_web_arm64_native_optional_deps >/dev/null; then
-  export STRICT_CI_BOOTSTRAP_LOAD_HELPERS_ONLY=1
-  source "$ROOT_DIR/scripts/bootstrap_strict_ci_runtime.sh"
-  unset STRICT_CI_BOOTSTRAP_LOAD_HELPERS_ONLY
-  install_web_npm_wrapper
 fi
 
 install_temporal_cli

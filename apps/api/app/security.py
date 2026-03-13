@@ -109,17 +109,7 @@ def _allow_unauth_write() -> bool:
     if value not in {"1", "true", "yes", "on"}:
         return False
 
-    if os.getenv("PYTEST_CURRENT_TEST"):
-        return True
-
-    ci_raw = os.getenv("CI", "").strip().lower()
-    actions_raw = os.getenv("GITHUB_ACTIONS", "").strip().lower()
-    ci_opt_in_raw = os.getenv("VD_CI_ALLOW_UNAUTH_WRITE", "").strip().lower()
-    return (
-        ci_raw in {"1", "true", "yes", "on"}
-        and actions_raw in {"1", "true", "yes", "on"}
-        and ci_opt_in_raw in {"1", "true", "yes", "on"}
-    )
+    return bool(os.getenv("PYTEST_CURRENT_TEST"))
 
 
 def _actor_label(

@@ -2,7 +2,27 @@ name: pre-commit
 
 on:
   pull_request:
+    paths:
+      - ".githooks/**"
+      - ".pre-commit-config.yaml"
+      - "scripts/check_test_assertions.py"
+      - "scripts/check_required_ci_secrets.py"
+      - "scripts/check_ci_workflow_strictness.py"
+      - ".github/workflows/pre-commit.yml"
+      - ".github/actions/**"
   push:
+    paths:
+      - ".githooks/**"
+      - ".pre-commit-config.yaml"
+      - "scripts/check_test_assertions.py"
+      - "scripts/check_required_ci_secrets.py"
+      - "scripts/check_ci_workflow_strictness.py"
+      - ".github/workflows/pre-commit.yml"
+      - ".github/actions/**"
+
+concurrency:
+  group: pre-commit-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -13,302 +33,63 @@ env:
   PRE_COMMIT_HOME: /tmp/ci-cache/pre-commit
 
 jobs:
-  required-ci-secrets:
-    runs-on: [self-hosted, video-analysis-extract]
-    timeout-minutes: 5
-    env:
-      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-      RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
-      RESEND_FROM_EMAIL: ${{ secrets.RESEND_FROM_EMAIL }}
-      YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
-    steps:
-      - name: Normalize self-hosted workspace (pre-checkout)
-        shell: bash
-        run: |
-          set -euo pipefail
-          workspace="${GITHUB_WORKSPACE:?}"
-          uid="$(id -u)"
-          gid="$(id -g)"
-          stale_paths=(
-            "$workspace/.runtime-cache"
-            "$workspace/.venv"
-            "$workspace/apps/web/node_modules"
-          )
-          if command -v sudo >/dev/null 2>&1; then
-            if sudo find "$workspace" -mindepth 1 -uid 0 -print -quit | grep -q .; then
-              echo "Detected root-owned residue under $workspace; normalizing ownership"
-              sudo chown -R "$uid:$gid" "$workspace"
-            fi
-            for path in "${stale_paths[@]}"; do
-              if sudo test -e "$path"; then
-                echo "Removing stale workspace path: $path"
-                sudo rm -rf "$path"
-              fi
-            done
-          else
-            for path in "${stale_paths[@]}"; do
-              rm -rf "$path" || true
-            done
-          fi
-
-      - name: Checkout
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-        with:
-          clean: true
-      - name: Enforce required CI secrets/env vars
-        run: |
-          python3 scripts/check_required_ci_secrets.py \
-            --required GEMINI_API_KEY \
-            --required RESEND_API_KEY \
-            --required RESEND_FROM_EMAIL \
-            --required YOUTUBE_API_KEY
-
-  pre-commit-hosted:
-    runs-on: [self-hosted, video-analysis-extract]
-    continue-on-error: true
-    timeout-minutes: 20
-    needs: [required-ci-secrets]
-    outputs:
-      hosted_ok: ${{ steps.hosted_status.outputs.hosted_ok }}
-    steps:
-      - name: Normalize self-hosted workspace (pre-checkout)
-        shell: bash
-        run: |
-          set -euo pipefail
-          workspace="${GITHUB_WORKSPACE:?}"
-          uid="$(id -u)"
-          gid="$(id -g)"
-          stale_paths=(
-            "$workspace/.runtime-cache"
-            "$workspace/.venv"
-            "$workspace/apps/web/node_modules"
-          )
-          if command -v sudo >/dev/null 2>&1; then
-            if sudo find "$workspace" -mindepth 1 -uid 0 -print -quit | grep -q .; then
-              echo "Detected root-owned residue under $workspace; normalizing ownership"
-              sudo chown -R "$uid:$gid" "$workspace"
-            fi
-            for path in "${stale_paths[@]}"; do
-              if sudo test -e "$path"; then
-                echo "Removing stale workspace path: $path"
-                sudo rm -rf "$path"
-              fi
-            done
-          else
-            for path in "${stale_paths[@]}"; do
-              rm -rf "$path" || true
-            done
-          fi
-
-      - name: Checkout
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-        with:
-          clean: true
-          fetch-depth: 1
-
-      - name: Setup Python
-        id: setup-python
-        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
-        with:
-          python-version: "3.12"
-
-      - name: Setup Node.js
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version: "20"
-
-      - name: Cache pre-commit environments
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
-        with:
-          path: ${{ env.PRE_COMMIT_HOME }}
-          key: >-
-            ${{ runner.os }}-pre-commit-
-            ${{ steps.setup-python.outputs.python-version }}-
-            ${{ hashFiles('.pre-commit-config.yaml') }}
-          restore-keys: |
-            ${{ runner.os }}-pre-commit-${{ steps.setup-python.outputs.python-version }}-
-            ${{ runner.os }}-pre-commit-
-
-      - name: Install pre-commit
-        run: python -m pip install "pre-commit==${PRE_COMMIT_PIP_VERSION}"
-
-      - name: Install gitleaks CLI
-        shell: bash
-        run: |
-          set -euo pipefail
-          version="8.30.0"
-          expected_sha256="79a3ab579b53f71efd634f3aaf7e04a0fa0cf206b7ed434638d1547a2470a66e"
-          archive="gitleaks_${version}_linux_x64.tar.gz"
-          url="https://github.com/gitleaks/gitleaks/releases/download/v${version}/${archive}"
-
-          curl -fsSL "$url" -o "$archive"
-          echo "${expected_sha256}  ${archive}" | sha256sum -c -
-          tar -xzf "$archive" gitleaks
-          sudo install -m 0755 gitleaks /usr/local/bin/gitleaks
-          rm -f "$archive" gitleaks
-
-          gitleaks version
-
-      - name: Run pre-commit (retry for flaky network installs)
-        shell: bash
-        run: |
-          set +e
-
-          max_attempts=3
-          attempt=1
-          result=1
-          while true; do
-            echo "[pre-commit-ci] attempt ${attempt}/${max_attempts}"
-            pre-commit run --all-files --show-diff-on-failure
-            result=$?
-            if [[ "$result" -eq 0 ]]; then
-              break
-            fi
-
-            if [[ "$attempt" -ge "$max_attempts" ]]; then
-              echo "[pre-commit-ci] exhausted retries"
-              break
-            fi
-
-            sleep_seconds=$((attempt * 15))
-            echo "[pre-commit-ci] retry in ${sleep_seconds}s"
-            sleep "$sleep_seconds"
-            attempt=$((attempt + 1))
-          done
-
-          if [[ "$result" -ne 0 ]]; then
-            echo "[pre-commit-ci] warning: hosted pre-commit remained non-zero after retries; fallback job will take over."
-          fi
-          exit 0
-
-      - name: Record hosted pre-commit outcome
-        if: ${{ always() }}
-        id: hosted_status
-        run: |
-          if [[ "${{ job.status }}" == "success" ]]; then
-            echo "hosted_ok=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "hosted_ok=false" >> "$GITHUB_OUTPUT"
-          fi
-
-  pre-commit-fallback:
-    runs-on: [self-hosted, video-analysis-extract]
-    timeout-minutes: 25
-    needs: [required-ci-secrets, pre-commit-hosted]
-    if: ${{ always() && (needs['pre-commit-hosted'].result != 'success' || needs['pre-commit-hosted'].outputs.hosted_ok != 'true') }}
-    steps:
-      - name: Normalize self-hosted workspace (pre-checkout)
-        shell: bash
-        run: |
-          set -euo pipefail
-          workspace="${GITHUB_WORKSPACE:?}"
-          uid="$(id -u)"
-          gid="$(id -g)"
-          stale_paths=(
-            "$workspace/.runtime-cache"
-            "$workspace/.venv"
-            "$workspace/apps/web/node_modules"
-          )
-          if command -v sudo >/dev/null 2>&1; then
-            if sudo find "$workspace" -mindepth 1 -uid 0 -print -quit | grep -q .; then
-              echo "Detected root-owned residue under $workspace; normalizing ownership"
-              sudo chown -R "$uid:$gid" "$workspace"
-            fi
-            for path in "${stale_paths[@]}"; do
-              if sudo test -e "$path"; then
-                echo "Removing stale workspace path: $path"
-                sudo rm -rf "$path"
-              fi
-            done
-          else
-            for path in "${stale_paths[@]}"; do
-              rm -rf "$path" || true
-            done
-          fi
-
-      - name: Checkout
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-        with:
-          clean: true
-          fetch-depth: 1
-
-      - name: Setup Python
-        id: setup-python
-        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
-        with:
-          python-version: "3.12"
-
-      - name: Setup Node.js
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version: "20"
-
-      - name: Cache pre-commit environments
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
-        with:
-          path: ${{ env.PRE_COMMIT_HOME }}
-          key: >-
-            ${{ runner.os }}-pre-commit-
-            ${{ steps.setup-python.outputs.python-version }}-
-            ${{ hashFiles('.pre-commit-config.yaml') }}
-          restore-keys: |
-            ${{ runner.os }}-pre-commit-${{ steps.setup-python.outputs.python-version }}-
-            ${{ runner.os }}-pre-commit-
-
-      - name: Install pre-commit
-        run: python -m pip install "pre-commit==${PRE_COMMIT_PIP_VERSION}"
-
-      - name: Install gitleaks CLI
-        shell: bash
-        run: |
-          set -euo pipefail
-          version="8.30.0"
-          expected_sha256="79a3ab579b53f71efd634f3aaf7e04a0fa0cf206b7ed434638d1547a2470a66e"
-          archive="gitleaks_${version}_linux_x64.tar.gz"
-          url="https://github.com/gitleaks/gitleaks/releases/download/v${version}/${archive}"
-
-          curl -fsSL "$url" -o "$archive"
-          echo "${expected_sha256}  ${archive}" | sha256sum -c -
-          tar -xzf "$archive" gitleaks
-          sudo install -m 0755 gitleaks /usr/local/bin/gitleaks
-          rm -f "$archive" gitleaks
-
-          gitleaks version
-
-      - name: Run pre-commit (retry for flaky network installs)
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          max_attempts=3
-          attempt=1
-          while true; do
-            echo "[pre-commit-ci] attempt ${attempt}/${max_attempts}"
-            if pre-commit run --all-files --show-diff-on-failure; then
-              break
-            fi
-
-            if [[ "$attempt" -ge "$max_attempts" ]]; then
-              echo "[pre-commit-ci] exhausted retries"
-              exit 1
-            fi
-
-            sleep_seconds=$((attempt * 15))
-            echo "[pre-commit-ci] retry in ${sleep_seconds}s"
-            sleep "$sleep_seconds"
-            attempt=$((attempt + 1))
-          done
-
   pre-commit:
     runs-on: [self-hosted, video-analysis-extract]
-    timeout-minutes: 3
-    needs: [pre-commit-hosted, pre-commit-fallback]
-    if: ${{ always() && (needs['pre-commit-hosted'].result == 'success' || needs['pre-commit-fallback'].result == 'success') }}
+    timeout-minutes: 20
     steps:
-      - name: Select pre-commit source
+      - uses: ./.github/actions/normalize-self-hosted-workspace
+
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          clean: true
+          fetch-depth: 1
+
+      - name: Setup Python
+        id: setup-python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "20"
+
+      - name: Cache pre-commit environments
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ${{ env.PRE_COMMIT_HOME }}
+          key: >-
+            ${{ runner.os }}-pre-commit-
+            ${{ steps.setup-python.outputs.python-version }}-
+            ${{ hashFiles('.pre-commit-config.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pre-commit-${{ steps.setup-python.outputs.python-version }}-
+            ${{ runner.os }}-pre-commit-
+
+      - name: Install pre-commit
+        run: python -m pip install "pre-commit==${PRE_COMMIT_PIP_VERSION}"
+
+      - name: Install gitleaks CLI
+        shell: bash
         run: |
-          if [[ "${{ needs['pre-commit-hosted'].result }}" == "success" ]]; then
-            echo "pre-commit source: hosted"
-          else
-            echo "pre-commit source: dedicated fallback"
-          fi
+          set -euo pipefail
+          version="8.30.0"
+          expected_sha256="79a3ab579b53f71efd634f3aaf7e04a0fa0cf206b7ed434638d1547a2470a66e"
+          archive="gitleaks_${version}_linux_x64.tar.gz"
+          url="https://github.com/gitleaks/gitleaks/releases/download/v${version}/${archive}"
+
+          curl --retry 5 --retry-all-errors --retry-delay 2 -fsSL "$url" -o "$archive"
+          echo "${expected_sha256}  ${archive}" | sha256sum -c -
+          tar -xzf "$archive" gitleaks
+          sudo install -m 0755 gitleaks /usr/local/bin/gitleaks
+          rm -f "$archive" gitleaks
+
+          gitleaks version
+
+      - name: Run pre-commit
+        id: run_pre_commit
+        shell: bash
+        run: |
+          pre-commit run --all-files --show-diff-on-failure

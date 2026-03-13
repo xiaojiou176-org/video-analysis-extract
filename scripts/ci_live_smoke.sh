@@ -8,6 +8,19 @@ eval "$(python3 scripts/ci_contract.py shell-exports)"
 mkdir -p .runtime-cache
 uv sync --frozen --extra dev --extra e2e
 
+LIVE_SMOKE_WRITE_TOKEN="$(
+  python3 - <<'PY'
+import secrets
+print(secrets.token_urlsafe(32))
+PY
+)"
+LIVE_SMOKE_WEB_SESSION_TOKEN="$(
+  python3 - <<'PY'
+import secrets
+print(secrets.token_urlsafe(32))
+PY
+)"
+
 missing=()
 [[ -n "${GEMINI_API_KEY:-}" ]] || missing+=("GEMINI_API_KEY")
 [[ -n "${RESEND_API_KEY:-}" ]] || missing+=("RESEND_API_KEY")
@@ -41,6 +54,8 @@ done
 
 temporal server start-dev --ip 127.0.0.1 --port 7233 > .runtime-cache/live-smoke-temporal.log 2>&1 &
 LIVE_SMOKE_TEMPORAL_PID="$!"
+VD_API_KEY="$LIVE_SMOKE_WRITE_TOKEN" \
+WEB_ACTION_SESSION_TOKEN="$LIVE_SMOKE_WEB_SESSION_TOKEN" \
 scripts/dev_api.sh --host 127.0.0.1 --port 18080 --no-reload > .runtime-cache/live-smoke-api.log 2>&1 &
 LIVE_SMOKE_API_PID="$!"
 scripts/dev_worker.sh --no-show-hints > .runtime-cache/live-smoke-worker.log 2>&1 &
@@ -60,6 +75,8 @@ for _ in $(seq 1 60); do
   sleep 1
 done
 
+VD_API_KEY="$LIVE_SMOKE_WRITE_TOKEN" \
+WEB_ACTION_SESSION_TOKEN="$LIVE_SMOKE_WEB_SESSION_TOKEN" \
 ./scripts/e2e_live_smoke.sh \
   --api-base-url "http://127.0.0.1:18080" \
   --require-api "1" \
