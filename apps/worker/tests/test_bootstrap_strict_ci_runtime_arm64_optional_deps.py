@@ -216,6 +216,9 @@ def test_bootstrap_runtime_fails_fast_when_linux_arm64_optional_native_web_packa
         env["PATH"] = f"{bin_dir}:{env.get('PATH', '')}"
         env["NPM_LOG"] = str(npm_log)
         env["UV_LOG"] = str(uv_log)
+        env.pop("UV_PROJECT_ENVIRONMENT", None)
+        env.pop("VIRTUAL_ENV", None)
+        env.pop("UV_LINK_MODE", None)
 
         result = subprocess.run(
             ["bash", str(scripts_dir / "bootstrap_strict_ci_runtime.sh")],
@@ -338,6 +341,9 @@ def test_bootstrap_runtime_keeps_failing_when_followup_ci_still_omits_arm64_nati
         env = os.environ.copy()
         env["PATH"] = f"{bin_dir}:{env.get('PATH', '')}"
         env["NPM_LOG"] = str(npm_log)
+        env.pop("UV_PROJECT_ENVIRONMENT", None)
+        env.pop("VIRTUAL_ENV", None)
+        env.pop("UV_LINK_MODE", None)
 
         result = subprocess.run(
             [

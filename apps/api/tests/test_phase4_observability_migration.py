@@ -28,8 +28,12 @@ def migration_db() -> Iterator[str | None]:
 
     database_name = f"phase4_obs_{uuid.uuid4().hex[:12]}"
     admin_database = parsed.database or "postgres"
-    app_url = parsed.set(database=database_name).render_as_string(hide_password=False)
-    admin_url = parsed.set(database=admin_database).render_as_string(hide_password=False)
+    app_url = parsed.set(drivername="postgresql", database=database_name).render_as_string(
+        hide_password=False
+    )
+    admin_url = parsed.set(drivername="postgresql", database=admin_database).render_as_string(
+        hide_password=False
+    )
 
     with psycopg.connect(admin_url, autocommit=True) as admin_conn, admin_conn.cursor() as cur:
         cur.execute(f'CREATE DATABASE "{database_name}"')

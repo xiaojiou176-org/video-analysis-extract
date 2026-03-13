@@ -402,6 +402,7 @@ jobs:
 
       - name: Gemini UI/UX audit (blocking)
         if: ${{ needs.changes.outputs.web_changed == 'true' || needs.changes.outputs.deps_changed == 'true' }}
+        shell: bash
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GEMINI_UI_UX_AUDIT_REPORT_PATH: .runtime-cache/ui-audit/gemini-ui-ux-audit-report.json
@@ -440,6 +441,7 @@ jobs:
 
       - name: Gemini UI/UX audit summary (strict)
         if: ${{ always() && (needs.changes.outputs.web_changed == 'true' || needs.changes.outputs.deps_changed == 'true') }}
+        shell: bash
         run: |
           python3 - <<'PY'
           import json

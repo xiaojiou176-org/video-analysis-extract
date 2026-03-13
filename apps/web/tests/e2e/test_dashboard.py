@@ -45,8 +45,8 @@ def _require_mock_api_state(
 def test_dashboard_trigger_ingest_poll_button(page: Page) -> None:
     for attempt in range(5):
         page.goto("/", wait_until="domcontentloaded")
-        expect(page.get_by_role("heading", name="拉取采集")).to_be_visible()
         trigger_button = page.get_by_role("button", name="触发采集")
+        expect(trigger_button).to_be_visible()
         expect(trigger_button).to_have_attribute("data-slot", "button")
         trigger_button.click()
         try:
