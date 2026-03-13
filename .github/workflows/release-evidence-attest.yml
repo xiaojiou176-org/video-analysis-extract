@@ -1,0 +1,72 @@
+name: release-evidence-attest
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Release tag to package and attest.
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  attestations: write
+  id-token: write
+  artifact-metadata: write
+
+jobs:
+  release-evidence:
+    runs-on: [self-hosted, video-analysis-extract]
+    timeout-minutes: 30
+    steps:
+      - uses: ./.github/actions/normalize-self-hosted-workspace
+
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          clean: true
+          fetch-depth: 0
+
+      - name: Capture release evidence bundle inputs
+        run: |
+          bash scripts/release/capture_release_manifest.sh "${{ inputs.release_tag }}"
+
+      - name: Package release evidence
+        run: |
+          release_dir="reports/releases/${{ inputs.release_tag }}"
+          bundle_path=".runtime-cache/release-evidence-${{ inputs.release_tag }}.tar.gz"
+          mkdir -p .runtime-cache
+          tar -czf "$bundle_path" -C "$release_dir" .
+          echo "bundle_path=$bundle_path" >> "$GITHUB_ENV"
+
+      - name: Upload release evidence bundle
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-evidence-${{ inputs.release_tag }}-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: error
+          path: |
+            .runtime-cache/release-evidence-${{ inputs.release_tag }}.tar.gz
+            reports/releases/${{ inputs.release_tag }}/manifest.json
+            reports/releases/${{ inputs.release_tag }}/checksums.sha256
+            reports/releases/${{ inputs.release_tag }}/rollback/db-rollback-readiness.json
+            reports/releases/${{ inputs.release_tag }}/rollback/drill.json
+
+      - name: Attest release evidence bundle provenance
+        uses: actions/attest-build-provenance@b3e506e8c389afc651c5bacf2b8f2a1ea0557215 # v4
+        with:
+          subject-path: .runtime-cache/release-evidence-${{ inputs.release_tag }}.tar.gz
+
+      - name: Write attestation verification summary
+        if: always()
+        run: |
+          {
+            echo "## Release Evidence Attestation"
+            echo
+            echo "- release_tag: \`${{ inputs.release_tag }}\`"
+            echo "- bundle: \`.runtime-cache/release-evidence-${{ inputs.release_tag }}.tar.gz\`"
+            echo
+            echo "Suggested verification:"
+            echo "\`\`\`bash"
+            echo "gh attestation verify .runtime-cache/release-evidence-${{ inputs.release_tag }}.tar.gz --repo ${{ github.repository }}"
+            echo "\`\`\`"
+          } >> "$GITHUB_STEP_SUMMARY"

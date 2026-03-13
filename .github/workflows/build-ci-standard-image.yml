@@ -6,40 +6,16 @@ on:
 permissions:
   contents: write
   packages: write
+  attestations: write
+  id-token: write
+  artifact-metadata: write
 
 jobs:
   publish:
     runs-on: [self-hosted, video-analysis-extract]
     timeout-minutes: 90
     steps:
-      - name: Normalize self-hosted workspace (pre-checkout)
-        shell: bash
-        run: |
-          set -euo pipefail
-          workspace="${GITHUB_WORKSPACE:?}"
-          uid="$(id -u)"
-          gid="$(id -g)"
-          stale_paths=(
-            "$workspace/.runtime-cache"
-            "$workspace/.venv"
-            "$workspace/apps/web/node_modules"
-          )
-          if command -v sudo >/dev/null 2>&1; then
-            if sudo find "$workspace" -mindepth 1 -uid 0 -print -quit | grep -q .; then
-              echo "Detected root-owned residue under $workspace; normalizing ownership"
-              sudo chown -R "$uid:$gid" "$workspace"
-            fi
-            for path in "${stale_paths[@]}"; do
-              if sudo test -e "$path"; then
-                echo "Removing stale workspace path: $path"
-                sudo rm -rf "$path"
-              fi
-            done
-          else
-            for path in "${stale_paths[@]}"; do
-              rm -rf "$path" || true
-            done
-          fi
+      - uses: ./.github/actions/normalize-self-hosted-workspace
 
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -51,34 +27,68 @@ jobs:
           echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
 
       - name: Build and push strict CI standard image
-        run: ./scripts/build_ci_standard_image.sh --push --tag "${{ github.sha }}"
+        run: ./scripts/build_ci_standard_image.sh --push --tag "${{ github.sha }}" --metadata-file .runtime-cache/build-ci-standard-image-metadata.json
 
       - name: Resolve published image digest
         id: digest
         run: |
-          repo="$(python3 scripts/ci_contract.py get standard_image.repository)"
-          manifest="$(docker buildx imagetools inspect "${repo}:${{ github.sha }}" --format '{{json .Manifest}}')"
-          digest="$(python3 - <<'PY' "$manifest"
-import json
-import sys
-print(json.loads(sys.argv[1])["digest"])
-PY
-)"
+          digest="$(python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          metadata = json.loads(Path(".runtime-cache/build-ci-standard-image-metadata.json").read_text(encoding="utf-8"))
+          print(metadata["containerimage.digest"])
+          PY
+          )"
           echo "digest=${digest}" >> "$GITHUB_OUTPUT"
+
+      - name: Generate strict CI image SBOM
+        uses: anchore/sbom-action@da167eac915b4e86f08b264dbdbc867b61be6f0c # v0.20.5
+        with:
+          image: ghcr.io/xiaojiou176-org/video-analysis-extract-ci-standard:${{ github.sha }}
+          format: spdx-json
+          output-file: .runtime-cache/attestations/strict-ci-image.spdx.json
+          upload-artifact: false
+          registry-username: ${{ github.actor }}
+          registry-password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload strict CI supply-chain artifacts
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: strict-ci-image-supply-chain-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: error
+          path: |
+            .runtime-cache/build-ci-standard-image-metadata.json
+            .runtime-cache/attestations/strict-ci-image.spdx.json
+
+      - name: Attest strict CI image provenance
+        uses: actions/attest-build-provenance@b3e506e8c389afc651c5bacf2b8f2a1ea0557215 # v4
+        with:
+          subject-name: ghcr.io/xiaojiou176-org/video-analysis-extract-ci-standard
+          subject-digest: ${{ steps.digest.outputs.digest }}
+          push-to-registry: true
+
+      - name: Attest strict CI image SBOM
+        uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26 # v4.1.0
+        with:
+          subject-name: ghcr.io/xiaojiou176-org/video-analysis-extract-ci-standard
+          subject-digest: ${{ steps.digest.outputs.digest }}
+          sbom-path: .runtime-cache/attestations/strict-ci-image.spdx.json
+          push-to-registry: true
 
       - name: Update strict CI contract digest
         run: |
           python3 - <<'PY' "${{ steps.digest.outputs.digest }}" "${{ github.sha }}"
-import json
-import sys
-from pathlib import Path
+          import json
+          import sys
+          from pathlib import Path
 
-contract_path = Path("infra/config/strict_ci_contract.json")
-contract = json.loads(contract_path.read_text(encoding="utf-8"))
-contract["standard_image"]["tag"] = sys.argv[2]
-contract["standard_image"]["digest"] = sys.argv[1]
-contract_path.write_text(json.dumps(contract, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-PY
+          contract_path = Path("infra/config/strict_ci_contract.json")
+          contract = json.loads(contract_path.read_text(encoding="utf-8"))
+          contract["standard_image"]["tag"] = sys.argv[2]
+          contract["standard_image"]["digest"] = sys.argv[1]
+          contract_path.write_text(json.dumps(contract, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+          PY
 
       - name: Commit strict CI contract digest
         run: |

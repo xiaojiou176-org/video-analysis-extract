@@ -7,6 +7,7 @@ cd "$ROOT_DIR"
 PUSH_IMAGE="0"
 LOAD_IMAGE="0"
 TAG_OVERRIDE=""
+METADATA_FILE=""
 PLATFORMS="${VD_STANDARD_ENV_BUILD_PLATFORMS:-linux/amd64,linux/arm64}"
 
 resolve_local_load_platform() {
@@ -27,7 +28,7 @@ resolve_local_load_platform() {
 
 usage() {
   cat <<'EOF'
-Usage: ./scripts/build_ci_standard_image.sh [--push] [--load] [--tag <tag>]
+Usage: ./scripts/build_ci_standard_image.sh [--push] [--load] [--tag <tag>] [--metadata-file <path>]
 EOF
 }
 
@@ -43,6 +44,10 @@ while (($# > 0)); do
       ;;
     --tag)
       TAG_OVERRIDE="${2:-}"
+      shift 2
+      ;;
+    --metadata-file)
+      METADATA_FILE="${2:-}"
       shift 2
       ;;
     -h|--help)
@@ -92,6 +97,11 @@ elif [[ "$LOAD_IMAGE" == "1" ]]; then
 else
   docker_args=(buildx build "${docker_args[@]}")
   docker_args+=(--platform "$PLATFORMS")
+fi
+
+if [[ -n "$METADATA_FILE" ]]; then
+  mkdir -p "$(dirname "$METADATA_FILE")"
+  docker_args+=(--metadata-file "$METADATA_FILE")
 fi
 
 docker_args+=("${build_args[@]}" "$ROOT_DIR")

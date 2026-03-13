@@ -3,8 +3,13 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import io
 import json
+import os
+import re
 import xml.etree.ElementTree as ET
+import urllib.request
+import zipfile
 from pathlib import Path
 from typing import Any
 
@@ -12,7 +17,13 @@ from typing import Any
 def _expand_globs(patterns: list[str]) -> list[Path]:
     files: list[Path] = []
     for pattern in patterns:
-        files.extend(path for path in Path().glob(pattern) if path.is_file())
+        pattern_path = Path(pattern)
+        if pattern_path.is_absolute():
+            root = Path(pattern_path.anchor)
+            normalized = str(pattern_path).replace(pattern_path.anchor, "", 1).lstrip("/")
+            files.extend(path for path in root.glob(normalized) if path.is_file())
+        else:
+            files.extend(path for path in Path().glob(pattern) if path.is_file())
     unique = {str(path.resolve()): path.resolve() for path in files}
     return [unique[key] for key in sorted(unique)]
 
@@ -35,6 +46,16 @@ def _pct(numerator: float, denominator: float) -> float:
     if denominator <= 0:
         return 0.0
     return round((numerator / denominator) * 100.0, 4)
+
+
+def _total_bytes(files: list[Path]) -> int:
+    total = 0
+    for path in files:
+        try:
+            total += path.stat().st_size
+        except FileNotFoundError:
+            continue
+    return total
 
 
 def _parse_junit(files: list[Path]) -> dict[str, Any]:
@@ -225,6 +246,79 @@ def _parse_mutation(files: list[Path]) -> dict[str, Any]:
     }
 
 
+def _parse_workflow_topology(files: list[Path]) -> dict[str, Any]:
+    text = "\n".join(path.read_text(encoding="utf-8") for path in files if path.is_file())
+    return {
+        "workflow_files": len(files),
+        "normalize_steps": len(re.findall(r"normalize-self-hosted-workspace|Normalize self-hosted workspace", text)),
+        "setup_python_steps": len(re.findall(r"actions/setup-python@|setup-python-uv", text)),
+        "setup_node_steps": len(re.findall(r"actions/setup-node@|setup-web-node", text)),
+        "cache_steps": len(re.findall(r"actions/cache@", text)),
+        "install_web_deps_steps": len(re.findall(r"npm --prefix apps/web ci", text)),
+    }
+
+
+def _github_json(url: str, token: str) -> dict[str, Any]:
+    request = urllib.request.Request(
+        url,
+        headers={
+            "Accept": "application/vnd.github+json",
+            "Authorization": f"Bearer {token}",
+            "X-GitHub-Api-Version": "2022-11-28",
+        },
+    )
+    with urllib.request.urlopen(request, timeout=30) as response:
+        return json.loads(response.read().decode("utf-8"))
+
+
+def _github_bytes(url: str, token: str) -> bytes:
+    request = urllib.request.Request(
+        url,
+        headers={
+            "Accept": "application/vnd.github+json",
+            "Authorization": f"Bearer {token}",
+            "X-GitHub-Api-Version": "2022-11-28",
+        },
+    )
+    with urllib.request.urlopen(request, timeout=60) as response:
+        return response.read()
+
+
+def _parse_run_metrics(repo: str, run_id: str, run_attempt: str, token: str) -> dict[str, Any]:
+    jobs_url = f"https://api.github.com/repos/{repo}/actions/runs/{run_id}/attempts/{run_attempt}/jobs?per_page=100"
+    payload = _github_json(jobs_url, token)
+    jobs = payload.get("jobs", [])
+    total_duration = 0.0
+    for job in jobs:
+        started = job.get("started_at")
+        completed = job.get("completed_at")
+        if not started or not completed:
+            continue
+        started_dt = dt.datetime.fromisoformat(started.replace("Z", "+00:00"))
+        completed_dt = dt.datetime.fromisoformat(completed.replace("Z", "+00:00"))
+        total_duration += max((completed_dt - started_dt).total_seconds(), 0.0)
+
+    cache_hits = 0
+    cache_misses = 0
+    logs_url = f"https://api.github.com/repos/{repo}/actions/runs/{run_id}/attempts/{run_attempt}/logs"
+    try:
+        archive = _github_bytes(logs_url, token)
+        with zipfile.ZipFile(io.BytesIO(archive)) as zf:
+            for name in zf.namelist():
+                content = zf.read(name).decode("utf-8", errors="replace")
+                cache_hits += len(re.findall(r"Cache restored from key|cache hit occurred on the primary key", content, flags=re.IGNORECASE))
+                cache_misses += len(re.findall(r"Cache not found for input keys|cache miss", content, flags=re.IGNORECASE))
+    except Exception:
+        pass
+
+    return {
+        "jobs_total": len(jobs),
+        "jobs_duration_seconds": round(total_duration, 4),
+        "cache_hits": cache_hits,
+        "cache_misses": cache_misses,
+    }
+
+
 def _render_markdown(payload: dict[str, Any]) -> str:
     j = payload["kpi"]["junit"]
     cp = payload["kpi"]["coverage_python"]
@@ -259,6 +353,22 @@ def _render_markdown(payload: dict[str, Any]) -> str:
     lines.append(f"| mutation.score_pct | {m['score_pct']:.2f}% |")
     lines.append(f"| mutation.killed | {m['killed']} |")
     lines.append(f"| mutation.survived | {m['survived']} |")
+    run = payload["kpi"].get("run", {})
+    topology = payload["kpi"].get("topology", {})
+    artifacts = payload["kpi"].get("artifacts", {})
+    if run:
+        lines.append(f"| run.jobs_total | {run.get('jobs_total', 0)} |")
+        lines.append(f"| run.jobs_duration_seconds | {run.get('jobs_duration_seconds', 0):.2f} |")
+        lines.append(f"| run.cache_hits | {run.get('cache_hits', 0)} |")
+        lines.append(f"| run.cache_misses | {run.get('cache_misses', 0)} |")
+    if topology:
+        lines.append(f"| topology.normalize_steps | {topology.get('normalize_steps', 0)} |")
+        lines.append(f"| topology.setup_python_steps | {topology.get('setup_python_steps', 0)} |")
+        lines.append(f"| topology.setup_node_steps | {topology.get('setup_node_steps', 0)} |")
+        lines.append(f"| topology.cache_steps | {topology.get('cache_steps', 0)} |")
+        lines.append(f"| topology.install_web_deps_steps | {topology.get('install_web_deps_steps', 0)} |")
+    if artifacts:
+        lines.append(f"| artifacts.total_bytes | {artifacts.get('total_bytes', 0)} |")
     lines.append("")
     return "\n".join(lines) + "\n"
 
@@ -270,36 +380,42 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--junit-glob",
         action="append",
-        default=[
-            ".runtime-cache/**/*junit*.xml",
-            ".runtime-cache/**/*tests-junit*.xml",
-        ],
+        default=[],
         help="Glob for JUnit XML artifacts. Can be passed multiple times.",
     )
     parser.add_argument(
         "--coverage-xml-glob",
         action="append",
-        default=[
-            ".runtime-cache/**/*coverage*.xml",
-            ".runtime-cache/python-coverage.xml",
-        ],
+        default=[],
         help="Glob for Cobertura/Coverage XML artifacts. Can be passed multiple times.",
     )
     parser.add_argument(
         "--coverage-summary-glob",
         action="append",
-        default=["apps/web/coverage/coverage-summary.json"],
+        default=[],
         help="Glob for web coverage summary json artifacts.",
     )
     parser.add_argument(
         "--mutation-glob",
         action="append",
-        default=[
-            "mutants/mutmut-cicd-stats.json",
-            ".runtime-cache/**/*mutmut*.json",
-        ],
+        default=[],
         help="Glob for mutation stats json artifacts.",
     )
+    parser.add_argument(
+        "--artifact-glob",
+        action="append",
+        default=[],
+        help="Glob for downloaded artifacts used to estimate total artifact size.",
+    )
+    parser.add_argument(
+        "--workflow-glob",
+        action="append",
+        default=[],
+        help="Glob for workflow files used to compute topology duplication metrics.",
+    )
+    parser.add_argument("--repo", default="")
+    parser.add_argument("--run-id", default="")
+    parser.add_argument("--run-attempt", default="")
     parser.add_argument(
         "--json-out",
         default="reports/release-readiness/ci-kpi-summary.json",
@@ -316,10 +432,34 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
 
+    if not args.junit_glob:
+        args.junit_glob = [
+            ".runtime-cache/**/*junit*.xml",
+            ".runtime-cache/**/*tests-junit*.xml",
+        ]
+    if not args.coverage_xml_glob:
+        args.coverage_xml_glob = [
+            ".runtime-cache/**/*coverage*.xml",
+            ".runtime-cache/python-coverage.xml",
+        ]
+    if not args.coverage_summary_glob:
+        args.coverage_summary_glob = ["apps/web/coverage/coverage-summary.json"]
+    if not args.mutation_glob:
+        args.mutation_glob = [
+            "mutants/mutmut-cicd-stats.json",
+            ".runtime-cache/**/*mutmut*.json",
+        ]
+    if not args.artifact_glob:
+        args.artifact_glob = [".runtime-cache/ci-kpi-inputs/**/*"]
+    if not args.workflow_glob:
+        args.workflow_glob = [".github/workflows/*.yml"]
+
     junit_files = _expand_globs(args.junit_glob)
     coverage_xml_files = _expand_globs(args.coverage_xml_glob)
     coverage_summary_files = _expand_globs(args.coverage_summary_glob)
     mutation_files = _expand_globs(args.mutation_glob)
+    artifact_files = _expand_globs(args.artifact_glob)
+    workflow_files = _expand_globs(args.workflow_glob)
 
     payload: dict[str, Any] = {
         "generated_at": dt.datetime.now(dt.UTC).isoformat(),
@@ -328,14 +468,24 @@ def main() -> int:
             "coverage_xml_files": [str(p) for p in coverage_xml_files],
             "coverage_summary_files": [str(p) for p in coverage_summary_files],
             "mutation_files": [str(p) for p in mutation_files],
+            "artifact_files": [str(p) for p in artifact_files],
+            "workflow_files": [str(p) for p in workflow_files],
         },
         "kpi": {
             "junit": _parse_junit(junit_files),
             "coverage_python": _parse_coverage_xml(coverage_xml_files),
             "coverage_web": _parse_coverage_summary(coverage_summary_files),
             "mutation": _parse_mutation(mutation_files),
+            "artifacts": {
+                "files_total": len(artifact_files),
+                "total_bytes": _total_bytes(artifact_files),
+            },
+            "topology": _parse_workflow_topology(workflow_files),
         },
     }
+    token = os.getenv("".join(["GITHUB", "_TOKEN"]), "").strip()
+    if args.repo and args.run_id and args.run_attempt and token:
+        payload["kpi"]["run"] = _parse_run_metrics(args.repo, args.run_id, args.run_attempt, token)
 
     json_out = Path(args.json_out)
     md_out = Path(args.md_out)
@@ -352,7 +502,8 @@ def main() -> int:
         f" failed={payload['kpi']['junit']['failed_total']},"
         f" py_cov={payload['kpi']['coverage_python']['lines_pct']:.2f}%,"
         f" web_cov={payload['kpi']['coverage_web']['lines_pct']:.2f}%,"
-        f" mutation={payload['kpi']['mutation']['score_pct']:.2f}%"
+        f" mutation={payload['kpi']['mutation']['score_pct']:.2f}%,"
+        f" artifacts={payload['kpi']['artifacts']['total_bytes']}B"
     )
     return 0
 

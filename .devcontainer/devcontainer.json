@@ -5,16 +5,19 @@
     "context": ".."
   },
   "remoteUser": "vscode",
-  "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
+  "workspaceFolder": "/workspace",
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind,consistency=cached",
   "mounts": [
     "source=/var/run/docker.sock,target=/var/run/docker.sock,type=bind"
   ],
   "features": {
-    "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {},
-    "ghcr.io/devcontainers/features/node:1": {
-      "version": "22"
-    },
-    "ghcr.io/devcontainers/features/github-cli:1": {}
+    "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {}
+  },
+  "containerEnv": {
+    "CI_CACHE_ROOT": "/tmp/ci-cache",
+    "UV_CACHE_DIR": "/tmp/ci-cache/uv",
+    "PLAYWRIGHT_BROWSERS_PATH": "/tmp/ci-cache/ms-playwright",
+    "PRE_COMMIT_HOME": "/tmp/ci-cache/pre-commit"
   },
   "postCreateCommand": "bash .devcontainer/post-create.sh",
   "postStartCommand": "bash .devcontainer/post-start.sh",
