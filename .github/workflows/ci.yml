@@ -364,6 +364,7 @@ jobs:
       CI_CACHE_ROOT: ${{ needs.ci-contract.outputs.cache_root }}
       UV_CACHE_DIR: ${{ needs.ci-contract.outputs.uv_cache_dir }}
       PLAYWRIGHT_BROWSERS_PATH: ${{ needs.ci-contract.outputs.playwright_browsers_path }}
+      HOME: /root
     steps:
       - name: Normalize self-hosted workspace (pre-checkout)
         shell: bash
@@ -592,16 +593,17 @@ jobs:
       - name: Migration smoke
         env:
           PGPASSWORD: postgres
-          PGPORT: ${{ job.services.postgres.ports['5432'] }}
+          PGHOST: postgres
+          PGPORT: "5432"
         run: |
           for _ in $(seq 1 30); do
-            if pg_isready -h 127.0.0.1 -p "$PGPORT" -U postgres -d video_analysis_ci >/dev/null 2>&1; then
+            if pg_isready -h "$PGHOST" -p "$PGPORT" -U postgres -d video_analysis_ci >/dev/null 2>&1; then
               break
             fi
             sleep 1
           done
           for migration in $(find infra/migrations -maxdepth 1 -type f -name '*.sql' | sort); do
-            psql "postgresql://postgres:postgres@127.0.0.1:${PGPORT}/video_analysis_ci" -v ON_ERROR_STOP=1 -f "$migration"
+            psql "postgresql://postgres:postgres@${PGHOST}:${PGPORT}/video_analysis_ci" -v ON_ERROR_STOP=1 -f "$migration"
           done
 
   mutation-testing:
@@ -914,6 +916,8 @@ jobs:
           TEMPORAL_NAMESPACE: default
           TEMPORAL_TASK_QUEUE: video-analysis-worker
           SQLITE_STATE_PATH: /tmp/video-digestor-api-smoke.db
+          PIPELINE_WORKSPACE_DIR: /tmp/video-digestor-api-smoke-workspace
+          PIPELINE_ARTIFACT_ROOT: /tmp/video-digestor-api-smoke-artifacts
           UI_AUDIT_GEMINI_ENABLED: "false"
           NOTIFICATION_ENABLED: "0"
           VD_API_KEY: "ci-smoke-write-token"
@@ -1018,6 +1022,7 @@ jobs:
       CI_CACHE_ROOT: ${{ needs.ci-contract.outputs.cache_root }}
       UV_CACHE_DIR: ${{ needs.ci-contract.outputs.uv_cache_dir }}
       PLAYWRIGHT_BROWSERS_PATH: ${{ needs.ci-contract.outputs.playwright_browsers_path }}
+      HOME: /root
       CI_HEAD_SHA: ${{ github.sha }}
     steps:
       - name: Normalize self-hosted workspace (pre-checkout)
@@ -1083,6 +1088,7 @@ jobs:
       CI_CACHE_ROOT: ${{ needs.ci-contract.outputs.cache_root }}
       UV_CACHE_DIR: ${{ needs.ci-contract.outputs.uv_cache_dir }}
       PLAYWRIGHT_BROWSERS_PATH: ${{ needs.ci-contract.outputs.playwright_browsers_path }}
+      HOME: /root
     services:
       postgres:
         image: ${{ needs.ci-contract.outputs.service_image_pgvector_pg16 }}
@@ -1305,6 +1311,7 @@ jobs:
       CI_CACHE_ROOT: ${{ needs.ci-contract.outputs.cache_root }}
       UV_CACHE_DIR: ${{ needs.ci-contract.outputs.uv_cache_dir }}
       PLAYWRIGHT_BROWSERS_PATH: ${{ needs.ci-contract.outputs.playwright_browsers_path }}
+      HOME: /root
     services:
       postgres:
         image: ${{ needs.ci-contract.outputs.service_image_pgvector_pg16 }}
@@ -1401,16 +1408,17 @@ jobs:
       - name: Run migrations for perceived e2e DB
         env:
           PGPASSWORD: postgres
-          PGPORT: ${{ job.services.postgres.ports['5432'] }}
+          PGHOST: postgres
+          PGPORT: "5432"
         run: |
           for _ in $(seq 1 30); do
-            if pg_isready -h 127.0.0.1 -p "$PGPORT" -U postgres -d video_analysis_web_e2e_perceived >/dev/null 2>&1; then
+            if pg_isready -h "$PGHOST" -p "$PGPORT" -U postgres -d video_analysis_web_e2e_perceived >/dev/null 2>&1; then
               break
             fi
             sleep 1
           done
           for migration in $(find infra/migrations -maxdepth 1 -type f -name '*.sql' | sort); do
-            psql "postgresql://postgres:postgres@127.0.0.1:${PGPORT}/video_analysis_web_e2e_perceived" -v ON_ERROR_STOP=1 -f "$migration"
+            psql "postgresql://postgres:postgres@${PGHOST}:${PGPORT}/video_analysis_web_e2e_perceived" -v ON_ERROR_STOP=1 -f "$migration"
           done
 
       - name: Start Temporal dev server for perceived e2e
@@ -1444,7 +1452,7 @@ jobs:
 
       - name: Start real API for perceived e2e
         env:
-          DATABASE_URL: "postgresql+psycopg://postgres:postgres@127.0.0.1:${{ job.services.postgres.ports['5432'] }}/video_analysis_web_e2e_perceived"
+          DATABASE_URL: "postgresql+psycopg://postgres:postgres@postgres:5432/video_analysis_web_e2e_perceived"
           TEMPORAL_TARGET_HOST: 127.0.0.1:${{ env.WEB_E2E_PERCEIVED_TEMPORAL_PORT }}
           TEMPORAL_NAMESPACE: default
           TEMPORAL_TASK_QUEUE: video-analysis-worker
@@ -1470,7 +1478,7 @@ jobs:
 
       - name: Start worker for perceived e2e
         env:
-          DATABASE_URL: "postgresql+psycopg://postgres:postgres@127.0.0.1:${{ job.services.postgres.ports['5432'] }}/video_analysis_web_e2e_perceived"
+          DATABASE_URL: "postgresql+psycopg://postgres:postgres@postgres:5432/video_analysis_web_e2e_perceived"
           TEMPORAL_TARGET_HOST: 127.0.0.1:${{ env.WEB_E2E_PERCEIVED_TEMPORAL_PORT }}
           TEMPORAL_NAMESPACE: default
           TEMPORAL_TASK_QUEUE: video-analysis-worker
@@ -1519,6 +1527,7 @@ jobs:
 
       - name: Stop perceived e2e API
         if: always()
+        shell: bash
         run: |
           if [[ -n "${WEB_E2E_PERCEIVED_API_PID:-}" ]]; then
             kill "${WEB_E2E_PERCEIVED_API_PID}" >/dev/null 2>&1 || true
@@ -1526,6 +1535,7 @@ jobs:
 
       - name: Stop perceived e2e worker
         if: always()
+        shell: bash
         run: |
           if [[ -n "${WEB_E2E_PERCEIVED_WORKER_PID:-}" ]]; then
             kill "${WEB_E2E_PERCEIVED_WORKER_PID}" >/dev/null 2>&1 || true
@@ -1533,6 +1543,7 @@ jobs:
 
       - name: Stop perceived e2e Temporal dev server
         if: always()
+        shell: bash
         run: |
           if [[ -n "${WEB_E2E_PERCEIVED_TEMPORAL_PID:-}" ]]; then
             kill "${WEB_E2E_PERCEIVED_TEMPORAL_PID}" >/dev/null 2>&1 || true

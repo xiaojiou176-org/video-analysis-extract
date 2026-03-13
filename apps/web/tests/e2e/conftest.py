@@ -9,7 +9,7 @@ from typing import Literal, NotRequired, TypedDict
 from urllib.parse import urlparse
 
 import pytest
-from playwright.sync_api import Browser, Page, sync_playwright
+from playwright.sync_api import Browser, sync_playwright
 from support.mock_api import (
     MockApiServer,
     MockApiState,

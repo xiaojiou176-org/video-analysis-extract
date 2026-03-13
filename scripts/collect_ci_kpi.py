@@ -7,8 +7,8 @@ import io
 import json
 import os
 import re
-import xml.etree.ElementTree as ET
 import urllib.request
+import xml.etree.ElementTree as ET
 import zipfile
 from pathlib import Path
 from typing import Any
@@ -462,7 +462,7 @@ def main() -> int:
     workflow_files = _expand_globs(args.workflow_glob)
 
     payload: dict[str, Any] = {
-        "generated_at": dt.datetime.now(dt.timezone.utc).isoformat(),
+        "generated_at": dt.datetime.now(dt.UTC).isoformat(),
         "inputs": {
             "junit_files": [str(p) for p in junit_files],
             "coverage_xml_files": [str(p) for p in coverage_xml_files],
@@ -483,7 +483,7 @@ def main() -> int:
             "topology": _parse_workflow_topology(workflow_files),
         },
     }
-    token = os.getenv("".join(["GITHUB", "_TOKEN"]), "").strip()
+    token = os.getenv("GITHUB_TOKEN", "").strip()
     if args.repo and args.run_id and args.run_attempt and token:
         payload["kpi"]["run"] = _parse_run_metrics(args.repo, args.run_id, args.run_attempt, token)
 

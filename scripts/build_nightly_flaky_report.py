@@ -80,7 +80,7 @@ def main() -> int:
     parser.add_argument("--md-out", type=Path, required=True)
     args = parser.parse_args()
 
-    token = os.getenv("".join(["GITHUB", "_TOKEN"]), "").strip()
+    token = os.getenv("GITHUB_TOKEN", "").strip()
     if not token:
         raise SystemExit("GITHUB_TOKEN is required")
 
