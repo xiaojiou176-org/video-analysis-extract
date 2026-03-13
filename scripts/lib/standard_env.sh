@@ -154,7 +154,14 @@ run_in_standard_env() {
   append_standard_env_git_mounts extra_mounts
   if ! docker image inspect "$STANDARD_ENV_IMAGE" >/dev/null 2>&1; then
     ensure_standard_env_registry_login
-    docker pull "$STANDARD_ENV_IMAGE" >/dev/null 2>&1 || true
+    if ! docker pull "$STANDARD_ENV_IMAGE" >/dev/null 2>&1; then
+      echo "[strict-standard-env] failed to pull required image: $STANDARD_ENV_IMAGE" >&2
+      return 1
+    fi
+    if ! docker image inspect "$STANDARD_ENV_IMAGE" >/dev/null 2>&1; then
+      echo "[strict-standard-env] required image is unavailable after pull: $STANDARD_ENV_IMAGE" >&2
+      return 1
+    fi
   fi
 
   docker run --rm --init \

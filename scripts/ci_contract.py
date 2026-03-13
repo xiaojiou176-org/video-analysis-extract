@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import shlex
 import sys
 from pathlib import Path
@@ -11,10 +12,13 @@ from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_CONTRACT_PATH = REPO_ROOT / "infra" / "config" / "strict_ci_contract.json"
+DIGEST_PATTERN = re.compile(r"^sha256:[0-9a-f]{64}$")
 
 
 def load_contract(path: Path) -> dict[str, Any]:
-    return json.loads(path.read_text(encoding="utf-8"))
+    contract = json.loads(path.read_text(encoding="utf-8"))
+    validate_contract(contract)
+    return contract
 
 
 def resolve_path(contract: dict[str, Any], path: str) -> Any:
@@ -26,12 +30,46 @@ def resolve_path(contract: dict[str, Any], path: str) -> Any:
     return current
 
 
+def _require_digest(label: str, value: str) -> str:
+    digest = str(value or "").strip()
+    if not DIGEST_PATTERN.fullmatch(digest):
+        raise ValueError(f"{label} must be pinned with a sha256 digest")
+    return digest
+
+
+def _require_pinned_image_ref(label: str, value: str) -> str:
+    image_ref = str(value or "").strip()
+    if "@sha256:" not in image_ref:
+        raise ValueError(f"{label} must be pinned by digest")
+    return image_ref
+
+
+def service_image_refs(contract: dict[str, Any]) -> dict[str, str]:
+    service_images = contract.get("service_images", {})
+    if not isinstance(service_images, dict) or not service_images:
+        raise ValueError("service_images must define at least one pinned image reference")
+    return {
+        key: _require_pinned_image_ref(f"service_images.{key}", value)
+        for key, value in service_images.items()
+    }
+
+
+def validate_contract(contract: dict[str, Any]) -> None:
+    image = contract["standard_image"]
+    repository = str(image.get("repository", "") or "").strip()
+    tag = str(image.get("tag", "") or "").strip()
+    if not repository:
+        raise ValueError("standard_image.repository must be set")
+    if not tag:
+        raise ValueError("standard_image.tag must be set")
+    _require_digest("standard_image.digest", image.get("digest", ""))
+    service_image_refs(contract)
+
+
 def standard_image_ref(contract: dict[str, Any]) -> str:
     image = contract["standard_image"]
-    digest = str(image.get("digest", "") or "").strip()
-    if digest:
-        return f'{image["repository"]}@{digest}'
-    return f'{image["repository"]}:{image["tag"]}'
+    digest = _require_digest("standard_image.digest", image.get("digest", ""))
+    return f'{image["repository"]}@{digest}'
 
 
 def shell_exports(contract: dict[str, Any]) -> str:
@@ -39,6 +77,8 @@ def shell_exports(contract: dict[str, Any]) -> str:
     toolchain = contract["toolchain"]
     quality = contract["quality"]
     cache = contract["cache"]
+    service_images = service_image_refs(contract)
+    devcontainer = contract.get("devcontainer", {})
     payload = {
         "STRICT_CI_CONTRACT_PATH": str(DEFAULT_CONTRACT_PATH),
         "STRICT_CI_STANDARD_IMAGE_REPOSITORY": image["repository"],
@@ -47,6 +87,8 @@ def shell_exports(contract: dict[str, Any]) -> str:
         "STRICT_CI_STANDARD_IMAGE_REF": standard_image_ref(contract),
         "STRICT_CI_STANDARD_IMAGE_DOCKERFILE": image["dockerfile"],
         "STRICT_CI_STANDARD_IMAGE_WORKDIR": image["workdir"],
+        "STRICT_CI_DEVCONTAINER_WORKSPACE_FOLDER": str(devcontainer.get("workspace_folder", image["workdir"])),
+        "STRICT_CI_DEVCONTAINER_REMOTE_USER": str(devcontainer.get("remote_user", "vscode")),
         "STRICT_CI_PYTHON_VERSION": toolchain["python_version"],
         "STRICT_CI_UV_VERSION": toolchain["uv_version"],
         "STRICT_CI_NODE_MAJOR": toolchain["node_major"],
@@ -69,6 +111,8 @@ def shell_exports(contract: dict[str, Any]) -> str:
         "STRICT_CI_LIVE_SMOKE_PUSH_RELEASE": "1" if contract["trigger_policy"]["live_smoke_push_release"] else "0",
         "STRICT_CI_LIVE_SMOKE_SCHEDULE_CRON": contract["trigger_policy"]["live_smoke_schedule_cron"],
     }
+    for key, value in service_images.items():
+        payload[f"STRICT_CI_SERVICE_IMAGE_{key.upper()}"] = value
     return "\n".join(
         f"export {key}={shlex.quote(value)}" for key, value in payload.items()
     )
@@ -79,6 +123,8 @@ def github_outputs(contract: dict[str, Any]) -> str:
     toolchain = contract["toolchain"]
     quality = contract["quality"]
     cache = contract["cache"]
+    service_images = service_image_refs(contract)
+    devcontainer = contract.get("devcontainer", {})
     outputs = {
         "standard_image_repository": image["repository"],
         "standard_image_tag": image["tag"],
@@ -86,6 +132,8 @@ def github_outputs(contract: dict[str, Any]) -> str:
         "standard_image_ref": standard_image_ref(contract),
         "standard_image_workdir": image["workdir"],
         "standard_image_dockerfile": image["dockerfile"],
+        "devcontainer_workspace_folder": str(devcontainer.get("workspace_folder", image["workdir"])),
+        "devcontainer_remote_user": str(devcontainer.get("remote_user", "vscode")),
         "python_version": toolchain["python_version"],
         "uv_version": toolchain["uv_version"],
         "node_major": toolchain["node_major"],
@@ -108,6 +156,8 @@ def github_outputs(contract: dict[str, Any]) -> str:
         "live_smoke_push_release": "true" if contract["trigger_policy"]["live_smoke_push_release"] else "false",
         "live_smoke_schedule_cron": contract["trigger_policy"]["live_smoke_schedule_cron"],
     }
+    for key, value in service_images.items():
+        outputs[f"service_image_{key}"] = value
     return "\n".join(f"{key}={value}" for key, value in outputs.items())
 
 

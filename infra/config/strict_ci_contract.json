@@ -2,10 +2,14 @@
   "version": 1,
   "standard_image": {
     "repository": "ghcr.io/xiaojiou176-org/video-analysis-extract-ci-standard",
-    "tag": "bootstrap",
-    "digest": "",
+    "tag": "2bf2b9a59bfeea1fd863f8d84769d88a5824f79d",
+    "digest": "sha256:d8088536c52e0e572407f8983255a1d8b97556009642cc16a71191c8aedfa7a9",
     "dockerfile": ".devcontainer/Dockerfile",
     "workdir": "/workspace"
+  },
+  "devcontainer": {
+    "workspace_folder": "/workspace",
+    "remote_user": "vscode"
   },
   "toolchain": {
     "python_version": "3.12",
@@ -40,9 +44,9 @@
   "service_images": {
     "pgvector_pg16": "pgvector/pgvector:pg16@sha256:7d400e340efb42f4d8c9c12c6427adb253f726881a9985d2a471bf0eed824dff",
     "redis_core": "redis:7.2-alpine@sha256:5f8bafd0669a697ee564ad825c2a63e6b60b0a67c02b0089f8a250051ab6fe85",
-    "temporal_auto_setup": "temporalio/auto-setup:1.27.2",
-    "postgres_miniflux": "postgres:16-alpine",
-    "miniflux": "miniflux/miniflux:latest",
-    "nextflux": "electh/nextflux:latest"
+    "temporal_auto_setup": "temporalio/auto-setup:1.27.2@sha256:b44cbfeb43dbeae42db113b44fb8414c3452f05643b3d6b1592f955277d73526",
+    "postgres_miniflux": "postgres:16-alpine@sha256:20edbde7749f822887a1a022ad526fde0a47d6b2be9a8364433605cf65099416",
+    "miniflux": "miniflux/miniflux@sha256:802ab7d045826d047883476e2310bf59f5d9b3875f7a8106fa0c43638d01fd64",
+    "nextflux": "electh/nextflux@sha256:cd48b8aab1f4a658257609edf9b1726567a648da23402d68cef8e70bcd4bb88a"
   }
 }
