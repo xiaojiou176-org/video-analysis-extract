@@ -2,183 +2,44 @@ name: vendor-governance
 
 on:
   pull_request:
+    paths:
+      - "scripts/vendor/**"
+      - "docs/reference/dependency-governance.md"
+      - ".github/workflows/vendor-governance.yml"
+      - ".github/actions/**"
   push:
     branches:
       - main
       - codex/**
+    paths:
+      - "scripts/vendor/**"
+      - "docs/reference/dependency-governance.md"
+      - ".github/workflows/vendor-governance.yml"
+      - ".github/actions/**"
+
+concurrency:
+  group: vendor-governance-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
 
 jobs:
-  required-ci-secrets:
-    runs-on: [self-hosted, video-analysis-extract]
-    timeout-minutes: 5
-    env:
-      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-      RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
-      RESEND_FROM_EMAIL: ${{ secrets.RESEND_FROM_EMAIL }}
-      YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
-    steps:
-      - name: Normalize self-hosted workspace (pre-checkout)
-        shell: bash
-        run: |
-          set -euo pipefail
-          workspace="${GITHUB_WORKSPACE:?}"
-          uid="$(id -u)"
-          gid="$(id -g)"
-          stale_paths=(
-            "$workspace/.runtime-cache"
-            "$workspace/.venv"
-            "$workspace/apps/web/node_modules"
-          )
-          if command -v sudo >/dev/null 2>&1; then
-            if sudo find "$workspace" -mindepth 1 -uid 0 -print -quit | grep -q .; then
-              echo "Detected root-owned residue under $workspace; normalizing ownership"
-              sudo chown -R "$uid:$gid" "$workspace"
-            fi
-            for path in "${stale_paths[@]}"; do
-              if sudo test -e "$path"; then
-                echo "Removing stale workspace path: $path"
-                sudo rm -rf "$path"
-              fi
-            done
-          else
-            for path in "${stale_paths[@]}"; do
-              rm -rf "$path" || true
-            done
-          fi
-
-      - name: Checkout
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-        with:
-          clean: true
-      - name: Enforce required CI secrets/env vars
-        run: |
-          python3 scripts/check_required_ci_secrets.py \
-            --required GEMINI_API_KEY \
-            --required RESEND_API_KEY \
-            --required RESEND_FROM_EMAIL \
-            --required YOUTUBE_API_KEY
-
-  upstream-lock-validation-hosted:
-    runs-on: [self-hosted, video-analysis-extract]
-    continue-on-error: true
-    timeout-minutes: 10
-    needs: [required-ci-secrets]
-    outputs:
-      hosted_ok: ${{ steps.hosted_status.outputs.hosted_ok }}
-    steps:
-      - name: Normalize self-hosted workspace (pre-checkout)
-        shell: bash
-        run: |
-          set -euo pipefail
-          workspace="${GITHUB_WORKSPACE:?}"
-          uid="$(id -u)"
-          gid="$(id -g)"
-          stale_paths=(
-            "$workspace/.runtime-cache"
-            "$workspace/.venv"
-            "$workspace/apps/web/node_modules"
-          )
-          if command -v sudo >/dev/null 2>&1; then
-            if sudo find "$workspace" -mindepth 1 -uid 0 -print -quit | grep -q .; then
-              echo "Detected root-owned residue under $workspace; normalizing ownership"
-              sudo chown -R "$uid:$gid" "$workspace"
-            fi
-            for path in "${stale_paths[@]}"; do
-              if sudo test -e "$path"; then
-                echo "Removing stale workspace path: $path"
-                sudo rm -rf "$path"
-              fi
-            done
-          else
-            for path in "${stale_paths[@]}"; do
-              rm -rf "$path" || true
-            done
-          fi
-
-      - name: Checkout
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-        with:
-          clean: true
-
-      - name: Bash syntax check
-        run: |
-          bash -n scripts/vendor/upstream_sync.sh
-          bash -n scripts/vendor/validate_upstream_lock.sh
-
-      - name: Validate UPSTREAM.lock files
-        run: bash scripts/vendor/validate_upstream_lock.sh --root .
-
-      - name: Record hosted vendor-governance outcome
-        if: ${{ always() }}
-        id: hosted_status
-        run: |
-          if [[ "${{ job.status }}" == "success" ]]; then
-            echo "hosted_ok=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "hosted_ok=false" >> "$GITHUB_OUTPUT"
-          fi
-
-  upstream-lock-validation-fallback:
-    runs-on: [self-hosted, video-analysis-extract]
-    timeout-minutes: 12
-    needs: [required-ci-secrets, upstream-lock-validation-hosted]
-    if: ${{ always() && (needs['upstream-lock-validation-hosted'].result != 'success' || needs['upstream-lock-validation-hosted'].outputs.hosted_ok != 'true') }}
-    steps:
-      - name: Normalize self-hosted workspace (pre-checkout)
-        shell: bash
-        run: |
-          set -euo pipefail
-          workspace="${GITHUB_WORKSPACE:?}"
-          uid="$(id -u)"
-          gid="$(id -g)"
-          stale_paths=(
-            "$workspace/.runtime-cache"
-            "$workspace/.venv"
-            "$workspace/apps/web/node_modules"
-          )
-          if command -v sudo >/dev/null 2>&1; then
-            if sudo find "$workspace" -mindepth 1 -uid 0 -print -quit | grep -q .; then
-              echo "Detected root-owned residue under $workspace; normalizing ownership"
-              sudo chown -R "$uid:$gid" "$workspace"
-            fi
-            for path in "${stale_paths[@]}"; do
-              if sudo test -e "$path"; then
-                echo "Removing stale workspace path: $path"
-                sudo rm -rf "$path"
-              fi
-            done
-          else
-            for path in "${stale_paths[@]}"; do
-              rm -rf "$path" || true
-            done
-          fi
-
-      - name: Checkout
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-        with:
-          clean: true
-
-      - name: Bash syntax check
-        run: |
-          bash -n scripts/vendor/upstream_sync.sh
-          bash -n scripts/vendor/validate_upstream_lock.sh
-
-      - name: Validate UPSTREAM.lock files
-        run: bash scripts/vendor/validate_upstream_lock.sh --root .
-
   upstream-lock-validation:
     runs-on: [self-hosted, video-analysis-extract]
-    timeout-minutes: 3
-    needs: [upstream-lock-validation-hosted, upstream-lock-validation-fallback]
-    if: ${{ always() && (needs['upstream-lock-validation-hosted'].result == 'success' || needs['upstream-lock-validation-fallback'].result == 'success') }}
+    timeout-minutes: 10
     steps:
-      - name: Select upstream-lock-validation source
+      - uses: ./.github/actions/normalize-self-hosted-workspace
+
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          clean: true
+
+      - name: Bash syntax check
         run: |
-          if [[ "${{ needs['upstream-lock-validation-hosted'].result }}" == "success" ]]; then
-            echo "upstream-lock-validation source: hosted"
-          else
-            echo "upstream-lock-validation source: dedicated fallback"
-          fi
+          bash -n scripts/vendor/upstream_sync.sh
+          bash -n scripts/vendor/validate_upstream_lock.sh
+
+      - name: Validate UPSTREAM.lock files
+        run: bash scripts/vendor/validate_upstream_lock.sh --root .

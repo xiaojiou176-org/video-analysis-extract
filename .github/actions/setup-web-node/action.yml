@@ -1,0 +1,31 @@
+name: Setup Web Node Toolchain
+description: Install the pinned Node toolchain, restore npm cache, and optionally install locked web dependencies.
+
+inputs:
+  node-version:
+    description: Node version to install.
+    required: false
+    default: "20"
+  cache-dependency-path:
+    description: Lockfile path for npm cache key.
+    required: false
+    default: "apps/web/package-lock.json"
+  install-command:
+    description: Optional install command to run after setup.
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Setup Node
+      uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+      with:
+        node-version: ${{ inputs.node-version }}
+        cache: npm
+        cache-dependency-path: ${{ inputs.cache-dependency-path }}
+
+    - name: Install web deps
+      if: ${{ inputs.install-command != '' }}
+      shell: bash
+      run: ${{ inputs.install-command }}

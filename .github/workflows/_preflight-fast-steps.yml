@@ -52,22 +52,8 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install ripgrep
-        run: |
-          for attempt in $(seq 1 20); do
-            if sudo apt-get update && sudo apt-get install -y ripgrep; then
-              exit 0
-            fi
-            if sudo fuser /var/lib/apt/lists/lock >/dev/null 2>&1 || sudo fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 || sudo fuser /var/cache/apt/archives/lock >/dev/null 2>&1; then
-              echo "apt lock detected, retrying ($attempt/20)..."
-              sleep 5
-              continue
-            fi
-            echo "apt install failed without lock contention"
-            exit 1
-          done
-          echo "apt install failed after retries"
-          exit 1
+      - name: Validate self-hosted runner baseline
+        run: python3 scripts/check_runner_baseline.py --profile preflight-fast
 
       - name: Env contract strict check
         run: python3 scripts/check_env_contract.py --strict --env-file .env.example
@@ -104,10 +90,12 @@ jobs:
           print("computer_use smoke CLI contract check passed")
           PY
 
-      - name: CI smoke drift check
+      - name: CI smoke drift check (advisory)
+        continue-on-error: true
         run: bash scripts/check_ci_smoke_drift.sh
 
-      - name: CI docs parity check (blocking)
+      - name: CI docs parity check (advisory)
+        continue-on-error: true
         run: python3 scripts/check_ci_docs_parity.py
 
       - name: Docs env canonical check

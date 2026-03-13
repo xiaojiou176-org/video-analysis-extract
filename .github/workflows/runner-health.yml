@@ -1,0 +1,121 @@
+name: runner-health
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "*/30 * * * *"
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/runner-health.yml"
+      - "infra/config/self_hosted_runner_baseline.json"
+      - "scripts/check_runner_baseline.py"
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  runner-bootstrap:
+    runs-on: [self-hosted, video-analysis-extract]
+    timeout-minutes: 30
+    env:
+      GH_ORG: xiaojiou176-org
+      GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+      GCP_ZONE: ${{ vars.GCP_ZONE }}
+      GCP_WIF_PROVIDER: ${{ vars.GCP_WIF_PROVIDER }}
+      GCP_WIF_SERVICE_ACCOUNT: ${{ vars.GCP_WIF_SERVICE_ACCOUNT }}
+      GH_TOKEN: ${{ secrets.ORG_RUNNER_TOKEN }}
+    steps:
+      - uses: ./.github/actions/normalize-self-hosted-workspace
+
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          clean: true
+
+      - name: Validate bootstrap secrets and vars
+        run: |
+          set -euo pipefail
+          [[ -n "${GH_TOKEN:-}" ]] || { echo "Missing secret ORG_RUNNER_TOKEN"; exit 1; }
+          [[ -n "${GCP_PROJECT_ID:-}" ]] || { echo "Missing repo var GCP_PROJECT_ID"; exit 1; }
+          [[ -n "${GCP_WIF_PROVIDER:-}" ]] || { echo "Missing repo var GCP_WIF_PROVIDER"; exit 1; }
+          [[ -n "${GCP_WIF_SERVICE_ACCOUNT:-}" ]] || { echo "Missing repo var GCP_WIF_SERVICE_ACCOUNT"; exit 1; }
+
+      - name: Validate self-hosted runner baseline
+        run: python3 scripts/check_runner_baseline.py --profile runner-health
+
+      - name: Auth to Google Cloud
+        uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed # v2
+        with:
+          workload_identity_provider: ${{ env.GCP_WIF_PROVIDER }}
+          service_account: ${{ env.GCP_WIF_SERVICE_ACCOUNT }}
+
+      - name: Setup gcloud
+        uses: google-github-actions/setup-gcloud@e427ad8a34f8676edf47cf7d7925499adf3eb74f # v2
+        with:
+          project_id: ${{ env.GCP_PROJECT_ID }}
+
+      - name: Ensure GitHub CLI is available
+        run: |
+          set -euo pipefail
+          command -v gh >/dev/null 2>&1 || { echo "runner baseline missing gh"; exit 1; }
+          gh --version
+
+      - name: Start offline runner instances and wait for online
+        run: |
+          set -euo pipefail
+
+          GCP_ZONE="${GCP_ZONE:-us-central1-a}"
+          INSTANCES=("github-runner-core-01" "github-runner-core-02" "github-runner-core-03")
+          MIN_ONLINE_CORE_RUNNERS="${MIN_ONLINE_CORE_RUNNERS:-3}"
+          MIN_ONLINE_LABEL_RUNNERS="${MIN_ONLINE_LABEL_RUNNERS:-1}"
+
+          echo "Checking GCE instances in ${GCP_PROJECT_ID}/${GCP_ZONE}..."
+          for instance in "${INSTANCES[@]}"; do
+            status="$(gcloud compute instances describe "$instance" --project="$GCP_PROJECT_ID" --zone="$GCP_ZONE" --format='value(status)' || true)"
+            echo "Instance ${instance}: ${status:-UNKNOWN}"
+            if [[ "$status" == "TERMINATED" ]]; then
+              echo "Starting ${instance}..."
+              gcloud compute instances start "$instance" --project="$GCP_PROJECT_ID" --zone="$GCP_ZONE"
+            fi
+          done
+
+          echo "Waiting for all 3 instances to reach RUNNING..."
+          for attempt in $(seq 1 30); do
+            not_running=0
+            for instance in "${INSTANCES[@]}"; do
+              status="$(gcloud compute instances describe "$instance" --project="$GCP_PROJECT_ID" --zone="$GCP_ZONE" --format='value(status)' || true)"
+              [[ "$status" == "RUNNING" ]] || not_running=$((not_running + 1))
+              echo "  ${instance}: ${status:-UNKNOWN}"
+            done
+            if [[ "$not_running" -eq 0 ]]; then
+              break
+            fi
+            if [[ "$attempt" -eq 30 ]]; then
+              echo "Timed out waiting for GCE instances to become RUNNING"
+              exit 1
+            fi
+            sleep 10
+          done
+
+          echo "Waiting for organization runners to satisfy label-based routing health checks..."
+          RUNNER_NAME_REGEX='^pool-core[0-9]{2}-0[1-3]$'
+          for attempt in $(seq 1 40); do
+            online_count="$(gh api "orgs/${GH_ORG}/actions/runners" --jq "[.runners[] | select((.name|test(\"${RUNNER_NAME_REGEX}\")) and .status==\"online\")] | length")"
+            label_online_count="$(gh api "orgs/${GH_ORG}/actions/runners" --jq "[.runners[] | select((.labels | map(.name) | index(\"video-analysis-extract\")) and .status==\"online\")] | length")"
+            echo "  online runners: pool-core*=${online_count} (min ${MIN_ONLINE_CORE_RUNNERS}), label video-analysis-extract=${label_online_count} (min ${MIN_ONLINE_LABEL_RUNNERS}) [attempt ${attempt}/40]"
+            if [[ "${online_count}" -ge "${MIN_ONLINE_CORE_RUNNERS}" && "${label_online_count}" -ge "${MIN_ONLINE_LABEL_RUNNERS}" ]]; then
+              echo "Runner bootstrap passed: label-routed runners are online (no exact instance-name binding)."
+              exit 0
+            fi
+            if [[ "$attempt" -eq 40 ]]; then
+              echo "Runner bootstrap failed: online runner counts did not reach thresholds."
+              echo "Thresholds: pool-core*=>=${MIN_ONLINE_CORE_RUNNERS}, label(video-analysis-extract)>=${MIN_ONLINE_LABEL_RUNNERS}"
+              echo "Actual org runner names/status/labels:"
+              gh api "orgs/${GH_ORG}/actions/runners" --jq '.runners[] | "\(.name)=\(.status), busy=\(.busy), labels=\([.labels[].name] | join(","))"'
+              exit 1
+            fi
+            sleep 15
+          done

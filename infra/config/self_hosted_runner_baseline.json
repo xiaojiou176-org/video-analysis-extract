@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "profiles": {
+    "preflight-fast": {
+      "commands": [
+        "bash",
+        "python3",
+        "git",
+        "docker",
+        "rg"
+      ],
+      "docker_compose_required": true
+    },
+    "runner-health": {
+      "commands": [
+        "bash",
+        "python3",
+        "git",
+        "docker",
+        "gh",
+        "gcloud",
+        "jq",
+        "rg"
+      ],
+      "docker_compose_required": false
+    }
+  }
+}

@@ -1,11 +1,15 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
 
 WORKFLOW_DIR = Path(".github/workflows")
 WORKFLOW_PATH = WORKFLOW_DIR / "ci.yml"
+RUNNER_HEALTH_WORKFLOW_PATH = WORKFLOW_DIR / "runner-health.yml"
+CONTRACT_PATH = Path("infra/config/strict_ci_contract.json")
+RUNNER_BASELINE_CONTRACT_PATH = Path("infra/config/self_hosted_runner_baseline.json")
 CHECKOUT_ACTION = "actions/checkout@"
 CACHE_ACTION = "actions/cache@"
 PRE_CHECKOUT_NORMALIZATION_STEP = "Normalize self-hosted workspace (pre-checkout)"
@@ -37,6 +41,7 @@ TOOL_CACHE_ENV_VARS = (
 MIN_MUTATION_SCORE = 0.64
 MIN_MUTATION_EFFECTIVE_RATIO = 0.27
 MAX_MUTATION_NO_TESTS_RATIO = 0.72
+DIGEST_PATTERN = re.compile(r"^sha256:[0-9a-f]{64}$")
 
 
 def _job_blocks(text: str) -> list[tuple[str, str]]:
@@ -281,7 +286,11 @@ def _check_checkout_clean_rule(workflow_path: Path, text: str, failures: list[st
         while prev_step >= 0 and not re.match(r"^\s*-\s+", lines[prev_step]):
             prev_step -= 1
 
-        if prev_step < 0 or PRE_CHECKOUT_NORMALIZATION_STEP not in lines[prev_step]:
+        prev_step_block = "\n".join(_collect_step_block(lines, prev_step)) if prev_step >= 0 else ""
+        if prev_step < 0 or (
+            PRE_CHECKOUT_NORMALIZATION_STEP not in prev_step_block
+            and "./.github/actions/normalize-self-hosted-workspace" not in prev_step_block
+        ):
             failures.append(
                 f"{workflow_path.name}:{lineno}: self-hosted checkout must be preceded by `{PRE_CHECKOUT_NORMALIZATION_STEP}`"
             )
@@ -506,13 +515,6 @@ def _check_global_rules(
         fallback_block = blocks.get(fallback_name, "")
         resolver_block = blocks.get(resolver_name, "")
 
-        # Jobs that call reusable workflows via `uses:` cannot set
-        # `continue-on-error` at the caller level.
-        if not _has_job_level_uses(hosted_block) and "continue-on-error: true" not in hosted_block:
-            failures.append(
-                f"{workflow_path}: {job_name}: hosted jobs must set continue-on-error: true to allow fallback takeover"
-            )
-
         if (
             "runs-on: [self-hosted, video-analysis-extract]" not in hosted_block
             and "runs-on: '[\"self-hosted\",\"video-analysis-extract\"]'" not in hosted_block
@@ -567,37 +569,22 @@ def _check_global_rules(
 
 
 def _check_ci_specific_rules(blocks: dict[str, str], failures: list[str]) -> None:
-    runner_bootstrap = blocks.get("runner-bootstrap", "")
-    if not runner_bootstrap:
-        failures.append("ci.yml: runner-bootstrap: missing job")
-    else:
-        if (
-            "EXPECTED_RUNNERS_SORTED=" in runner_bootstrap
-            or "EXPECTED_RUNNERS_JSON=" in runner_bootstrap
-            or "exactly match expected" in runner_bootstrap
-        ):
-            failures.append(
-                "ci.yml: runner-bootstrap: must not hardcode exact org runner name lists; use label/pattern online thresholds"
-            )
-        if "MIN_ONLINE_CORE_RUNNERS" not in runner_bootstrap:
-            failures.append(
-                "ci.yml: runner-bootstrap: missing pool-core online threshold guard (MIN_ONLINE_CORE_RUNNERS)"
-            )
-        if (
-            "MIN_ONLINE_LABEL_RUNNERS" not in runner_bootstrap
-            or "video-analysis-extract" not in runner_bootstrap
-        ):
-            failures.append(
-                "ci.yml: runner-bootstrap: missing label-route online threshold guard for video-analysis-extract"
-            )
+    if "runner-bootstrap" in blocks:
+        failures.append("ci.yml: runner-bootstrap: runner health must live in runner-health.yml, not the main CI workflow")
 
     standard_env_jobs = (
+        "preflight-heavy",
         "quality-gate-pre-push",
+        "db-migration-smoke",
         "python-tests",
         "api-real-smoke",
         "pr-llm-real-smoke",
+        "dependency-vuln-scan",
+        "backend-lint",
+        "frontend-lint",
         "web-test-build",
         "web-e2e",
+        "web-e2e-perceived",
         "live-smoke",
     )
     for job_name in standard_env_jobs:
@@ -609,6 +596,49 @@ def _check_ci_specific_rules(blocks: dict[str, str], failures: list[str]) -> Non
             failures.append(
                 f"ci.yml: {job_name}: must run inside the strict ci standard image from ci-contract outputs"
             )
+        if "services:\n      postgres:" in block and "needs.ci-contract.outputs.service_image_pgvector_pg16" not in block:
+            failures.append(
+                f"ci.yml: {job_name}: postgres service image must come from ci-contract outputs"
+            )
+    _check_ci_post_container_rules(blocks, failures)
+
+
+def _check_runner_health_specific_rules(blocks: dict[str, str], failures: list[str]) -> None:
+    runner_bootstrap = blocks.get("runner-bootstrap", "")
+    if not runner_bootstrap:
+        failures.append("runner-health.yml: runner-bootstrap: missing job")
+        return
+
+    if (
+        "EXPECTED_RUNNERS_SORTED=" in runner_bootstrap
+        or "EXPECTED_RUNNERS_JSON=" in runner_bootstrap
+        or "exactly match expected" in runner_bootstrap
+    ):
+        failures.append(
+            "runner-health.yml: runner-bootstrap: must not hardcode exact org runner name lists; use label/pattern online thresholds"
+        )
+    if "MIN_ONLINE_CORE_RUNNERS" not in runner_bootstrap:
+        failures.append(
+            "runner-health.yml: runner-bootstrap: missing pool-core online threshold guard (MIN_ONLINE_CORE_RUNNERS)"
+        )
+    if (
+        "MIN_ONLINE_LABEL_RUNNERS" not in runner_bootstrap
+        or "video-analysis-extract" not in runner_bootstrap
+    ):
+        failures.append(
+            "runner-health.yml: runner-bootstrap: missing label-route online threshold guard for video-analysis-extract"
+        )
+    if "python3 scripts/check_runner_baseline.py --profile runner-health" not in runner_bootstrap:
+        failures.append(
+            "runner-health.yml: runner-bootstrap: must validate the runner-health baseline contract before cloud bootstrap"
+        )
+    if "sudo apt-get install -y gh" in runner_bootstrap:
+        failures.append(
+            "runner-health.yml: runner-bootstrap: must not install gh dynamically; enforce runner baseline instead"
+        )
+
+
+def _check_ci_post_container_rules(blocks: dict[str, str], failures: list[str]) -> None:
 
     # quality-gate-pre-push must run broadly (not main/schedule-only gated).
     qg_block = blocks.get("quality-gate-pre-push", "")
@@ -701,26 +731,14 @@ def _check_ci_specific_rules(blocks: dict[str, str], failures: list[str]) -> Non
         if marker not in preflight_fast
     ]
     if missing_in_preflight:
-        # Fallback-aware structure: `preflight-fast` can be a resolver while hosted/fallback
-        # execute the actual checks. In that case, both execution paths must contain markers.
-        # If hosted/fallback use reusable workflows (uses:), check the reusable workflow file.
-        for job_name in ("preflight-fast-hosted", "preflight-fast-fallback"):
-            block = blocks.get(job_name, "")
-            if "uses: ./.github/workflows/_preflight-fast-steps.yml" in block:
-                # Read the reusable workflow and check it contains the markers.
-                reusable_path = Path(".github/workflows/_preflight-fast-steps.yml")
-                if reusable_path.is_file():
-                    reusable_text = reusable_path.read_text(encoding="utf-8")
-                    for marker, description in required_preflight_markers.items():
-                        if marker not in reusable_text:
-                            failures.append(f"ci.yml: {job_name}: missing {description} (delegated to _preflight-fast-steps.yml)")
-                else:
-                    failures.append(f"ci.yml: {job_name}: reusable workflow _preflight-fast-steps.yml not found")
-            else:
-                # Inline steps mode.
-                for marker, description in required_preflight_markers.items():
-                    if marker not in block:
-                        failures.append(f"ci.yml: {job_name}: missing {description}")
+        reusable_path = Path(".github/workflows/_preflight-fast-steps.yml")
+        if reusable_path.is_file():
+            reusable_text = reusable_path.read_text(encoding="utf-8")
+            for marker, description in required_preflight_markers.items():
+                if marker not in reusable_text:
+                    failures.append(f"ci.yml: preflight-fast: missing {description} (delegated to _preflight-fast-steps.yml)")
+        else:
+            failures.append("ci.yml: preflight-fast: reusable workflow _preflight-fast-steps.yml not found")
 
     # live-smoke must run on a fully provisioned local stack and enforce secrets.
     live_smoke = blocks.get("live-smoke", "")
@@ -742,6 +760,24 @@ def main() -> int:
         raise SystemExit(f"missing workflow file: {WORKFLOW_PATH}")
 
     failures: list[str] = []
+    if not CONTRACT_PATH.is_file():
+        failures.append(f"missing strict CI contract file: {CONTRACT_PATH}")
+    else:
+        contract = json.loads(CONTRACT_PATH.read_text(encoding="utf-8"))
+        digest = str(contract.get("standard_image", {}).get("digest", "")).strip()
+        if not DIGEST_PATTERN.fullmatch(digest):
+            failures.append("strict_ci_contract.json: standard_image.digest must be a sha256 digest")
+        service_images = contract.get("service_images", {})
+        if not isinstance(service_images, dict) or not service_images:
+            failures.append("strict_ci_contract.json: service_images must define pinned image references")
+        else:
+            for name, image_ref in service_images.items():
+                if "@sha256:" not in str(image_ref):
+                    failures.append(
+                        f"strict_ci_contract.json: service_images.{name} must be pinned by digest"
+                    )
+    if not RUNNER_BASELINE_CONTRACT_PATH.is_file():
+        failures.append(f"missing runner baseline contract file: {RUNNER_BASELINE_CONTRACT_PATH}")
     workflow_files = sorted(WORKFLOW_DIR.glob("*.yml"))
     if not workflow_files:
         failures.append("missing workflow files under .github/workflows")
@@ -751,6 +787,8 @@ def main() -> int:
         _check_global_rules(workflow, text, blocks, failures)
         if workflow == WORKFLOW_PATH:
             _check_ci_specific_rules(blocks, failures)
+        elif workflow == RUNNER_HEALTH_WORKFLOW_PATH:
+            _check_runner_health_specific_rules(blocks, failures)
 
     if failures:
         print("ci workflow strictness gate failed:")

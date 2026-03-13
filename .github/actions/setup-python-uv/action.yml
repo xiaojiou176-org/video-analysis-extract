@@ -1,0 +1,49 @@
+name: Setup Python and uv
+description: Install the pinned Python toolchain, uv, restore uv cache, and optionally sync locked dependencies.
+
+inputs:
+  python-version:
+    description: Python version to install.
+    required: false
+    default: "3.12"
+  uv-version:
+    description: uv version to install.
+    required: true
+  uv-cache-dir:
+    description: Cache directory used for uv artifacts.
+    required: true
+  cache-key-files:
+    description: File glob passed to hashFiles for uv cache key.
+    required: false
+    default: "uv.lock"
+  sync-command:
+    description: Optional sync/install command to run after setup.
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Setup Python
+      uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+      with:
+        python-version: ${{ inputs.python-version }}
+
+    - name: Setup uv
+      shell: bash
+      run: |
+        python -m pip install --upgrade pip
+        python -m pip install "uv==${{ inputs.uv-version }}"
+
+    - name: Cache uv
+      uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+      with:
+        path: ${{ inputs.uv-cache-dir }}
+        key: ${{ runner.os }}-uv-${{ hashFiles(inputs.cache-key-files) }}
+        restore-keys: |
+          ${{ runner.os }}-uv-
+
+    - name: Sync Python deps
+      if: ${{ inputs.sync-command != '' }}
+      shell: bash
+      run: ${{ inputs.sync-command }}

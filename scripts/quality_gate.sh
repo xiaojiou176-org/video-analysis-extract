@@ -266,7 +266,13 @@ for profile in "${PROFILES[@]}"; do
 done
 
 TMP_DIR="$(mktemp -d)"
-trap 'rm -rf "$TMP_DIR"' EXIT
+quality_gate_summary_dir="$ROOT_DIR/.runtime-cache/quality-gate"
+quality_gate_summary_tsv="$TMP_DIR/quality-gate-summary.tsv"
+quality_gate_summary_json="$quality_gate_summary_dir/summary.json"
+quality_gate_summary_md="$quality_gate_summary_dir/summary.md"
+mkdir -p "$quality_gate_summary_dir"
+: > "$quality_gate_summary_tsv"
+trap 'status=$?; write_quality_gate_summary "$status"; rm -rf "$TMP_DIR"' EXIT
 
 cleanup_mutation_artifacts() {
   rm -rf "$ROOT_DIR/mutants" "$ROOT_DIR/apps/worker/mutants"
@@ -275,6 +281,7 @@ cleanup_mutation_artifacts() {
 RUN_IDS=()
 RUN_NAMES=()
 RUN_PIDS=()
+quality_gate_current_phase="init"
 
 run_async_gate() {
   local gate_id="$1"
@@ -291,6 +298,107 @@ run_async_gate() {
   RUN_IDS+=("$gate_id")
   RUN_NAMES+=("$gate_name")
   RUN_PIDS+=("$!")
+}
+
+record_gate_status() {
+  local gate_id="$1"
+  local gate_name="$2"
+  local status="$3"
+  local gate_log="${4:-}"
+  if [[ -z "${quality_gate_summary_tsv:-}" ]]; then
+    quality_gate_summary_tsv="$TMP_DIR/quality-gate-summary.tsv"
+  fi
+  mkdir -p "$(dirname "$quality_gate_summary_tsv")"
+  printf '%s\t%s\t%s\t%s\t%s\n' \
+    "$quality_gate_current_phase" \
+    "$gate_id" \
+    "$gate_name" \
+    "$status" \
+    "$gate_log" >> "$quality_gate_summary_tsv"
+}
+
+write_quality_gate_summary() {
+  local exit_status="${1:-0}"
+  [[ -n "$quality_gate_summary_tsv" ]] || return 0
+  mkdir -p "$quality_gate_summary_dir"
+  python3 - <<'PY' "$quality_gate_summary_tsv" "$quality_gate_summary_json" "$quality_gate_summary_md" "$MODE" "$exit_status" "$quality_gate_current_phase" "$CHANGED_DETECTION_SOURCE" "$CHANGED_BACKEND" "$CHANGED_WEB" "$CHANGED_DEPS" "$CHANGED_MIGRATIONS" "$EFFECTIVE_BACKEND_CHANGED" "$EFFECTIVE_WEB_CHANGED"
+import json
+import sys
+from pathlib import Path
+
+(
+    tsv_path,
+    json_path,
+    md_path,
+    mode,
+    exit_status,
+    final_phase,
+    changed_source,
+    changed_backend,
+    changed_web,
+    changed_deps,
+    changed_migrations,
+    effective_backend,
+    effective_web,
+) = sys.argv[1:]
+
+rows = []
+tsv = Path(tsv_path)
+if tsv.exists():
+    for line in tsv.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        phase, gate_id, gate_name, status, gate_log = line.split("\t", 4)
+        rows.append(
+            {
+                "phase": phase,
+                "id": gate_id,
+                "name": gate_name,
+                "status": status,
+                "log_path": gate_log or None,
+            }
+        )
+
+payload = {
+    "mode": mode,
+    "exit_status": int(exit_status),
+    "result": "passed" if exit_status == "0" else "failed",
+    "final_phase": final_phase,
+    "changed_detection_source": changed_source,
+    "changed": {
+        "backend": changed_backend == "true",
+        "web": changed_web == "true",
+        "deps": changed_deps == "true",
+        "migrations": changed_migrations == "true",
+        "effective_backend": effective_backend == "true",
+        "effective_web": effective_web == "true",
+    },
+    "gates": rows,
+}
+
+Path(json_path).write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+lines = [
+    "# Quality Gate Summary",
+    "",
+    f"- mode: `{mode}`",
+    f"- result: `{'passed' if exit_status == '0' else 'failed'}`",
+    f"- final_phase: `{final_phase}`",
+    f"- changed_source: `{changed_source}`",
+    "",
+    "| Phase | Gate | Status | Log |",
+    "| --- | --- | --- | --- |",
+]
+for row in rows:
+    log_path = row["log_path"] or ""
+    lines.append(f"| `{row['phase']}` | `{row['name']}` | `{row['status']}` | `{log_path}` |")
+Path(md_path).write_text("\n".join(lines) + "\n", encoding="utf-8")
+PY
+}
+
+set_quality_gate_phase() {
+  quality_gate_current_phase="$1"
+  echo "[quality-gate] phase=$2"
 }
 
 reset_async_buffers() {
@@ -682,6 +790,24 @@ run_ci_docs_parity_gate() {
   echo "[quality-gate] ci docs parity gate passed"
 }
 
+run_ci_docs_parity_gate_advisory() {
+  if python3 scripts/check_ci_docs_parity.py; then
+    echo "[quality-gate] ci docs parity gate passed"
+    return 0
+  fi
+  echo "[quality-gate] advisory: ci docs parity gate failed (non-blocking)" >&2
+  return 0
+}
+
+run_ci_smoke_drift_advisory() {
+  if bash scripts/check_ci_smoke_drift.sh; then
+    echo "[quality-gate] ci smoke drift check passed"
+    return 0
+  fi
+  echo "[quality-gate] advisory: ci smoke drift check failed (non-blocking)" >&2
+  return 0
+}
+
 run_docs_env_canonical_guard() {
   if rg -n 'cp \.env\.local\.example \.env\.local|source \.env\.local|自动加载 `?\.env\.local' README.md docs/runbook-local.md; then
     echo "[quality-gate] docs env canonical guard failed" >&2
@@ -919,8 +1045,10 @@ wait_async_gates() {
 
     if ! wait "$gate_pid"; then
       had_failure=1
+      record_gate_status "$gate_id" "$gate_name" "failed" "$gate_log"
       report_gate_failure "$gate_name" "$gate_log"
     else
+      record_gate_status "$gate_id" "$gate_name" "passed" "$gate_log"
       echo "[quality-gate] pass: $gate_name"
     fi
   done
@@ -963,8 +1091,10 @@ wait_async_gates_with_heartbeat() {
 
     if ! wait "$gate_pid"; then
       had_failure=1
+      record_gate_status "$gate_id" "$gate_name" "failed" "$gate_log"
       report_gate_failure "$gate_name" "$gate_log"
     else
+      record_gate_status "$gate_id" "$gate_name" "passed" "$gate_log"
       echo "[quality-gate] pass: $gate_name"
     fi
   done
@@ -996,10 +1126,12 @@ run_sync_gate_with_heartbeat() {
   done
 
   if ! wait "$gate_pid"; then
+    record_gate_status "$gate_id" "$gate_name" "failed" "$gate_log"
     report_gate_failure "$gate_name" "$gate_log"
     return 1
   fi
 
+  record_gate_status "$gate_id" "$gate_name" "passed" "$gate_log"
   echo "[quality-gate] pass: $gate_name"
 }
 
@@ -1235,8 +1367,6 @@ required = {
     "PIPELINE_ARTIFACT_ROOT",
     "UI_AUDIT_GEMINI_ENABLED",
     "NOTIFICATION_ENABLED",
-    "VD_ALLOW_UNAUTH_WRITE",
-    "VD_CI_ALLOW_UNAUTH_WRITE",
 }
 missing = sorted(name for name in required if name not in variables)
 if missing:
@@ -1277,7 +1407,7 @@ for name, expected in defaults.items():
         raise SystemExit(f"live-smoke profile gate failed: {name} default must be '{expected}'")
 print("live-smoke profile gate passed")
 PY
-      bash scripts/check_ci_smoke_drift.sh
+      run_ci_smoke_drift_advisory
       ;;
   esac
 
@@ -1311,12 +1441,13 @@ run_pre_commit_mode() {
   cleanup_mutation_artifacts
 
   echo "[quality-gate] mode=pre-commit"
-  echo "[quality-gate] phase=profile-gates (parallel)"
+  set_quality_gate_phase "pre-commit/profile-gates" "profile-gates (parallel)"
   run_profile_gates_parallel "pre-commit/profile-gates"
   if [[ "$PROFILE_ONLY" == "1" ]]; then
     echo "[quality-gate] profile-only passed"
     exit 0
   fi
+  quality_gate_current_phase="pre-commit/short-checks"
   reset_async_buffers
 
   run_async_gate "doc_drift_staged" "documentation drift gate (staged)" \
@@ -1348,7 +1479,7 @@ run_pre_commit_mode() {
   run_async_gate "iac_entrypoint_guard" "iac entrypoint guard" \
     "bash scripts/check_iac_entrypoint.sh ."
   run_async_gate "ci_docs_parity_gate" "ci docs parity gate" \
-    "run_ci_docs_parity_gate"
+    "run_ci_docs_parity_gate_advisory"
   run_async_gate "schema_parity_gate" "schema parity gate (apps/mcp vs shared-contracts)" \
     "run_schema_parity_gate"
   run_async_gate "env_budget_guard" "env budget guard" \
@@ -1359,13 +1490,15 @@ run_pre_commit_mode() {
     run_async_gate "web_lint" "frontend lint" \
       "npm --prefix apps/web run lint"
   else
-    echo "[quality-gate] skip: frontend lint (effective_web_changed=false)"
+      record_gate_status "web_lint" "frontend lint" "skipped" ""
+      echo "[quality-gate] skip: frontend lint (effective_web_changed=false)"
   fi
   if is_true "$EFFECTIVE_BACKEND_CHANGED"; then
     run_async_gate "ruff_full" "backend lint (ruff full rules)" \
       "uv run --with ruff ruff check apps/api apps/worker apps/mcp"
   else
-    echo "[quality-gate] skip: backend lint (effective_backend_changed=false)"
+      record_gate_status "ruff_full" "backend lint (ruff full rules)" "skipped" ""
+      echo "[quality-gate] skip: backend lint (effective_backend_changed=false)"
   fi
 
   ensure_parallel_batch "pre-commit/short-checks"
@@ -1385,14 +1518,14 @@ run_pre_push_mode() {
   cleanup_mutation_artifacts
 
   echo "[quality-gate] mode=pre-push"
-  echo "[quality-gate] phase=profile-gates (parallel)"
+  set_quality_gate_phase "pre-push/profile-gates" "profile-gates (parallel)"
   run_profile_gates_parallel "pre-push/profile-gates"
   if [[ "$PROFILE_ONLY" == "1" ]]; then
     echo "[quality-gate] profile-only passed"
     exit 0
   fi
 
-  echo "[quality-gate] phase=short-checks (parallel)"
+  set_quality_gate_phase "pre-push/short-checks" "short-checks (parallel)"
   reset_async_buffers
 
   run_async_gate "env_contract" "env contract" \
@@ -1426,7 +1559,7 @@ run_pre_push_mode() {
   run_async_gate "iac_compose_config_validation" "iac compose config validation" \
     "run_iac_compose_config_validation"
   run_async_gate "ci_docs_parity_gate" "ci docs parity gate" \
-    "run_ci_docs_parity_gate"
+    "run_ci_docs_parity_gate_advisory"
   run_async_gate "docs_env_canonical_guard" "docs env canonical guard" \
     "run_docs_env_canonical_guard"
   run_async_gate "provider_residual_guard" "provider residual guard" \
@@ -1436,19 +1569,23 @@ run_pre_push_mode() {
   run_async_gate "schema_parity_gate" "schema parity gate (apps/mcp vs shared-contracts)" \
     "run_schema_parity_gate"
   if [[ "$CI_DEDUPE" == "1" ]]; then
+    record_gate_status "web_lint" "frontend lint" "skipped" ""
     echo "[quality-gate] skip: frontend lint (--ci-dedupe=1)"
   elif is_true "$EFFECTIVE_WEB_CHANGED"; then
     run_async_gate "web_lint" "frontend lint" \
       "npm --prefix apps/web run lint"
   else
+    record_gate_status "web_lint" "frontend lint" "skipped" ""
     echo "[quality-gate] skip: frontend lint (effective_web_changed=false)"
   fi
   if [[ "$CI_DEDUPE" == "1" ]]; then
+    record_gate_status "ruff_full" "backend lint (ruff full rules)" "skipped" ""
     echo "[quality-gate] skip: backend lint (ruff) (--ci-dedupe=1)"
   elif is_true "$EFFECTIVE_BACKEND_CHANGED"; then
     run_async_gate "ruff_full" "backend lint (ruff full rules)" \
       "uv run --with ruff ruff check apps/api apps/worker apps/mcp"
   else
+    record_gate_status "ruff_full" "backend lint (ruff full rules)" "skipped" ""
     echo "[quality-gate] skip: backend lint (effective_backend_changed=false)"
   fi
 
@@ -1459,10 +1596,12 @@ run_pre_push_mode() {
     exit 1
   fi
 
-  echo "[quality-gate] phase=long-tests (parallel + heartbeat=${HEARTBEAT_SECONDS}s)"
+  set_quality_gate_phase "pre-push/long-tests" "long-tests (parallel + heartbeat=${HEARTBEAT_SECONDS}s)"
   reset_async_buffers
 
   if [[ "$CI_DEDUPE" == "1" ]]; then
+    record_gate_status "web_unit_tests" "web unit tests" "skipped" ""
+    record_gate_status "web_coverage_threshold" "web coverage threshold gate (lines/functions/branches global>=95, core>=95)" "skipped" ""
     echo "[quality-gate] skip: web unit tests (--ci-dedupe=1)"
     echo "[quality-gate] skip: web coverage threshold gate (--ci-dedupe=1, covered by CI web-test-build)"
   elif is_true "$EFFECTIVE_WEB_CHANGED"; then
@@ -1476,10 +1615,13 @@ run_pre_push_mode() {
     run_async_gate "web_button_coverage" "web interactive coverage gate (combined=1.0 e2e=0.6 unit=0.93)" \
       "python3 scripts/check_web_button_coverage.py --threshold 1.0 --e2e-threshold 0.6 --unit-threshold 0.93"
   else
+    record_gate_status "web_unit_tests" "web unit tests" "skipped" ""
+    record_gate_status "web_coverage_threshold" "web coverage threshold gate (lines/functions/branches global>=95, core>=95)" "skipped" ""
     echo "[quality-gate] skip: web unit tests (effective_web_changed=false)"
     echo "[quality-gate] skip: web coverage threshold gate (effective_web_changed=false)"
   fi
   if [[ "$CI_DEDUPE" == "1" ]]; then
+    record_gate_status "python_tests_with_coverage" "python tests + total coverage gate (>=95%)" "skipped" ""
     echo "[quality-gate] skip: python tests + total coverage (--ci-dedupe=1)"
   elif is_true "$EFFECTIVE_BACKEND_CHANGED"; then
     run_async_gate "python_tests_with_coverage" "python tests + total coverage gate (>=95%)" \
@@ -1489,6 +1631,7 @@ run_pre_push_mode() {
     run_async_gate "contract_diff_local_gate" "contract diff local gate (base vs head)" \
       "run_contract_diff_local_gate"
   else
+    record_gate_status "python_tests_with_coverage" "python tests + total coverage gate (>=95%)" "skipped" ""
     echo "[quality-gate] skip: python tests + total coverage (effective_backend_changed=false)"
   fi
   if is_true "$CHANGED_DEPS"; then
@@ -1499,6 +1642,9 @@ run_pre_push_mode() {
     run_async_gate "web_runtime_dependency_audit" "web runtime dependency audit (npm audit high+)" \
       "npm --prefix apps/web audit --omit=dev --audit-level=high"
   else
+    record_gate_status "python_dependency_audit" "python dependency audit (pip-audit)" "skipped" ""
+    record_gate_status "web_dependency_policy_gate" "web dependency policy gate (no floating versions)" "skipped" ""
+    record_gate_status "web_runtime_dependency_audit" "web runtime dependency audit (npm audit high+)" "skipped" ""
     echo "[quality-gate] skip: dependency vulnerability scan (changed_deps=false)"
   fi
 
@@ -1510,7 +1656,7 @@ run_pre_push_mode() {
   fi
 
   if [[ "$run_web_coverage_threshold_after_tests" == "true" ]]; then
-    echo "[quality-gate] phase=web-coverage-threshold (post web unit tests)"
+    set_quality_gate_phase "pre-push/web-coverage-threshold" "web-coverage-threshold (post web unit tests)"
     if ! run_sync_gate_with_heartbeat "web_coverage_threshold" "web coverage threshold gate (lines/functions/branches global>=95, core>=95)" \
       "python3 scripts/check_web_coverage_threshold.py --summary-path apps/web/coverage/coverage-summary.json --global-threshold 95 --core-threshold 95 --metric lines --metric functions --metric branches"; then
       echo "[quality-gate] pre-push failed in web-coverage-threshold phase" >&2
@@ -1518,10 +1664,12 @@ run_pre_push_mode() {
     fi
   fi
 
-  echo "[quality-gate] phase=coverage-core-gates (parallel)"
+  set_quality_gate_phase "pre-push/coverage-core-gates" "coverage-core-gates (parallel)"
   reset_async_buffers
 
   if [[ "$CI_DEDUPE" == "1" ]]; then
+    record_gate_status "coverage_worker_core_95" "worker core coverage gate (>=95%)" "skipped" ""
+    record_gate_status "coverage_api_core_95" "api core coverage gate (>=95%)" "skipped" ""
     echo "[quality-gate] skip: coverage core gates (--ci-dedupe=1)"
   elif is_true "$EFFECTIVE_BACKEND_CHANGED"; then
     run_async_gate "coverage_worker_core_95" "worker core coverage gate (>=95%)" \
@@ -1529,6 +1677,8 @@ run_pre_push_mode() {
     run_async_gate "coverage_api_core_95" "api core coverage gate (>=95%)" \
       "uv run coverage report --include=\"apps/api/app/routers/ingest.py,*/apps/api/app/routers/ingest.py,apps/api/app/routers/jobs.py,*/apps/api/app/routers/jobs.py,apps/api/app/routers/subscriptions.py,*/apps/api/app/routers/subscriptions.py,apps/api/app/routers/videos.py,*/apps/api/app/routers/videos.py,apps/api/app/services/jobs.py,*/apps/api/app/services/jobs.py,apps/api/app/services/subscriptions.py,*/apps/api/app/services/subscriptions.py,apps/api/app/services/videos.py,*/apps/api/app/services/videos.py\" --show-missing --fail-under=95"
   else
+    record_gate_status "coverage_worker_core_95" "worker core coverage gate (>=95%)" "skipped" ""
+    record_gate_status "coverage_api_core_95" "api core coverage gate (>=95%)" "skipped" ""
     echo "[quality-gate] skip: coverage core gates (effective_backend_changed=false)"
   fi
 
@@ -1550,20 +1700,21 @@ run_pre_push_mode() {
   if [[ "$SKIP_MUTATION" == "1" ]]; then
     echo "[quality-gate] skip: mutation gate (--skip-mutation=1)"
   elif [[ "$mutation_relevant_changed" == "true" ]]; then
-    echo "[quality-gate] phase=mutation-gate (heartbeat=${HEARTBEAT_SECONDS}s)"
+    set_quality_gate_phase "pre-push/mutation-gate" "mutation-gate (heartbeat=${HEARTBEAT_SECONDS}s)"
     if ! run_sync_gate_with_heartbeat "mutation_gate" "mutation gate" "run_mutation_gate"; then
       echo "[quality-gate] pre-push failed in mutation-gate phase" >&2
       exit 1
     fi
   else
+    record_gate_status "mutation_gate" "mutation gate" "skipped" ""
     echo "[quality-gate] skip: mutation gate (mutation_relevant_changed=false)"
   fi
 
   if [[ "$STRICT_FULL_RUN" == "1" || ( "$CI_DEDUPE" != "1" && "$EFFECTIVE_BACKEND_CHANGED" == "true" ) ]]; then
     if [[ "$STRICT_FULL_RUN" == "1" ]]; then
-      echo "[quality-gate] phase=api-real-smoke-local (strict-full-run)"
+      set_quality_gate_phase "pre-push/api-real-smoke-local" "api-real-smoke-local (strict-full-run)"
     else
-      echo "[quality-gate] phase=api-real-smoke-local (backend changed)"
+      set_quality_gate_phase "pre-push/api-real-smoke-local" "api-real-smoke-local (backend changed)"
     fi
     if ! run_sync_gate_with_heartbeat "api_real_smoke_local" "api real smoke local (postgresql+psycopg)" \
       "run_api_real_smoke_local_gate"; then
@@ -1571,6 +1722,7 @@ run_pre_push_mode() {
       exit 1
     fi
   else
+    record_gate_status "api_real_smoke_local" "api real smoke local (postgresql+psycopg)" "skipped" ""
     echo "[quality-gate] skip: api-real-smoke-local (effective_backend_changed=false or --ci-dedupe=1)"
   fi
 

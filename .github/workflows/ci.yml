@@ -31,108 +31,9 @@ env:
   TEMPORAL_CLI_SHA256_LINUX_ARM64: "bd1b0db9f18b051026de8bf6cc1505f2510f14bbb7a8b9a4a91fff46c77454f5"
 
 jobs:
-  runner-bootstrap:
-    runs-on: [self-hosted, video-analysis-extract]
-    timeout-minutes: 30
-    env:
-      GH_ORG: xiaojiou176-org
-      GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
-      GCP_ZONE: ${{ vars.GCP_ZONE }}
-      GCP_WIF_PROVIDER: ${{ vars.GCP_WIF_PROVIDER }}
-      GCP_WIF_SERVICE_ACCOUNT: ${{ vars.GCP_WIF_SERVICE_ACCOUNT }}
-      GH_TOKEN: ${{ secrets.ORG_RUNNER_TOKEN }}
-    steps:
-      - name: Validate bootstrap secrets and vars
-        run: |
-          set -euo pipefail
-          [[ -n "${GH_TOKEN:-}" ]] || { echo "Missing secret ORG_RUNNER_TOKEN"; exit 1; }
-          [[ -n "${GCP_PROJECT_ID:-}" ]] || { echo "Missing repo var GCP_PROJECT_ID"; exit 1; }
-          [[ -n "${GCP_WIF_PROVIDER:-}" ]] || { echo "Missing repo var GCP_WIF_PROVIDER"; exit 1; }
-          [[ -n "${GCP_WIF_SERVICE_ACCOUNT:-}" ]] || { echo "Missing repo var GCP_WIF_SERVICE_ACCOUNT"; exit 1; }
-
-      - name: Auth to Google Cloud
-        uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed # v2
-        with:
-          workload_identity_provider: ${{ env.GCP_WIF_PROVIDER }}
-          service_account: ${{ env.GCP_WIF_SERVICE_ACCOUNT }}
-
-      - name: Setup gcloud
-        uses: google-github-actions/setup-gcloud@e427ad8a34f8676edf47cf7d7925499adf3eb74f # v2
-        with:
-          project_id: ${{ env.GCP_PROJECT_ID }}
-
-      - name: Ensure GitHub CLI is available
-        run: |
-          set -euo pipefail
-          if command -v gh >/dev/null 2>&1; then
-            gh --version
-            exit 0
-          fi
-          sudo apt-get update
-          sudo apt-get install -y gh
-          gh --version
-
-      - name: Start offline runner instances and wait for online
-        run: |
-          set -euo pipefail
-
-          GCP_ZONE="${GCP_ZONE:-us-central1-a}"
-          INSTANCES=("github-runner-core-01" "github-runner-core-02" "github-runner-core-03")
-          MIN_ONLINE_CORE_RUNNERS="${MIN_ONLINE_CORE_RUNNERS:-3}"
-          MIN_ONLINE_LABEL_RUNNERS="${MIN_ONLINE_LABEL_RUNNERS:-1}"
-
-          echo "Checking GCE instances in ${GCP_PROJECT_ID}/${GCP_ZONE}..."
-          for instance in "${INSTANCES[@]}"; do
-            status="$(gcloud compute instances describe "$instance" --project="$GCP_PROJECT_ID" --zone="$GCP_ZONE" --format='value(status)' || true)"
-            echo "Instance ${instance}: ${status:-UNKNOWN}"
-            if [[ "$status" == "TERMINATED" ]]; then
-              echo "Starting ${instance}..."
-              gcloud compute instances start "$instance" --project="$GCP_PROJECT_ID" --zone="$GCP_ZONE"
-            fi
-          done
-
-          echo "Waiting for all 3 instances to reach RUNNING..."
-          for attempt in $(seq 1 30); do
-            not_running=0
-            for instance in "${INSTANCES[@]}"; do
-              status="$(gcloud compute instances describe "$instance" --project="$GCP_PROJECT_ID" --zone="$GCP_ZONE" --format='value(status)' || true)"
-              [[ "$status" == "RUNNING" ]] || not_running=$((not_running + 1))
-              echo "  ${instance}: ${status:-UNKNOWN}"
-            done
-            if [[ "$not_running" -eq 0 ]]; then
-              break
-            fi
-            if [[ "$attempt" -eq 30 ]]; then
-              echo "Timed out waiting for GCE instances to become RUNNING"
-              exit 1
-            fi
-            sleep 10
-          done
-
-          echo "Waiting for organization runners to satisfy label-based routing health checks..."
-          RUNNER_NAME_REGEX='^pool-core[0-9]{2}-0[1-3]$'
-          for attempt in $(seq 1 40); do
-            online_count="$(gh api "orgs/${GH_ORG}/actions/runners" --jq "[.runners[] | select((.name|test(\"${RUNNER_NAME_REGEX}\")) and .status==\"online\")] | length")"
-            label_online_count="$(gh api "orgs/${GH_ORG}/actions/runners" --jq "[.runners[] | select((.labels | map(.name) | index(\"video-analysis-extract\")) and .status==\"online\")] | length")"
-            echo "  online runners: pool-core*=${online_count} (min ${MIN_ONLINE_CORE_RUNNERS}), label video-analysis-extract=${label_online_count} (min ${MIN_ONLINE_LABEL_RUNNERS}) [attempt ${attempt}/40]"
-            if [[ "${online_count}" -ge "${MIN_ONLINE_CORE_RUNNERS}" && "${label_online_count}" -ge "${MIN_ONLINE_LABEL_RUNNERS}" ]]; then
-              echo "Runner bootstrap passed: label-routed runners are online (no exact instance-name binding)."
-              exit 0
-            fi
-            if [[ "$attempt" -eq 40 ]]; then
-              echo "Runner bootstrap failed: online runner counts did not reach thresholds."
-              echo "Thresholds: pool-core*=>=${MIN_ONLINE_CORE_RUNNERS}, label(video-analysis-extract)>=${MIN_ONLINE_LABEL_RUNNERS}"
-              echo "Actual org runner names/status/labels:"
-              gh api "orgs/${GH_ORG}/actions/runners" --jq '.runners[] | "\(.name)=\(.status), busy=\(.busy), labels=\([.labels[].name] | join(","))"'
-              exit 1
-            fi
-            sleep 15
-          done
-
   required-ci-secrets:
     runs-on: [self-hosted, video-analysis-extract]
     timeout-minutes: 5
-    needs: [runner-bootstrap]
     env:
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
@@ -183,9 +84,9 @@ jobs:
   ci-contract:
     runs-on: [self-hosted, video-analysis-extract]
     timeout-minutes: 5
-    needs: [required-ci-secrets]
     outputs:
       standard_image_ref: ${{ steps.contract.outputs.standard_image_ref }}
+      service_image_pgvector_pg16: ${{ steps.contract.outputs.service_image_pgvector_pg16 }}
       mutation_min_score: ${{ steps.contract.outputs.mutation_min_score }}
       mutation_min_effective_ratio: ${{ steps.contract.outputs.mutation_min_effective_ratio }}
       mutation_max_no_tests_ratio: ${{ steps.contract.outputs.mutation_max_no_tests_ratio }}
@@ -235,237 +136,82 @@ jobs:
         run: |
           python3 scripts/ci_contract.py github-outputs >> "$GITHUB_OUTPUT"
 
-  changes-hosted:
-    runs-on: [self-hosted, video-analysis-extract]
-    continue-on-error: true
-    timeout-minutes: 5
-    needs: [required-ci-secrets]
-    outputs:
-      backend_changed: ${{ github.event_name == 'pull_request' && steps.filter.outputs.backend_changed || steps.non_pr_defaults.outputs.backend_changed }}
-      web_changed: ${{ github.event_name == 'pull_request' && steps.filter.outputs.web_changed || steps.non_pr_defaults.outputs.web_changed }}
-      deps_changed: ${{ github.event_name == 'pull_request' && steps.filter.outputs.deps_changed || steps.non_pr_defaults.outputs.deps_changed }}
-      migrations_changed: ${{ github.event_name == 'pull_request' && steps.filter.outputs.migrations_changed || steps.non_pr_defaults.outputs.migrations_changed }}
-      hosted_ok: ${{ steps.hosted_status.outputs.hosted_ok }}
-    steps:
-      - name: Normalize self-hosted workspace (pre-checkout)
-        shell: bash
-        run: |
-          set -euo pipefail
-          workspace="${GITHUB_WORKSPACE:?}"
-          uid="$(id -u)"
-          gid="$(id -g)"
-          stale_paths=(
-            "$workspace/.runtime-cache"
-            "$workspace/.venv"
-            "$workspace/apps/web/node_modules"
-          )
-          if command -v sudo >/dev/null 2>&1; then
-            if sudo find "$workspace" -mindepth 1 -uid 0 -print -quit | grep -q .; then
-              echo "Detected root-owned residue under $workspace; normalizing ownership"
-              sudo chown -R "$uid:$gid" "$workspace"
-            fi
-            for path in "${stale_paths[@]}"; do
-              if sudo test -e "$path"; then
-                echo "Removing stale workspace path: $path"
-                sudo rm -rf "$path"
-              fi
-            done
-          else
-            for path in "${stale_paths[@]}"; do
-              rm -rf "$path" || true
-            done
-          fi
-
-      - name: Checkout
-        if: ${{ github.event_name == 'pull_request' }}
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-        with:
-          clean: true
-          fetch-depth: 0
-
-      - name: Detect changed paths (PR only)
-        if: ${{ github.event_name == 'pull_request' }}
-        id: filter
-        uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
-        with:
-          filters: |
-            backend_changed:
-              - 'apps/api/**'
-              - 'apps/worker/**'
-              - 'apps/mcp/**'
-              - 'packages/shared-contracts/**'
-              - 'scripts/**'
-              - 'infra/config/**'
-              - 'infra/compose/**'
-              - 'infra/sql/**'
-              - 'pyproject.toml'
-              - 'uv.lock'
-            web_changed:
-              - 'apps/web/**'
-            deps_changed:
-              - 'pyproject.toml'
-              - 'uv.lock'
-              - 'apps/web/package.json'
-              - 'apps/web/package-lock.json'
-            migrations_changed:
-              - 'infra/migrations/**'
-
-      - name: Default full-run flags (non-PR)
-        if: ${{ github.event_name != 'pull_request' }}
-        id: non_pr_defaults
-        run: |
-          {
-            echo "backend_changed=true"
-            echo "web_changed=true"
-            echo "deps_changed=true"
-            echo "migrations_changed=true"
-          } >> "$GITHUB_OUTPUT"
-
-      - name: Record hosted changes outcome
-        if: ${{ always() }}
-        id: hosted_status
-        run: |
-          if [[ "${{ job.status }}" == "success" ]]; then
-            echo "hosted_ok=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "hosted_ok=false" >> "$GITHUB_OUTPUT"
-          fi
-
-  changes-fallback:
-    runs-on: [self-hosted, video-analysis-extract]
-    timeout-minutes: 8
-    needs: [required-ci-secrets, changes-hosted]
-    if: ${{ always() && (needs['changes-hosted'].result != 'success' || needs['changes-hosted'].outputs.hosted_ok != 'true') }}
-    outputs:
-      backend_changed: ${{ github.event_name == 'pull_request' && steps.filter.outputs.backend_changed || steps.non_pr_defaults.outputs.backend_changed }}
-      web_changed: ${{ github.event_name == 'pull_request' && steps.filter.outputs.web_changed || steps.non_pr_defaults.outputs.web_changed }}
-      deps_changed: ${{ github.event_name == 'pull_request' && steps.filter.outputs.deps_changed || steps.non_pr_defaults.outputs.deps_changed }}
-      migrations_changed: ${{ github.event_name == 'pull_request' && steps.filter.outputs.migrations_changed || steps.non_pr_defaults.outputs.migrations_changed }}
-    steps:
-      - name: Normalize self-hosted workspace (pre-checkout)
-        shell: bash
-        run: |
-          set -euo pipefail
-          workspace="${GITHUB_WORKSPACE:?}"
-          uid="$(id -u)"
-          gid="$(id -g)"
-          stale_paths=(
-            "$workspace/.runtime-cache"
-            "$workspace/.venv"
-            "$workspace/apps/web/node_modules"
-          )
-          if command -v sudo >/dev/null 2>&1; then
-            if sudo find "$workspace" -mindepth 1 -uid 0 -print -quit | grep -q .; then
-              echo "Detected root-owned residue under $workspace; normalizing ownership"
-              sudo chown -R "$uid:$gid" "$workspace"
-            fi
-            for path in "${stale_paths[@]}"; do
-              if sudo test -e "$path"; then
-                echo "Removing stale workspace path: $path"
-                sudo rm -rf "$path"
-              fi
-            done
-          else
-            for path in "${stale_paths[@]}"; do
-              rm -rf "$path" || true
-            done
-          fi
-
-      - name: Checkout
-        if: ${{ github.event_name == 'pull_request' }}
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-        with:
-          clean: true
-          fetch-depth: 0
-
-      - name: Detect changed paths (PR only)
-        if: ${{ github.event_name == 'pull_request' }}
-        id: filter
-        uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
-        with:
-          filters: |
-            backend_changed:
-              - 'apps/api/**'
-              - 'apps/worker/**'
-              - 'apps/mcp/**'
-              - 'packages/shared-contracts/**'
-              - 'scripts/**'
-              - 'infra/config/**'
-              - 'infra/compose/**'
-              - 'infra/sql/**'
-              - 'pyproject.toml'
-              - 'uv.lock'
-            web_changed:
-              - 'apps/web/**'
-            deps_changed:
-              - 'pyproject.toml'
-              - 'uv.lock'
-              - 'apps/web/package.json'
-              - 'apps/web/package-lock.json'
-            migrations_changed:
-              - 'infra/migrations/**'
-
-      - name: Default full-run flags (non-PR)
-        if: ${{ github.event_name != 'pull_request' }}
-        id: non_pr_defaults
-        run: |
-          {
-            echo "backend_changed=true"
-            echo "web_changed=true"
-            echo "deps_changed=true"
-            echo "migrations_changed=true"
-          } >> "$GITHUB_OUTPUT"
 
   changes:
     runs-on: [self-hosted, video-analysis-extract]
     timeout-minutes: 3
-    needs: [changes-hosted, changes-fallback]
-    if: ${{ always() && (needs['changes-hosted'].result == 'success' || needs['changes-fallback'].result == 'success') }}
+    if: always()
     outputs:
-      backend_changed: ${{ (needs['changes-hosted'].result == 'success' && needs['changes-hosted'].outputs.backend_changed) || needs['changes-fallback'].outputs.backend_changed }}
-      web_changed: ${{ (needs['changes-hosted'].result == 'success' && needs['changes-hosted'].outputs.web_changed) || needs['changes-fallback'].outputs.web_changed }}
-      deps_changed: ${{ (needs['changes-hosted'].result == 'success' && needs['changes-hosted'].outputs.deps_changed) || needs['changes-fallback'].outputs.deps_changed }}
-      migrations_changed: ${{ (needs['changes-hosted'].result == 'success' && needs['changes-hosted'].outputs.migrations_changed) || needs['changes-fallback'].outputs.migrations_changed }}
+      backend_changed: ${{ github.event_name == 'pull_request' && steps.filter.outputs.backend_changed || steps.non_pr_defaults.outputs.backend_changed }}
+      web_changed: ${{ github.event_name == 'pull_request' && steps.filter.outputs.web_changed || steps.non_pr_defaults.outputs.web_changed }}
+      deps_changed: ${{ github.event_name == 'pull_request' && steps.filter.outputs.deps_changed || steps.non_pr_defaults.outputs.deps_changed }}
+      migrations_changed: ${{ github.event_name == 'pull_request' && steps.filter.outputs.migrations_changed || steps.non_pr_defaults.outputs.migrations_changed }}
     steps:
-      - name: Select changes source
+      - uses: ./.github/actions/normalize-self-hosted-workspace
+
+      - name: Checkout
+        if: ${{ github.event_name == 'pull_request' }}
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          clean: true
+          fetch-depth: 0
+
+      - name: Detect changed paths (PR only)
+        if: ${{ github.event_name == 'pull_request' }}
+        id: filter
+        uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
+        with:
+          filters: |
+            backend_changed:
+              - 'apps/api/**'
+              - 'apps/worker/**'
+              - 'apps/mcp/**'
+              - 'packages/shared-contracts/**'
+              - 'scripts/**'
+              - 'infra/config/**'
+              - 'infra/compose/**'
+              - 'infra/sql/**'
+              - 'pyproject.toml'
+              - 'uv.lock'
+            web_changed:
+              - 'apps/web/**'
+            deps_changed:
+              - 'pyproject.toml'
+              - 'uv.lock'
+              - 'apps/web/package.json'
+              - 'apps/web/package-lock.json'
+            migrations_changed:
+              - 'infra/migrations/**'
+
+      - name: Default full-run flags (non-PR)
+        if: ${{ github.event_name != 'pull_request' }}
+        id: non_pr_defaults
         run: |
-          if [[ "${{ needs['changes-hosted'].result }}" == "success" ]]; then
-            echo "changes source: hosted"
-          else
-            echo "changes source: dedicated fallback"
-          fi
+          {
+            echo "backend_changed=true"
+            echo "web_changed=true"
+            echo "deps_changed=true"
+            echo "migrations_changed=true"
+          } >> "$GITHUB_OUTPUT"
 
-  preflight-fast-hosted:
-    uses: ./.github/workflows/_preflight-fast-steps.yml
-    needs: [required-ci-secrets]
-    with:
-      runs-on: '["self-hosted","video-analysis-extract"]'
-
-  preflight-fast-fallback:
-    uses: ./.github/workflows/_preflight-fast-steps.yml
-    needs: [required-ci-secrets, preflight-fast-hosted]
-    if: ${{ always() && needs['preflight-fast-hosted'].result != 'success' }}
-    with:
-      runs-on: '["self-hosted","video-analysis-extract"]'
   preflight-fast:
-    runs-on: [self-hosted, video-analysis-extract]
-    timeout-minutes: 3
-    needs: [preflight-fast-hosted, preflight-fast-fallback]
-    if: ${{ always() && (needs['preflight-fast-hosted'].result == 'success' || needs['preflight-fast-fallback'].result == 'success') }}
-    steps:
-      - name: Select preflight-fast source
-        run: |
-          if [[ "${{ needs['preflight-fast-hosted'].result }}" == "success" ]]; then
-            echo "preflight-fast source: hosted"
-          else
-            echo "preflight-fast source: dedicated fallback"
-          fi
+    uses: ./.github/workflows/_preflight-fast-steps.yml
+    with:
+      runs-on: '["self-hosted","video-analysis-extract"]'
 
   preflight-heavy:
     runs-on: [self-hosted, video-analysis-extract]
     timeout-minutes: 20
-    needs: preflight-fast
-    if: ${{ always() && needs.preflight-fast.result == 'success' }}
+    needs: [preflight-fast, ci-contract]
+    if: ${{ always() && needs.preflight-fast.result == 'success' && needs.ci-contract.result == 'success' }}
+    container:
+      image: ${{ needs.ci-contract.outputs.standard_image_ref }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    env:
+      CI_CACHE_ROOT: ${{ needs.ci-contract.outputs.cache_root }}
+      UV_CACHE_DIR: ${{ needs.ci-contract.outputs.uv_cache_dir }}
     steps:
       - name: Normalize self-hosted workspace (pre-checkout)
         shell: bash
@@ -500,16 +246,6 @@ jobs:
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           clean: true
-
-      - name: Setup Python
-        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
-        with:
-          python-version: "3.12"
-
-      - name: Setup uv
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install "uv==${UV_PIP_VERSION}"
 
       - name: Cache uv
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
@@ -770,11 +506,16 @@ jobs:
   db-migration-smoke:
     runs-on: [self-hosted, video-analysis-extract, core02]
     timeout-minutes: 20
-    needs: [preflight-fast, changes]
-    if: ${{ always() && needs.preflight-fast.result == 'success' && needs.changes.result == 'success' && (github.event_name != 'pull_request' || needs.changes.outputs.migrations_changed == 'true') }}
+    needs: [preflight-fast, changes, ci-contract]
+    if: ${{ always() && needs.preflight-fast.result == 'success' && needs.changes.result == 'success' && needs.ci-contract.result == 'success' && (github.event_name != 'pull_request' || needs.changes.outputs.migrations_changed == 'true') }}
+    container:
+      image: ${{ needs.ci-contract.outputs.standard_image_ref }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
     services:
       postgres:
-        image: pgvector/pgvector:pg16
+        image: ${{ needs.ci-contract.outputs.service_image_pgvector_pg16 }}
         env:
           POSTGRES_DB: video_analysis_ci
           POSTGRES_USER: postgres
@@ -820,18 +561,6 @@ jobs:
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           clean: true
-
-      - name: Install PostgreSQL client
-        run: |
-          for attempt in $(seq 1 20); do
-            if sudo apt-get update && sudo apt-get install -y postgresql-client; then
-              exit 0
-            fi
-            echo "apt install attempt ${attempt}/20 failed, retrying..."
-            sleep 5
-          done
-          echo "apt install failed after retries"
-          exit 1
 
       - name: Migration smoke
         env:
@@ -1002,7 +731,7 @@ jobs:
       UV_CACHE_DIR: ${{ needs.ci-contract.outputs.uv_cache_dir }}
     services:
       postgres:
-        image: pgvector/pgvector:pg16@sha256:7d400e340efb42f4d8c9c12c6427adb253f726881a9985d2a471bf0eed824dff
+        image: ${{ needs.ci-contract.outputs.service_image_pgvector_pg16 }}
         env:
           POSTGRES_DB: video_analysis_pytests
           POSTGRES_USER: postgres
@@ -1105,7 +834,7 @@ jobs:
       UV_CACHE_DIR: ${{ needs.ci-contract.outputs.uv_cache_dir }}
     services:
       postgres:
-        image: pgvector/pgvector:pg16@sha256:7d400e340efb42f4d8c9c12c6427adb253f726881a9985d2a471bf0eed824dff
+        image: ${{ needs.ci-contract.outputs.service_image_pgvector_pg16 }}
         env:
           POSTGRES_DB: video_analysis_api_smoke
           POSTGRES_USER: postgres
@@ -1329,7 +1058,7 @@ jobs:
       PLAYWRIGHT_BROWSERS_PATH: ${{ needs.ci-contract.outputs.playwright_browsers_path }}
     services:
       postgres:
-        image: pgvector/pgvector:pg16@sha256:7d400e340efb42f4d8c9c12c6427adb253f726881a9985d2a471bf0eed824dff
+        image: ${{ needs.ci-contract.outputs.service_image_pgvector_pg16 }}
         env:
           POSTGRES_DB: video_analysis_web_e2e
           POSTGRES_USER: postgres
@@ -1538,11 +1267,20 @@ jobs:
   web-e2e-perceived:
     runs-on: [self-hosted, video-analysis-extract, core02]
     timeout-minutes: 40
-    needs: [preflight-fast, changes]
-    if: ${{ always() && needs.preflight-fast.result == 'success' && needs.changes.result == 'success' && (github.event_name != 'pull_request' || needs.changes.outputs.backend_changed == 'true' || needs.changes.outputs.web_changed == 'true' || needs.changes.outputs.deps_changed == 'true') }}
+    needs: [preflight-fast, changes, ci-contract]
+    if: ${{ always() && needs.preflight-fast.result == 'success' && needs.changes.result == 'success' && needs.ci-contract.result == 'success' && (github.event_name != 'pull_request' || needs.changes.outputs.backend_changed == 'true' || needs.changes.outputs.web_changed == 'true' || needs.changes.outputs.deps_changed == 'true') }}
+    container:
+      image: ${{ needs.ci-contract.outputs.standard_image_ref }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    env:
+      CI_CACHE_ROOT: ${{ needs.ci-contract.outputs.cache_root }}
+      UV_CACHE_DIR: ${{ needs.ci-contract.outputs.uv_cache_dir }}
+      PLAYWRIGHT_BROWSERS_PATH: ${{ needs.ci-contract.outputs.playwright_browsers_path }}
     services:
       postgres:
-        image: pgvector/pgvector:pg16
+        image: ${{ needs.ci-contract.outputs.service_image_pgvector_pg16 }}
         env:
           POSTGRES_DB: video_analysis_web_e2e_perceived
           POSTGRES_USER: postgres
@@ -1589,23 +1327,6 @@ jobs:
         with:
           clean: true
 
-      - name: Setup Node
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version: "20"
-          cache: "npm"
-          cache-dependency-path: apps/web/package-lock.json
-
-      - name: Setup Python
-        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
-        with:
-          python-version: "3.12"
-
-      - name: Setup uv
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install "uv==${UV_PIP_VERSION}"
-
       - name: Cache uv
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
@@ -1614,61 +1335,11 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-uv-
 
-      - name: Cache Playwright browsers
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
-        with:
-          path: ${{ env.PLAYWRIGHT_BROWSERS_PATH }}
-          key: ${{ runner.os }}-playwright-perceived-${{ hashFiles('uv.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-playwright-perceived-
-
       - name: Sync Python deps (locked)
         run: uv sync --frozen --extra dev --extra e2e
 
       - name: Install web deps
         run: npm --prefix apps/web ci
-
-      - name: Install PostgreSQL client
-        run: |
-          for attempt in $(seq 1 20); do
-            if sudo apt-get update && sudo apt-get install -y postgresql-client; then
-              exit 0
-            fi
-            echo "apt install attempt ${attempt}/20 failed, retrying..."
-            sleep 5
-          done
-          echo "apt install failed after retries"
-          exit 1
-
-      - name: Install Temporal CLI
-        run: |
-          arch="$(uname -m)"
-          case "$arch" in
-            x86_64|amd64)
-              temporal_arch="amd64"
-              expected_sha="${TEMPORAL_CLI_SHA256_LINUX_AMD64}"
-              ;;
-            aarch64|arm64)
-              temporal_arch="arm64"
-              expected_sha="${TEMPORAL_CLI_SHA256_LINUX_ARM64}"
-              ;;
-            *)
-              echo "Unsupported architecture for Temporal CLI: ${arch}" >&2
-              exit 1
-              ;;
-          esac
-          tmpdir="$(mktemp -d "/tmp/temporal-cli-web-e2e-perceived-XXXXXX")"
-          archive="temporal_cli_${TEMPORAL_CLI_VERSION}_linux_${temporal_arch}.tar.gz"
-          archive_path="${tmpdir}/${archive}"
-          url="https://github.com/temporalio/cli/releases/download/v${TEMPORAL_CLI_VERSION}/${archive}"
-          trap 'rm -rf "${tmpdir}"' EXIT
-          curl --retry 5 --retry-all-errors --retry-delay 2 --connect-timeout 15 -fL "$url" -o "${archive_path}"
-          echo "${expected_sha}  ${archive_path}" | sha256sum -c -
-          tar -tzf "${archive_path}" temporal >/dev/null
-          tar -xzf "${archive_path}" -C "${tmpdir}" temporal
-          mkdir -p "$HOME/.local/bin"
-          install -m 0755 "${tmpdir}/temporal" "$HOME/.local/bin/temporal"
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
       - name: Allocate isolated perceived e2e runtime resources
         run: |
@@ -1800,23 +1471,6 @@ jobs:
           echo "web-e2e-perceived worker failed readiness probe (no log output within 30s)"
           exit 1
 
-      - name: Install Playwright browser (chromium)
-        run: |
-          for attempt in $(seq 1 8); do
-            if uv run --with playwright python -m playwright install --with-deps chromium; then
-              exit 0
-            fi
-            if sudo fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 || sudo fuser /var/lib/apt/lists/lock >/dev/null 2>&1 || sudo fuser /var/cache/apt/archives/lock >/dev/null 2>&1; then
-              echo "playwright dependency install hit apt/dpkg lock, retrying (${attempt}/8)..."
-              sleep 8
-              continue
-            fi
-            echo "playwright install failed without apt lock contention"
-            exit 1
-          done
-          echo "playwright install failed after retries"
-          exit 1
-
       - name: Perceived UX E2E gate (mobile + reduced-motion + perceived-latency)
         env:
           WEB_E2E_API_BASE_URL: http://127.0.0.1:${{ env.WEB_E2E_PERCEIVED_API_PORT }}
@@ -1860,8 +1514,16 @@ jobs:
   dependency-vuln-scan:
     runs-on: [self-hosted, video-analysis-extract]
     timeout-minutes: 25
-    needs: [preflight-fast, changes]
-    if: ${{ always() && needs.preflight-fast.result == 'success' && needs.changes.result == 'success' && (github.event_name != 'pull_request' || needs.changes.outputs.deps_changed == 'true') }}
+    needs: [preflight-fast, changes, ci-contract]
+    if: ${{ always() && needs.preflight-fast.result == 'success' && needs.changes.result == 'success' && needs.ci-contract.result == 'success' && (github.event_name != 'pull_request' || needs.changes.outputs.deps_changed == 'true') }}
+    container:
+      image: ${{ needs.ci-contract.outputs.standard_image_ref }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    env:
+      CI_CACHE_ROOT: ${{ needs.ci-contract.outputs.cache_root }}
+      UV_CACHE_DIR: ${{ needs.ci-contract.outputs.uv_cache_dir }}
     steps:
       - name: Normalize self-hosted workspace (pre-checkout)
         shell: bash
@@ -1897,16 +1559,6 @@ jobs:
         with:
           clean: true
 
-      - name: Setup Python
-        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
-        with:
-          python-version: "3.12"
-
-      - name: Setup uv
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install "uv==${UV_PIP_VERSION}"
-
       - name: Cache uv
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
@@ -1920,13 +1572,6 @@ jobs:
 
       - name: Python dependency audit (pip-audit)
         run: uv run --with pip-audit pip-audit --progress-spinner off
-
-      - name: Setup Node
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version: "20"
-          cache: "npm"
-          cache-dependency-path: apps/web/package-lock.json
 
       - name: Install web deps
         run: npm --prefix apps/web ci
@@ -2119,6 +1764,38 @@ jobs:
             exit 1
           fi
           echo "aggregate gate passed"
+
+      - name: Write aggregate summary
+        if: always()
+        run: |
+          {
+            echo "## Aggregate Gate"
+            echo
+            echo "| Job | Result |"
+            echo "| --- | --- |"
+            echo "| required-ci-secrets | \`${{ needs.required-ci-secrets.result }}\` |"
+            echo "| changes | \`${{ needs.changes.result }}\` |"
+            echo "| preflight-fast | \`${{ needs.preflight-fast.result }}\` |"
+            echo "| preflight-heavy | \`${{ needs.preflight-heavy.result }}\` |"
+            echo "| quality-gate-pre-push | \`${{ needs.quality-gate-pre-push.result }}\` |"
+            echo "| db-migration-smoke | \`${{ needs.db-migration-smoke.result }}\` |"
+            echo "| mutation-testing | \`${{ needs.mutation-testing.result }}\` |"
+            echo "| python-tests | \`${{ needs.python-tests.result }}\` |"
+            echo "| api-real-smoke | \`${{ needs.api-real-smoke.result }}\` |"
+            echo "| pr-llm-real-smoke | \`${{ needs.pr-llm-real-smoke.result }}\` |"
+            echo "| backend-lint | \`${{ needs.backend-lint.result }}\` |"
+            echo "| frontend-lint | \`${{ needs.frontend-lint.result }}\` |"
+            echo "| web-test-build | \`${{ needs.web-test-build.result }}\` |"
+            echo "| web-e2e | \`${{ needs.web-e2e.result }}\` |"
+            echo "| web-e2e-perceived | \`${{ needs.web-e2e-perceived.result }}\` |"
+            echo "| external-playwright-smoke | \`${{ needs.external-playwright-smoke.result }}\` |"
+            echo "| dependency-vuln-scan | \`${{ needs.dependency-vuln-scan.result }}\` |"
+            echo
+            echo "Common artifact families:"
+            echo "- \`ci-failure-diagnostics-*\`"
+            echo "- \`live-smoke-diagnostics-*\`"
+            echo "- \`autofix-dry-run-report-*\`"
+          } >> "$GITHUB_STEP_SUMMARY"
 
   nightly-flaky-python:
     runs-on: [self-hosted, video-analysis-extract]
@@ -2314,6 +1991,39 @@ jobs:
                 --web-e2e-browser "$BROWSER"
           done
 
+  nightly-flaky-report:
+    runs-on: [self-hosted, video-analysis-extract]
+    timeout-minutes: 15
+    if: ${{ github.event_name == 'schedule' }}
+    needs: [nightly-flaky-python, nightly-flaky-web-e2e]
+    steps:
+      - uses: ./.github/actions/normalize-self-hosted-workspace
+
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          clean: true
+
+      - name: Build nightly flaky trend report
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python3 scripts/build_nightly_flaky_report.py \
+            --repo "${{ github.repository }}" \
+            --workflow-file "ci.yml" \
+            --limit 10 \
+            --json-out .runtime-cache/nightly-flaky-trend.json \
+            --md-out .runtime-cache/nightly-flaky-trend.md
+
+      - name: Upload nightly flaky trend artifacts
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: nightly-flaky-trend-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: error
+          path: |
+            .runtime-cache/nightly-flaky-trend.json
+            .runtime-cache/nightly-flaky-trend.md
+
   autofix-dry-run:
     name: autofix-dry-run
     runs-on: [self-hosted, video-analysis-extract]
@@ -2398,7 +2108,7 @@ jobs:
       YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
     services:
       postgres:
-        image: pgvector/pgvector:pg16@sha256:7d400e340efb42f4d8c9c12c6427adb253f726881a9985d2a471bf0eed824dff
+        image: ${{ needs.ci-contract.outputs.service_image_pgvector_pg16 }}
         env:
           POSTGRES_DB: video_analysis_live_smoke
           POSTGRES_USER: postgres
@@ -2453,8 +2163,6 @@ jobs:
           SQLITE_PATH: /tmp/video-digestor-live-smoke-${{ github.run_id }}-${{ github.run_attempt }}.db
           PIPELINE_WORKSPACE_DIR: /tmp/video-digestor-live-smoke-workspace-${{ github.run_id }}-${{ github.run_attempt }}
           PIPELINE_ARTIFACT_ROOT: /tmp/video-digestor-live-smoke-artifacts-${{ github.run_id }}-${{ github.run_attempt }}
-          VD_ALLOW_UNAUTH_WRITE: "true"
-          VD_CI_ALLOW_UNAUTH_WRITE: "true"
         run: ./scripts/strict_ci_entry.sh --mode live-smoke
 
       - name: Upload live smoke diagnostics
@@ -2482,6 +2190,7 @@ jobs:
       - live-smoke
       - nightly-flaky-python
       - nightly-flaky-web-e2e
+      - nightly-flaky-report
     steps:
       - name: Enforce final gate (with required live smoke on main/release/nightly)
         run: |
@@ -2489,6 +2198,7 @@ jobs:
           live_smoke_result="${{ needs.live-smoke.result }}"
           nightly_flaky_result="${{ needs.nightly-flaky-python.result }}"
           nightly_flaky_web_e2e_result="${{ needs.nightly-flaky-web-e2e.result }}"
+          nightly_flaky_report_result="${{ needs.nightly-flaky-report.result }}"
           event_name="${{ github.event_name }}"
           ref="${{ github.ref }}"
 
@@ -2505,6 +2215,7 @@ jobs:
           echo "live-smoke=$live_smoke_result"
           echo "nightly-flaky-python=$nightly_flaky_result"
           echo "nightly-flaky-web-e2e=$nightly_flaky_web_e2e_result"
+          echo "nightly-flaky-report=$nightly_flaky_report_result"
           echo "event=$event_name ref=$ref require_live_smoke=$require_live_smoke"
 
           if [[ "$aggregate_result" != "success" ]]; then
@@ -2521,6 +2232,10 @@ jobs:
             echo "final gate failed: nightly flaky web e2e subset must pass on schedule runs (result='$nightly_flaky_web_e2e_result')"
             exit 1
           fi
+          if [[ "$event_name" == "schedule" && "$nightly_flaky_report_result" != "success" ]]; then
+            echo "final gate failed: nightly flaky trend report must pass on schedule runs (result='$nightly_flaky_report_result')"
+            exit 1
+          fi
 
           if [[ "$require_live_smoke" -eq 1 ]]; then
             if [[ "$live_smoke_result" != "success" ]]; then
@@ -2535,288 +2250,132 @@ jobs:
           fi
 
           echo "final gate passed"
-  backend-lint-hosted:
+
+      - name: Write final summary
+        if: always()
+        run: |
+          {
+            echo "## Final Gate"
+            echo
+            echo "- aggregate-gate: \`${{ needs.aggregate-gate.result }}\`"
+            echo "- live-smoke: \`${{ needs.live-smoke.result }}\`"
+            echo "- nightly-flaky-python: \`${{ needs.nightly-flaky-python.result }}\`"
+            echo "- nightly-flaky-web-e2e: \`${{ needs.nightly-flaky-web-e2e.result }}\`"
+            echo "- nightly-flaky-report: \`${{ needs.nightly-flaky-report.result }}\`"
+            echo
+            echo "If final gate is red, inspect aggregate summary above first, then corresponding diagnostics artifacts."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  ci-kpi:
     runs-on: [self-hosted, video-analysis-extract]
-    continue-on-error: true
     timeout-minutes: 20
-    needs: [preflight-fast, changes]
-    if: ${{ github.event_name != 'pull_request' || needs.changes.outputs.backend_changed == 'true' }}
+    if: always()
+    needs: [ci-final-gate]
     steps:
-      - name: Normalize self-hosted workspace (pre-checkout)
-        shell: bash
-        run: |
-          set -euo pipefail
-          workspace="${GITHUB_WORKSPACE:?}"
-          uid="$(id -u)"
-          gid="$(id -g)"
-          stale_paths=(
-            "$workspace/.runtime-cache"
-            "$workspace/.venv"
-            "$workspace/apps/web/node_modules"
-          )
-          if command -v sudo >/dev/null 2>&1; then
-            if sudo find "$workspace" -mindepth 1 -uid 0 -print -quit | grep -q .; then
-              echo "Detected root-owned residue under $workspace; normalizing ownership"
-              sudo chown -R "$uid:$gid" "$workspace"
-            fi
-            for path in "${stale_paths[@]}"; do
-              if sudo test -e "$path"; then
-                echo "Removing stale workspace path: $path"
-                sudo rm -rf "$path"
-              fi
-            done
-          else
-            for path in "${stale_paths[@]}"; do
-              rm -rf "$path" || true
-            done
-          fi
+      - uses: ./.github/actions/normalize-self-hosted-workspace
 
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           clean: true
 
-      - name: Setup Python
-        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+      - name: Download run artifacts
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
-          python-version: "3.12"
+          pattern: "*"
+          merge-multiple: true
+          path: .runtime-cache/ci-kpi-inputs
 
-      - name: Setup uv
+      - name: Build CI KPI summary
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          python -m pip install --upgrade pip
-          python -m pip install "uv==${UV_PIP_VERSION}"
+          python3 scripts/collect_ci_kpi.py \
+            --junit-glob ".runtime-cache/ci-kpi-inputs/**/*.xml" \
+            --coverage-xml-glob ".runtime-cache/ci-kpi-inputs/**/*coverage*.xml" \
+            --coverage-summary-glob ".runtime-cache/ci-kpi-inputs/**/coverage-summary.json" \
+            --mutation-glob ".runtime-cache/ci-kpi-inputs/**/*mutmut*.json" \
+            --artifact-glob ".runtime-cache/ci-kpi-inputs/**/*" \
+            --workflow-glob ".github/workflows/*.yml" \
+            --repo "${{ github.repository }}" \
+            --run-id "${{ github.run_id }}" \
+            --run-attempt "${{ github.run_attempt }}" \
+            --json-out reports/release-readiness/ci-kpi-summary.json \
+            --md-out reports/release-readiness/ci-kpi-summary.md
 
-      - name: Cache uv
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+      - name: Upload CI KPI summary
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          path: ${{ env.UV_CACHE_DIR }}
-          key: ${{ runner.os }}-uv-${{ hashFiles('uv.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-uv-
+          name: ci-kpi-summary-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: error
+          path: |
+            reports/release-readiness/ci-kpi-summary.json
+            reports/release-readiness/ci-kpi-summary.md
 
-      - name: Sync Python deps (locked)
-        run: uv sync --frozen --extra dev --extra e2e
-
-      - name: Placebo assertion guard (all tests)
-        run: python3 scripts/check_test_assertions.py
-
-      - name: Backend lint (ruff critical rules)
-        run: uv run --with ruff ruff check apps scripts --select E9,F63,F7,F82
-
-      - name: Backend lint (ruff full rules)
-        run: uv run --with ruff ruff check apps scripts
-
-  backend-lint-fallback:
-    runs-on: [self-hosted, video-analysis-extract]
-    timeout-minutes: 25
-    needs: [preflight-fast, changes, backend-lint-hosted]
-    if: ${{ (github.event_name != 'pull_request' || needs.changes.outputs.backend_changed == 'true') && always() && needs['backend-lint-hosted'].result != 'success' }}
-    steps:
-      - name: Normalize self-hosted workspace (pre-checkout)
-        shell: bash
+      - name: Write KPI summary
+        if: always()
         run: |
-          set -euo pipefail
-          workspace="${GITHUB_WORKSPACE:?}"
-          uid="$(id -u)"
-          gid="$(id -g)"
-          stale_paths=(
-            "$workspace/.runtime-cache"
-            "$workspace/.venv"
-            "$workspace/apps/web/node_modules"
-          )
-          if command -v sudo >/dev/null 2>&1; then
-            if sudo find "$workspace" -mindepth 1 -uid 0 -print -quit | grep -q .; then
-              echo "Detected root-owned residue under $workspace; normalizing ownership"
-              sudo chown -R "$uid:$gid" "$workspace"
-            fi
-            for path in "${stale_paths[@]}"; do
-              if sudo test -e "$path"; then
-                echo "Removing stale workspace path: $path"
-                sudo rm -rf "$path"
-              fi
-            done
-          else
-            for path in "${stale_paths[@]}"; do
-              rm -rf "$path" || true
-            done
-          fi
-
-      - name: Checkout
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-        with:
-          clean: true
-
-      - name: Setup Python
-        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
-        with:
-          python-version: "3.12"
-
-      - name: Setup uv
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install "uv==${UV_PIP_VERSION}"
-
-      - name: Cache uv
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
-        with:
-          path: ${{ env.UV_CACHE_DIR }}
-          key: ${{ runner.os }}-uv-${{ hashFiles('uv.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-uv-
-
-      - name: Sync Python deps (locked)
-        run: uv sync --frozen --extra dev --extra e2e
-
-      - name: Placebo assertion guard (all tests)
-        run: python3 scripts/check_test_assertions.py
-
-      - name: Backend lint (ruff critical rules)
-        run: uv run --with ruff ruff check apps scripts --select E9,F63,F7,F82
-
-      - name: Backend lint (ruff full rules)
-        run: uv run --with ruff ruff check apps scripts
-
+          cat reports/release-readiness/ci-kpi-summary.md >> "$GITHUB_STEP_SUMMARY"
   backend-lint:
     runs-on: [self-hosted, video-analysis-extract]
-    timeout-minutes: 3
-    needs: [backend-lint-hosted, backend-lint-fallback]
-    if: ${{ always() && (needs['backend-lint-hosted'].result == 'success' || needs['backend-lint-fallback'].result == 'success' || (needs['backend-lint-hosted'].result == 'skipped' && needs['backend-lint-fallback'].result == 'skipped')) }}
-    steps:
-      - name: Select backend-lint source
-        run: |
-          if [[ "${{ needs['backend-lint-hosted'].result }}" == "success" ]]; then
-            echo "backend-lint source: hosted"
-          elif [[ "${{ needs['backend-lint-fallback'].result }}" == "success" ]]; then
-            echo "backend-lint source: dedicated fallback"
-          else
-            echo "backend-lint source: skipped"
-          fi
-
-  frontend-lint-hosted:
-    runs-on: [self-hosted, video-analysis-extract]
-    continue-on-error: true
     timeout-minutes: 20
-    needs: [preflight-fast, changes]
-    if: ${{ github.event_name != 'pull_request' || needs.changes.outputs.web_changed == 'true' }}
+    needs: [preflight-fast, changes, ci-contract]
+    if: ${{ github.event_name != 'pull_request' || needs.changes.outputs.backend_changed == 'true' }}
+    container:
+      image: ${{ needs.ci-contract.outputs.standard_image_ref }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    env:
+      CI_CACHE_ROOT: ${{ needs.ci-contract.outputs.cache_root }}
+      UV_CACHE_DIR: ${{ needs.ci-contract.outputs.uv_cache_dir }}
     steps:
-      - name: Normalize self-hosted workspace (pre-checkout)
-        shell: bash
-        run: |
-          set -euo pipefail
-          workspace="${GITHUB_WORKSPACE:?}"
-          uid="$(id -u)"
-          gid="$(id -g)"
-          stale_paths=(
-            "$workspace/.runtime-cache"
-            "$workspace/.venv"
-            "$workspace/apps/web/node_modules"
-          )
-          if command -v sudo >/dev/null 2>&1; then
-            if sudo find "$workspace" -mindepth 1 -uid 0 -print -quit | grep -q .; then
-              echo "Detected root-owned residue under $workspace; normalizing ownership"
-              sudo chown -R "$uid:$gid" "$workspace"
-            fi
-            for path in "${stale_paths[@]}"; do
-              if sudo test -e "$path"; then
-                echo "Removing stale workspace path: $path"
-                sudo rm -rf "$path"
-              fi
-            done
-          else
-            for path in "${stale_paths[@]}"; do
-              rm -rf "$path" || true
-            done
-          fi
+      - uses: ./.github/actions/normalize-self-hosted-workspace
 
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           clean: true
 
-      - name: Setup Node
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+      - uses: ./.github/actions/setup-python-uv
         with:
-          node-version: "20"
-          cache: "npm"
-          cache-dependency-path: apps/web/package-lock.json
+          uv-version: ${{ env.UV_PIP_VERSION }}
+          uv-cache-dir: ${{ env.UV_CACHE_DIR }}
+          sync-command: uv sync --frozen --extra dev --extra e2e
 
-      - name: Install web deps
-        run: npm --prefix apps/web ci
+      - name: Placebo assertion guard (all tests)
+        run: python3 scripts/check_test_assertions.py
 
-      - name: Frontend lint
-        run: npm --prefix apps/web run lint
+      - name: Backend lint (ruff critical rules)
+        run: uv run --with ruff ruff check apps scripts --select E9,F63,F7,F82
 
-      - name: Placebo assertion guard (web tests)
-        run: python3 scripts/check_test_assertions.py --path apps/web
-
-  frontend-lint-fallback:
-    runs-on: [self-hosted, video-analysis-extract]
-    timeout-minutes: 25
-    needs: [preflight-fast, changes, frontend-lint-hosted]
-    if: ${{ (github.event_name != 'pull_request' || needs.changes.outputs.web_changed == 'true') && always() && needs['frontend-lint-hosted'].result != 'success' }}
-    steps:
-      - name: Normalize self-hosted workspace (pre-checkout)
-        shell: bash
-        run: |
-          set -euo pipefail
-          workspace="${GITHUB_WORKSPACE:?}"
-          uid="$(id -u)"
-          gid="$(id -g)"
-          stale_paths=(
-            "$workspace/.runtime-cache"
-            "$workspace/.venv"
-            "$workspace/apps/web/node_modules"
-          )
-          if command -v sudo >/dev/null 2>&1; then
-            if sudo find "$workspace" -mindepth 1 -uid 0 -print -quit | grep -q .; then
-              echo "Detected root-owned residue under $workspace; normalizing ownership"
-              sudo chown -R "$uid:$gid" "$workspace"
-            fi
-            for path in "${stale_paths[@]}"; do
-              if sudo test -e "$path"; then
-                echo "Removing stale workspace path: $path"
-                sudo rm -rf "$path"
-              fi
-            done
-          else
-            for path in "${stale_paths[@]}"; do
-              rm -rf "$path" || true
-            done
-          fi
-
-      - name: Checkout
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-        with:
-          clean: true
-
-      - name: Setup Node
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version: "20"
-          cache: "npm"
-          cache-dependency-path: apps/web/package-lock.json
-
-      - name: Install web deps
-        run: npm --prefix apps/web ci
-
-      - name: Frontend lint
-        run: npm --prefix apps/web run lint
-
-      - name: Placebo assertion guard (web tests)
-        run: python3 scripts/check_test_assertions.py --path apps/web
+      - name: Backend lint (ruff full rules)
+        run: uv run --with ruff ruff check apps scripts
 
   frontend-lint:
     runs-on: [self-hosted, video-analysis-extract]
-    timeout-minutes: 3
-    needs: [frontend-lint-hosted, frontend-lint-fallback]
-    if: ${{ always() && (needs['frontend-lint-hosted'].result == 'success' || needs['frontend-lint-fallback'].result == 'success' || (needs['frontend-lint-hosted'].result == 'skipped' && needs['frontend-lint-fallback'].result == 'skipped')) }}
+    timeout-minutes: 20
+    needs: [preflight-fast, changes, ci-contract]
+    if: ${{ github.event_name != 'pull_request' || needs.changes.outputs.web_changed == 'true' }}
+    container:
+      image: ${{ needs.ci-contract.outputs.standard_image_ref }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
     steps:
-      - name: Select frontend-lint source
-        run: |
-          if [[ "${{ needs['frontend-lint-hosted'].result }}" == "success" ]]; then
-            echo "frontend-lint source: hosted"
-          elif [[ "${{ needs['frontend-lint-fallback'].result }}" == "success" ]]; then
-            echo "frontend-lint source: dedicated fallback"
-          else
-            echo "frontend-lint source: skipped"
-          fi
+      - uses: ./.github/actions/normalize-self-hosted-workspace
+
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          clean: true
+
+      - uses: ./.github/actions/setup-web-node
+        with:
+          install-command: npm --prefix apps/web ci
+
+      - name: Frontend lint
+        run: npm --prefix apps/web run lint
+
+      - name: Placebo assertion guard (web tests)
+        run: python3 scripts/check_test_assertions.py --path apps/web
