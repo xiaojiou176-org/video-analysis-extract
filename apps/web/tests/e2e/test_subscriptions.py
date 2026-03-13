@@ -25,6 +25,10 @@ def _create_subscription_form(page: Page) -> Locator:
     return create_form
 
 
+def _subscription_row(page: Page, source_value: str) -> Locator:
+    return page.locator("tbody tr").filter(has_text=source_value).first
+
+
 def _create_subscription_via_form(page: Page, source_value: str) -> None:
     create_form = _create_subscription_form(page)
     create_form.locator('[name="source_value"]').fill(source_value)
@@ -46,7 +50,7 @@ def test_subscriptions_save_subscription_button(page: Page) -> None:
     expect(page.locator("p.alert.success")).to_contain_text(
         re.compile(r"订阅已创建。|订阅已更新。")
     )
-    created_row = page.locator("tbody tr", has_text=source_value)
+    created_row = _subscription_row(page, source_value)
     expect(created_row).to_be_visible()
 
 
@@ -55,7 +59,7 @@ def test_subscriptions_delete_button(page: Page) -> None:
     page.goto("/subscriptions", wait_until="domcontentloaded")
     _create_subscription_via_form(page, source_value)
 
-    row = page.locator("tbody tr", has_text=source_value)
+    row = _subscription_row(page, source_value)
     expect(row).to_be_visible()
     row.get_by_role("button", name="删除").click()
     row.get_by_test_id("subscription-confirm-delete").click()
@@ -63,7 +67,7 @@ def test_subscriptions_delete_button(page: Page) -> None:
     expect(page).to_have_url(
         re.compile(r"/subscriptions\?status=success&code=SUBSCRIPTION_DELETED")
     )
-    expect(page.locator("tbody tr", has_text=source_value)).to_have_count(0)
+    expect(page.locator("tbody tr").filter(has_text=source_value)).to_have_count(0)
     expect(page.locator("p.alert.success")).to_contain_text("订阅已删除。")
 
 
@@ -72,14 +76,14 @@ def test_subscriptions_batch_update_category(page: Page) -> None:
     page.goto("/subscriptions", wait_until="domcontentloaded")
     _create_subscription_via_form(page, source_value)
 
-    row = page.locator("tbody tr", has_text=source_value)
+    row = _subscription_row(page, source_value)
     expect(row).to_be_visible()
     row.get_by_role("checkbox").click()
     _select_option(page, "批量设分类", "运维")
     page.get_by_test_id("subscription-apply-category").click()
 
-    expect(page.locator("tbody tr", has_text=source_value)).to_contain_text("运维")
+    expect(_subscription_row(page, source_value)).to_contain_text("运维")
     undo_button = page.get_by_test_id("subscription-undo-category")
     expect(undo_button).to_be_visible()
     undo_button.click()
-    expect(page.locator("tbody tr", has_text=source_value)).to_contain_text("创作者")
+    expect(_subscription_row(page, source_value)).to_contain_text("创作者")
