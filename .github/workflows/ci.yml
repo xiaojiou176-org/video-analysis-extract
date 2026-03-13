@@ -60,13 +60,26 @@ jobs:
             for path in "${stale_paths[@]}"; do
               if sudo test -e "$path"; then
                 echo "Removing stale workspace path: $path"
-                sudo rm -rf "$path"
+                sudo chmod -R u+w "$path" 2>/dev/null || true
+                sudo rm -rf "$path" || true
+              fi
+            done
+            generated_web_files=(
+              "$workspace/apps/web/next-env.d.ts"
+              "$workspace/apps/web/tsconfig.json"
+            )
+            for path in "${generated_web_files[@]}"; do
+              if sudo test -e "$path"; then
+                echo "Restoring generated workspace file: $path"
+                sudo git -C "$workspace" checkout -- "$path" || sudo rm -f "$path" || true
               fi
             done
           else
             for path in "${stale_paths[@]}"; do
               rm -rf "$path" || true
             done
+            rm -f "$workspace/apps/web/next-env.d.ts" || true
+            git -C "$workspace" checkout -- apps/web/tsconfig.json >/dev/null 2>&1 || true
           fi
 
       - name: Checkout
@@ -117,13 +130,26 @@ jobs:
             for path in "${stale_paths[@]}"; do
               if sudo test -e "$path"; then
                 echo "Removing stale workspace path: $path"
-                sudo rm -rf "$path"
+                sudo chmod -R u+w "$path" 2>/dev/null || true
+                sudo rm -rf "$path" || true
+              fi
+            done
+            generated_web_files=(
+              "$workspace/apps/web/next-env.d.ts"
+              "$workspace/apps/web/tsconfig.json"
+            )
+            for path in "${generated_web_files[@]}"; do
+              if sudo test -e "$path"; then
+                echo "Restoring generated workspace file: $path"
+                sudo git -C "$workspace" checkout -- "$path" || sudo rm -f "$path" || true
               fi
             done
           else
             for path in "${stale_paths[@]}"; do
               rm -rf "$path" || true
             done
+            rm -f "$workspace/apps/web/next-env.d.ts" || true
+            git -C "$workspace" checkout -- apps/web/tsconfig.json >/dev/null 2>&1 || true
           fi
 
       - name: Checkout
@@ -167,13 +193,26 @@ jobs:
             for path in "${stale_paths[@]}"; do
               if sudo test -e "$path"; then
                 echo "Removing stale workspace path: $path"
-                sudo rm -rf "$path"
+                sudo chmod -R u+w "$path" 2>/dev/null || true
+                sudo rm -rf "$path" || true
+              fi
+            done
+            generated_web_files=(
+              "$workspace/apps/web/next-env.d.ts"
+              "$workspace/apps/web/tsconfig.json"
+            )
+            for path in "${generated_web_files[@]}"; do
+              if sudo test -e "$path"; then
+                echo "Restoring generated workspace file: $path"
+                sudo git -C "$workspace" checkout -- "$path" || sudo rm -f "$path" || true
               fi
             done
           else
             for path in "${stale_paths[@]}"; do
               rm -rf "$path" || true
             done
+            rm -f "$workspace/apps/web/next-env.d.ts" || true
+            git -C "$workspace" checkout -- apps/web/tsconfig.json >/dev/null 2>&1 || true
           fi
 
       - name: Checkout
@@ -260,13 +299,26 @@ jobs:
             for path in "${stale_paths[@]}"; do
               if sudo test -e "$path"; then
                 echo "Removing stale workspace path: $path"
-                sudo rm -rf "$path"
+                sudo chmod -R u+w "$path" 2>/dev/null || true
+                sudo rm -rf "$path" || true
+              fi
+            done
+            generated_web_files=(
+              "$workspace/apps/web/next-env.d.ts"
+              "$workspace/apps/web/tsconfig.json"
+            )
+            for path in "${generated_web_files[@]}"; do
+              if sudo test -e "$path"; then
+                echo "Restoring generated workspace file: $path"
+                sudo git -C "$workspace" checkout -- "$path" || sudo rm -f "$path" || true
               fi
             done
           else
             for path in "${stale_paths[@]}"; do
               rm -rf "$path" || true
             done
+            rm -f "$workspace/apps/web/next-env.d.ts" || true
+            git -C "$workspace" checkout -- apps/web/tsconfig.json >/dev/null 2>&1 || true
           fi
 
       - name: Checkout
@@ -318,13 +370,26 @@ jobs:
             for path in "${stale_paths[@]}"; do
               if sudo test -e "$path"; then
                 echo "Removing stale workspace path: $path"
-                sudo rm -rf "$path"
+                sudo chmod -R u+w "$path" 2>/dev/null || true
+                sudo rm -rf "$path" || true
+              fi
+            done
+            generated_web_files=(
+              "$workspace/apps/web/next-env.d.ts"
+              "$workspace/apps/web/tsconfig.json"
+            )
+            for path in "${generated_web_files[@]}"; do
+              if sudo test -e "$path"; then
+                echo "Restoring generated workspace file: $path"
+                sudo git -C "$workspace" checkout -- "$path" || sudo rm -f "$path" || true
               fi
             done
           else
             for path in "${stale_paths[@]}"; do
               rm -rf "$path" || true
             done
+            rm -f "$workspace/apps/web/next-env.d.ts" || true
+            git -C "$workspace" checkout -- apps/web/tsconfig.json >/dev/null 2>&1 || true
           fi
 
       - name: Checkout
@@ -364,7 +429,6 @@ jobs:
       CI_CACHE_ROOT: ${{ needs.ci-contract.outputs.cache_root }}
       UV_CACHE_DIR: ${{ needs.ci-contract.outputs.uv_cache_dir }}
       PLAYWRIGHT_BROWSERS_PATH: ${{ needs.ci-contract.outputs.playwright_browsers_path }}
-      HOME: /root
     steps:
       - name: Normalize self-hosted workspace (pre-checkout)
         shell: bash
@@ -386,13 +450,26 @@ jobs:
             for path in "${stale_paths[@]}"; do
               if sudo test -e "$path"; then
                 echo "Removing stale workspace path: $path"
-                sudo rm -rf "$path"
+                sudo chmod -R u+w "$path" 2>/dev/null || true
+                sudo rm -rf "$path" || true
+              fi
+            done
+            generated_web_files=(
+              "$workspace/apps/web/next-env.d.ts"
+              "$workspace/apps/web/tsconfig.json"
+            )
+            for path in "${generated_web_files[@]}"; do
+              if sudo test -e "$path"; then
+                echo "Restoring generated workspace file: $path"
+                sudo git -C "$workspace" checkout -- "$path" || sudo rm -f "$path" || true
               fi
             done
           else
             for path in "${stale_paths[@]}"; do
               rm -rf "$path" || true
             done
+            rm -f "$workspace/apps/web/next-env.d.ts" || true
+            git -C "$workspace" checkout -- apps/web/tsconfig.json >/dev/null 2>&1 || true
           fi
 
       - name: Checkout
@@ -578,13 +655,26 @@ jobs:
             for path in "${stale_paths[@]}"; do
               if sudo test -e "$path"; then
                 echo "Removing stale workspace path: $path"
-                sudo rm -rf "$path"
+                sudo chmod -R u+w "$path" 2>/dev/null || true
+                sudo rm -rf "$path" || true
+              fi
+            done
+            generated_web_files=(
+              "$workspace/apps/web/next-env.d.ts"
+              "$workspace/apps/web/tsconfig.json"
+            )
+            for path in "${generated_web_files[@]}"; do
+              if sudo test -e "$path"; then
+                echo "Restoring generated workspace file: $path"
+                sudo git -C "$workspace" checkout -- "$path" || sudo rm -f "$path" || true
               fi
             done
           else
             for path in "${stale_paths[@]}"; do
               rm -rf "$path" || true
             done
+            rm -f "$workspace/apps/web/next-env.d.ts" || true
+            git -C "$workspace" checkout -- apps/web/tsconfig.json >/dev/null 2>&1 || true
           fi
 
       - name: Checkout
@@ -634,13 +724,26 @@ jobs:
             for path in "${stale_paths[@]}"; do
               if sudo test -e "$path"; then
                 echo "Removing stale workspace path: $path"
-                sudo rm -rf "$path"
+                sudo chmod -R u+w "$path" 2>/dev/null || true
+                sudo rm -rf "$path" || true
+              fi
+            done
+            generated_web_files=(
+              "$workspace/apps/web/next-env.d.ts"
+              "$workspace/apps/web/tsconfig.json"
+            )
+            for path in "${generated_web_files[@]}"; do
+              if sudo test -e "$path"; then
+                echo "Restoring generated workspace file: $path"
+                sudo git -C "$workspace" checkout -- "$path" || sudo rm -f "$path" || true
               fi
             done
           else
             for path in "${stale_paths[@]}"; do
               rm -rf "$path" || true
             done
+            rm -f "$workspace/apps/web/next-env.d.ts" || true
+            git -C "$workspace" checkout -- apps/web/tsconfig.json >/dev/null 2>&1 || true
           fi
 
       - name: Checkout
@@ -795,13 +898,26 @@ jobs:
             for path in "${stale_paths[@]}"; do
               if sudo test -e "$path"; then
                 echo "Removing stale workspace path: $path"
-                sudo rm -rf "$path"
+                sudo chmod -R u+w "$path" 2>/dev/null || true
+                sudo rm -rf "$path" || true
+              fi
+            done
+            generated_web_files=(
+              "$workspace/apps/web/next-env.d.ts"
+              "$workspace/apps/web/tsconfig.json"
+            )
+            for path in "${generated_web_files[@]}"; do
+              if sudo test -e "$path"; then
+                echo "Restoring generated workspace file: $path"
+                sudo git -C "$workspace" checkout -- "$path" || sudo rm -f "$path" || true
               fi
             done
           else
             for path in "${stale_paths[@]}"; do
               rm -rf "$path" || true
             done
+            rm -f "$workspace/apps/web/next-env.d.ts" || true
+            git -C "$workspace" checkout -- apps/web/tsconfig.json >/dev/null 2>&1 || true
           fi
 
       - name: Checkout
@@ -898,13 +1014,26 @@ jobs:
             for path in "${stale_paths[@]}"; do
               if sudo test -e "$path"; then
                 echo "Removing stale workspace path: $path"
-                sudo rm -rf "$path"
+                sudo chmod -R u+w "$path" 2>/dev/null || true
+                sudo rm -rf "$path" || true
+              fi
+            done
+            generated_web_files=(
+              "$workspace/apps/web/next-env.d.ts"
+              "$workspace/apps/web/tsconfig.json"
+            )
+            for path in "${generated_web_files[@]}"; do
+              if sudo test -e "$path"; then
+                echo "Restoring generated workspace file: $path"
+                sudo git -C "$workspace" checkout -- "$path" || sudo rm -f "$path" || true
               fi
             done
           else
             for path in "${stale_paths[@]}"; do
               rm -rf "$path" || true
             done
+            rm -f "$workspace/apps/web/next-env.d.ts" || true
+            git -C "$workspace" checkout -- apps/web/tsconfig.json >/dev/null 2>&1 || true
           fi
 
       - name: Checkout
@@ -972,13 +1101,26 @@ jobs:
             for path in "${stale_paths[@]}"; do
               if sudo test -e "$path"; then
                 echo "Removing stale workspace path: $path"
-                sudo rm -rf "$path"
+                sudo chmod -R u+w "$path" 2>/dev/null || true
+                sudo rm -rf "$path" || true
+              fi
+            done
+            generated_web_files=(
+              "$workspace/apps/web/next-env.d.ts"
+              "$workspace/apps/web/tsconfig.json"
+            )
+            for path in "${generated_web_files[@]}"; do
+              if sudo test -e "$path"; then
+                echo "Restoring generated workspace file: $path"
+                sudo git -C "$workspace" checkout -- "$path" || sudo rm -f "$path" || true
               fi
             done
           else
             for path in "${stale_paths[@]}"; do
               rm -rf "$path" || true
             done
+            rm -f "$workspace/apps/web/next-env.d.ts" || true
+            git -C "$workspace" checkout -- apps/web/tsconfig.json >/dev/null 2>&1 || true
           fi
 
       - name: Checkout
@@ -1025,7 +1167,6 @@ jobs:
       CI_CACHE_ROOT: ${{ needs.ci-contract.outputs.cache_root }}
       UV_CACHE_DIR: ${{ needs.ci-contract.outputs.uv_cache_dir }}
       PLAYWRIGHT_BROWSERS_PATH: ${{ needs.ci-contract.outputs.playwright_browsers_path }}
-      HOME: /root
       CI_HEAD_SHA: ${{ github.sha }}
     steps:
       - name: Normalize self-hosted workspace (pre-checkout)
@@ -1048,13 +1189,26 @@ jobs:
             for path in "${stale_paths[@]}"; do
               if sudo test -e "$path"; then
                 echo "Removing stale workspace path: $path"
-                sudo rm -rf "$path"
+                sudo chmod -R u+w "$path" 2>/dev/null || true
+                sudo rm -rf "$path" || true
+              fi
+            done
+            generated_web_files=(
+              "$workspace/apps/web/next-env.d.ts"
+              "$workspace/apps/web/tsconfig.json"
+            )
+            for path in "${generated_web_files[@]}"; do
+              if sudo test -e "$path"; then
+                echo "Restoring generated workspace file: $path"
+                sudo git -C "$workspace" checkout -- "$path" || sudo rm -f "$path" || true
               fi
             done
           else
             for path in "${stale_paths[@]}"; do
               rm -rf "$path" || true
             done
+            rm -f "$workspace/apps/web/next-env.d.ts" || true
+            git -C "$workspace" checkout -- apps/web/tsconfig.json >/dev/null 2>&1 || true
           fi
 
       - name: Checkout
@@ -1091,7 +1245,6 @@ jobs:
       CI_CACHE_ROOT: ${{ needs.ci-contract.outputs.cache_root }}
       UV_CACHE_DIR: ${{ needs.ci-contract.outputs.uv_cache_dir }}
       PLAYWRIGHT_BROWSERS_PATH: ${{ needs.ci-contract.outputs.playwright_browsers_path }}
-      HOME: /root
     services:
       postgres:
         image: ${{ needs.ci-contract.outputs.service_image_pgvector_pg16 }}
@@ -1131,13 +1284,26 @@ jobs:
             for path in "${stale_paths[@]}"; do
               if sudo test -e "$path"; then
                 echo "Removing stale workspace path: $path"
-                sudo rm -rf "$path"
+                sudo chmod -R u+w "$path" 2>/dev/null || true
+                sudo rm -rf "$path" || true
+              fi
+            done
+            generated_web_files=(
+              "$workspace/apps/web/next-env.d.ts"
+              "$workspace/apps/web/tsconfig.json"
+            )
+            for path in "${generated_web_files[@]}"; do
+              if sudo test -e "$path"; then
+                echo "Restoring generated workspace file: $path"
+                sudo git -C "$workspace" checkout -- "$path" || sudo rm -f "$path" || true
               fi
             done
           else
             for path in "${stale_paths[@]}"; do
               rm -rf "$path" || true
             done
+            rm -f "$workspace/apps/web/next-env.d.ts" || true
+            git -C "$workspace" checkout -- apps/web/tsconfig.json >/dev/null 2>&1 || true
           fi
 
       - name: Checkout
@@ -1155,6 +1321,7 @@ jobs:
 
       - name: Run web e2e in standard env
         env:
+          HOME: /root
           DATABASE_URL: postgresql+psycopg://postgres:postgres@postgres:5432/video_analysis_web_e2e
           WEB_E2E_DB_PORT: "5432"
         run: ./scripts/strict_ci_entry.sh --mode web-e2e ${{ matrix.browser }}
@@ -1218,13 +1385,26 @@ jobs:
             for path in "${stale_paths[@]}"; do
               if sudo test -e "$path"; then
                 echo "Removing stale workspace path: $path"
-                sudo rm -rf "$path"
+                sudo chmod -R u+w "$path" 2>/dev/null || true
+                sudo rm -rf "$path" || true
+              fi
+            done
+            generated_web_files=(
+              "$workspace/apps/web/next-env.d.ts"
+              "$workspace/apps/web/tsconfig.json"
+            )
+            for path in "${generated_web_files[@]}"; do
+              if sudo test -e "$path"; then
+                echo "Restoring generated workspace file: $path"
+                sudo git -C "$workspace" checkout -- "$path" || sudo rm -f "$path" || true
               fi
             done
           else
             for path in "${stale_paths[@]}"; do
               rm -rf "$path" || true
             done
+            rm -f "$workspace/apps/web/next-env.d.ts" || true
+            git -C "$workspace" checkout -- apps/web/tsconfig.json >/dev/null 2>&1 || true
           fi
 
       - name: Checkout
@@ -1314,7 +1494,6 @@ jobs:
       CI_CACHE_ROOT: ${{ needs.ci-contract.outputs.cache_root }}
       UV_CACHE_DIR: ${{ needs.ci-contract.outputs.uv_cache_dir }}
       PLAYWRIGHT_BROWSERS_PATH: ${{ needs.ci-contract.outputs.playwright_browsers_path }}
-      HOME: /root
     services:
       postgres:
         image: ${{ needs.ci-contract.outputs.service_image_pgvector_pg16 }}
@@ -1350,13 +1529,26 @@ jobs:
             for path in "${stale_paths[@]}"; do
               if sudo test -e "$path"; then
                 echo "Removing stale workspace path: $path"
-                sudo rm -rf "$path"
+                sudo chmod -R u+w "$path" 2>/dev/null || true
+                sudo rm -rf "$path" || true
+              fi
+            done
+            generated_web_files=(
+              "$workspace/apps/web/next-env.d.ts"
+              "$workspace/apps/web/tsconfig.json"
+            )
+            for path in "${generated_web_files[@]}"; do
+              if sudo test -e "$path"; then
+                echo "Restoring generated workspace file: $path"
+                sudo git -C "$workspace" checkout -- "$path" || sudo rm -f "$path" || true
               fi
             done
           else
             for path in "${stale_paths[@]}"; do
               rm -rf "$path" || true
             done
+            rm -f "$workspace/apps/web/next-env.d.ts" || true
+            git -C "$workspace" checkout -- apps/web/tsconfig.json >/dev/null 2>&1 || true
           fi
 
       - name: Checkout
@@ -1511,6 +1703,7 @@ jobs:
 
       - name: Perceived UX E2E gate (mobile + reduced-motion + perceived-latency)
         env:
+          HOME: /root
           WEB_E2E_API_BASE_URL: http://127.0.0.1:${{ env.WEB_E2E_PERCEIVED_API_PORT }}
         run: |
           # Keep this as a dedicated long-term perceptual regression gate in CI.
@@ -1586,13 +1779,26 @@ jobs:
             for path in "${stale_paths[@]}"; do
               if sudo test -e "$path"; then
                 echo "Removing stale workspace path: $path"
-                sudo rm -rf "$path"
+                sudo chmod -R u+w "$path" 2>/dev/null || true
+                sudo rm -rf "$path" || true
+              fi
+            done
+            generated_web_files=(
+              "$workspace/apps/web/next-env.d.ts"
+              "$workspace/apps/web/tsconfig.json"
+            )
+            for path in "${generated_web_files[@]}"; do
+              if sudo test -e "$path"; then
+                echo "Restoring generated workspace file: $path"
+                sudo git -C "$workspace" checkout -- "$path" || sudo rm -f "$path" || true
               fi
             done
           else
             for path in "${stale_paths[@]}"; do
               rm -rf "$path" || true
             done
+            rm -f "$workspace/apps/web/next-env.d.ts" || true
+            git -C "$workspace" checkout -- apps/web/tsconfig.json >/dev/null 2>&1 || true
           fi
 
       - name: Checkout
@@ -1864,13 +2070,26 @@ jobs:
             for path in "${stale_paths[@]}"; do
               if sudo test -e "$path"; then
                 echo "Removing stale workspace path: $path"
-                sudo rm -rf "$path"
+                sudo chmod -R u+w "$path" 2>/dev/null || true
+                sudo rm -rf "$path" || true
+              fi
+            done
+            generated_web_files=(
+              "$workspace/apps/web/next-env.d.ts"
+              "$workspace/apps/web/tsconfig.json"
+            )
+            for path in "${generated_web_files[@]}"; do
+              if sudo test -e "$path"; then
+                echo "Restoring generated workspace file: $path"
+                sudo git -C "$workspace" checkout -- "$path" || sudo rm -f "$path" || true
               fi
             done
           else
             for path in "${stale_paths[@]}"; do
               rm -rf "$path" || true
             done
+            rm -f "$workspace/apps/web/next-env.d.ts" || true
+            git -C "$workspace" checkout -- apps/web/tsconfig.json >/dev/null 2>&1 || true
           fi
 
       - name: Checkout
@@ -1952,13 +2171,26 @@ jobs:
             for path in "${stale_paths[@]}"; do
               if sudo test -e "$path"; then
                 echo "Removing stale workspace path: $path"
-                sudo rm -rf "$path"
+                sudo chmod -R u+w "$path" 2>/dev/null || true
+                sudo rm -rf "$path" || true
+              fi
+            done
+            generated_web_files=(
+              "$workspace/apps/web/next-env.d.ts"
+              "$workspace/apps/web/tsconfig.json"
+            )
+            for path in "${generated_web_files[@]}"; do
+              if sudo test -e "$path"; then
+                echo "Restoring generated workspace file: $path"
+                sudo git -C "$workspace" checkout -- "$path" || sudo rm -f "$path" || true
               fi
             done
           else
             for path in "${stale_paths[@]}"; do
               rm -rf "$path" || true
             done
+            rm -f "$workspace/apps/web/next-env.d.ts" || true
+            git -C "$workspace" checkout -- apps/web/tsconfig.json >/dev/null 2>&1 || true
           fi
 
       - name: Checkout
@@ -2058,13 +2290,26 @@ jobs:
             for path in "${stale_paths[@]}"; do
               if sudo test -e "$path"; then
                 echo "Removing stale workspace path: $path"
-                sudo rm -rf "$path"
+                sudo chmod -R u+w "$path" 2>/dev/null || true
+                sudo rm -rf "$path" || true
+              fi
+            done
+            generated_web_files=(
+              "$workspace/apps/web/next-env.d.ts"
+              "$workspace/apps/web/tsconfig.json"
+            )
+            for path in "${generated_web_files[@]}"; do
+              if sudo test -e "$path"; then
+                echo "Restoring generated workspace file: $path"
+                sudo git -C "$workspace" checkout -- "$path" || sudo rm -f "$path" || true
               fi
             done
           else
             for path in "${stale_paths[@]}"; do
               rm -rf "$path" || true
             done
+            rm -f "$workspace/apps/web/next-env.d.ts" || true
+            git -C "$workspace" checkout -- apps/web/tsconfig.json >/dev/null 2>&1 || true
           fi
 
       - name: Checkout
@@ -2119,13 +2364,26 @@ jobs:
             for path in "${stale_paths[@]}"; do
               if sudo test -e "$path"; then
                 echo "Removing stale workspace path: $path"
-                sudo rm -rf "$path"
+                sudo chmod -R u+w "$path" 2>/dev/null || true
+                sudo rm -rf "$path" || true
+              fi
+            done
+            generated_web_files=(
+              "$workspace/apps/web/next-env.d.ts"
+              "$workspace/apps/web/tsconfig.json"
+            )
+            for path in "${generated_web_files[@]}"; do
+              if sudo test -e "$path"; then
+                echo "Restoring generated workspace file: $path"
+                sudo git -C "$workspace" checkout -- "$path" || sudo rm -f "$path" || true
               fi
             done
           else
             for path in "${stale_paths[@]}"; do
               rm -rf "$path" || true
             done
+            rm -f "$workspace/apps/web/next-env.d.ts" || true
+            git -C "$workspace" checkout -- apps/web/tsconfig.json >/dev/null 2>&1 || true
           fi
 
       - name: Checkout
@@ -2209,13 +2467,26 @@ jobs:
             for path in "${stale_paths[@]}"; do
               if sudo test -e "$path"; then
                 echo "Removing stale workspace path: $path"
-                sudo rm -rf "$path"
+                sudo chmod -R u+w "$path" 2>/dev/null || true
+                sudo rm -rf "$path" || true
+              fi
+            done
+            generated_web_files=(
+              "$workspace/apps/web/next-env.d.ts"
+              "$workspace/apps/web/tsconfig.json"
+            )
+            for path in "${generated_web_files[@]}"; do
+              if sudo test -e "$path"; then
+                echo "Restoring generated workspace file: $path"
+                sudo git -C "$workspace" checkout -- "$path" || sudo rm -f "$path" || true
               fi
             done
           else
             for path in "${stale_paths[@]}"; do
               rm -rf "$path" || true
             done
+            rm -f "$workspace/apps/web/next-env.d.ts" || true
+            git -C "$workspace" checkout -- apps/web/tsconfig.json >/dev/null 2>&1 || true
           fi
 
       - name: Checkout
@@ -2360,13 +2631,26 @@ jobs:
             for path in "${stale_paths[@]}"; do
               if sudo test -e "$path"; then
                 echo "Removing stale workspace path: $path"
-                sudo rm -rf "$path"
+                sudo chmod -R u+w "$path" 2>/dev/null || true
+                sudo rm -rf "$path" || true
+              fi
+            done
+            generated_web_files=(
+              "$workspace/apps/web/next-env.d.ts"
+              "$workspace/apps/web/tsconfig.json"
+            )
+            for path in "${generated_web_files[@]}"; do
+              if sudo test -e "$path"; then
+                echo "Restoring generated workspace file: $path"
+                sudo git -C "$workspace" checkout -- "$path" || sudo rm -f "$path" || true
               fi
             done
           else
             for path in "${stale_paths[@]}"; do
               rm -rf "$path" || true
             done
+            rm -f "$workspace/apps/web/next-env.d.ts" || true
+            git -C "$workspace" checkout -- apps/web/tsconfig.json >/dev/null 2>&1 || true
           fi
 
       - name: Checkout
@@ -2445,13 +2729,26 @@ jobs:
             for path in "${stale_paths[@]}"; do
               if sudo test -e "$path"; then
                 echo "Removing stale workspace path: $path"
-                sudo rm -rf "$path"
+                sudo chmod -R u+w "$path" 2>/dev/null || true
+                sudo rm -rf "$path" || true
+              fi
+            done
+            generated_web_files=(
+              "$workspace/apps/web/next-env.d.ts"
+              "$workspace/apps/web/tsconfig.json"
+            )
+            for path in "${generated_web_files[@]}"; do
+              if sudo test -e "$path"; then
+                echo "Restoring generated workspace file: $path"
+                sudo git -C "$workspace" checkout -- "$path" || sudo rm -f "$path" || true
               fi
             done
           else
             for path in "${stale_paths[@]}"; do
               rm -rf "$path" || true
             done
+            rm -f "$workspace/apps/web/next-env.d.ts" || true
+            git -C "$workspace" checkout -- apps/web/tsconfig.json >/dev/null 2>&1 || true
           fi
 
       - name: Checkout
@@ -2505,13 +2802,26 @@ jobs:
             for path in "${stale_paths[@]}"; do
               if sudo test -e "$path"; then
                 echo "Removing stale workspace path: $path"
-                sudo rm -rf "$path"
+                sudo chmod -R u+w "$path" 2>/dev/null || true
+                sudo rm -rf "$path" || true
+              fi
+            done
+            generated_web_files=(
+              "$workspace/apps/web/next-env.d.ts"
+              "$workspace/apps/web/tsconfig.json"
+            )
+            for path in "${generated_web_files[@]}"; do
+              if sudo test -e "$path"; then
+                echo "Restoring generated workspace file: $path"
+                sudo git -C "$workspace" checkout -- "$path" || sudo rm -f "$path" || true
               fi
             done
           else
             for path in "${stale_paths[@]}"; do
               rm -rf "$path" || true
             done
+            rm -f "$workspace/apps/web/next-env.d.ts" || true
+            git -C "$workspace" checkout -- apps/web/tsconfig.json >/dev/null 2>&1 || true
           fi
 
       - name: Checkout
