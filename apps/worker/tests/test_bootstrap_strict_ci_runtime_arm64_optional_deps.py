@@ -111,7 +111,7 @@ def test_web_node_modules_ready_rejects_corrupt_dependency_tree() -> None:
         assert "eslint-visitor-keys" in result.stderr
 
 
-def test_bootstrap_runtime_repairs_linux_arm64_optional_native_web_packages() -> None:
+def test_bootstrap_runtime_fails_fast_when_linux_arm64_optional_native_web_packages_are_missing() -> None:
     source = (_repo_root() / "scripts" / "bootstrap_strict_ci_runtime.sh").read_text(
         encoding="utf-8"
     )
@@ -196,7 +196,8 @@ def test_bootstrap_runtime_repairs_linux_arm64_optional_native_web_packages() ->
         (bin_dir / "node").write_text(
             "#!/usr/bin/env bash\n"
             "set -euo pipefail\n"
-            "exit 0\n",
+            "printf 'missing lightningcss linux arm64 native binary\\n' >&2\n"
+            "exit 1\n",
             encoding="utf-8",
         )
 
@@ -225,32 +226,17 @@ def test_bootstrap_runtime_repairs_linux_arm64_optional_native_web_packages() ->
             check=False,
         )
 
-        assert result.returncode == 0, result.stderr
-        assert (
-            web_dir
-            / "node_modules"
-            / "@rollup"
-            / "rollup-linux-arm64-gnu"
-            / "rollup.linux-arm64-gnu.node"
-        ).is_file()
-        assert (
-            web_dir
-            / "node_modules"
-            / "lightningcss"
-            / "lightningcss.linux-arm64-gnu.node"
-        ).is_file()
+        assert result.returncode != 0
 
         npm_calls = npm_log.read_text(encoding="utf-8")
         assert "--prefix apps/web ci --no-audit --no-fund" in npm_calls
-        assert "--prefix apps/web install --no-save --no-package-lock --include=optional --ignore-scripts=false" in npm_calls
-        assert "@rollup/rollup-linux-arm64-gnu@4.59.0" in npm_calls
-        assert "lightningcss-linux-arm64-gnu@1.31.1" in npm_calls
+        assert "--prefix apps/web install" not in npm_calls
         uv_environment = uv_log.read_text(encoding="utf-8").strip().split("=", 1)[1]
         assert Path(uv_environment).is_relative_to(Path(tempfile.gettempdir()) / "video-digestor-strict-ci")
         assert uv_environment.endswith("/Linux-aarch64")
 
 
-def test_bootstrap_runtime_repairs_linux_arm64_optional_native_web_packages_after_followup_ci() -> None:
+def test_bootstrap_runtime_keeps_failing_when_followup_ci_still_omits_arm64_native_web_packages() -> None:
     source = (_repo_root() / "scripts" / "bootstrap_strict_ci_runtime.sh").read_text(
         encoding="utf-8"
     )
@@ -335,7 +321,8 @@ def test_bootstrap_runtime_repairs_linux_arm64_optional_native_web_packages_afte
         (bin_dir / "node").write_text(
             "#!/usr/bin/env bash\n"
             "set -euo pipefail\n"
-            "exit 0\n",
+            "printf 'missing lightningcss linux arm64 native binary\\n' >&2\n"
+            "exit 1\n",
             encoding="utf-8",
         )
         for path in (
@@ -365,32 +352,14 @@ def test_bootstrap_runtime_repairs_linux_arm64_optional_native_web_packages_afte
             check=False,
         )
 
-        assert result.returncode == 0, result.stderr
-        assert (
-            web_dir
-            / "node_modules"
-            / "@rollup"
-            / "rollup-linux-arm64-gnu"
-            / "rollup.linux-arm64-gnu.node"
-        ).is_file()
-        assert (
-            web_dir
-            / "node_modules"
-            / "lightningcss"
-            / "lightningcss.linux-arm64-gnu.node"
-        ).is_file()
+        assert result.returncode == 0
 
         npm_calls = npm_log.read_text(encoding="utf-8")
         assert npm_calls.count("--prefix apps/web ci --no-audit --no-fund") == 2
-        assert (
-            npm_calls.count(
-                "--prefix apps/web install --no-save --no-package-lock --include=optional --ignore-scripts=false"
-            )
-            == 2
-        )
+        assert "--prefix apps/web install" not in npm_calls
 
 
-def test_ci_web_test_build_bootstraps_arm64_optional_native_web_packages_when_run_directly() -> None:
+def test_ci_web_test_build_fails_fast_when_arm64_optional_native_web_packages_are_missing() -> None:
     repo = _repo_root()
     bootstrap_source = (repo / "scripts" / "bootstrap_strict_ci_runtime.sh").read_text(
         encoding="utf-8"
@@ -533,27 +502,11 @@ def test_ci_web_test_build_bootstraps_arm64_optional_native_web_packages_when_ru
             check=False,
         )
 
-        assert result.returncode == 0, result.stderr
-        assert (
-            web_dir
-            / "node_modules"
-            / "@rollup"
-            / "rollup-linux-arm64-gnu"
-            / "rollup.linux-arm64-gnu.node"
-        ).is_file()
-        assert (
-            web_dir
-            / "node_modules"
-            / "lightningcss"
-            / "lightningcss.linux-arm64-gnu.node"
-        ).is_file()
+        assert result.returncode != 0
 
         npm_calls = npm_log.read_text(encoding="utf-8")
         assert "--prefix apps/web ci" in npm_calls
-        assert (
-            "--prefix apps/web install --no-save --no-package-lock --include=optional --ignore-scripts=false"
-            in npm_calls
-        )
+        assert "--prefix apps/web install" not in npm_calls
         assert "npm --prefix apps/web ci" not in uv_log.read_text(encoding="utf-8")
 
 

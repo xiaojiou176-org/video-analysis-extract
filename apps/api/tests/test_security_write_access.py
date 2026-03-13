@@ -44,46 +44,12 @@ def test_require_write_access_allows_when_unauth_write_switch_enabled(
     )
 
 
-def test_require_write_access_allows_when_unauth_write_switch_enabled_in_ci_context(
+def test_require_write_access_rejects_when_ci_opt_in_set_outside_pytest_context(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.delenv("VD_API_KEY", raising=False)
     monkeypatch.setenv("VD_ALLOW_UNAUTH_WRITE", "true")
     monkeypatch.setenv("CI", "true")
-    monkeypatch.setenv("GITHUB_ACTIONS", "true")
-    monkeypatch.setenv("VD_CI_ALLOW_UNAUTH_WRITE", "true")
-    monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
-    require_write_access(
-        bearer=None,
-        api_key_header=None,
-    )
-
-
-def test_require_write_access_rejects_when_unauth_write_switch_enabled_in_ci_without_explicit_opt_in(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.delenv("VD_API_KEY", raising=False)
-    monkeypatch.setenv("VD_ALLOW_UNAUTH_WRITE", "true")
-    monkeypatch.setenv("CI", "true")
-    monkeypatch.setenv("GITHUB_ACTIONS", "true")
-    monkeypatch.delenv("VD_CI_ALLOW_UNAUTH_WRITE", raising=False)
-    monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
-    with pytest.raises(HTTPException) as exc_info:
-        require_write_access(
-            bearer=None,
-            api_key_header=None,
-        )
-
-    assert exc_info.value.status_code == status.HTTP_401_UNAUTHORIZED
-    assert exc_info.value.detail == "write access token required"
-
-
-def test_require_write_access_rejects_when_ci_opt_in_set_outside_ci_context(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.delenv("VD_API_KEY", raising=False)
-    monkeypatch.setenv("VD_ALLOW_UNAUTH_WRITE", "true")
-    monkeypatch.delenv("CI", raising=False)
     monkeypatch.setenv("GITHUB_ACTIONS", "true")
     monkeypatch.setenv("VD_CI_ALLOW_UNAUTH_WRITE", "true")
     monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)

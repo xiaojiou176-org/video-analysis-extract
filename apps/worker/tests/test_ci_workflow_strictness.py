@@ -92,10 +92,11 @@ def test_global_rules_timeout_uses_job_level_not_step_level() -> None:
     assert "ci.yml: lint: missing timeout-minutes" in failures
 
 
-def test_global_rules_hosted_continue_on_error_uses_job_level_not_step_level() -> None:
+def test_global_rules_hosted_jobs_can_fail_without_continue_on_error() -> None:
     module = _load_module()
     hosted_block = """  preflight-fast-hosted:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
       - run: echo preflight
@@ -118,11 +119,11 @@ def test_global_rules_hosted_continue_on_error_uses_job_level_not_step_level() -
         failures,
     )
 
-    expected = (
+    assert (
         "ci.yml: preflight-fast-hosted: hosted jobs must set continue-on-error: true "
         "to allow fallback takeover"
+        not in failures
     )
-    assert expected in failures
 
 
 def test_pre_push_hook_uses_local_safe_ci_dedupe() -> None:
@@ -439,10 +440,10 @@ def test_ci_specific_rules_reject_runner_bootstrap_exact_name_pinning() -> None:
     }
     failures: list[str] = []
 
-    module._check_ci_specific_rules(blocks, failures)
+    module._check_runner_health_specific_rules(blocks, failures)
 
     assert (
-        "ci.yml: runner-bootstrap: must not hardcode exact org runner name lists; use label/pattern online thresholds"
+        "runner-health.yml: runner-bootstrap: must not hardcode exact org runner name lists; use label/pattern online thresholds"
         in failures
     )
 
@@ -461,10 +462,10 @@ def test_ci_specific_rules_require_runner_bootstrap_label_threshold_guard() -> N
     }
     failures: list[str] = []
 
-    module._check_ci_specific_rules(blocks, failures)
+    module._check_runner_health_specific_rules(blocks, failures)
 
     assert (
-        "ci.yml: runner-bootstrap: missing label-route online threshold guard for video-analysis-extract"
+        "runner-health.yml: runner-bootstrap: missing label-route online threshold guard for video-analysis-extract"
         in failures
     )
 
@@ -484,18 +485,18 @@ def test_ci_specific_rules_accept_runner_bootstrap_label_threshold_policy() -> N
     }
     failures: list[str] = []
 
-    module._check_ci_specific_rules(blocks, failures)
+    module._check_runner_health_specific_rules(blocks, failures)
 
     assert (
-        "ci.yml: runner-bootstrap: must not hardcode exact org runner name lists; use label/pattern online thresholds"
+        "runner-health.yml: runner-bootstrap: must not hardcode exact org runner name lists; use label/pattern online thresholds"
         not in failures
     )
     assert (
-        "ci.yml: runner-bootstrap: missing pool-core online threshold guard (MIN_ONLINE_CORE_RUNNERS)"
+        "runner-health.yml: runner-bootstrap: missing pool-core online threshold guard (MIN_ONLINE_CORE_RUNNERS)"
         not in failures
     )
     assert (
-        "ci.yml: runner-bootstrap: missing label-route online threshold guard for video-analysis-extract"
+        "runner-health.yml: runner-bootstrap: missing label-route online threshold guard for video-analysis-extract"
         not in failures
     )
 
@@ -745,7 +746,8 @@ def test_web_e2e_job_calls_repo_script_inside_strict_ci_entry() -> None:
     assert 'DATABASE_URL="${DATABASE_URL:-}"' in script
     assert 'db_url="postgresql+psycopg://' not in script
     assert "ensure_node_toolchain" in script
-    assert "npm --prefix apps/web ci" in script
+    assert 'source "$ROOT_DIR/scripts/bootstrap_strict_ci_runtime.sh"' in script
+    assert "install_web_npm_wrapper" not in script
     assert 'wait_for_tcp "$WEB_E2E_TEMPORAL_PORT" "temporal web-e2e" 60' in script
     assert script.index("start_temporal") < script.index("start_api")
     assert script.index("start_temporal") < script.index("start_worker")
@@ -766,7 +768,7 @@ def test_quality_gate_and_live_smoke_jobs_use_strict_ci_entry_and_contract_conta
 
 
 def test_runner_bootstrap_uses_minimum_online_runner_capacity_instead_of_exact_name_match() -> None:
-    workflow = (_repo_root() / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    workflow = (_repo_root() / ".github" / "workflows" / "runner-health.yml").read_text(encoding="utf-8")
 
     assert 'MIN_ONLINE_CORE_RUNNERS="${MIN_ONLINE_CORE_RUNNERS:-3}"' in workflow
     assert 'MIN_ONLINE_LABEL_RUNNERS="${MIN_ONLINE_LABEL_RUNNERS:-1}"' in workflow
@@ -796,94 +798,13 @@ def test_docker_dependent_required_jobs_route_to_core02_runner_subset() -> None:
         assert expected in window
 
 
-def test_global_rules_rejects_resolver_without_hosted_or_fallback_success_checks() -> None:
-    module = _load_module()
-    required_ci_secrets_block = """  required-ci-secrets:
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - run: python3 scripts/check_required_ci_secrets.py --required GEMINI_API_KEY
-"""
-    hosted_block = """  preflight-fast-hosted:
-    runs-on: ubuntu-latest
-    continue-on-error: true
-    timeout-minutes: 5
-"""
-    fallback_block = """  preflight-fast-fallback:
-    runs-on: e2-core
-    timeout-minutes: 5
-    if: ${{ always() && needs['preflight-fast-hosted'].result != 'success' }}
-"""
-    resolver_block = """  preflight-fast:
-    runs-on: ubuntu-latest
-    timeout-minutes: 3
-    needs: [preflight-fast-hosted, preflight-fast-fallback]
-    if: ${{ always() && needs.required-ci-secrets.result == 'success' }}
-"""
-    failures: list[str] = []
+def test_ci_workflow_uses_single_reusable_preflight_fast_job() -> None:
+    workflow = (_repo_root() / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
 
-    module._check_global_rules(
-        Path("ci.yml"),
-        "name: CI\non:\n  pull_request:\n",
-        {
-            "required-ci-secrets": required_ci_secrets_block,
-            "preflight-fast-hosted": hosted_block,
-            "preflight-fast-fallback": fallback_block,
-            "preflight-fast": resolver_block,
-        },
-        failures,
-    )
-
-    assert (
-        "ci.yml: preflight-fast: resolver must only pass when hosted or fallback is successful"
-        in failures
-    )
-
-
-def test_global_rules_accepts_resolver_success_checks_with_double_quotes() -> None:
-    module = _load_module()
-    required_ci_secrets_block = """  required-ci-secrets:
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - run: python3 scripts/check_required_ci_secrets.py --required GEMINI_API_KEY
-"""
-    hosted_block = """  preflight-fast-hosted:
-    runs-on: ubuntu-latest
-    continue-on-error: true
-    timeout-minutes: 5
-"""
-    fallback_block = """  preflight-fast-fallback:
-    runs-on: e2-core
-    timeout-minutes: 5
-    if: ${{ always() && needs.preflight-fast-hosted.result != "success" }}
-"""
-    resolver_block = """  preflight-fast:
-    runs-on: ubuntu-latest
-    timeout-minutes: 3
-    needs:
-      - preflight-fast-hosted
-      - preflight-fast-fallback
-    if: ${{ always() && (needs.preflight-fast-hosted.result == "success" || needs['preflight-fast-fallback'].result == "success") }}
-"""
-    failures: list[str] = []
-
-    module._check_global_rules(
-        Path("ci.yml"),
-        "name: CI\non:\n  pull_request:\n",
-        {
-            "required-ci-secrets": required_ci_secrets_block,
-            "preflight-fast-hosted": hosted_block,
-            "preflight-fast-fallback": fallback_block,
-            "preflight-fast": resolver_block,
-        },
-        failures,
-    )
-
-    assert (
-        "ci.yml: preflight-fast: resolver must only pass when hosted or fallback is successful"
-        not in failures
-    )
+    assert "  preflight-fast:\n" in workflow
+    assert "uses: ./.github/workflows/_preflight-fast-steps.yml" in workflow
+    assert "preflight-fast-hosted" not in workflow
+    assert "preflight-fast-fallback" not in workflow
 
 
 @dataclass

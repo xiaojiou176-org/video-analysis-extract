@@ -149,5 +149,11 @@ rg -n "thought_signatures|thought_signature_digest|thought_metadata|llm_meta" lo
   - 禁止完整输出敏感 token/authorization 头值
   - 失败排查时优先关联：`delivery_id`、`attempt_count`、`Idempotency-Key` 摘要、`provider_message_id`
 
+## CI 写权限日志边界（2026-03）
+
+- `live-smoke` 与其他 CI 写路径不再依赖 `VD_ALLOW_UNAUTH_WRITE` / `VD_CI_ALLOW_UNAUTH_WRITE` 的 GitHub Actions 旁路。
+- CI 写路径必须使用显式测试 token 或 `X-Web-Session`，以便 `auth_write_access_denied` / `auth_write_access_bypassed` 日志能明确区分“真实认证流”与“pytest-only 豁免”。
+- `VD_ALLOW_UNAUTH_WRITE` 现在仅允许在 `PYTEST_CURRENT_TEST` 上下文中生效；若在 CI 非测试上下文命中未认证写请求，应记录为拒绝而不是旁路通过。
+
 
 <!-- doc-sync: api/worker reliability + auth guard update (2026-03-03) -->

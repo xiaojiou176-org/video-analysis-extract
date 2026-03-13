@@ -22,6 +22,7 @@
 - `docs/state-machine.md`
 - `docs/testing.md`
 - `ENVIRONMENT.md`
+- `docs/reference/runner-baseline.md`
 
 ## 你需要先知道的 5 件事
 
@@ -126,6 +127,10 @@ DevContainer 启动拓扑补充（2026-03）：
 
 - `.devcontainer/post-create.sh` 已移除 `curl|sh` 安装模式，改为 `python3 -m pip install --user --upgrade "uv>=0.10,<1.0"`。
 - 并发 Web E2E 场景可通过 `WEB_E2E_NEXT_DIST_DIR` 隔离 Next.js `distDir`，避免 `.next/dev/lock` 冲突（默认常规开发无需设置）。
+- `infra/config/strict_ci_contract.json` 现在是标准镜像真相源；`scripts/strict_ci_entry.sh` / `scripts/run_in_standard_env.sh` 只接受 digest-pinned 标准镜像，拉取失败会直接终止，不再静默回退到旧本地镜像。
+- 关键 correctness gates（`preflight-heavy`、`db-migration-smoke`、`dependency-vuln-scan`、`web-e2e-perceived`、后端/前端 lint hosted/fallback）已经跟 `python-tests` / `api-real-smoke` / `web-e2e` 一样迁入标准镜像执行，因此宿主 Docker 可用性现在是 CI 等价本地验收的前提。
+- self-hosted runner 基线合同已独立成 `infra/config/self_hosted_runner_baseline.json`；主 `ci.yml` 不再预热/拉起 runner，runner 健康检查改由 `runner-health.yml` 负责。
+- DevContainer 现在固定挂载到 `/workspace`，并通过 `post-create.sh` 校验 `uv` / `node` / cache 路径是否与 strict contract 一致。
 
 ## 6 步启动（Host Fallback，仅排障时使用）
 

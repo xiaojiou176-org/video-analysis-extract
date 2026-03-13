@@ -6,6 +6,8 @@
 
 - AI 执行 lint/test/live smoke 必须在标准环境完成：`.devcontainer/devcontainer.json`。
 - 基础设施编排真相源固定为：`infra/compose/core-services.compose.yml`（使用 `pgvector/pgvector:pg16` 镜像支持向量检索扩展）与 `infra/compose/miniflux-nextflux.compose.yml`。
+- 严格 CI 标准镜像真相源固定为：`infra/config/strict_ci_contract.json`。`scripts/run_in_standard_env.sh` 现在要求 contract 中的标准镜像必须是 digest-pinned，且拉取失败时直接报错，不再回退到旧本地镜像。
+- self-hosted runner 基线真相源固定为：`infra/config/self_hosted_runner_baseline.json`。`_preflight-fast-steps.yml` 与 `runner-health.yml` 都通过 `scripts/check_runner_baseline.py` 验证 runner 前提，缺失工具直接失败，不再在 workflow 中临时安装。
 - 若不使用 DevContainer，必须提供等价隔离环境（依赖版本、工具链、Compose 服务拓扑一致），否则验证结果不具备门禁效力。
 
 进入标准环境：
@@ -13,6 +15,12 @@
 ```bash
 devcontainer up --workspace-folder .
 ```
+
+补充说明：
+
+- 宿主 Docker daemon 必须可用；`strict_ci_entry.sh`、`run_in_standard_env.sh` 与 DevContainer 都共享这一前提。
+- 当前关键 correctness jobs 已统一按标准镜像口径对齐，包括 `preflight-heavy`、`db-migration-smoke`、`dependency-vuln-scan`、`web-e2e-perceived`、`backend-lint` hosted/fallback、`frontend-lint` hosted/fallback。
+- DevContainer 工作目录已固定为 `/workspace`，并复用 strict contract 的 `CI_CACHE_ROOT` / `UV_CACHE_DIR` / `PLAYWRIGHT_BROWSERS_PATH` / `PRE_COMMIT_HOME`。
 
 ## 环境分层与优先级（Core/Profile Overlay）
 

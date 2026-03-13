@@ -26,9 +26,9 @@
 
 以下口径按已拍板 D1~D5 执行，旧规则（E2E 默认 mock API）已废止。
 
-- `preflight-fast` + `preflight-heavy`：预检门禁（env contract、schema parity、provider residual、worker line limits、structured log guard、e2e strictness guard、mutation scope guard、mutation test selection guard）。
-- 严格执行型 job（`quality-gate-pre-push`、`python-tests`、`api-real-smoke`、`pr-llm-real-smoke`、`web-test-build`、`web-e2e`、`live-smoke`）统一运行在仓库自有标准镜像中，并通过 `scripts/strict_ci_entry.sh` 调 repo 脚本。
-- `db-migration-smoke` + `python-tests` + `api-real-smoke` + `backend-lint` + `frontend-lint` + `web-test-build` + `web-e2e`：并行执行的主链路测试集合。
+- `preflight-fast` + `preflight-heavy`：预检门禁（runner baseline、env contract、schema parity、provider residual、worker line limits、structured log guard、e2e strictness guard、mutation scope guard、mutation test selection guard）。
+- 严格执行型 job（`preflight-heavy`、`quality-gate-pre-push`、`db-migration-smoke`、`python-tests`、`api-real-smoke`、`pr-llm-real-smoke`、`dependency-vuln-scan`、`backend-lint-hosted`、`backend-lint-fallback`、`frontend-lint-hosted`、`frontend-lint-fallback`、`web-test-build`、`web-e2e`、`web-e2e-perceived`、`live-smoke`）统一运行在仓库自有标准镜像中，并通过仓库脚本/命令调 repo 内部 gate。
+- `db-migration-smoke` + `python-tests` + `api-real-smoke` + `backend-lint` + `frontend-lint` + `web-test-build` + `web-e2e` + `web-e2e-perceived`：并行执行的主链路测试集合。
 - `web-test-build` 现在在 PR/push/schedule 都默认执行（只要 `preflight-fast` 与 `changes` 成功），避免 path-filter 误判导致关键 Web gate 被跳过。
 - `web-test-build` 会追加阻断式 `Gemini UI/UX audit`，并上传 `.runtime-cache/ui-audit/gemini-ui-ux-audit-*.{json,log}` 作为审查工件；严格通过条件为 `status=passed`、`reason_code=ok`、`successful_batches==batch_count` 且 `model_attempts>0`。
 - 当 Gemini 返回不可解析格式时，脚本会把该批次记为结构化阻断项并继续后续批次；报告中可通过 `reason_code=batch_failures_detected`、`failed_batch_count`、`failed_batches` 精确定位失败批次证据。
@@ -39,6 +39,9 @@
 - `live-smoke`：仅 `main` / `release` / nightly 强制执行，且不得 `skip` / `skipped`；PR 由 `pr-llm-real-smoke` 承担真实 LLM 烟测。
 - `aggregate-gate`：汇总主链路结果；`api-real-smoke` / `web-e2e` 不允许 `skipped`，`live-smoke` 由 `ci-final-gate` 按触发源做强制校验。
 - `ci-final-gate`：最终门禁；`main` / `release` / nightly 要求 `live-smoke=success`，PR 允许 `live-smoke=skipped`。
+- `ci-kpi`：在 `ci-final-gate` 之后汇总 junit/coverage/mutation/artifact bytes/topology duplication，并输出 `reports/release-readiness/ci-kpi-summary.{json,md}` artifact。
+- `build-ci-standard-image.yml` 会产出 strict CI 镜像 SBOM，并对镜像与 SBOM 做 attestation。
+- `release-evidence-attest.yml` 会把 release manifest/checksums/rollback 证据打包成可 attestation 的 bundle。
 
 ## Runner 标签策略（维护约定）
 
@@ -47,7 +50,8 @@
 - 允许精细调度：如需额外分流，只能追加标签，不允许使用 runner 名称直绑。
 - 关键约束：组织共享 runner 名称由治理侧统一维护，仓库 workflow 仅通过 label 调度。
 - 禁止硬编码 runner 实例名（例如 `github-runner-core-03`）；统一用标签路由，避免扩缩容后工作流失效。
-- `runner-bootstrap` 仅做健康阈值检查：验证 `pool-core..` 命名 runner 在线数量达到最小值，且 `video-analysis-extract` 标签路由目标在线可用；不得要求组织 runner 名单“精确匹配”。
+- `runner-health.yml` 负责 `runner-bootstrap` 健康阈值检查：验证 `pool-core..` 命名 runner 在线数量达到最小值，且 `video-analysis-extract` 标签路由目标在线可用；不得要求组织 runner 名单“精确匹配”。
+- `ci.yml` 主路径不再承担 runner 运维职责；PR/push 的代码质量门禁从代码与合同真相直接起跑。
 
 ## Runner 宿主机健康巡检
 

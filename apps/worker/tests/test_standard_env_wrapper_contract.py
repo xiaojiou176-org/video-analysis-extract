@@ -121,7 +121,7 @@ def test_standard_env_wrapper_and_helper_contract_exist() -> None:
 
     assert 'source "$ROOT_DIR/scripts/lib/standard_env.sh"' in runner
     assert 'ALLOW_LOCAL_BUILD="${VD_STANDARD_ENV_ALLOW_LOCAL_BUILD:-0}"' in runner
-    assert 'if [[ "${VD_IN_STANDARD_ENV:-0}" == "1" ]]; then' in runner
+    assert "if is_running_inside_standard_env; then" in runner
     assert 'if [[ "$ALLOW_LOCAL_BUILD" == "1" ]]; then' in runner
     assert 'run_in_standard_env "$@"' in runner
 
@@ -240,6 +240,7 @@ def test_devcontainer_dockerfile_pins_nodesource_node_22_for_standard_env() -> N
     dockerfile = (_repo_root() / ".devcontainer" / "Dockerfile").read_text(encoding="utf-8")
 
     assert "STRICT_CI_NODE_MAJOR=22" in dockerfile
-    assert "https://deb.nodesource.com/setup_${STRICT_CI_NODE_MAJOR}.x" in dockerfile
-    assert dockerfile.index("https://deb.nodesource.com/setup_${STRICT_CI_NODE_MAJOR}.x") < dockerfile.index("apt-get install -y --no-install-recommends \\\n    nodejs")
+    assert "https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key" in dockerfile
+    assert "https://deb.nodesource.com/node_${STRICT_CI_NODE_MAJOR}.x nodistro main" in dockerfile
+    assert dockerfile.index("https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key") < dockerfile.index("apt-get install -y --no-install-recommends \\\n    nodejs")
     assert "nodejs" in dockerfile

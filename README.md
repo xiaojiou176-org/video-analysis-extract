@@ -54,6 +54,7 @@
 - 运行 `full_stack.sh` / `api_real_smoke_local.sh` 时，优先排查 `logs/full-stack/*.log` 与 `.runtime-cache/api-real-smoke-local.log`，不要先去猜是业务代码还是本机端口漂移。
 - `UI audit` 结果默认会写入 `.runtime-cache/ui-audit-runs/`；`autofix` 当前只会返回持久化 dry-run 计划，不会假装已经落盘改代码。
 - `scripts/smoke_computer_use_local.sh` 默认严格口径：provider 未开通 computer use 会直接失败；仅显式传 `--allow-unsupported-skip=1` 才允许按 skip 通过。
+- self-hosted runner 基线真相源：`infra/config/self_hosted_runner_baseline.json`，说明文档见 `docs/reference/runner-baseline.md`。主 `ci.yml` 不再负责 runner 运维；runner 健康检查已拆到 `runner-health.yml`。
 
 ## 本地验收分层（必须区分）
 
@@ -81,6 +82,9 @@
 
 - Docker Compose（基础设施真相源）：`infra/compose/core-services.compose.yml`（使用 `pgvector/pgvector:pg16` 镜像支持向量检索）、`infra/compose/miniflux-nextflux.compose.yml`
 - DevContainer（AI/自动化标准执行环境）：`.devcontainer/devcontainer.json`
+- 严格 CI 标准镜像真相源：`infra/config/strict_ci_contract.json`。`scripts/strict_ci_entry.sh` / `scripts/run_in_standard_env.sh` 现在只接受 digest-pinned 标准镜像，不再允许静默回退到旧的本地 tag 镜像。
+- 标准镜像供应链增强：`build-ci-standard-image.yml` 现在会产出镜像 SBOM artifact，并对镜像本体与 SBOM 做 GitHub attestation。
+- Release 证据 attestation：新增 `release-evidence-attest.yml`，会把 `reports/releases/<tag>/` 下的 manifest/checksums/rollback 证据打包并出 provenance attestation。
 
 推荐先进入标准环境，再执行本地联调或严格验收。严格验收的唯一权威入口是仓库标准镜像，不是宿主机命令：
 
@@ -102,6 +106,8 @@ devcontainer up --workspace-folder .
 
 - 现有 `scripts/deploy_core_services.sh` 与 `scripts/deploy_reader_stack.sh` 已直接绑定上述 compose 文件，不需要改脚本。
 - 风险 1：DevContainer 依赖宿主 Docker（通过 `/var/run/docker.sock`），若宿主未启动 Docker，容器内 compose 无法拉起。
+- 风险 1.1：严格验收入口 `scripts/strict_ci_entry.sh` 同样依赖宿主 Docker 与可拉取的标准镜像；若 Docker daemon 未启动，或当前环境无法获取 contract 中声明的 digest 镜像，脚本会直接 fail-fast，不再回退到旧本地镜像。
+- 风险 1.2：DevContainer 现在固定把 workspace 挂到 `/workspace` 并复用 strict contract 的缓存路径；若仍依赖旧 `/workspaces/...` 路径的本地脚本，需要同步修正。
 - 风险 2：live smoke 依赖真实外部 API Key（如 `GEMINI_API_KEY`），标准环境只保证执行一致性，不保证外部资源可用。
 - 风险 3：本地裸机与容器路径不得在同一轮验收中混用，否则端口、数据库与缓存残留会破坏 CI 等价性。
 
