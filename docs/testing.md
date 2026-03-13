@@ -615,7 +615,7 @@ npm run lint
 - 由于当前 Web 代码尚未完成 Next.js 16 `searchParams` 异步迁移，`jobs -> artifacts` 用例会先断言查询跳转与页面占位状态（`No artifact loaded yet.`）；迁移后可升级为 markdown/screenshot 区块可见性断言。
 - API 路由测试会通过 `monkeypatch` 隔离 Temporal/数据库外部依赖，验证路由层映射行为。
 - 需要访问真实依赖（Postgres/Temporal）的端到端链路，可在后续补专门的 integration 套件。
-- CI 缓存策略：工具缓存统一收口在 `/tmp/ci-cache` 及其派生路径（`UV_CACHE_DIR=/tmp/ci-cache/uv`、`PRE_COMMIT_HOME=/tmp/ci-cache/pre-commit`、`PLAYWRIGHT_BROWSERS_PATH=/tmp/ci-cache/ms-playwright`）；测试与 e2e 产物统一写入 repo 内的 `.runtime-cache` 并作为 artifact 上传。
+- CI 缓存策略：工具缓存统一收口在 `/tmp/ci-cache` 及其派生路径（如 `UV_CACHE_DIR=/tmp/ci-cache/uv`、`PLAYWRIGHT_BROWSERS_PATH=/tmp/ci-cache/ms-playwright`）；测试与 e2e 产物统一写入 repo 内的 `.runtime-cache` 并作为 artifact 上传。
 - 禁止项：`actions/cache` 或工具缓存环境变量不得指向 `~/.cache/**`、`${{ github.workspace }}/**`、相对 repo 路径（如 `.runtime-cache/**`、`.cache/**`、`cache/**`、`.venv`）。这些路径会在 shared self-hosted runner 上制造工作区污染。
 - Checkout 规则：所有 workflow 中的 `actions/checkout` 必须显式声明 `with.clean: true`，不能依赖默认值。
 

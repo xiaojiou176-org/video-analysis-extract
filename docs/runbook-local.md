@@ -20,7 +20,7 @@ devcontainer up --workspace-folder .
 
 - 宿主 Docker daemon 必须可用；`strict_ci_entry.sh`、`run_in_standard_env.sh` 与 DevContainer 都共享这一前提。
 - 当前关键 correctness jobs 已统一按标准镜像口径对齐，包括 `preflight-heavy`、`db-migration-smoke`、`dependency-vuln-scan`、`web-e2e-perceived`、`backend-lint` hosted/fallback、`frontend-lint` hosted/fallback。
-- DevContainer 工作目录已固定为 `/workspace`，并复用 strict contract 的 `CI_CACHE_ROOT` / `UV_CACHE_DIR` / `PLAYWRIGHT_BROWSERS_PATH` / `PRE_COMMIT_HOME`。
+- DevContainer 工作目录已固定为 `/workspace`，并复用 strict contract 的 `UV_CACHE_DIR` / `PLAYWRIGHT_BROWSERS_PATH` 等标准缓存路径约定。
 
 ## 环境分层与优先级（Core/Profile Overlay）
 
