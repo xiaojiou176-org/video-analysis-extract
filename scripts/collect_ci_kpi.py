@@ -462,7 +462,7 @@ def main() -> int:
     workflow_files = _expand_globs(args.workflow_glob)
 
     payload: dict[str, Any] = {
-        "generated_at": dt.datetime.now(dt.UTC).isoformat(),
+        "generated_at": dt.datetime.now(dt.timezone.utc).isoformat(),
         "inputs": {
             "junit_files": [str(p) for p in junit_files],
             "coverage_xml_files": [str(p) for p in coverage_xml_files],

@@ -24,15 +24,16 @@ def command_exists(name: str) -> bool:
 
 def docker_compose_available() -> bool:
     docker = shutil.which("docker")
-    if docker is None:
-        return False
-    result = subprocess.run(
-        [docker, "compose", "version"],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    return result.returncode == 0
+    if docker is not None:
+        result = subprocess.run(
+            [docker, "compose", "version"],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode == 0:
+            return True
+    return shutil.which("docker-compose") is not None
 
 
 def validate_profile(profile: str, baseline: dict[str, Any]) -> list[str]:
