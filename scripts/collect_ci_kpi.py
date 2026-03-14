@@ -312,6 +312,7 @@ def _parse_run_metrics(repo: str, run_id: str, run_attempt: str, token: str) -> 
         pass
 
     return {
+        "status": "ok",
         "jobs_total": len(jobs),
         "jobs_duration_seconds": round(total_duration, 4),
         "cache_hits": cache_hits,
@@ -357,6 +358,11 @@ def _render_markdown(payload: dict[str, Any]) -> str:
     topology = payload["kpi"].get("topology", {})
     artifacts = payload["kpi"].get("artifacts", {})
     if run:
+        if run.get("status") != "ok":
+            lines.append(f"| run.status | {run.get('status', 'unknown')} |")
+            warning = str(run.get("warning", "")).strip()
+            if warning:
+                lines.append(f"| run.warning | {warning} |")
         lines.append(f"| run.jobs_total | {run.get('jobs_total', 0)} |")
         lines.append(f"| run.jobs_duration_seconds | {run.get('jobs_duration_seconds', 0):.2f} |")
         lines.append(f"| run.cache_hits | {run.get('cache_hits', 0)} |")
@@ -462,7 +468,7 @@ def main() -> int:
     workflow_files = _expand_globs(args.workflow_glob)
 
     payload: dict[str, Any] = {
-        "generated_at": dt.datetime.now(dt.UTC).isoformat(),
+        "generated_at": dt.datetime.now(dt.timezone.utc).isoformat(),
         "inputs": {
             "junit_files": [str(p) for p in junit_files],
             "coverage_xml_files": [str(p) for p in coverage_xml_files],
@@ -485,7 +491,26 @@ def main() -> int:
     }
     token = os.getenv("GITHUB_TOKEN", "").strip()
     if args.repo and args.run_id and args.run_attempt and token:
-        payload["kpi"]["run"] = _parse_run_metrics(args.repo, args.run_id, args.run_attempt, token)
+        try:
+            payload["kpi"]["run"] = _parse_run_metrics(args.repo, args.run_id, args.run_attempt, token)
+        except Exception as exc:
+            payload["kpi"]["run"] = {
+                "status": "degraded",
+                "warning": f"run-metrics unavailable: {type(exc).__name__}: {exc}",
+                "jobs_total": 0,
+                "jobs_duration_seconds": 0.0,
+                "cache_hits": 0,
+                "cache_misses": 0,
+            }
+    else:
+        payload["kpi"]["run"] = {
+            "status": "degraded",
+            "warning": "run-metrics unavailable: missing repo/run-id/run-attempt or GITHUB_TOKEN",
+            "jobs_total": 0,
+            "jobs_duration_seconds": 0.0,
+            "cache_hits": 0,
+            "cache_misses": 0,
+        }
 
     json_out = Path(args.json_out)
     md_out = Path(args.md_out)

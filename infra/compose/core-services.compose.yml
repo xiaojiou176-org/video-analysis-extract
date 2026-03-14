@@ -1,6 +1,6 @@
 services:
   postgres:
-    image: pgvector/pgvector:pg16
+    image: ${STRICT_CI_SERVICE_IMAGE_PGVECTOR_PG16:-pgvector/pgvector:pg16@sha256:7d400e340efb42f4d8c9c12c6427adb253f726881a9985d2a471bf0eed824dff}
     container_name: vd-core-postgres
     ports:
       - "${CORE_POSTGRES_PORT:-5432}:5432"
@@ -19,14 +19,14 @@ services:
     restart: unless-stopped
 
   redis:
-    image: redis:7-alpine
+    image: ${STRICT_CI_SERVICE_IMAGE_REDIS_CORE:-redis:7.2-alpine@sha256:5f8bafd0669a697ee564ad825c2a63e6b60b0a67c02b0089f8a250051ab6fe85}
     container_name: vd-core-redis
     ports:
       - "6379:6379"
     restart: unless-stopped
 
   temporal:
-    image: temporalio/auto-setup:1.27.2
+    image: ${STRICT_CI_SERVICE_IMAGE_TEMPORAL_AUTO_SETUP:-temporalio/auto-setup:1.27.2@sha256:b44cbfeb43dbeae42db113b44fb8414c3452f05643b3d6b1592f955277d73526}
     container_name: vd-core-temporal
     depends_on:
       postgres:

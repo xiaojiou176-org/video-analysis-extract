@@ -251,6 +251,10 @@ def test_api_real_smoke_script_enforces_real_postgres_and_strict_mode() -> None:
     assert '"wait_for_result": True' in script
     assert '"workflow_name"] == "CleanupWorkspaceWorkflow"' in script
     assert "api -> temporal -> worker cleanup workflow closure probe passed" in script
+    assert 'SMOKE_WRITE_TOKEN="${VD_API_KEY:-video-digestor-local-dev-token}"' in script
+    assert 'export VD_API_KEY="${VD_API_KEY:-$SMOKE_WRITE_TOKEN}"' in script
+    assert 'export WEB_ACTION_SESSION_TOKEN="${WEB_ACTION_SESSION_TOKEN:-$SMOKE_WRITE_TOKEN}"' in script
+    assert 'local write_token="${SMOKE_WRITE_TOKEN}"' in script
     assert 'API_PORT_EXPLICIT="0"' in script
     assert "choose_available_api_port" in script
     assert "using fallback port" in script
@@ -274,6 +278,8 @@ def test_api_real_smoke_script_enforces_real_postgres_and_strict_mode() -> None:
     assert "preflight_loopback_ipv4_connectivity" in script
     assert "host_loopback_ipv4_exhausted" in script
     assert "EADDRNOTAVAIL (Errno 49)" in script
+    assert "unset VD_API_KEY" not in script
+    assert "unset WEB_ACTION_SESSION_TOKEN" not in script
 
 
 def test_api_real_smoke_script_can_run_inside_standard_env_without_host_specific_bootstrap() -> None:

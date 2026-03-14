@@ -10,9 +10,6 @@
   "mounts": [
     "source=/var/run/docker.sock,target=/var/run/docker.sock,type=bind"
   ],
-  "features": {
-    "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {}
-  },
   "containerEnv": {
     "CI_CACHE_ROOT": "/tmp/ci-cache",
     "UV_CACHE_DIR": "/tmp/ci-cache/uv",

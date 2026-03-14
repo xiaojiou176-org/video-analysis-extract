@@ -223,11 +223,11 @@ curl -sS -X POST http://127.0.0.1:9000/api/v1/ingest/poll \
   - Conventional Commits 强制门禁（无根级 `package.json` 依赖时，使用 `npx --yes` + hook 内置最小规则配置）
 - `.githooks/pre-commit` → `./scripts/quality_gate.sh --mode pre-commit --profile local`
   - 包含：`scripts/ci_or_local_gate_doc_drift.sh --scope staged`
-  - 包含：`check_test_assertions`、`web lint`、`ruff critical`、`secrets scan`、`gitleaks fast scan`、`structured log guard`、`env budget guard`、`IaC entrypoint guard`
+  - 包含：`check_docs_governance`、`check_test_assertions`、`web lint`、`ruff critical`、`secrets scan`、`gitleaks fast scan`、`structured log guard`、`env budget guard`、`IaC entrypoint guard`
 - `.githooks/pre-push` → `./scripts/quality_gate.sh --mode pre-push --heartbeat-seconds 20 --mutation-min-score 0.64 --mutation-min-effective-ratio 0.27 --mutation-max-no-tests-ratio 0.72 --profile ci --profile live-smoke --ci-dedupe 0`
   - 包含：`scripts/ci_or_local_gate_doc_drift.sh --scope push`
   - 包含：`coverage>=95`、`core coverage>=95`、`web unit tests`、`python tests(no-silent-skip)`、`api cors preflight smoke`、`contract diff local gate`
-  - 包含：与 `preflight-fast`/`web-test-build` 对齐的本地硬门禁：`check_ci_docs_parity`、`docs env canonical guard`、`provider residual guard`、`worker line limits guard`、`schema parity gate`、`web design token guard`、`web build`、`web button coverage`
+  - 包含：与 `preflight-fast`/`web-test-build` 对齐的本地硬门禁：`check_docs_governance`、`check_ci_docs_parity(legacy advisory)`、`docs env canonical guard`、`provider residual guard`、`worker line limits guard`、`schema parity gate`、`web design token guard`、`web build`、`web button coverage`
   - 分层解释：本地 pre-push 比 pre-commit 更严格；启用变更感知，后端变更命中时强制 mutation，无后端变更时跳过 mutation 以避免无效本地消耗。
 
 ### 5.2 远程 CI 成本治理（必须遵守）
@@ -237,6 +237,8 @@ curl -sS -X POST http://127.0.0.1:9000/api/v1/ingest/poll \
 - 远程 CI 失败后，必须先在本地复现并修复，再执行下一次远程触发；禁止“连续重跑碰运气”。
 - 同一分支存在被新提交覆盖的 in-progress 远程运行时，必须主动取消旧运行，避免重复计费。
 - 预算受限或计费异常期间，必须冻结非必要远程重跑，仅保留一次验证性运行。
+- GitHub Actions 信任边界：当前仓库默认只支持 **trusted internal PR** 进入 self-hosted 主链；fork / untrusted PR 必须在 `trusted-pr-boundary` hosted gate 被阻断。
+- Docs control plane：`config/docs/*.json` 是文档治理真相源；高漂移 reference 统一收口到 `docs/generated/*.md`。
 
 ## 6. 最小 DoD（Definition of Done）
 

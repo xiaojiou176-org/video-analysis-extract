@@ -188,6 +188,14 @@ def _if_expr_checks_success_for_job(if_expr: str, job_name: str) -> bool:
     return any(re.search(pattern, if_expr) is not None for pattern in patterns)
 
 
+def _if_expr_enforces_trusted_internal_pr_boundary(if_expr: str) -> bool:
+    patterns = (
+        r"github\.event_name\s*!=\s*['\"]pull_request['\"]",
+        r"github\.event\.pull_request\.head\.repo\.full_name\s*==\s*github\.repository",
+    )
+    return all(re.search(pattern, if_expr) is not None for pattern in patterns)
+
+
 def _aggregate_maps_required_ci_result(block: str) -> bool:
     patterns = (
         r"results\[required_ci_secrets\]\s*=\s*['\"]\$\{\{\s*needs\.required-ci-secrets\.result\s*\}\}['\"]",
@@ -639,7 +647,25 @@ def _check_runner_health_specific_rules(blocks: dict[str, str], failures: list[s
 
 
 def _check_ci_post_container_rules(blocks: dict[str, str], failures: list[str]) -> None:
+    trusted_boundary = blocks.get("trusted-pr-boundary", "")
+    if not trusted_boundary:
+        failures.append("ci.yml: trusted-pr-boundary: missing job")
+    else:
+        if "runs-on: ubuntu-latest" not in trusted_boundary:
+            failures.append("ci.yml: trusted-pr-boundary: must run on hosted runner")
+        if "trusted internal PR boundary violated" not in trusted_boundary:
+            failures.append("ci.yml: trusted-pr-boundary: missing explicit trusted internal PR failure message")
 
+    for guarded_job in ("required-ci-secrets", "ci-contract", "changes", "preflight-fast", "aggregate-gate", "ci-final-gate", "ci-kpi"):
+        block = blocks.get(guarded_job, "")
+        if not block:
+            failures.append(f"ci.yml: {guarded_job}: missing job")
+            continue
+        if guarded_job != "preflight-fast" and not _has_needs_dep(block, "trusted-pr-boundary"):
+            failures.append(f"ci.yml: {guarded_job}: missing needs dependency `trusted-pr-boundary`")
+        if_expr = _extract_job_level_if_expression(block)
+        if not if_expr or not _if_expr_checks_success_for_job(if_expr, "trusted-pr-boundary"):
+            failures.append(f"ci.yml: {guarded_job}: must gate self-hosted execution on trusted-pr-boundary success")
     # quality-gate-pre-push must run broadly (not main/schedule-only gated).
     qg_block = blocks.get("quality-gate-pre-push", "")
     if qg_block:
@@ -698,6 +724,11 @@ def _check_ci_post_container_rules(blocks: dict[str, str], failures: list[str]) 
             continue
         if "VD_ALLOW_UNAUTH_WRITE" in block:
             failures.append(f"ci.yml: {job_name}: forbidden VD_ALLOW_UNAUTH_WRITE bypass detected")
+        if job_name == "api-real-smoke":
+            if 'VD_API_KEY: "ci-smoke-write-token"' not in block:
+                failures.append("ci.yml: api-real-smoke: missing explicit smoke write token wiring")
+            if 'WEB_ACTION_SESSION_TOKEN: "ci-smoke-write-token"' not in block:
+                failures.append("ci.yml: api-real-smoke: missing explicit smoke web-session token wiring")
 
     # Aggregate gate must require critical jobs.
     aggregate = blocks.get("aggregate-gate", "")

@@ -1,110 +1,65 @@
 #!/usr/bin/env python3
-"""Minimal CI docs parity check for testing governance keywords.
+"""Legacy advisory CI docs parity check.
 
-Checks whether docs/testing.md contains key strategy signals agreed in Phase0:
-- main/release/nightly-enforced live-smoke and PR real-smoke strategy
-- mutation baseline >=0.62
-- web coverage 95/95
-- no skip for key gates
-- E2E real API
+This script is intentionally lightweight and compatibility-focused. The blocking
+docs gate now lives in `scripts/check_docs_governance.py`, which validates the
+docs control plane and render freshness. This script only ensures the manual
+explanation layer still points readers at the generated governance references.
 """
 
 from __future__ import annotations
 
-import re
+import argparse
 import sys
 from pathlib import Path
 
 
-def _match_any(text: str, patterns: list[str]) -> bool:
-    return any(re.search(p, text, flags=re.IGNORECASE | re.DOTALL) for p in patterns)
-
-
-def _match_all(text: str, patterns: list[str]) -> bool:
-    return all(re.search(p, text, flags=re.IGNORECASE | re.DOTALL) for p in patterns)
-
-
 def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--strict",
+        action="store_true",
+        help="Return non-zero when legacy parity hints are missing.",
+    )
+    args = parser.parse_args()
+
     repo_root = Path(__file__).resolve().parents[1]
     target = repo_root / "docs" / "testing.md"
+    generated_ci = repo_root / "docs" / "generated" / "ci-topology.md"
+    generated_release = repo_root / "docs" / "generated" / "release-evidence.md"
 
     if not target.exists():
         print(f"[ERROR] Target file not found: {target}")
         return 2
 
     content = target.read_text(encoding="utf-8")
+    generated_refs = {
+        "generated_ci_topology_link": "`docs/generated/ci-topology.md`" in content,
+        "generated_release_reference_link": "`docs/generated/release-evidence.md`" in content,
+        "trusted_internal_pr_policy": "trusted internal PR" in content or "同仓 trusted internal PR" in content,
+        "docs_control_plane_reference": "`config/docs/*.json`" in content or "docs control plane" in content,
+    }
 
-    rules = [
-        {
-            "id": "D1",
-            "name": "live-smoke与PR真实烟测策略",
-            "mode": "any",
-            "patterns": [
-                r"(?:main|release|nightly|schedule).{0,120}(?:强制|必须|必跑).{0,60}live[-_ ]?smoke",
-                r"live[-_ ]?smoke.{0,120}(?:main|release|nightly|schedule).{0,80}(?:强制|必须|必跑)",
-                r"(?:PR|pull[_ -]?request).{0,120}(?:强制|必须|必跑).{0,60}live[-_ ]?smoke",
-                r"live[-_ ]?smoke.{0,120}(?:PR|pull[_ -]?request).{0,60}(?:强制|必须|必跑)",
-                r"(?:PR|pull[_ -]?request).{0,120}(?:pr[-_ ]?llm[-_ ]?real[-_ ]?smoke|真实.{0,10}烟测|real.{0,10}smoke)",
-                r"live[-_ ]?smoke.{0,120}(?:not\s+skipped|不得\s*skipped|不允许\s*skipped)",
-            ],
-        },
-        {
-            "id": "D2",
-            "name": "mutation>=0.62",
-            "mode": "any",
-            "patterns": [
-                r"mutation[^\n]{0,80}(?:>=\s*0\.(?:6[2-9]|[7-9][0-9])|0\.(?:6[2-9]|[7-9][0-9])|(?:6[2-9]|[7-9][0-9]|100)\s*%)",
-                r"mutmut[^\n]{0,80}(?:>=\s*0\.(?:6[2-9]|[7-9][0-9])|0\.(?:6[2-9]|[7-9][0-9])|(?:6[2-9]|[7-9][0-9]|100)\s*%)",
-            ],
-        },
-        {
-            "id": "D3",
-            "name": "web覆盖95/95",
-            "mode": "all",
-            "patterns": [
-                r"(?:web|前端)[^\n]{0,120}(?:global|全局)[^\n]{0,80}(?:>=\s*95\s*%|95\s*%)",
-                r"(?:web|前端)[^\n]{0,120}(?:核心|关键|core)[^\n]{0,80}(?:>=\s*95\s*%|95\s*%)",
-            ],
-        },
-        {
-            "id": "D4",
-            "name": "禁skip",
-            "mode": "any",
-            "patterns": [
-                r"(?:禁止|不允许|不得)[^\n]{0,40}skip(?:ped)?",
-                r"skip(?:ped)?[^\n]{0,40}(?:禁止|不允许|不得|not\s+allowed|forbidden)",
-            ],
-        },
-        {
-            "id": "D5",
-            "name": "E2E real API",
-            "mode": "any",
-            "patterns": [
-                r"(?:E2E|端到端)[^\n]{0,120}(?:real\s*API|真实\s*API)",
-                r"(?:real\s*API|真实\s*API)[^\n]{0,120}(?:E2E|端到端)",
-            ],
-        },
-    ]
-
-    print("CI Docs Parity Check")
+    print("Legacy CI Docs Parity Check")
     print(f"Target: {target}")
-    print("Rules:")
+    print(f"Generated references present: ci={generated_ci.exists()} release={generated_release.exists()}")
+    print("Hints:")
 
     failed = []
-    for rule in rules:
-        matcher = _match_all if rule["mode"] == "all" else _match_any
-        ok = matcher(content, rule["patterns"])
+    for rule_id, ok in generated_refs.items():
         status = "PASS" if ok else "FAIL"
-        print(f"- [{status}] {rule['id']} {rule['name']}")
+        print(f"- [{status}] {rule_id}")
         if not ok:
-            failed.append(f"{rule['id']} {rule['name']}")
+            failed.append(rule_id)
 
     if failed:
-        print("\nResult: FAILED")
-        print("Missing strategy keywords:")
+        print("\nResult: WARNING")
+        print("Missing legacy explanation hints:")
         for item in failed:
             print(f"- {item}")
-        return 1
+        if args.strict:
+            return 1
+        return 0
 
     print("\nResult: PASSED")
     return 0

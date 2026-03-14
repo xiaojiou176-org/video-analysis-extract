@@ -1,0 +1,102 @@
+{
+  "version": 1,
+  "generated_docs": [
+    {
+      "id": "governance_dashboard_reference",
+      "path": "docs/generated/governance-dashboard.md",
+      "kind": "render_only",
+      "sources": [
+        "config/docs/nav-registry.json",
+        "config/docs/render-manifest.json",
+        "config/docs/boundary-policy.json",
+        ".github/workflows/ci.yml",
+        "infra/config/strict_ci_contract.json",
+        "infra/config/self_hosted_runner_baseline.json"
+      ]
+    },
+    {
+      "id": "ci_topology_reference",
+      "path": "docs/generated/ci-topology.md",
+      "kind": "render_only",
+      "sources": [
+        ".github/workflows/ci.yml",
+        "infra/config/strict_ci_contract.json",
+        "config/docs/change-contract.json",
+        "config/docs/boundary-policy.json"
+      ]
+    },
+    {
+      "id": "required_checks_reference",
+      "path": "docs/generated/required-checks.md",
+      "kind": "render_only",
+      "sources": [
+        ".github/workflows/ci.yml",
+        "config/docs/boundary-policy.json"
+      ]
+    },
+    {
+      "id": "runner_baseline_reference",
+      "path": "docs/generated/runner-baseline.md",
+      "kind": "render_only",
+      "sources": [
+        "infra/config/self_hosted_runner_baseline.json"
+      ]
+    },
+    {
+      "id": "release_evidence_reference",
+      "path": "docs/generated/release-evidence.md",
+      "kind": "render_only",
+      "sources": [
+        ".github/workflows/release-evidence-attest.yml",
+        "scripts/release/capture_release_manifest.sh",
+        "reports/releases/README.md"
+      ]
+    }
+  ],
+  "fragments": [
+    {
+      "id": "readme_governance_snapshot",
+      "path": "README.md",
+      "marker": "governance-snapshot",
+      "sources": [
+        "config/docs/nav-registry.json",
+        "config/docs/render-manifest.json",
+        "config/docs/boundary-policy.json",
+        "infra/config/strict_ci_contract.json"
+      ]
+    },
+    {
+      "id": "start_here_governance_snapshot",
+      "path": "docs/start-here.md",
+      "marker": "governance-snapshot",
+      "sources": [
+        "config/docs/nav-registry.json",
+        "config/docs/render-manifest.json",
+        "config/docs/boundary-policy.json",
+        ".github/workflows/ci.yml"
+      ]
+    },
+    {
+      "id": "runbook_governance_snapshot",
+      "path": "docs/runbook-local.md",
+      "marker": "governance-snapshot",
+      "sources": [
+        "config/docs/nav-registry.json",
+        "config/docs/render-manifest.json",
+        "infra/config/strict_ci_contract.json",
+        "infra/config/self_hosted_runner_baseline.json"
+      ]
+    },
+    {
+      "id": "testing_governance_snapshot",
+      "path": "docs/testing.md",
+      "marker": "governance-snapshot",
+      "sources": [
+        ".github/workflows/ci.yml",
+        "config/docs/render-manifest.json",
+        "config/docs/boundary-policy.json",
+        "config/docs/change-contract.json"
+      ]
+    }
+  ]
+}

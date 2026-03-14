@@ -5,8 +5,11 @@ on:
     inputs:
       release_tag:
         description: Release tag to package and attest.
-        required: true
+        required: false
         type: string
+  push:
+    tags:
+      - "v*"
 
 permissions:
   contents: read
@@ -24,28 +27,11 @@ jobs:
         run: |
           set -euo pipefail
           workspace="${GITHUB_WORKSPACE:?}"
-          uid="$(id -u)"
-          gid="$(id -g)"
-          stale_paths=(
-            "$workspace/.runtime-cache"
-            "$workspace/.venv"
-            "$workspace/apps/web/node_modules"
-          )
-          if command -v sudo >/dev/null 2>&1; then
-            if sudo find "$workspace" -mindepth 1 -uid 0 -print -quit | grep -q .; then
-              echo "Detected root-owned residue under $workspace; normalizing ownership"
-              sudo chown -R "$uid:$gid" "$workspace"
-            fi
-            for path in "${stale_paths[@]}"; do
-              if sudo test -e "$path"; then
-                echo "Removing stale workspace path: $path"
-                sudo rm -rf "$path"
-              fi
-            done
+          helper="$workspace/scripts/normalize_self_hosted_pre_checkout.sh"
+          if [[ -x "$helper" ]]; then
+            bash "$helper" --workspace "$workspace" --include-runner-diag 1
           else
-            for path in "${stale_paths[@]}"; do
-              rm -rf "$path" || true
-            done
+            rm -rf "$workspace/.runtime-cache" "$workspace/.venv" "$workspace/apps/web/node_modules" || true
           fi
 
       - name: Checkout
@@ -54,14 +40,29 @@ jobs:
           clean: true
           fetch-depth: 0
 
-      - name: Capture release evidence bundle inputs
+      - name: Enforce runner disk budget
         run: |
-          bash scripts/release/capture_release_manifest.sh "${{ inputs.release_tag }}"
+          bash scripts/runner_workspace_maintenance.sh --workspace "$GITHUB_WORKSPACE" --include-runner-diag 1
+          python3 scripts/check_runner_baseline.py --profile ci-heavy --workspace "$GITHUB_WORKSPACE"
+
+      - name: Capture release evidence bundle inputs
+        id: release_tag
+        run: |
+          release_tag="${{ inputs.release_tag }}"
+          if [[ -z "$release_tag" ]]; then
+            release_tag="${GITHUB_REF_NAME:-}"
+          fi
+          if [[ -z "$release_tag" ]]; then
+            echo "release tag is required for release evidence attestation" >&2
+            exit 1
+          fi
+          echo "release_tag=$release_tag" >> "$GITHUB_OUTPUT"
+          bash scripts/release/capture_release_manifest.sh "$release_tag"
 
       - name: Package release evidence
         run: |
-          release_dir="reports/releases/${{ inputs.release_tag }}"
-          bundle_path=".runtime-cache/release-evidence-${{ inputs.release_tag }}.tar.gz"
+          release_dir="reports/releases/${{ steps.release_tag.outputs.release_tag }}"
+          bundle_path=".runtime-cache/release-evidence-${{ steps.release_tag.outputs.release_tag }}.tar.gz"
           mkdir -p .runtime-cache
           tar -czf "$bundle_path" -C "$release_dir" .
           echo "bundle_path=$bundle_path" >> "$GITHUB_ENV"
@@ -69,19 +70,19 @@ jobs:
       - name: Upload release evidence bundle
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: release-evidence-${{ inputs.release_tag }}-${{ github.run_id }}-${{ github.run_attempt }}
+          name: release-evidence-${{ steps.release_tag.outputs.release_tag }}-${{ github.run_id }}-${{ github.run_attempt }}
           if-no-files-found: error
           path: |
-            .runtime-cache/release-evidence-${{ inputs.release_tag }}.tar.gz
-            reports/releases/${{ inputs.release_tag }}/manifest.json
-            reports/releases/${{ inputs.release_tag }}/checksums.sha256
-            reports/releases/${{ inputs.release_tag }}/rollback/db-rollback-readiness.json
-            reports/releases/${{ inputs.release_tag }}/rollback/drill.json
+            .runtime-cache/release-evidence-${{ steps.release_tag.outputs.release_tag }}.tar.gz
+            reports/releases/${{ steps.release_tag.outputs.release_tag }}/manifest.json
+            reports/releases/${{ steps.release_tag.outputs.release_tag }}/checksums.sha256
+            reports/releases/${{ steps.release_tag.outputs.release_tag }}/rollback/db-rollback-readiness.json
+            reports/releases/${{ steps.release_tag.outputs.release_tag }}/rollback/drill.json
 
       - name: Attest release evidence bundle provenance
         uses: actions/attest-build-provenance@b3e506e8c389afc651c5bacf2b8f2a1ea0557215 # v4
         with:
-          subject-path: .runtime-cache/release-evidence-${{ inputs.release_tag }}.tar.gz
+          subject-path: .runtime-cache/release-evidence-${{ steps.release_tag.outputs.release_tag }}.tar.gz
 
       - name: Write attestation verification summary
         if: always()
@@ -89,11 +90,12 @@ jobs:
           {
             echo "## Release Evidence Attestation"
             echo
-            echo "- release_tag: \`${{ inputs.release_tag }}\`"
-            echo "- bundle: \`.runtime-cache/release-evidence-${{ inputs.release_tag }}.tar.gz\`"
+            echo "- release_tag: \`${{ steps.release_tag.outputs.release_tag }}\`"
+            echo "- bundle: \`.runtime-cache/release-evidence-${{ steps.release_tag.outputs.release_tag }}.tar.gz\`"
+            echo "- evidence_scope: \`current-run\`"
             echo
             echo "Suggested verification:"
             echo "\`\`\`bash"
-            echo "gh attestation verify .runtime-cache/release-evidence-${{ inputs.release_tag }}.tar.gz --repo ${{ github.repository }}"
+            echo "gh attestation verify .runtime-cache/release-evidence-${{ steps.release_tag.outputs.release_tag }}.tar.gz --repo ${{ github.repository }}"
             echo "\`\`\`"
           } >> "$GITHUB_STEP_SUMMARY"

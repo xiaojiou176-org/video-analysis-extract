@@ -5,7 +5,7 @@
 ## 标准环境约束（AI/自动化必须）
 
 - AI 执行 lint/test/live smoke 必须在标准环境完成：`.devcontainer/devcontainer.json`。
-- 基础设施编排真相源固定为：`infra/compose/core-services.compose.yml`（使用 `pgvector/pgvector:pg16` 镜像支持向量检索扩展）与 `infra/compose/miniflux-nextflux.compose.yml`。
+- 基础设施编排真相源固定为：`infra/compose/core-services.compose.yml`（核心服务镜像已收口为 digest-pinned fallback，并优先接受 strict contract 导出的 `STRICT_CI_SERVICE_IMAGE_*` 值）与 `infra/compose/miniflux-nextflux.compose.yml`。
 - 严格 CI 标准镜像真相源固定为：`infra/config/strict_ci_contract.json`。`scripts/run_in_standard_env.sh` 现在要求 contract 中的标准镜像必须是 digest-pinned，且拉取失败时直接报错，不再回退到旧本地镜像。
 - self-hosted runner 基线真相源固定为：`infra/config/self_hosted_runner_baseline.json`。`_preflight-fast-steps.yml` 与 `runner-health.yml` 都通过 `scripts/check_runner_baseline.py` 验证 runner 前提，缺失工具直接失败，不再在 workflow 中临时安装。
 - 若不使用 DevContainer，必须提供等价隔离环境（依赖版本、工具链、Compose 服务拓扑一致），否则验证结果不具备门禁效力。
@@ -21,6 +21,16 @@ devcontainer up --workspace-folder .
 - 宿主 Docker daemon 必须可用；`strict_ci_entry.sh`、`run_in_standard_env.sh` 与 DevContainer 都共享这一前提。
 - 当前关键 correctness jobs 已统一按标准镜像口径对齐，包括 `preflight-heavy`、`db-migration-smoke`、`dependency-vuln-scan`、`web-e2e-perceived`、`backend-lint` hosted/fallback、`frontend-lint` hosted/fallback。
 - DevContainer 工作目录已固定为 `/workspace`，并复用 strict contract 的 `UV_CACHE_DIR` / `PLAYWRIGHT_BROWSERS_PATH` 等标准缓存路径约定。
+- `.devcontainer/post-create.sh` 现在会直接校验 strict contract 的 Chromium 是否可启动；若浏览器缺失，标准环境初始化会直接失败，而不是继续用 best-effort 安装掩盖漂移。
+
+<!-- docs:generated governance-snapshot start -->
+## Generated Governance Snapshot
+
+- 运行说明文档只解释执行与排障语义；高漂移 CI/runner/release 清单见 `docs/generated/*.md`。
+- runner baseline 参考页：`docs/generated/runner-baseline.md`。
+- CI 主链与 aggregate gate 清单：`docs/generated/ci-topology.md`。
+- release evidence 结构与 canonical 规则：`docs/generated/release-evidence.md`。
+<!-- docs:generated governance-snapshot end -->
 
 ## 环境分层与优先级（Core/Profile Overlay）
 
@@ -90,6 +100,7 @@ pre-commit install --hook-type pre-commit --hook-type commit-msg --hook-type pre
 - 本地 `strict-full-run=1` 会强制关闭 `ci-dedupe` 并禁用 `skip-mutation`，同时执行 repo-wide `>=95%` 覆盖率与 mutation `score>=0.64 / effective_ratio>=0.27 / no_tests_ratio<=0.72` 的完整全量门禁。
 - 本地 pre-push 会额外执行 `api cors preflight smoke (OPTIONS DELETE)` 与 `contract diff local gate (base vs head)`，用于在推送前发现跨端 CORS 与接口契约回归。
 - 成本治理约束：重跑远程 CI 前，必须先本地通过 pre-push；若远程失败，先本地复现修复再重跑，禁止连续重跑碰运气。
+- PR 信任边界约束：self-hosted CI 只接受 **trusted internal PR**。若 PR 来自 fork / 非同仓分支，主链应在 trusted boundary gate 直接终止，而不是继续占用 privileged runner。
 
 Big Bang 全量清洗（可选）：
 

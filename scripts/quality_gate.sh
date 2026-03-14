@@ -790,6 +790,11 @@ run_ci_docs_parity_gate() {
   echo "[quality-gate] ci docs parity gate passed"
 }
 
+run_docs_governance_gate() {
+  python3 scripts/check_docs_governance.py
+  echo "[quality-gate] docs governance control-plane gate passed"
+}
+
 run_ci_docs_parity_gate_advisory() {
   if python3 scripts/check_ci_docs_parity.py; then
     echo "[quality-gate] ci docs parity gate passed"
@@ -1452,6 +1457,8 @@ run_pre_commit_mode() {
 
   run_async_gate "doc_drift_staged" "documentation drift gate (staged)" \
     "bash scripts/ci_or_local_gate_doc_drift.sh --scope staged"
+  run_async_gate "docs_governance_gate" "docs governance control-plane gate" \
+    "run_docs_governance_gate"
   run_async_gate "env_contract" "env contract" \
     "python3 scripts/check_env_contract.py --strict"
   run_async_gate "placebo" "placebo assertion guard" \
@@ -1536,6 +1543,8 @@ run_pre_push_mode() {
     "run_env_governance_report_non_blocking pre-push"
   run_async_gate "doc_drift_push" "documentation drift gate (push range)" \
     "bash scripts/ci_or_local_gate_doc_drift.sh --scope push"
+  run_async_gate "docs_governance_gate" "docs governance control-plane gate" \
+    "run_docs_governance_gate"
   run_async_gate "placebo" "placebo assertion guard" \
     "python3 scripts/check_test_assertions.py --path ."
   run_async_gate "secrets_scan" "secrets leak scan" \

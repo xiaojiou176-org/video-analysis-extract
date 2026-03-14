@@ -3,13 +3,15 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SCOPE="staged"
+CHANGE_CONTRACT_PATH="$ROOT_DIR/config/docs/change-contract.json"
 
 usage() {
   cat <<'USAGE'
 Usage:
   scripts/ci_or_local_gate_doc_drift.sh [--scope staged|push]
 
-Checks required documentation updates for high-risk code changes.
+Checks required documentation updates for high-risk code changes using the
+docs control plane contract in `config/docs/change-contract.json`.
 USAGE
 }
 
@@ -90,8 +92,6 @@ load_changed_files() {
   else
     local base
     base="$(get_push_base)"
-    # Push scope checks the outgoing commit range, and also includes local pending
-    # changes so developers can satisfy required docs before creating the next commit.
     diff_output+="$(
       git -C "$ROOT_DIR" diff --name-only "$base"..HEAD
     )"$'\n'
@@ -110,23 +110,9 @@ load_changed_files() {
   if [[ -n "$diff_output" ]]; then
     while IFS= read -r line; do
       [[ -n "$line" ]] || continue
-      if ! contains_file "$line" "${changed_files[@]-}"; then
-        changed_files+=("$line")
-      fi
+      changed_files+=("$line")
     done <<< "$diff_output"
   fi
-}
-
-contains_file() {
-  local needle="$1"
-  shift
-  local item
-  for item in "$@"; do
-    if [[ "$item" == "$needle" ]]; then
-      return 0
-    fi
-  done
-  return 1
 }
 
 pipeline_steps_changed() {
@@ -142,36 +128,6 @@ pipeline_steps_changed() {
   git -C "$ROOT_DIR" diff "$base"..HEAD -- "$target" | rg -q 'PIPELINE_STEPS'
 }
 
-check_required_docs() {
-  local reason="$1"
-  shift
-  local -a required=("$@")
-  local missing=0
-  local doc
-
-  for doc in "${required[@]}"; do
-    if ! contains_file "$doc" "${changed_files[@]}"; then
-      ((missing += 1))
-      echo "[doc-drift] missing required doc update for ${reason}: ${doc}" >&2
-    fi
-  done
-
-  if ((missing > 0)); then
-    violations+=("$reason")
-  fi
-}
-
-has_changed_matching() {
-  local pattern="$1"
-  local f
-  for f in "${changed_files[@]}"; do
-    if [[ "$f" == $pattern ]]; then
-      return 0
-    fi
-  done
-  return 1
-}
-
 load_changed_files
 
 echo "[doc-drift] scope=${SCOPE}, changed_files=${#changed_files[@]}"
@@ -181,96 +137,65 @@ if ((${#changed_files[@]} == 0)); then
   exit 0
 fi
 
-violations=()
-
-if has_changed_matching 'infra/migrations/*.sql'; then
-  check_required_docs "infra/migrations/*.sql" \
-    "README.md" \
-    "docs/runbook-local.md"
+PIPELINE_STEPS_CHANGED="0"
+if pipeline_steps_changed; then
+  PIPELINE_STEPS_CHANGED="1"
 fi
 
-if contains_file "apps/worker/worker/pipeline/types.py" "${changed_files[@]}"; then
-  if pipeline_steps_changed; then
-    check_required_docs "PIPELINE_STEPS in apps/worker/worker/pipeline/types.py" \
-      "docs/state-machine.md"
-  fi
-fi
+changed_file_list="$(printf '%s\n' "${changed_files[@]}")"
 
-if contains_file ".env.example" "${changed_files[@]}" || contains_file "infra/config/env.contract.json" "${changed_files[@]}"; then
-  check_required_docs "environment variable contract" \
-    ".env.example" \
-    "ENVIRONMENT.md" \
-    "infra/config/env.contract.json"
-fi
+ROOT_DIR="$ROOT_DIR" \
+CHANGE_CONTRACT_PATH="$CHANGE_CONTRACT_PATH" \
+CHANGED_FILE_LIST="$changed_file_list" \
+PIPELINE_STEPS_CHANGED="$PIPELINE_STEPS_CHANGED" \
+python3 - <<'PY'
+from __future__ import annotations
 
-if has_changed_matching 'apps/api/app/routers/*.py' || \
-   has_changed_matching 'apps/api/app/services/*.py' || \
-   has_changed_matching 'apps/mcp/*.py' || \
-   has_changed_matching 'apps/mcp/**/*.py'; then
-  check_required_docs "api behavior/signature contract changes" \
-    "README.md" \
-    "docs/runbook-local.md" \
-    "docs/testing.md"
-fi
+import fnmatch
+import json
+import os
+import sys
+from pathlib import Path
 
-if contains_file "apps/mcp/schemas/tools.json" "${changed_files[@]}" || \
-   has_changed_matching 'packages/shared-contracts/jsonschema/*.json'; then
-  check_required_docs "schema signature contract changes" \
-    "docs/testing.md"
-fi
+root = Path(os.environ["ROOT_DIR"])
+contract_path = Path(os.environ["CHANGE_CONTRACT_PATH"])
+changed_files = [line.strip() for line in os.environ["CHANGED_FILE_LIST"].splitlines() if line.strip()]
+pipeline_steps_changed = os.environ.get("PIPELINE_STEPS_CHANGED", "0") == "1"
 
-if has_changed_matching 'scripts/dev_*.sh' || \
-   contains_file "scripts/full_stack.sh" "${changed_files[@]}" || \
-   contains_file "scripts/bootstrap_full_stack.sh" "${changed_files[@]}" || \
-   contains_file "scripts/smoke_full_stack.sh" "${changed_files[@]}"; then
-  check_required_docs "local startup script parameters/defaults" \
-    "README.md" \
-    "docs/start-here.md" \
-    "docs/runbook-local.md"
-fi
+payload = json.loads(contract_path.read_text(encoding="utf-8"))
+rules = payload.get("rules", [])
 
-if has_changed_matching 'infra/compose/*.compose.yml' || \
-   has_changed_matching '.devcontainer/*' || \
-   has_changed_matching '.devcontainer/**'; then
-  check_required_docs "compose/devcontainer startup topology" \
-    "README.md" \
-    "docs/start-here.md" \
-    "docs/runbook-local.md"
-fi
+violations: list[str] = []
 
-if contains_file "pyproject.toml" "${changed_files[@]}" || \
-   contains_file "uv.lock" "${changed_files[@]}" || \
-   has_changed_matching 'requirements*.txt' || \
-   has_changed_matching 'requirements/*.txt' || \
-   has_changed_matching 'apps/*/package.json' || \
-   has_changed_matching 'apps/*/package-lock.json' || \
-   has_changed_matching 'apps/*/pnpm-lock.yaml'; then
-  check_required_docs "dependency governance policy" \
-    "docs/reference/dependency-governance.md"
-fi
 
-if contains_file "scripts/dev_api.sh" "${changed_files[@]}" || \
-   contains_file "scripts/dev_worker.sh" "${changed_files[@]}" || \
-   contains_file "scripts/dev_mcp.sh" "${changed_files[@]}" || \
-   contains_file "scripts/run_daily_digest.sh" "${changed_files[@]}" || \
-   contains_file "scripts/run_failure_alerts.sh" "${changed_files[@]}" || \
-   contains_file "apps/api/app/security.py" "${changed_files[@]}"; then
-  check_required_docs "logging governance policy" \
-    "docs/reference/logging.md"
-fi
+def matches_any(patterns: list[str]) -> bool:
+    for changed in changed_files:
+        for pattern in patterns:
+            if fnmatch.fnmatch(changed, pattern):
+                return True
+    return False
 
-if contains_file "scripts/start_ops_workflows.sh" "${changed_files[@]}" || \
-   contains_file "apps/worker/worker/main.py" "${changed_files[@]}" || \
-   contains_file "apps/worker/worker/temporal/activities_cleanup.py" "${changed_files[@]}" || \
-   contains_file "apps/worker/worker/pipeline/step_executor.py" "${changed_files[@]}" || \
-   contains_file "apps/worker/worker/pipeline/steps/llm_client.py" "${changed_files[@]}"; then
-  check_required_docs "cache governance policy" \
-    "docs/reference/cache.md"
-fi
 
-if ((${#violations[@]} > 0)); then
-  echo "[doc-drift] failed: ${#violations[@]} trigger(s) missing required docs" >&2
-  exit 1
-fi
+for rule in rules:
+    rule_id = str(rule.get("id", "unknown"))
+    patterns = [str(item) for item in rule.get("when", [])]
+    if not patterns:
+        continue
+    if not matches_any(patterns):
+        continue
+    if rule.get("special_check") == "pipeline_steps_changed" and not pipeline_steps_changed:
+        continue
 
-echo "[doc-drift] passed"
+    required = [str(item) for item in rule.get("required_paths", [])]
+    missing = [path for path in required if path not in changed_files]
+    for path in missing:
+        print(f"[doc-drift] missing required doc update for {rule_id}: {path}", file=sys.stderr)
+    if missing:
+        violations.append(rule_id)
+
+if violations:
+    print(f"[doc-drift] failed: {len(violations)} trigger(s) missing required docs", file=sys.stderr)
+    raise SystemExit(1)
+
+print("[doc-drift] passed")
+PY

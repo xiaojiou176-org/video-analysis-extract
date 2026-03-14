@@ -5,6 +5,8 @@ ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 COMPOSE_FILE="$ROOT_DIR/infra/compose/core-services.compose.yml"
 ENV_FILE="$ROOT_DIR/.env"
 
+eval "$(python3 "$ROOT_DIR/scripts/ci_contract.py" shell-exports)"
+
 usage() {
   cat <<'EOF'
 Usage: ./scripts/deploy_core_services.sh [up|down|restart|status|logs] [--env-file <path>]

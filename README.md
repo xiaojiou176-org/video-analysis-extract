@@ -26,6 +26,15 @@
 
 先读 `docs/start-here.md`。它是唯一上手入口，聚合了启动命令、口径说明和后续文档导航。
 
+<!-- docs:generated governance-snapshot start -->
+## Governance Snapshot
+
+- **Docs control plane**：`config/docs/*.json` 现在是文档治理真相源；reference 由 `docs/generated/*.md` 承担。
+- **CI 信任边界**：`trusted_internal_pr_only`。fork / untrusted PR 不进入 privileged self-hosted 主链。
+- **Strict CI 真相源**：`infra/config/strict_ci_contract.json`。
+- **Generated references**：`docs/generated/ci-topology.md`、`docs/generated/runner-baseline.md`、`docs/generated/release-evidence.md`。
+<!-- docs:generated governance-snapshot end -->
+
 ## Clone 后快速跑通（推荐）
 
 ```bash
@@ -80,11 +89,15 @@
 
 仓库当前可复现环境方案：
 
-- Docker Compose（基础设施真相源）：`infra/compose/core-services.compose.yml`（使用 `pgvector/pgvector:pg16` 镜像支持向量检索）、`infra/compose/miniflux-nextflux.compose.yml`
-- DevContainer（AI/自动化标准执行环境）：`.devcontainer/devcontainer.json`
+- Docker Compose（基础设施真相源）：`infra/compose/core-services.compose.yml`（核心服务镜像已收口为 digest-pinned fallback，可直接对齐 strict contract）、`infra/compose/miniflux-nextflux.compose.yml`
+- DevContainer（AI/自动化标准执行环境）：`.devcontainer/devcontainer.json`。当前已移除浮动 devcontainer feature 依赖，`post-create.sh` 会直接校验 strict contract 的 `uv/node/chromium` 是否可用，不再用 best-effort 浏览器安装掩盖漂移。
 - 严格 CI 标准镜像真相源：`infra/config/strict_ci_contract.json`。`scripts/strict_ci_entry.sh` / `scripts/run_in_standard_env.sh` 现在只接受 digest-pinned 标准镜像，不再允许静默回退到旧的本地 tag 镜像。
 - 标准镜像供应链增强：`build-ci-standard-image.yml` 现在会产出镜像 SBOM artifact，并对镜像本体与 SBOM 做 GitHub attestation。
 - Release 证据 attestation：新增 `release-evidence-attest.yml`，会把 `reports/releases/<tag>/` 下的 manifest/checksums/rollback 证据打包并出 provenance attestation。
+- 生成式治理参考：
+  - CI 主链与 aggregate gate：`docs/generated/ci-topology.md`
+  - self-hosted runner baseline：`docs/generated/runner-baseline.md`
+  - release evidence canonical 规则：`docs/generated/release-evidence.md`
 
 推荐先进入标准环境，再执行本地联调或严格验收。严格验收的唯一权威入口是仓库标准镜像，不是宿主机命令：
 

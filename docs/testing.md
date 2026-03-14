@@ -22,12 +22,24 @@
 - 禁止把 shell 登录配置作为测试密钥来源。
 - 默认最小变量集沿用 `ENVIRONMENT.md` 的 Shared Core；涉及真实 provider 链路时，再追加对应 secrets。
 
+<!-- docs:generated governance-snapshot start -->
+## Generated Governance Snapshot
+
+- `docs/testing.md` 现在以**策略解释**为主；高漂移 job inventory 已移到 `docs/generated/ci-topology.md`。
+- PR 信任模型：仅同仓 trusted internal PR 允许进入 self-hosted 主链。
+- docs gate 现在同时要求：`config/docs/*.json` control plane 一致、render output 新鲜、manual boundary 不越界。
+<!-- docs:generated governance-snapshot end -->
+
 ## CI Topology (GitHub Actions)
 
 以下口径按已拍板 D1~D5 执行，旧规则（E2E 默认 mock API）已废止。
 
 - `preflight-fast` + `preflight-heavy`：预检门禁（runner baseline、env contract、schema parity、provider residual、worker line limits、structured log guard、e2e strictness guard、mutation scope guard、mutation test selection guard）。
 - 严格执行型 job（`preflight-heavy`、`quality-gate-pre-push`、`db-migration-smoke`、`python-tests`、`api-real-smoke`、`pr-llm-real-smoke`、`dependency-vuln-scan`、`backend-lint-hosted`、`backend-lint-fallback`、`frontend-lint-hosted`、`frontend-lint-fallback`、`web-test-build`、`web-e2e`、`web-e2e-perceived`、`live-smoke`）统一运行在仓库自有标准镜像中，并通过仓库脚本/命令调 repo 内部 gate。
+- 高漂移 CI job inventory、runner profile inventory、release evidence inventory 不再由本页手工维护；统一参考：
+  - `docs/generated/ci-topology.md`
+  - `docs/generated/runner-baseline.md`
+  - `docs/generated/release-evidence.md`
 - `db-migration-smoke` + `python-tests` + `api-real-smoke` + `backend-lint` + `frontend-lint` + `web-test-build` + `web-e2e` + `web-e2e-perceived`：并行执行的主链路测试集合。
 - `web-test-build` 现在在 PR/push/schedule 都默认执行（只要 `preflight-fast` 与 `changes` 成功），避免 path-filter 误判导致关键 Web gate 被跳过。
 - `web-test-build` 会追加阻断式 `Gemini UI/UX audit`，并上传 `.runtime-cache/ui-audit/gemini-ui-ux-audit-*.{json,log}` 作为审查工件；严格通过条件为 `status=passed`、`reason_code=ok`、`successful_batches==batch_count` 且 `model_attempts>0`。
@@ -42,6 +54,7 @@
 - `ci-kpi`：在 `ci-final-gate` 之后汇总 junit/coverage/mutation/artifact bytes/topology duplication，并输出 `reports/release-readiness/ci-kpi-summary.{json,md}` artifact。
 - `build-ci-standard-image.yml` 会产出 strict CI 镜像 SBOM，并对镜像与 SBOM 做 attestation。
 - `release-evidence-attest.yml` 会把 release manifest/checksums/rollback 证据打包成可 attestation 的 bundle。
+- self-hosted CI 信任边界：当前仓库默认只支持 **trusted internal PR** 进入 privileged runner 主链；fork / untrusted PR 属于拒绝口径，不在支持矩阵内。
 
 ## Runner 标签策略（维护约定）
 

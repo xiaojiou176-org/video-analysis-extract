@@ -17,6 +17,11 @@
 
 - 状态机与流程契约：`docs/state-machine.md`
 - 环境变量契约：`ENVIRONMENT.md`
+- 治理仪表盘：`docs/generated/governance-dashboard.md`
+- CI 主链参考：`docs/generated/ci-topology.md`
+- Required checks 参考：`docs/generated/required-checks.md`
+- runner baseline 参考：`docs/generated/runner-baseline.md`
+- release evidence 参考：`docs/generated/release-evidence.md`
 - 日志治理：`docs/reference/logging.md`
 - 缓存治理：`docs/reference/cache.md`
 - 依赖治理：`docs/reference/dependency-governance.md`

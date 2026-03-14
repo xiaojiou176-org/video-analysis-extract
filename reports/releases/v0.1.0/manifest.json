@@ -1,6 +1,9 @@
 {
+  "manifest_version": 1,
   "release_tag": "v0.1.0",
   "generated_at": "2026-03-03T08:11:37.864765+00:00",
+  "evidence_scope": "current-run",
+  "historical_example": true,
   "git": {
     "head_sha": "10ef774c0fe73ad28f06f72b525f0d52b547811c",
     "branch": "main",
@@ -8,8 +11,8 @@
     "dirty": true
   },
   "artifacts": {
-    "checksums_file": "/Users/yuyifeng/Documents/VS Code/1_Personal_Project/[其他项目]Useful_Tools/📺视频分析提取/reports/releases/v0.1.0/checksums.sha256",
-    "rollback_readiness_file": "/Users/yuyifeng/Documents/VS Code/1_Personal_Project/[其他项目]Useful_Tools/📺视频分析提取/reports/releases/v0.1.0/rollback/db-rollback-readiness.json",
-    "rollback_drill_file": "/Users/yuyifeng/Documents/VS Code/1_Personal_Project/[其他项目]Useful_Tools/📺视频分析提取/reports/releases/v0.1.0/rollback/drill.json"
+    "checksums_file": "reports/releases/v0.1.0/checksums.sha256",
+    "rollback_readiness_file": "reports/releases/v0.1.0/rollback/db-rollback-readiness.json",
+    "rollback_drill_file": "reports/releases/v0.1.0/rollback/drill.json"
   }
 }

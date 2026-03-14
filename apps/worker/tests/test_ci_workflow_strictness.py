@@ -134,6 +134,17 @@ def test_pre_push_hook_uses_local_safe_ci_dedupe() -> None:
     assert "--ci-dedupe 1" not in content
 
 
+def test_ci_workflow_trusted_internal_pr_boundary_guards_self_hosted_bootstrap() -> None:
+    workflow = (_repo_root() / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+
+    assert "trusted-pr-boundary:" in workflow
+    assert "trusted internal PR boundary violated" in workflow
+    assert "required-ci-secrets:\n" in workflow and "needs: [trusted-pr-boundary]" in workflow
+    assert "ci-contract:\n" in workflow and "needs: [trusted-pr-boundary]" in workflow
+    assert "changes:\n" in workflow and "needs: [trusted-pr-boundary]" in workflow
+    assert "preflight-fast:\n" in workflow and "needs: [trusted-pr-boundary]" in workflow
+
+
 def test_global_rules_reusable_workflow_must_define_timeout(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     module = _load_module()
     monkeypatch.chdir(tmp_path)
@@ -732,6 +743,8 @@ def test_api_real_smoke_job_calls_repo_script_inside_strict_ci_entry() -> None:
     workflow = (_repo_root() / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
 
     assert "./scripts/strict_ci_entry.sh --mode api-real-smoke" in workflow
+    assert 'VD_API_KEY: "ci-smoke-write-token"' in workflow
+    assert 'WEB_ACTION_SESSION_TOKEN: "ci-smoke-write-token"' in workflow
 
 
 def test_web_e2e_job_calls_repo_script_inside_strict_ci_entry() -> None:

@@ -31,7 +31,16 @@ if [[ "${node_major}" != "${STRICT_CI_NODE_MAJOR}" ]]; then
   exit 1
 fi
 
-# Browser install is best-effort in devcontainer; CI remains the source of truth.
-uv run --with playwright python -m playwright install chromium || true
+if ! uv run --with playwright python - <<'PY' >/dev/null
+from playwright.sync_api import sync_playwright
+
+with sync_playwright() as playwright:
+    browser = playwright.chromium.launch(headless=True)
+    browser.close()
+PY
+then
+  echo "[devcontainer] chromium browser drift detected; rebuild the strict standard image" >&2
+  exit 1
+fi
 
 python3 scripts/check_env_contract.py --strict --env-file .env.example

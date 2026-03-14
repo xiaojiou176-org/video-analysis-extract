@@ -48,6 +48,20 @@ ensure_node_toolchain() {
   fail "node/npm are unavailable inside standard env"
 }
 
+verify_playwright_browser_available() {
+  BROWSER_NAME="$BROWSER" uv run --with playwright python - <<'PY' >/dev/null
+import os
+
+from playwright.sync_api import sync_playwright
+
+browser_name = os.environ["BROWSER_NAME"]
+with sync_playwright() as playwright:
+    browser_launcher = getattr(playwright, browser_name)
+    browser = browser_launcher.launch(headless=True)
+    browser.close()
+PY
+}
+
 port_is_listening() {
   local port="$1"
   python3 - "$port" <<'PY'
@@ -287,6 +301,13 @@ start_worker() {
 }
 
 install_playwright_browser() {
+  if [[ "${VD_IN_STANDARD_ENV:-0}" == "1" ]]; then
+    if verify_playwright_browser_available; then
+      log "standard env browser already available: ${BROWSER}"
+      return 0
+    fi
+    fail "standard env browser missing for ${BROWSER}; rebuild the strict CI image instead of installing at runtime"
+  fi
   for attempt in $(seq 1 8); do
     if uv run --with playwright python -m playwright install --with-deps "$BROWSER"; then
       return 0
@@ -385,6 +406,7 @@ ensure_node_toolchain
 require_command npm
 
 if [[ "${STRICT_CI_BOOTSTRAP_RUNTIME_READY:-0}" != "1" ]]; then
+  bash "$ROOT_DIR/scripts/runner_workspace_maintenance.sh" --workspace "$ROOT_DIR"
   source "$ROOT_DIR/scripts/bootstrap_strict_ci_runtime.sh"
 fi
 

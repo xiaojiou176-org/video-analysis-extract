@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "trust_boundary": {
+    "mode": "trusted_internal_pr_only",
+    "summary": "Self-hosted CI is reserved for trusted internal pull requests. Fork or untrusted PRs must not enter the privileged self-hosted path."
+  },
+  "manual_docs": {
+    "README.md": {
+      "purpose": "front door and quick entry",
+      "generated_markers": [
+        "governance-snapshot"
+      ]
+    },
+    "docs/start-here.md": {
+      "purpose": "onboarding and shortest path",
+      "generated_markers": [
+        "governance-snapshot"
+      ]
+    },
+    "docs/runbook-local.md": {
+      "purpose": "execution and diagnosis runbook",
+      "generated_markers": [
+        "governance-snapshot"
+      ]
+    },
+    "docs/testing.md": {
+      "purpose": "testing semantics and CI policy explanation",
+      "generated_markers": [
+        "governance-snapshot"
+      ]
+    }
+  },
+  "render_only_paths": [
+    "docs/generated/ci-topology.md",
+    "docs/generated/runner-baseline.md",
+    "docs/generated/release-evidence.md"
+  ]
+}

@@ -32,6 +32,14 @@
 4. Python 命令统一使用 `python3`。
 5. AI/自动化执行必须在标准环境：优先 `.devcontainer/devcontainer.json`，基础设施使用 `infra/compose/*.compose.yml`。
 
+<!-- docs:generated governance-snapshot start -->
+## Generated Governance Snapshot
+
+- 文档高漂移事实已开始收口到 `docs/generated/*.md`；入口文档只保留 onboarding 必需信息。
+- self-hosted CI 只接受 **trusted internal PR**；若 PR 来自 fork，GitHub Actions 会在边界门禁直接阻断。
+- 严格验收仍以 `./scripts/strict_ci_entry.sh --mode pre-push --strict-full-run 1 --ci-dedupe 0` 为唯一权威入口。
+<!-- docs:generated governance-snapshot end -->
+
 ## 环境文件准备（必做）
 
 ```bash
@@ -125,12 +133,16 @@ devcontainer up --workspace-folder .
 
 DevContainer 启动拓扑补充（2026-03）：
 
-- `.devcontainer/post-create.sh` 已移除 `curl|sh` 安装模式，改为 `python3 -m pip install --user --upgrade "uv>=0.10,<1.0"`。
+- `.devcontainer/post-create.sh` 已移除 `curl|sh` 安装模式，改为 `python3 -m pip install --user --upgrade "uv>=0.10,<1.0"`；当前会直接校验 strict contract 里的 Chromium 是否可启动，失败时直接报 drift，不再 `playwright install ... || true`。
 - 并发 Web E2E 场景可通过 `WEB_E2E_NEXT_DIST_DIR` 隔离 Next.js `distDir`，避免 `.next/dev/lock` 冲突（默认常规开发无需设置）。
 - `infra/config/strict_ci_contract.json` 现在是标准镜像真相源；`scripts/strict_ci_entry.sh` / `scripts/run_in_standard_env.sh` 只接受 digest-pinned 标准镜像，拉取失败会直接终止，不再静默回退到旧本地镜像。
 - 关键 correctness gates（`preflight-heavy`、`db-migration-smoke`、`dependency-vuln-scan`、`web-e2e-perceived`、后端/前端 lint hosted/fallback）已经跟 `python-tests` / `api-real-smoke` / `web-e2e` 一样迁入标准镜像执行，因此宿主 Docker 可用性现在是 CI 等价本地验收的前提。
 - self-hosted runner 基线合同已独立成 `infra/config/self_hosted_runner_baseline.json`；主 `ci.yml` 不再预热/拉起 runner，runner 健康检查改由 `runner-health.yml` 负责。
 - DevContainer 现在固定挂载到 `/workspace`，并通过 `post-create.sh` 校验 `uv` / `node` / cache 路径是否与 strict contract 一致。
+- CI/release 生成式参考页：
+  - `docs/generated/ci-topology.md`
+  - `docs/generated/runner-baseline.md`
+  - `docs/generated/release-evidence.md`
 
 ## 6 步启动（Host Fallback，仅排障时使用）
 
@@ -172,7 +184,7 @@ curl -sS -X POST http://127.0.0.1:9000/api/v1/ingest/poll -H 'Content-Type: appl
 
 - `bootstrap_full_stack.sh` 会拉起 core services + Miniflux + Nextflux。
 - `bootstrap_full_stack.sh` 除首次 `.env` 不存在时复制模板外，不再持久化改写 `.env`；端口冲突与回退等运行时决策会写入 `.runtime-cache/full-stack/resolved.env`，仅对当前运行生效。
-- `core-services.compose.yml` 使用 `pgvector/pgvector:pg16` 镜像（支持向量检索扩展），`redis/temporal` 端口与 Postgres `DB/User` 已收口为固定默认（`6379` / `7233` / `video_analysis` / `postgres`）。
+- `core-services.compose.yml` 现在使用 digest-pinned fallback 镜像（Postgres/Redis/Temporal），并优先接受 strict contract 导出的 `STRICT_CI_SERVICE_IMAGE_*` 值；端口与 Postgres `DB/User` 仍收口为固定默认（`6379` / `7233` / `video_analysis` / `postgres`）。
 - `miniflux-nextflux.compose.yml` 的 Miniflux 端口与 `DB/User/DB_NAME` 已收口为固定默认（`8080` / `miniflux` / `miniflux`）。
 - 本地路由真相源是 `API_PORT/WEB_PORT`；`VD_API_BASE_URL` 与 `NEXT_PUBLIC_API_BASE_URL` 属于派生目标地址。
 - `full_stack.sh up` 会按 `API health -> Web -> Worker` 顺序启动；Worker 启动前会先做 Temporal preflight（`TEMPORAL_TARGET_HOST`，默认 `localhost:7233`），不通时直接 fail-fast。
@@ -188,6 +200,7 @@ curl -sS -X POST http://127.0.0.1:9000/api/v1/ingest/poll -H 'Content-Type: appl
 - 这里的一键 smoke 指本地联调烟测，不等同于 CI 的 live-smoke，也不能替代严格验收。
 - 本地测试口径必须区分：sqlite 口径用于默认快速回归；真实 Postgres 口径用于 integration smoke 的最终验收。
 - CI `live-smoke` 仅在 `main` push / nightly schedule 强制执行，且要求外部 provider secrets 完整（详见 `docs/testing.md`）。
+- CI 信任边界：当前仓库默认只支持 **trusted internal PR** 进入 self-hosted 主链；fork / untrusted PR 不作为支持口径。
 - PR 阶段仅有条件触发真实 LLM 烟测（`pr-llm-real-smoke`）；`web-e2e` 在 CI 主路径默认走 real API，mock API 仅用于本地调试。
 
 标准严格验收（唯一权威入口）：

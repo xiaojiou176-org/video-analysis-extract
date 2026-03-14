@@ -72,8 +72,10 @@ except Exception:
     latest_tag = ""
 
 manifest = {
+    "manifest_version": 1,
     "release_tag": release_tag,
     "generated_at": datetime.now(timezone.utc).isoformat(),
+    "evidence_scope": "current-run",
     "git": {
         "head_sha": head_sha,
         "branch": branch,
@@ -81,9 +83,9 @@ manifest = {
         "dirty": bool(status_short.strip()),
     },
     "artifacts": {
-        "checksums_file": str(checksums_path),
-        "rollback_readiness_file": str(rollback_readiness_path),
-        "rollback_drill_file": str(rollback_drill_path),
+        "checksums_file": checksums_path.relative_to(root).as_posix(),
+        "rollback_readiness_file": rollback_readiness_path.relative_to(root).as_posix(),
+        "rollback_drill_file": rollback_drill_path.relative_to(root).as_posix(),
     },
 }
 manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")

@@ -23,6 +23,7 @@ SMOKE_DATABASE_URL=""
 ADMIN_DATABASE_URL=""
 ADMIN_DATABASE_PG_URL=""
 WORKFLOW_PROBE_ROOT=""
+SMOKE_WRITE_TOKEN="${VD_API_KEY:-video-digestor-local-dev-token}"
 
 usage() {
   cat <<'EOF'
@@ -309,7 +310,7 @@ run_cleanup_workflow_closure_probe() {
   local response_file
   local status
   local body
-  local write_token="video-digestor-local-dev-token"
+  local write_token="${SMOKE_WRITE_TOKEN}"
 
   mkdir -p \
     "$(dirname "$media_file")" \
@@ -688,19 +689,17 @@ export UI_AUDIT_GEMINI_ENABLED="${UI_AUDIT_GEMINI_ENABLED:-false}"
 export NOTIFICATION_ENABLED="${NOTIFICATION_ENABLED:-0}"
 export VD_ALLOW_UNAUTH_WRITE="${VD_ALLOW_UNAUTH_WRITE:-true}"
 export PYTHONPATH="$ROOT_DIR:$ROOT_DIR/apps/worker:${PYTHONPATH:-}"
+export VD_API_KEY="${VD_API_KEY:-$SMOKE_WRITE_TOKEN}"
+export WEB_ACTION_SESSION_TOKEN="${WEB_ACTION_SESSION_TOKEN:-$SMOKE_WRITE_TOKEN}"
 
 ensure_temporal_server_online
-
-# Keep pytest in unauth-write mode. dev_api.sh will provision its own local token
-# for the spawned API process when no explicit token is exported.
-unset VD_API_KEY
-unset WEB_ACTION_SESSION_TOKEN
 
 log "starting API smoke server: http://${API_HOST}:${API_PORT}"
 (
   cd "$ROOT_DIR"
   export DATABASE_URL TEMPORAL_TARGET_HOST TEMPORAL_NAMESPACE TEMPORAL_TASK_QUEUE
   export SQLITE_STATE_PATH UI_AUDIT_GEMINI_ENABLED NOTIFICATION_ENABLED VD_ALLOW_UNAUTH_WRITE PYTHONPATH
+  export VD_API_KEY WEB_ACTION_SESSION_TOKEN
   ./scripts/dev_api.sh --host "$API_HOST" --port "$API_PORT" --no-reload >"$API_LOG" 2>&1
 ) &
 API_PID="$!"

@@ -9,7 +9,19 @@
         "docker",
         "rg"
       ],
-      "docker_compose_required": true
+      "docker_compose_required": true,
+      "disk_budget_gb": {
+        "min_free_gb_tmp": 4,
+        "min_free_gb_workspace": 4
+      },
+      "purge_paths": [
+        ".runtime-cache",
+        ".venv",
+        "apps/web/node_modules",
+        "apps/web/.next-e2e-*",
+        "mutants/",
+        "/tmp/video-digestor-strict-ci"
+      ]
     },
     "runner-health": {
       "commands": [
@@ -22,7 +34,40 @@
         "jq",
         "rg"
       ],
-      "docker_compose_required": false
+      "docker_compose_required": false,
+      "disk_budget_gb": {
+        "min_free_gb_tmp": 4,
+        "min_free_gb_workspace": 4
+      },
+      "purge_paths": [
+        ".runtime-cache",
+        ".venv",
+        "apps/web/node_modules",
+        "_diag/pages/*"
+      ]
+    },
+    "ci-heavy": {
+      "commands": [
+        "bash",
+        "python3",
+        "git",
+        "rg"
+      ],
+      "docker_compose_required": false,
+      "disk_budget_gb": {
+        "min_free_gb_tmp": 8,
+        "min_free_gb_workspace": 8
+      },
+      "purge_paths": [
+        ".runtime-cache",
+        ".venv",
+        "apps/web/node_modules",
+        "apps/web/.next-e2e-*",
+        "mutants/",
+        "/tmp/video-digestor-strict-ci",
+        "/tmp/video-digestor-*",
+        "/tmp/temporal-cli-*"
+      ]
     }
   }
 }

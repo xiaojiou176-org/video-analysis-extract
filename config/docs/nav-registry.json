@@ -1,0 +1,55 @@
+{
+  "version": 1,
+  "sections": [
+    {
+      "id": "entry",
+      "title": "Entry",
+      "docs": [
+        "README.md",
+        "docs/start-here.md",
+        "docs/index.md",
+        "AGENTS.md"
+      ]
+    },
+    {
+      "id": "runbook",
+      "title": "Runbook",
+      "docs": [
+        "docs/runbook-local.md",
+        "docs/deploy/rollback-runbook.md"
+      ]
+    },
+    {
+      "id": "reference",
+      "title": "Reference",
+      "docs": [
+        "docs/generated/governance-dashboard.md",
+        "docs/generated/ci-topology.md",
+        "docs/generated/required-checks.md",
+        "docs/generated/runner-baseline.md",
+        "docs/generated/release-evidence.md",
+        "docs/reference/dependency-governance.md",
+        "docs/reference/logging.md",
+        "ENVIRONMENT.md"
+      ]
+    },
+    {
+      "id": "explanation",
+      "title": "Explanation",
+      "docs": [
+        "docs/architecture.md",
+        "docs/testing.md"
+      ]
+    },
+    {
+      "id": "historical",
+      "title": "Historical and Evidence",
+      "docs": [
+        "docs/plans/2026-03-10-container-first-ci-mixed-mode.md",
+        "reports/releases/README.md",
+        "reports/performance/rum-baseline.json",
+        "reports/releases/v0.1.0/manifest.json"
+      ]
+    }
+  ]
+}

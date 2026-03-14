@@ -1,0 +1,130 @@
+{
+  "version": 1,
+  "rules": [
+    {
+      "id": "migrations",
+      "when": [
+        "infra/migrations/*.sql"
+      ],
+      "required_paths": [
+        "README.md",
+        "docs/runbook-local.md"
+      ]
+    },
+    {
+      "id": "pipeline_steps",
+      "when": [
+        "apps/worker/worker/pipeline/types.py"
+      ],
+      "special_check": "pipeline_steps_changed",
+      "required_paths": [
+        "docs/state-machine.md"
+      ]
+    },
+    {
+      "id": "env_contract",
+      "when": [
+        ".env.example",
+        "infra/config/env.contract.json"
+      ],
+      "required_paths": [
+        ".env.example",
+        "ENVIRONMENT.md",
+        "infra/config/env.contract.json"
+      ]
+    },
+    {
+      "id": "api_signature",
+      "when": [
+        "apps/api/app/routers/*.py",
+        "apps/api/app/services/*.py",
+        "apps/mcp/*.py",
+        "apps/mcp/**/*.py"
+      ],
+      "required_paths": [
+        "README.md",
+        "docs/runbook-local.md",
+        "docs/testing.md"
+      ]
+    },
+    {
+      "id": "schema_contract",
+      "when": [
+        "apps/mcp/schemas/tools.json",
+        "packages/shared-contracts/jsonschema/*.json"
+      ],
+      "required_paths": [
+        "docs/testing.md",
+        "docs/generated/ci-topology.md"
+      ]
+    },
+    {
+      "id": "startup_topology",
+      "when": [
+        "scripts/dev_*.sh",
+        "scripts/full_stack.sh",
+        "scripts/bootstrap_full_stack.sh",
+        "scripts/smoke_full_stack.sh",
+        "infra/compose/*.compose.yml",
+        ".devcontainer/*",
+        ".devcontainer/**"
+      ],
+      "required_paths": [
+        "README.md",
+        "docs/start-here.md",
+        "docs/runbook-local.md"
+      ]
+    },
+    {
+      "id": "dependency_policy",
+      "when": [
+        "pyproject.toml",
+        "uv.lock",
+        "requirements*.txt",
+        "requirements/*.txt",
+        "apps/*/package.json",
+        "apps/*/package-lock.json",
+        "apps/*/pnpm-lock.yaml"
+      ],
+      "required_paths": [
+        "docs/reference/dependency-governance.md"
+      ]
+    },
+    {
+      "id": "logging_policy",
+      "when": [
+        "scripts/dev_api.sh",
+        "scripts/dev_worker.sh",
+        "scripts/dev_mcp.sh",
+        "scripts/run_daily_digest.sh",
+        "scripts/run_failure_alerts.sh",
+        "apps/api/app/security.py"
+      ],
+      "required_paths": [
+        "docs/reference/logging.md"
+      ]
+    },
+    {
+      "id": "governance_render_outputs",
+      "when": [
+        ".github/workflows/ci.yml",
+        ".github/workflows/release-evidence-attest.yml",
+        ".github/workflows/build-ci-standard-image.yml",
+        "infra/config/strict_ci_contract.json",
+        "infra/config/self_hosted_runner_baseline.json",
+        "scripts/release/capture_release_manifest.sh",
+        "reports/releases/README.md",
+        "config/docs/*.json"
+      ],
+      "required_paths": [
+        "docs/generated/ci-topology.md",
+        "docs/generated/runner-baseline.md",
+        "docs/generated/release-evidence.md",
+        "README.md",
+        "docs/start-here.md",
+        "docs/runbook-local.md",
+        "docs/testing.md"
+      ]
+    }
+  ]
+}

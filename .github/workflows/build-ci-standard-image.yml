@@ -2,6 +2,13 @@ name: build-ci-standard-image
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - ".devcontainer/**"
+      - ".github/workflows/build-ci-standard-image.yml"
+      - "scripts/build_ci_standard_image.sh"
 
 permissions:
   contents: write
@@ -20,34 +27,22 @@ jobs:
         run: |
           set -euo pipefail
           workspace="${GITHUB_WORKSPACE:?}"
-          uid="$(id -u)"
-          gid="$(id -g)"
-          stale_paths=(
-            "$workspace/.runtime-cache"
-            "$workspace/.venv"
-            "$workspace/apps/web/node_modules"
-          )
-          if command -v sudo >/dev/null 2>&1; then
-            if sudo find "$workspace" -mindepth 1 -uid 0 -print -quit | grep -q .; then
-              echo "Detected root-owned residue under $workspace; normalizing ownership"
-              sudo chown -R "$uid:$gid" "$workspace"
-            fi
-            for path in "${stale_paths[@]}"; do
-              if sudo test -e "$path"; then
-                echo "Removing stale workspace path: $path"
-                sudo rm -rf "$path"
-              fi
-            done
+          helper="$workspace/scripts/normalize_self_hosted_pre_checkout.sh"
+          if [[ -x "$helper" ]]; then
+            bash "$helper" --workspace "$workspace" --include-runner-diag 1
           else
-            for path in "${stale_paths[@]}"; do
-              rm -rf "$path" || true
-            done
+            rm -rf "$workspace/.runtime-cache" "$workspace/.venv" "$workspace/apps/web/node_modules" || true
           fi
 
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           clean: true
+
+      - name: Enforce runner disk budget
+        run: |
+          bash scripts/runner_workspace_maintenance.sh --workspace "$GITHUB_WORKSPACE" --include-runner-diag 1
+          python3 scripts/check_runner_baseline.py --profile ci-heavy --workspace "$GITHUB_WORKSPACE"
 
       - name: Login to GHCR
         run: |

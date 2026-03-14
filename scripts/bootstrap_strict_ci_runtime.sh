@@ -69,6 +69,45 @@ EOF
   )
 }
 
+repair_linux_arm64_optional_native_web_packages() {
+  if ! is_linux_arm64; then
+    return 0
+  fi
+
+  local lightningcss_expected="apps/web/node_modules/lightningcss/lightningcss.linux-arm64-gnu.node"
+  local lightningcss_vendor="apps/web/node_modules/lightningcss-linux-arm64-gnu/lightningcss.linux-arm64-gnu.node"
+
+  if [[ ! -f "$lightningcss_expected" && -f "$lightningcss_vendor" ]]; then
+    mkdir -p "$(dirname "$lightningcss_expected")"
+    cp "$lightningcss_vendor" "$lightningcss_expected"
+  fi
+}
+
+remove_web_node_modules_tree() {
+  local target="apps/web/node_modules"
+  if [[ ! -e "$target" ]]; then
+    return 0
+  fi
+
+  local stale_target="apps/web/.node_modules-stale-$$"
+  rm -rf "$stale_target" 2>/dev/null || true
+  if mv "$target" "$stale_target" 2>/dev/null; then
+    target="$stale_target"
+  fi
+
+  chmod -R u+w "$target" 2>/dev/null || true
+  python3 - <<'PY' "$target"
+from pathlib import Path
+import shutil
+import sys
+
+target = Path(sys.argv[1])
+shutil.rmtree(target, ignore_errors=True)
+if target.exists():
+    raise SystemExit(f"failed to remove stale path: {target}")
+PY
+}
+
 if [[ "${STRICT_CI_BOOTSTRAP_LOAD_HELPERS_ONLY:-0}" != "1" ]]; then
   mkdir -p .runtime-cache
   export DATABASE_URL="${DATABASE_URL:-sqlite+pysqlite:///:memory:}"
@@ -94,10 +133,13 @@ if [[ "${STRICT_CI_BOOTSTRAP_LOAD_HELPERS_ONLY:-0}" != "1" ]]; then
     existing_web_hash="$(cat "$web_hash_file" 2>/dev/null || true)"
   fi
 
+  repair_linux_arm64_optional_native_web_packages
+
   if ! web_node_modules_ready || [[ "$existing_web_hash" != "$web_hash" ]]; then
-    rm -rf apps/web/node_modules
+    remove_web_node_modules_tree
     export npm_config_jobs="${npm_config_jobs:-1}"
     npm --prefix apps/web ci --no-audit --no-fund
+    repair_linux_arm64_optional_native_web_packages
     web_node_modules_ready
     printf '%s' "$web_hash" > "$web_hash_file"
   fi

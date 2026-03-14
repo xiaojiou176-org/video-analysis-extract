@@ -17,6 +17,7 @@ def test_quality_gate_preserves_required_existing_semantics() -> None:
     assert '"LIVE_SMOKE_REQUIRE_SECRETS": "1"' in script
     assert "uv run --with ruff ruff check apps/api apps/worker apps/mcp" in script
     assert "npm --prefix apps/web run test:coverage" in script
+    assert "python3 scripts/check_docs_governance.py" in script
     assert 'if [[ "${VD_IN_STANDARD_ENV:-0}" == "1" ]]; then' in script
     assert "host.docker.internal:5432/postgres" in script
     assert "host.docker.internal:7233" in script
