@@ -1,0 +1,74 @@
+{
+  "version": 1,
+  "internal_roots": [
+    "apps.",
+    "packages."
+  ],
+  "python_rules": [
+    {
+      "scope": "apps/api/app",
+      "allow_internal_prefixes": [
+        "apps.api.app.",
+        "packages."
+      ],
+      "reason": "API may depend only on its own implementation namespace and shared contract packages."
+    },
+    {
+      "scope": "apps/worker/worker",
+      "allow_internal_prefixes": [
+        "apps.worker.worker.",
+        "packages."
+      ],
+      "reason": "Worker may depend only on its own implementation namespace and shared contract packages."
+    },
+    {
+      "scope": "apps/mcp",
+      "allow_internal_prefixes": [
+        "apps.mcp.",
+        "packages."
+      ],
+      "reason": "MCP must stay inside its own namespace or shared contract packages; runtime crossings happen over HTTP/contracts."
+    },
+    {
+      "scope": "packages",
+      "allow_internal_prefixes": [
+        "packages."
+      ],
+      "reason": "Shared packages must stay pure and self-contained."
+    }
+  ],
+  "frontend_rules": [
+    {
+      "scope": "apps/web",
+      "allow_import_prefixes": [
+        "@/app/",
+        "@/components/",
+        "@/lib/",
+        "./",
+        "../"
+      ],
+      "forbid_substrings": [
+        "apps/api/",
+        "apps/worker/",
+        "apps/mcp/",
+        "packages/"
+      ],
+      "reason": "Web may import only web-local aliases/relative paths and must not reach into sibling apps or repo packages by file path."
+    }
+  ],
+  "package_purity_rules": [
+    {
+      "scope": "packages/shared-contracts",
+      "forbid_substrings": [
+        "httpx",
+        "requests",
+        "aiohttp",
+        "os.getenv",
+        "os.environ",
+        "subprocess",
+        "socket"
+      ],
+      "reason": "Shared contracts must remain schema-only and free of runtime side effects or environment coupling."
+    }
+  ]
+}

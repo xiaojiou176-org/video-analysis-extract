@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-eval "$(python3 "$ROOT_DIR/scripts/ci_contract.py" shell-exports)"
+eval "$(python3 "$ROOT_DIR/scripts/ci/contract.py" shell-exports)"
 STANDARD_ENV_IMAGE="${VD_STANDARD_ENV_IMAGE:-$STRICT_CI_STANDARD_IMAGE_REF}"
 STANDARD_ENV_DOCKERFILE="${VD_STANDARD_ENV_DOCKERFILE:-$ROOT_DIR/$STRICT_CI_STANDARD_IMAGE_DOCKERFILE}"
 STANDARD_ENV_WORKDIR="${VD_STANDARD_ENV_WORKDIR:-$STRICT_CI_STANDARD_IMAGE_WORKDIR}"
@@ -70,11 +70,18 @@ PY
 
 ensure_standard_env_registry_login() {
   local registry="ghcr.io"
-  local username="${GHCR_USERNAME:-}"
-  local token="${GHCR_TOKEN:-}"
+  local username="${GHCR_USERNAME:-${GITHUB_ACTOR:-}}"
+  local token="${GHCR_TOKEN:-${GITHUB_TOKEN:-${GH_TOKEN:-}}}"
 
   if [[ -z "$username" || -z "$token" ]]; then
-    return 0
+    if command -v gh >/dev/null 2>&1 && gh auth status -t >/dev/null 2>&1; then
+      username="${username:-$(gh api user -q .login 2>/dev/null || true)}"
+      token="${token:-$(gh auth token 2>/dev/null || true)}"
+    fi
+  fi
+
+  if [[ -z "$username" || -z "$token" ]]; then
+    return 1
   fi
 
   printf '%s' "$token" | docker login "$registry" -u "$username" --password-stdin >/dev/null
@@ -139,7 +146,7 @@ build_standard_env_image() {
     return 0
   fi
 
-  "$ROOT_DIR/scripts/build_ci_standard_image.sh" --load --tag local-debug
+  "$ROOT_DIR/scripts/ci/build_standard_image.sh" --load --tag local-debug
   STANDARD_ENV_IMAGE="${STRICT_CI_STANDARD_IMAGE_REPOSITORY}:local-debug"
 }
 
@@ -153,7 +160,10 @@ run_in_standard_env() {
 
   append_standard_env_git_mounts extra_mounts
   if ! docker image inspect "$STANDARD_ENV_IMAGE" >/dev/null 2>&1; then
-    ensure_standard_env_registry_login
+    if ! ensure_standard_env_registry_login; then
+      echo "[strict-standard-env] missing GHCR credentials; set GHCR_USERNAME/GHCR_TOKEN or authenticate gh CLI before pulling $STANDARD_ENV_IMAGE" >&2
+      return 1
+    fi
     if ! docker pull "$STANDARD_ENV_IMAGE" >/dev/null 2>&1; then
       echo "[strict-standard-env] failed to pull required image: $STANDARD_ENV_IMAGE" >&2
       return 1
@@ -181,4 +191,26 @@ run_in_standard_env() {
     -e UV_CACHE_DIR="${UV_CACHE_DIR:-$STRICT_CI_UV_CACHE_DIR}" \
     "$STANDARD_ENV_IMAGE" \
     "${command[@]}"
+}
+
+ensure_external_uv_project_environment() {
+  local root_dir="${1:-}"
+  local current_value="${UV_PROJECT_ENVIRONMENT:-}"
+  local fallback="${HOME}/.cache/video-digestor/project-venv"
+
+  if [[ -z "$root_dir" ]]; then
+    export UV_PROJECT_ENVIRONMENT="${current_value:-$fallback}"
+    return 0
+  fi
+
+  if [[ -z "$current_value" ]]; then
+    export UV_PROJECT_ENVIRONMENT="$fallback"
+    return 0
+  fi
+
+  case "$current_value" in
+    "$root_dir"/*|.venv|./.venv|.runtime-cache/*)
+      export UV_PROJECT_ENVIRONMENT="$fallback"
+      ;;
+  esac
 }

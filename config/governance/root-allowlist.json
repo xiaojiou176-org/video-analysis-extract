@@ -1,0 +1,236 @@
+{
+  "version": 1,
+  "entries": [
+    {
+      "path": ".devcontainer",
+      "kind": "iac",
+      "reason": "Standard development environment contract.",
+      "owner": "platform",
+      "mutable": false
+    },
+    {
+      "path": ".env",
+      "kind": "runtime-contract",
+      "reason": "Core local environment overlay file.",
+      "owner": "platform",
+      "mutable": true
+    },
+    {
+      "path": ".env.example",
+      "kind": "contract",
+      "reason": "Published environment variable template.",
+      "owner": "platform",
+      "mutable": false
+    },
+    {
+      "path": ".git",
+      "kind": "vcs",
+      "reason": "Repository metadata directory.",
+      "owner": "git",
+      "mutable": true
+    },
+    {
+      "path": ".githooks",
+      "kind": "governance",
+      "reason": "Git hook entrypoints for repository gates.",
+      "owner": "platform",
+      "mutable": false
+    },
+    {
+      "path": ".github",
+      "kind": "governance",
+      "reason": "CI/CD workflows and reusable actions.",
+      "owner": "platform",
+      "mutable": false
+    },
+    {
+      "path": ".gitignore",
+      "kind": "governance",
+      "reason": "Repository ignore policy.",
+      "owner": "platform",
+      "mutable": false
+    },
+    {
+      "path": ".gitleaks.toml",
+      "kind": "security",
+      "reason": "Secrets scanning configuration.",
+      "owner": "platform",
+      "mutable": false
+    },
+    {
+      "path": ".golangci.yml",
+      "kind": "tooling",
+      "reason": "Go lint configuration for helper surfaces.",
+      "owner": "platform",
+      "mutable": false
+    },
+    {
+      "path": ".markdownlint-cli2.jsonc",
+      "kind": "tooling",
+      "reason": "Markdown lint configuration.",
+      "owner": "platform",
+      "mutable": false
+    },
+    {
+      "path": ".pre-commit-config.yaml",
+      "kind": "governance",
+      "reason": "Pre-commit hook contract.",
+      "owner": "platform",
+      "mutable": false
+    },
+    {
+      "path": ".runtime-cache",
+      "kind": "runtime-output",
+      "reason": "Single repository-side runtime output root.",
+      "owner": "platform",
+      "mutable": true
+    },
+    {
+      "path": ".secrets.baseline",
+      "kind": "security",
+      "reason": "Detect-secrets baseline retained for auxiliary scans.",
+      "owner": "platform",
+      "mutable": false
+    },
+    {
+      "path": ".stylelintignore",
+      "kind": "tooling",
+      "reason": "Stylelint ignore contract.",
+      "owner": "platform",
+      "mutable": false
+    },
+    {
+      "path": ".stylelintrc.json",
+      "kind": "tooling",
+      "reason": "Stylelint configuration.",
+      "owner": "platform",
+      "mutable": false
+    },
+    {
+      "path": "AGENTS.md",
+      "kind": "governance",
+      "reason": "Repository AI execution constitution.",
+      "owner": "platform",
+      "mutable": false
+    },
+    {
+      "path": "apps",
+      "kind": "responsibility-layer",
+      "reason": "Runtime service and application entrypoints.",
+      "owner": "platform",
+      "mutable": false
+    },
+    {
+      "path": "biome.json",
+      "kind": "tooling",
+      "reason": "Biome configuration for frontend formatting and linting.",
+      "owner": "platform",
+      "mutable": false
+    },
+    {
+      "path": "CHANGELOG.md",
+      "kind": "docs",
+      "reason": "Project changelog.",
+      "owner": "platform",
+      "mutable": false
+    },
+    {
+      "path": "CLAUDE.md",
+      "kind": "governance",
+      "reason": "Companion AI operating contract.",
+      "owner": "platform",
+      "mutable": false
+    },
+    {
+      "path": "config",
+      "kind": "governance",
+      "reason": "Repository governance control planes and structured facts.",
+      "owner": "platform",
+      "mutable": false
+    },
+    {
+      "path": "data",
+      "kind": "data",
+      "reason": "Curated local data inputs and fixtures.",
+      "owner": "platform",
+      "mutable": false
+    },
+    {
+      "path": "docs",
+      "kind": "docs",
+      "reason": "Repository knowledge, runbooks, generated references, and governance contracts.",
+      "owner": "platform",
+      "mutable": false
+    },
+    {
+      "path": "env",
+      "kind": "config",
+      "reason": "Profile overlays and environment templates.",
+      "owner": "platform",
+      "mutable": false
+    },
+    {
+      "path": "ENVIRONMENT.md",
+      "kind": "docs",
+      "reason": "Environment contract explanation.",
+      "owner": "platform",
+      "mutable": false
+    },
+    {
+      "path": "infra",
+      "kind": "responsibility-layer",
+      "reason": "Infrastructure configuration, compose files, and migrations.",
+      "owner": "platform",
+      "mutable": false
+    },
+    {
+      "path": "packages",
+      "kind": "responsibility-layer",
+      "reason": "Shared contracts and pure shared artifacts.",
+      "owner": "platform",
+      "mutable": false
+    },
+    {
+      "path": "pyproject.toml",
+      "kind": "contract",
+      "reason": "Python dependency and toolchain contract.",
+      "owner": "platform",
+      "mutable": false
+    },
+    {
+      "path": "README.md",
+      "kind": "docs",
+      "reason": "Repository front door.",
+      "owner": "platform",
+      "mutable": false
+    },
+    {
+      "path": "reports",
+      "kind": "responsibility-layer",
+      "reason": "Published long-lived reports and release-readiness artifacts.",
+      "owner": "platform",
+      "mutable": false
+    },
+    {
+      "path": "scripts",
+      "kind": "responsibility-layer",
+      "reason": "Repository execution entrypoints grouped by governance, runtime, CI, vendor, release, and deploy responsibilities.",
+      "owner": "platform",
+      "mutable": false
+    },
+    {
+      "path": "templates",
+      "kind": "docs",
+      "reason": "Shared document and output templates.",
+      "owner": "platform",
+      "mutable": false
+    },
+    {
+      "path": "uv.lock",
+      "kind": "contract",
+      "reason": "Locked Python dependency graph.",
+      "owner": "platform",
+      "mutable": false
+    }
+  ]
+}

@@ -93,9 +93,9 @@
       "secret": false,
       "default": "http://127.0.0.1:8080",
       "consumer": [
-        "scripts/deploy_reader_stack.sh",
-        "scripts/sync_ai_feed_to_miniflux.py",
-        "scripts/smoke_full_stack.sh"
+        "scripts/deploy/reader_stack.sh",
+        "scripts/runtime/sync_ai_feed_to_miniflux.py",
+        "scripts/ci/smoke_full_stack.sh"
       ],
       "description": "Miniflux base URL."
     },

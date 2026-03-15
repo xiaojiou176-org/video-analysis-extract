@@ -15,7 +15,7 @@ def _repo_root() -> Path:
 
 
 def _load_module():
-    module_path = _repo_root() / "scripts" / "check_ci_workflow_strictness.py"
+    module_path = _repo_root() / "scripts" / "governance" / "check_ci_workflow_strictness.py"
     spec = importlib.util.spec_from_file_location("check_ci_workflow_strictness", module_path)
     assert spec is not None
     assert spec.loader is not None
@@ -105,7 +105,7 @@ def test_global_rules_hosted_jobs_can_fail_without_continue_on_error() -> None:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - run: python3 scripts/check_required_ci_secrets.py --required GEMINI_API_KEY
+      - run: python3 scripts/governance/check_required_ci_secrets.py --required GEMINI_API_KEY
 """
     failures: list[str] = []
 
@@ -244,7 +244,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - run: python3 scripts/check_required_ci_secrets.py --required GEMINI_API_KEY
+      - run: python3 scripts/governance/check_required_ci_secrets.py --required GEMINI_API_KEY
 """
     failures: list[str] = []
 
@@ -319,7 +319,7 @@ on:
   pull_request:
 env:
   CI_CACHE_ROOT: ${{ runner.temp }}/ci-cache
-  PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.runtime-cache/ms-playwright
+  PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.runtime-cache/temp/ms-playwright
 jobs:
       lint:
         runs-on: ubuntu-latest
@@ -332,12 +332,12 @@ jobs:
       - name: Cache Playwright browsers
         uses: actions/cache@1234567890abcdef1234567890abcdef12345678
         with:
-          path: ${{ github.workspace }}/.runtime-cache/ms-playwright
+          path: ${{ github.workspace }}/.runtime-cache/temp/ms-playwright
   required-ci-secrets:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - run: python3 scripts/check_required_ci_secrets.py --required GEMINI_API_KEY
+      - run: python3 scripts/governance/check_required_ci_secrets.py --required GEMINI_API_KEY
 """
     failures: list[str] = []
 
@@ -348,7 +348,7 @@ jobs:
         in failures
     )
     assert (
-        "ci.yml:17: actions/cache path `${{ github.workspace }}/.runtime-cache/ms-playwright` must resolve under runner.temp/CI_CACHE_ROOT"
+        "ci.yml:17: actions/cache path `${{ github.workspace }}/.runtime-cache/temp/ms-playwright` must resolve under runner.temp/CI_CACHE_ROOT"
         in failures
     )
 
@@ -375,7 +375,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - run: python3 scripts/check_required_ci_secrets.py --required GEMINI_API_KEY
+      - run: python3 scripts/governance/check_required_ci_secrets.py --required GEMINI_API_KEY
 """
     failures: list[str] = []
 
@@ -400,7 +400,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - run: python3 scripts/check_required_ci_secrets.py --required GEMINI_API_KEY
+      - run: python3 scripts/governance/check_required_ci_secrets.py --required GEMINI_API_KEY
 """
     failures: list[str] = []
 
@@ -425,7 +425,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - run: python3 scripts/check_required_ci_secrets.py --required GEMINI_API_KEY
+      - run: python3 scripts/governance/check_required_ci_secrets.py --required GEMINI_API_KEY
 """
     failures: list[str] = []
 
@@ -723,7 +723,7 @@ def test_python_tests_pipeline_smoke_syncs_dependencies_before_pytest() -> None:
 
 
 def test_ci_python_tests_script_preserves_backend_coverage_and_junit_contract() -> None:
-    script = (_repo_root() / "scripts" / "ci_python_tests.sh").read_text(encoding="utf-8")
+    script = (_repo_root() / "scripts" / "ci" / "python_tests.sh").read_text(encoding="utf-8")
 
     assert "mkdir -p .runtime-cache" in script
     assert "uv sync --frozen --extra dev --extra e2e" in script
@@ -731,12 +731,21 @@ def test_ci_python_tests_script_preserves_backend_coverage_and_junit_contract() 
         "uv run pytest apps/worker/tests apps/api/tests apps/mcp/tests -q -rA -n 2"
     )
     assert "uv run pytest apps/worker/tests apps/api/tests apps/mcp/tests -q -rA -n 2" in script
-    assert "--cov-report=xml:.runtime-cache/python-coverage.xml" in script
-    assert "--junitxml=.runtime-cache/python-tests-junit.xml" in script
-    assert ".runtime-cache/python-tests.log" in script
-    assert "python-coverage-worker-core.log" in script
-    assert "python-coverage-api-core.log" in script
+    assert "--cov-report=xml:.runtime-cache/reports/python/python-coverage.xml" in script
+    assert "--junitxml=.runtime-cache/reports/python/python-tests-junit.xml" in script
+    assert ".runtime-cache/logs/tests/python-tests.log" in script
+    assert ".runtime-cache/logs/tests/python-coverage-worker-core.log" in script
+    assert ".runtime-cache/logs/tests/python-coverage-api-core.log" in script
     assert "python skip guard passed" in script
+
+
+def test_bootstrap_strict_runtime_uses_run_scoped_hash_file() -> None:
+    script = (_repo_root() / "scripts" / "ci" / "bootstrap_strict_ci_runtime.sh").read_text(
+        encoding="utf-8"
+    )
+
+    assert "mkdir -p .runtime-cache/run/strict-ci" in script
+    assert 'web_hash_file=".runtime-cache/run/strict-ci/web-${platform_id}.sha256"' in script
 
 
 def test_api_real_smoke_job_calls_repo_script_inside_strict_ci_entry() -> None:
@@ -751,15 +760,15 @@ def test_web_e2e_job_calls_repo_script_inside_strict_ci_entry() -> None:
     module = _load_module()
     workflow = (_repo_root() / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
     web_e2e_block = dict(module._job_blocks(workflow))["web-e2e"]
-    script = (_repo_root() / "scripts" / "ci_web_e2e.sh").read_text(encoding="utf-8")
-    strict_entry = (_repo_root() / "scripts" / "strict_ci_entry.sh").read_text(encoding="utf-8")
+    script = (_repo_root() / "scripts" / "ci" / "web_e2e.sh").read_text(encoding="utf-8")
+    strict_entry = (_repo_root() / "scripts" / "ci" / "strict_entry.sh").read_text(encoding="utf-8")
 
     assert "./scripts/strict_ci_entry.sh --mode web-e2e" in web_e2e_block
-    assert "./scripts/ci_web_e2e.sh" in strict_entry
+    assert "./scripts/ci/web_e2e.sh" in strict_entry
     assert 'DATABASE_URL="${DATABASE_URL:-}"' in script
     assert 'db_url="postgresql+psycopg://' not in script
     assert "ensure_node_toolchain" in script
-    assert 'source "$ROOT_DIR/scripts/bootstrap_strict_ci_runtime.sh"' in script
+    assert 'source "$ROOT_DIR/scripts/ci/bootstrap_strict_ci_runtime.sh"' in script
     assert "install_web_npm_wrapper" not in script
     assert 'wait_for_tcp "$WEB_E2E_TEMPORAL_PORT" "temporal web-e2e" 60' in script
     assert script.index("start_temporal") < script.index("start_api")
@@ -769,6 +778,10 @@ def test_web_e2e_job_calls_repo_script_inside_strict_ci_entry() -> None:
     assert "TASK_QUEUE_TYPE_ACTIVITY" in script
     assert "web-e2e worker pollers detected on task queue video-analysis-worker" in script
     assert "no task queue pollers within 30s" in script
+    assert ".runtime-cache/logs/tests/web-e2e-api.log" in script
+    assert ".runtime-cache/logs/tests/web-e2e-worker.log" in script
+    assert ".runtime-cache/logs/tests/web-e2e-temporal.log" in script
+    assert ".runtime-cache/reports/tests/web-e2e-junit-" in script
 
 
 def test_quality_gate_and_live_smoke_jobs_use_strict_ci_entry_and_contract_container() -> None:

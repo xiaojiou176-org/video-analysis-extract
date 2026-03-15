@@ -8,7 +8,9 @@ def _repo_root() -> Path:
 
 
 def test_quality_gate_uses_pre_push_base_resolver_without_head_tilde_fallback() -> None:
-    content = (_repo_root() / "scripts" / "quality_gate.sh").read_text(encoding="utf-8")
+    content = (_repo_root() / "scripts" / "governance" / "quality_gate.sh").read_text(
+        encoding="utf-8"
+    )
 
     assert "resolve_pre_push_diff_base()" in content
     assert "fallback:HEAD~1..HEAD" not in content
@@ -19,7 +21,9 @@ def test_quality_gate_uses_pre_push_base_resolver_without_head_tilde_fallback() 
 
 
 def test_quality_gate_contract_diff_and_design_token_share_base_resolver() -> None:
-    content = (_repo_root() / "scripts" / "quality_gate.sh").read_text(encoding="utf-8")
+    content = (_repo_root() / "scripts" / "governance" / "quality_gate.sh").read_text(
+        encoding="utf-8"
+    )
 
     assert "DIFF_BASE_SHA=" in content
     assert "if ! resolve_pre_push_diff_base; then" in content
@@ -27,7 +31,7 @@ def test_quality_gate_contract_diff_and_design_token_share_base_resolver() -> No
 
 
 def test_doc_drift_push_base_resolver_avoids_head_tilde_fallback() -> None:
-    content = (_repo_root() / "scripts" / "ci_or_local_gate_doc_drift.sh").read_text(
+    content = (_repo_root() / "scripts" / "governance" / "ci_or_local_gate_doc_drift.sh").read_text(
         encoding="utf-8"
     )
 

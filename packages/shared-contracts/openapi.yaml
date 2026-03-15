@@ -70,6 +70,23 @@ paths:
         '404':
           description: Not found
 
+  /api/v1/subscriptions/batch-update-category:
+    post:
+      operationId: batchUpdateSubscriptionCategory
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Batch category update result
+          content:
+            application/json:
+              schema:
+                type: object
+
   /api/v1/ingest/poll:
     post:
       operationId: pollIngest
@@ -357,6 +374,150 @@ paths:
           description: Bad request
         '503':
           description: Notification provider unavailable
+
+  /api/v1/notifications/category/send:
+    post:
+      operationId: sendCategoryNotification
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Category notification result
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /api/v1/feed/digests:
+    get:
+      operationId: getDigestFeed
+      parameters:
+        - in: query
+          name: source
+          schema:
+            $ref: '#/components/schemas/Platform'
+        - in: query
+          name: category
+          schema:
+            type: string
+        - in: query
+          name: subscription_id
+          schema:
+            type: string
+        - in: query
+          name: limit
+          schema:
+            type: integer
+        - in: query
+          name: cursor
+          schema:
+            type: string
+        - in: query
+          name: since
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Digest feed result
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /api/v1/ui-audit/run:
+    post:
+      operationId: runUiAudit
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: UI audit run started
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /api/v1/ui-audit/{run_id}:
+    get:
+      operationId: getUiAuditRun
+      parameters:
+        - in: path
+          name: run_id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: UI audit run detail
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /api/v1/ui-audit/{run_id}/findings:
+    get:
+      operationId: listUiAuditFindings
+      parameters:
+        - in: path
+          name: run_id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: UI audit findings
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /api/v1/ui-audit/{run_id}/artifact:
+    get:
+      operationId: getUiAuditArtifact
+      parameters:
+        - in: path
+          name: run_id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: UI audit artifact
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /api/v1/ui-audit/{run_id}/autofix:
+    post:
+      operationId: runUiAuditAutofix
+      parameters:
+        - in: path
+          name: run_id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: UI audit autofix plan
+          content:
+            application/json:
+              schema:
+                type: object
 
 components:
   schemas:

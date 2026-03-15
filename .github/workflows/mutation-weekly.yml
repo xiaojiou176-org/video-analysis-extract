@@ -23,16 +23,7 @@ jobs:
     timeout-minutes: 120
     steps:
       - name: Normalize self-hosted workspace (pre-checkout)
-        shell: bash
-        run: |
-          set -euo pipefail
-          workspace="${GITHUB_WORKSPACE:?}"
-          helper="$workspace/scripts/normalize_self_hosted_pre_checkout.sh"
-          if [[ -x "$helper" ]]; then
-            bash "$helper" --workspace "$workspace"
-          else
-            rm -rf "$workspace/.runtime-cache" "$workspace/.venv" "$workspace/apps/web/node_modules" || true
-          fi
+        uses: ./.github/actions/normalize-self-hosted-workspace
 
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -79,7 +70,8 @@ jobs:
 
           text = "\n".join(lines)
           print(text)
-          Path("mutants/mutation-targets.txt").write_text(text + "\n", encoding="utf-8")
+          Path(".runtime-cache/reports/mutation").mkdir(parents=True, exist_ok=True)
+          Path(".runtime-cache/reports/mutation/mutation-targets.txt").write_text(text + "\n", encoding="utf-8")
           PY
 
       - name: Run mutmut and export stats
@@ -87,9 +79,8 @@ jobs:
           DATABASE_URL: "sqlite+pysqlite:///:memory:"
           PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/apps/worker
         run: |
-          rm -rf mutants
-          uv run --extra dev --with mutmut mutmut run
-          uv run --extra dev --with mutmut mutmut export-cicd-stats
+          mkdir -p .runtime-cache/reports/mutation
+          bash scripts/ci/run_mutmut.sh
 
       - name: Enforce weekly mutation quality gates
         env:
@@ -97,51 +88,11 @@ jobs:
           MUTATION_MIN_EFFECTIVE_RATIO: "0.27"
           MUTATION_MAX_NO_TESTS_RATIO: "0.72"
         run: |
-          python3 - <<'PY'
-          import json
-          import os
-          from pathlib import Path
-
-          stats_path = Path('mutants/mutmut-cicd-stats.json')
-          if not stats_path.exists():
-              raise SystemExit('mutation-weekly failed: mutants/mutmut-cicd-stats.json not found')
-
-          stats = json.loads(stats_path.read_text(encoding='utf-8'))
-          killed = int(stats.get('killed', 0))
-          survived = int(stats.get('survived', 0))
-          no_tests = int(stats.get('no_tests', stats.get('skipped', 0)))
-          total = int(stats.get('total', killed + survived))
-          effective = killed + survived
-          threshold = float(os.environ.get('MUTATION_MIN_SCORE', '0.64'))
-          min_effective_ratio = float(os.environ.get('MUTATION_MIN_EFFECTIVE_RATIO', '0.27'))
-          max_no_tests_ratio = float(os.environ.get('MUTATION_MAX_NO_TESTS_RATIO', '0.72'))
-          score = killed / effective if effective > 0 else 0.0
-          effective_ratio = effective / total if total > 0 else 0.0
-          no_tests_ratio = no_tests / total if total > 0 else 1.0
-
-          print(
-              f'mutation stats: killed={killed}, survived={survived}, '
-              f'effective={effective}, total={total}, no_tests={no_tests}, '
-              f'score={score:.4f}, threshold={threshold:.4f}, '
-              f'effective_ratio={effective_ratio:.4f}, min_effective_ratio={min_effective_ratio:.4f}, '
-              f'no_tests_ratio={no_tests_ratio:.4f}, max_no_tests_ratio={max_no_tests_ratio:.4f}'
-          )
-
-          if effective <= 0:
-              raise SystemExit('mutation-weekly failed: no effective mutants (killed+survived=0)')
-          if score < threshold:
-              raise SystemExit(
-                  f'mutation-weekly failed: score {score:.4f} < threshold {threshold:.4f}'
-              )
-          if effective_ratio < min_effective_ratio:
-              raise SystemExit(
-                  f'mutation-weekly failed: effective_ratio {effective_ratio:.4f} < threshold {min_effective_ratio:.4f}'
-              )
-          if no_tests_ratio > max_no_tests_ratio:
-              raise SystemExit(
-                  f'mutation-weekly failed: no_tests_ratio {no_tests_ratio:.4f} > ceiling {max_no_tests_ratio:.4f}'
-              )
-          PY
+          python3 scripts/governance/check_mutation_stats.py \
+            .runtime-cache/reports/mutation/mutmut-cicd-stats.json \
+            "$MUTATION_MIN_SCORE" \
+            "$MUTATION_MIN_EFFECTIVE_RATIO" \
+            "$MUTATION_MAX_NO_TESTS_RATIO"
 
       - name: Upload mutation stats artifact
         if: always()
@@ -149,6 +100,6 @@ jobs:
         with:
           name: mutmut-cicd-stats
           path: |
-            mutants/mutmut-cicd-stats.json
-            mutants/mutation-targets.txt
+            .runtime-cache/reports/mutation/mutmut-cicd-stats.json
+            .runtime-cache/reports/mutation/mutation-targets.txt
           if-no-files-found: warn

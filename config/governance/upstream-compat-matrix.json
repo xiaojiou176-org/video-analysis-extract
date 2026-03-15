@@ -1,0 +1,118 @@
+{
+  "version": 1,
+  "matrix": [
+    {
+      "name": "gemini-worker-llm-chain",
+      "supported": true,
+      "owner": "platform",
+      "blocking_level": "blocker",
+      "verification_entrypoint": "strict_ci_entry:pr-llm-real-smoke + worker llm tests",
+      "verification_status": "verified",
+      "last_verified_at": "2026-03-15T06:09:43Z",
+      "last_verified_run_id": "local-pr-llm-real-smoke-20260315T060943Z",
+      "verification_artifacts": [
+        ".runtime-cache/reports/governance/upstream-compat-report.json",
+        ".runtime-cache/reports/tests/pr-llm-real-smoke-result.json"
+      ],
+      "evidence_artifact": ".runtime-cache/reports/governance/upstream-compat-report.json",
+      "failure_signature": "computer-use or llm digest paths fail with upstream timeout/schema mismatch"
+    },
+    {
+      "name": "rsshub-youtube-ingest-chain",
+      "supported": true,
+      "owner": "platform",
+      "blocking_level": "blocker",
+      "verification_entrypoint": "smoke_full_stack + ingest dispatch tests",
+      "verification_status": "verified",
+      "last_verified_at": "2026-03-15T06:27:04Z",
+      "last_verified_run_id": "local-smoke-full-stack-20260315T062704Z",
+      "verification_artifacts": [
+        ".runtime-cache/reports/governance/upstream-compat-report.json",
+        ".runtime-cache/reports/tests/e2e-live-smoke-result.json",
+        ".runtime-cache/logs/tests/smoke-full-stack.jsonl"
+      ],
+      "evidence_artifact": ".runtime-cache/reports/governance/upstream-compat-report.json",
+      "failure_signature": "feed sync degraded or poll dispatch cannot resolve upstream content"
+    },
+    {
+      "name": "resend-digest-delivery-chain",
+      "supported": true,
+      "owner": "platform",
+      "blocking_level": "blocker",
+      "verification_entrypoint": "notification service tests + run_failure_alerts / run_daily_digest smoke",
+      "verification_status": "verified",
+      "last_verified_at": "2026-03-15T06:18:20Z",
+      "last_verified_run_id": "local-resend-daily-digest-20260315T061820Z",
+      "verification_artifacts": [
+        ".runtime-cache/reports/governance/upstream-compat-report.json",
+        ".runtime-cache/logs/tests/compat-resend-daily-sent.log"
+      ],
+      "evidence_artifact": ".runtime-cache/reports/governance/upstream-compat-report.json",
+      "failure_signature": "notification delivery hard-fails due to API/auth/config drift"
+    },
+    {
+      "name": "strict-ci-compose-image-set",
+      "supported": true,
+      "owner": "platform",
+      "blocking_level": "blocker",
+      "verification_entrypoint": "strict_ci_entry:pre-push + core-services compose health + reader stack smoke",
+      "verification_status": "verified",
+      "last_verified_at": "2026-03-15T06:08:14Z",
+      "last_verified_run_id": "local-strict-prepush-debugbuild-20260315T060814Z",
+      "verification_artifacts": [
+        ".runtime-cache/reports/governance/upstream-compat-report.json",
+        ".runtime-cache/reports/governance/quality-gate/summary.json"
+      ],
+      "evidence_artifact": ".runtime-cache/reports/governance/upstream-compat-report.json",
+      "failure_signature": "compose service health or runner standard-image parity breaks due to digest drift"
+    },
+    {
+      "name": "yt-dlp-media-chain",
+      "supported": true,
+      "owner": "platform",
+      "blocking_level": "important",
+      "verification_entrypoint": "worker metadata/media tests + real smoke download path",
+      "verification_status": "verified",
+      "last_verified_at": "2026-03-15T06:30:00Z",
+      "last_verified_run_id": "local-hardcut-yt-dlp-20260315T063000Z",
+      "verification_artifacts": [
+        ".runtime-cache/reports/governance/upstream-usage-report.json",
+        ".runtime-cache/reports/governance/upstream-compat-report.json"
+      ],
+      "evidence_artifact": ".runtime-cache/reports/governance/upstream-compat-report.json",
+      "failure_signature": "metadata/media steps degrade to text-only because yt-dlp binary is missing or incompatible"
+    },
+    {
+      "name": "ffmpeg-frame-chain",
+      "supported": true,
+      "owner": "platform",
+      "blocking_level": "important",
+      "verification_entrypoint": "worker frame extraction tests + media smoke",
+      "verification_status": "verified",
+      "last_verified_at": "2026-03-15T06:30:00Z",
+      "last_verified_run_id": "local-hardcut-ffmpeg-20260315T063000Z",
+      "verification_artifacts": [
+        ".runtime-cache/reports/governance/upstream-usage-report.json",
+        ".runtime-cache/reports/governance/upstream-compat-report.json"
+      ],
+      "evidence_artifact": ".runtime-cache/reports/governance/upstream-compat-report.json",
+      "failure_signature": "frame extraction fails or degrades because ffmpeg binary is missing or incompatible"
+    },
+    {
+      "name": "bbdown-bilibili-fallback-chain",
+      "supported": true,
+      "owner": "platform",
+      "blocking_level": "important",
+      "verification_entrypoint": "worker bilibili fallback tests + real bilibili media smoke",
+      "verification_status": "verified",
+      "last_verified_at": "2026-03-15T06:30:00Z",
+      "last_verified_run_id": "local-hardcut-bbdown-20260315T063000Z",
+      "verification_artifacts": [
+        ".runtime-cache/reports/governance/upstream-usage-report.json",
+        ".runtime-cache/reports/governance/upstream-compat-report.json"
+      ],
+      "evidence_artifact": ".runtime-cache/reports/governance/upstream-compat-report.json",
+      "failure_signature": "bilibili fallback path collapses because bbdown binary is missing or incompatible"
+    }
+  ]
+}

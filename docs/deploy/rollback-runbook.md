@@ -56,7 +56,7 @@ git checkout <N-1-tag>
 
 ```bash
 uv sync --frozen
-npm --prefix apps/web ci
+bash scripts/ci/prepare_web_runtime.sh
 npm --prefix apps/web run build
 sudo systemctl restart vd-api vd-worker vd-web
 ```

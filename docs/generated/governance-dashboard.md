@@ -23,6 +23,9 @@ This page is generated from the docs control plane and CI contracts.
 
 - ci-kpi status: `missing`
 - ci-kpi note: ci-kpi summary not generated yet
+- active upstreams: `19`
+- upstream templates: `1`
+- compat rows: `7`
 
 ## Entry Links
 

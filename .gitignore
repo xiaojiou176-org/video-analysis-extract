@@ -44,6 +44,9 @@ env/profiles/*.local.env
 .idea/
 .vscode/
 .codex/
+.claude/
+.opencode/
+.cursorrules
 Folo/
 
 # Personal local notes

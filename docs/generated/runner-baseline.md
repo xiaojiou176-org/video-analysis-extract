@@ -11,9 +11,6 @@ Generated from `infra/config/self_hosted_runner_baseline.json`.
 - commands: `bash`, `python3`, `git`, `docker`, `rg`
 - purge paths:
   - `.runtime-cache`
-  - `.venv`
-  - `apps/web/node_modules`
-  - `apps/web/.next-e2e-*`
   - `mutants/`
   - `/tmp/video-digestor-strict-ci`
 
@@ -24,8 +21,6 @@ Generated from `infra/config/self_hosted_runner_baseline.json`.
 - commands: `bash`, `python3`, `git`, `docker`, `gh`, `gcloud`, `jq`, `rg`
 - purge paths:
   - `.runtime-cache`
-  - `.venv`
-  - `apps/web/node_modules`
   - `_diag/pages/*`
 
 ## `ci-heavy`
@@ -35,10 +30,13 @@ Generated from `infra/config/self_hosted_runner_baseline.json`.
 - commands: `bash`, `python3`, `git`, `rg`
 - purge paths:
   - `.runtime-cache`
-  - `.venv`
-  - `apps/web/node_modules`
-  - `apps/web/.next-e2e-*`
   - `mutants/`
   - `/tmp/video-digestor-strict-ci`
   - `/tmp/video-digestor-*`
   - `/tmp/temporal-cli-*`
+
+## Governance Hygiene Hooks
+
+- runtime output root enforced by governance: `.runtime-cache`
+- root cleanliness is re-checked by `check_root_dirtiness_after_tasks.py` during monthly governance audit
+- monthly governance audit reuses self-hosted pre-checkout normalization before checkout

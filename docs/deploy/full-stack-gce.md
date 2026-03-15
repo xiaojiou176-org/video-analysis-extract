@@ -57,7 +57,7 @@ gcloud compute instances create vd-server \
 可选：使用仓库脚本重建实例（高风险操作默认受保护）：
 
 ```bash
-./scripts/recreate_gce_instance.sh \
+./scripts/deploy/recreate_gce_instance.sh \
   --project YOUR_PROJECT \
   --zone us-west1-b \
   --instance vd-prod \
@@ -71,7 +71,7 @@ gcloud compute instances create vd-server \
 - 若实例已存在但未传 `--force-delete-instance`，脚本会拒绝删除并退出。
 - 若远端 `~/app` 已存在但未传 `--force-replace-app-dir`，脚本会拒绝覆盖并退出。
 - 默认会使用最小权限实例 scopes（不再默认 `cloud-platform`）。
-- 如需兼容旧行为，可显式传入：
+- 如需显式启用全权限模式，可传入：
   `--scopes https://www.googleapis.com/auth/cloud-platform`
 
 ---
@@ -140,7 +140,7 @@ cd /opt/vd/repo
 uv sync --frozen --extra dev
 
 # 安装 Node 依赖 & 构建 Next.js
-npm --prefix apps/web ci
+bash scripts/ci/prepare_web_runtime.sh
 npm --prefix apps/web run build
 ```
 
@@ -176,7 +176,7 @@ export RESEND_API_KEY='YOUR_RESEND_KEY'
 export RESEND_FROM_EMAIL='digest@YOUR_DOMAIN'
 
 # RSSHub fallback 节点（运行 probe 脚本自动写入）
-# python3 scripts/probe_rsshub_health.py --write-env --env-file /opt/vd/.env
+# python3 scripts/runtime/probe_rsshub_health.py --write-env --env-file /opt/vd/.env
 ```
 
 ---
@@ -275,7 +275,7 @@ sudo journalctl -u vd-web    -f --no-pager
 cd /opt/vd/repo
 git pull
 uv sync --frozen
-npm --prefix apps/web ci && npm --prefix apps/web run build
+bash scripts/ci/prepare_web_runtime.sh && eval "$(bash scripts/ci/prepare_web_runtime.sh --shell-exports)" && npm --prefix "$WEB_RUNTIME_WEB_DIR" run build
 sudo systemctl restart vd-api vd-worker vd-web
 
 # 执行新迁移
@@ -290,7 +290,7 @@ sudo docker compose -f /opt/vd/repo/infra/compose/core-services.compose.yml ps
 
 # 刷新 RSSHub fallback 节点排名
 source /opt/vd/.env
-python3 /opt/vd/repo/scripts/probe_rsshub_health.py --write-env --env-file /opt/vd/.env
+python3 /opt/vd/repo/scripts/runtime/probe_rsshub_health.py --write-env --env-file /opt/vd/.env
 sudo systemctl restart vd-worker
 ```
 

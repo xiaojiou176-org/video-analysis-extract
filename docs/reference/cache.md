@@ -4,12 +4,12 @@
 
 ## CI Tool Cache Governance
 
-- Repo 内允许：`.runtime-cache/` 仅用于日志、Junit/XML、coverage、诊断 JSON、artifact staging 等一次性运行产物。
+- Repo 内允许：`.runtime-cache/` 是唯一合法 repo-side 运行时出口，用于日志、Junit/XML、coverage、诊断 JSON、artifact staging 等一次性运行产物。
 - 本地严格验收新增产物：
-  - `.runtime-cache/api-real-smoke-local.log`
-  - `.runtime-cache/e2e-live-smoke-result.json`
-  - `.runtime-cache/full-stack/` 下的运行时 PID/状态文件
-- Repo 内禁止：pre-commit 环境、uv/pip/npm 下载缓存、Playwright 浏览器二进制、其他可复用工具缓存。
+  - `.runtime-cache/logs/tests/api-real-smoke-local.log`
+  - `.runtime-cache/reports/tests/e2e-live-smoke-result.json`
+  - `.runtime-cache/run/full-stack/` 下的运行时 PID/状态文件
+- Repo 内禁止：pre-commit 环境、uv/pip/npm 下载缓存、Playwright 浏览器二进制、其他可复用工具缓存，以及 `apps/web/node_modules`、`apps/web/.next`、`apps/web/.next-e2e-*` 这类直接停留在源码树中的 Web 机器态。
 - Self-hosted CI 必须使用 `runner.temp` 作为工具缓存根目录，并通过统一变量收口：
   - `CI_CACHE_ROOT=${{ runner.temp }}/ci-cache`
   - `PRE_COMMIT_HOME=${{ runner.temp }}/ci-cache/pre-commit`
@@ -21,7 +21,7 @@
   - `.runtime-cache/**` 作为工具缓存根
   - `.cache/**`
   - `cache/**`
-  - `.venv` 作为 `actions/cache` 的持久缓存路径
+  - repo 内任意 Python venv / browser cache / npm 下载缓存 路径
 - 所有 workflow 中的 `actions/checkout` 必须显式声明 `with.clean: true`，避免 shared self-hosted runner 复用旧工作区时把脏残留带进新 job。
 
 ### 1) 业务幂等去重（PostgreSQL）
@@ -108,7 +108,7 @@
 通过常驻 ops 启动脚本接入 cleanup（推荐）：
 
 ```bash
-./scripts/start_ops_workflows.sh \
+./scripts/runtime/start_ops_workflows.sh \
   --cleanup-interval-hours 6 \
   --cleanup-older-than-hours 24
 ```
@@ -131,10 +131,10 @@
 ## Doc-Drift Enforcement
 
 - 触发文件：
-  - `scripts/start_ops_workflows.sh`
+  - `scripts/runtime/start_ops_workflows.sh`
   - `scripts/cleanup_workspace.sh`
 - 触发后必须同步更新：`docs/reference/cache.md`
-- 校验脚本：`scripts/ci_or_local_gate_doc_drift.sh`
+- 校验脚本：`scripts/governance/ci_or_local_gate_doc_drift.sh`
 
 ## Delivery Retry Claim 窗口说明（2026-03）
 
@@ -156,8 +156,14 @@
 
 ## Full-stack / Smoke 运行时缓存边界（2026-03）
 
-- `scripts/smoke_full_stack.sh` 与 `scripts/e2e_live_smoke.sh` 产生的 `.runtime-cache/*` 文件属于一次性诊断产物，不应被当作长期缓存命中来源。
-- `scripts/api_real_smoke_local.sh` 创建的隔离 smoke 数据库会在退出时删除；它依赖 `.runtime-cache/api-real-smoke-local-state.sqlite3` 作为临时状态文件，不进入长期保留策略。
+- `scripts/ci/smoke_full_stack.sh` 与 `scripts/ci/e2e_live_smoke.sh` 产生的 `.runtime-cache/*` 文件属于一次性诊断产物，不应被当作长期缓存命中来源。
+- `scripts/ci/api_real_smoke_local.sh` 创建的隔离 smoke 数据库会在退出时删除；它依赖 `.runtime-cache/run/api-real-smoke-local-state.sqlite3` 作为临时状态文件，不进入长期保留策略。
+- Web 依赖工作区与 `.next*` 临时产物统一进入 `.runtime-cache/temp/web-runtime/`，由 `scripts/ci/prepare_web_runtime.sh` 重建与清场。
+- smoke / e2e / live-smoke / pr-llm-real-smoke 的输出现在按测试语义分舱：
+  - 日志：`.runtime-cache/logs/tests/`
+  - JUnit/diagnostics：`.runtime-cache/reports/tests/`
+  - 浏览器证据：`.runtime-cache/evidence/tests/`
+- 终局治理分舱固定为：`.runtime-cache/run/`、`.runtime-cache/logs/`、`.runtime-cache/reports/`、`.runtime-cache/evidence/`、`.runtime-cache/temp/`。
 
 
 <!-- doc-sync: api/worker reliability + auth guard update (2026-03-03) -->

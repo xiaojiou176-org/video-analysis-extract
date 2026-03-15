@@ -31,8 +31,8 @@
       "secret": true,
       "default": null,
       "consumer": [
-        "scripts/deploy_reader_stack.sh",
-        "scripts/sync_ai_feed_to_miniflux.py"
+        "scripts/deploy/reader_stack.sh",
+        "scripts/runtime/sync_ai_feed_to_miniflux.py"
       ],
       "description": "Miniflux admin password."
     },
@@ -43,8 +43,8 @@
       "secret": false,
       "default": "admin",
       "consumer": [
-        "scripts/deploy_reader_stack.sh",
-        "scripts/sync_ai_feed_to_miniflux.py"
+        "scripts/deploy/reader_stack.sh",
+        "scripts/runtime/sync_ai_feed_to_miniflux.py"
       ],
       "description": "Miniflux admin username."
     },
@@ -55,7 +55,7 @@
       "secret": true,
       "default": null,
       "consumer": [
-        "scripts/sync_ai_feed_to_miniflux.py"
+        "scripts/runtime/sync_ai_feed_to_miniflux.py"
       ],
       "description": "Miniflux API token for AI sync."
     },
@@ -77,10 +77,23 @@
       "secret": false,
       "default": "3000",
       "consumer": [
-        "scripts/deploy_reader_stack.sh",
-        "scripts/smoke_full_stack.sh"
+        "scripts/deploy/reader_stack.sh",
+        "scripts/ci/smoke_full_stack.sh"
       ],
       "description": "Nextflux exposed port."
+    },
+    {
+      "name": "PYTHONDONTWRITEBYTECODE",
+      "scope": "scripts",
+      "required": false,
+      "secret": false,
+      "default": "1",
+      "consumer": [
+        "scripts/ci/bootstrap_strict_ci_runtime.sh",
+        "scripts/ci/python_tests.sh",
+        "scripts/governance/quality_gate.sh"
+      ],
+      "description": "Strict verification hygiene override. Defaults to 1 to suppress repo-side __pycache__ and *.pyc residue during Python-heavy gates."
     }
   ]
 }

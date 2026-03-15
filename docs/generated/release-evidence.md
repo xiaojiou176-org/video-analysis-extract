@@ -28,3 +28,9 @@ Generated from the release evidence workflow and manifest capture script.
 
 - provenance action: `actions/attest-build-provenance`
 - bundle source: `scripts/release/capture_release_manifest.sh`
+
+## Adjacent Governance Evidence
+
+- upstream inventory entries tracked: `19`
+- compatibility matrix rows tracked: `7`
+- monthly governance audit snapshots are complementary hygiene evidence, not release verdict proof

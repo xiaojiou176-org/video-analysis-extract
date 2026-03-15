@@ -23,16 +23,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Normalize self-hosted workspace (pre-checkout)
-        shell: bash
-        run: |
-          set -euo pipefail
-          workspace="${GITHUB_WORKSPACE:?}"
-          helper="$workspace/scripts/normalize_self_hosted_pre_checkout.sh"
-          if [[ -x "$helper" ]]; then
-            bash "$helper" --workspace "$workspace" --include-runner-diag 1
-          else
-            rm -rf "$workspace/.runtime-cache" "$workspace/.venv" "$workspace/apps/web/node_modules" || true
-          fi
+        uses: ./.github/actions/normalize-self-hosted-workspace
 
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -42,8 +33,8 @@ jobs:
 
       - name: Enforce runner disk budget
         run: |
-          bash scripts/runner_workspace_maintenance.sh --workspace "$GITHUB_WORKSPACE" --include-runner-diag 1
-          python3 scripts/check_runner_baseline.py --profile ci-heavy --workspace "$GITHUB_WORKSPACE"
+          bash scripts/governance/runner_workspace_maintenance.sh --workspace "$GITHUB_WORKSPACE" --include-runner-diag 1
+          python3 scripts/governance/check_runner_baseline.py --profile ci-heavy --workspace "$GITHUB_WORKSPACE"
 
       - name: Capture release evidence bundle inputs
         id: release_tag
@@ -62,7 +53,7 @@ jobs:
       - name: Package release evidence
         run: |
           release_dir="reports/releases/${{ steps.release_tag.outputs.release_tag }}"
-          bundle_path=".runtime-cache/release-evidence-${{ steps.release_tag.outputs.release_tag }}.tar.gz"
+          bundle_path=".runtime-cache/reports/release/release-evidence-${{ steps.release_tag.outputs.release_tag }}.tar.gz"
           mkdir -p .runtime-cache
           tar -czf "$bundle_path" -C "$release_dir" .
           echo "bundle_path=$bundle_path" >> "$GITHUB_ENV"
@@ -73,7 +64,7 @@ jobs:
           name: release-evidence-${{ steps.release_tag.outputs.release_tag }}-${{ github.run_id }}-${{ github.run_attempt }}
           if-no-files-found: error
           path: |
-            .runtime-cache/release-evidence-${{ steps.release_tag.outputs.release_tag }}.tar.gz
+            .runtime-cache/reports/release/release-evidence-${{ steps.release_tag.outputs.release_tag }}.tar.gz
             reports/releases/${{ steps.release_tag.outputs.release_tag }}/manifest.json
             reports/releases/${{ steps.release_tag.outputs.release_tag }}/checksums.sha256
             reports/releases/${{ steps.release_tag.outputs.release_tag }}/rollback/db-rollback-readiness.json
@@ -82,7 +73,7 @@ jobs:
       - name: Attest release evidence bundle provenance
         uses: actions/attest-build-provenance@b3e506e8c389afc651c5bacf2b8f2a1ea0557215 # v4
         with:
-          subject-path: .runtime-cache/release-evidence-${{ steps.release_tag.outputs.release_tag }}.tar.gz
+          subject-path: .runtime-cache/reports/release/release-evidence-${{ steps.release_tag.outputs.release_tag }}.tar.gz
 
       - name: Write attestation verification summary
         if: always()
@@ -91,11 +82,11 @@ jobs:
             echo "## Release Evidence Attestation"
             echo
             echo "- release_tag: \`${{ steps.release_tag.outputs.release_tag }}\`"
-            echo "- bundle: \`.runtime-cache/release-evidence-${{ steps.release_tag.outputs.release_tag }}.tar.gz\`"
+            echo "- bundle: \`.runtime-cache/reports/release/release-evidence-${{ steps.release_tag.outputs.release_tag }}.tar.gz\`"
             echo "- evidence_scope: \`current-run\`"
             echo
             echo "Suggested verification:"
             echo "\`\`\`bash"
-            echo "gh attestation verify .runtime-cache/release-evidence-${{ steps.release_tag.outputs.release_tag }}.tar.gz --repo ${{ github.repository }}"
+            echo "gh attestation verify .runtime-cache/reports/release/release-evidence-${{ steps.release_tag.outputs.release_tag }}.tar.gz --repo ${{ github.repository }}"
             echo "\`\`\`"
           } >> "$GITHUB_STEP_SUMMARY"

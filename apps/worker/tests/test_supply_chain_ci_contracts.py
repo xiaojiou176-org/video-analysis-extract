@@ -12,7 +12,7 @@ def _repo_root() -> Path:
 
 
 def _load_collect_ci_kpi_module():
-    module_path = _repo_root() / "scripts" / "collect_ci_kpi.py"
+    module_path = _repo_root() / "scripts" / "ci" / "collect_kpi.py"
     spec = importlib.util.spec_from_file_location("collect_ci_kpi", module_path)
     assert spec is not None
     assert spec.loader is not None
@@ -22,7 +22,7 @@ def _load_collect_ci_kpi_module():
 
 
 def _load_supply_chain_verifier_module():
-    module_path = _repo_root() / "scripts" / "verify_supply_chain_evidence.py"
+    module_path = _repo_root() / "scripts" / "governance" / "verify_supply_chain_evidence.py"
     spec = importlib.util.spec_from_file_location("verify_supply_chain_evidence", module_path)
     assert spec is not None
     assert spec.loader is not None
@@ -83,7 +83,9 @@ def test_sample_release_manifest_is_marked_as_historical_example_with_relative_p
 
 
 def test_pre_checkout_helper_exists_for_self_hosted_hygiene_reuse() -> None:
-    helper = (_repo_root() / "scripts" / "normalize_self_hosted_pre_checkout.sh").read_text(encoding="utf-8")
+    helper = (
+        _repo_root() / "scripts" / "governance" / "normalize_self_hosted_pre_checkout.sh"
+    ).read_text(encoding="utf-8")
 
     assert "runner_workspace_maintenance.sh" in helper
     assert "--include-runner-diag" in helper
@@ -105,7 +107,7 @@ def test_devcontainer_and_reader_stack_follow_strict_contract() -> None:
     assert '"CI_CACHE_ROOT": "/tmp/ci-cache"' in devcontainer
     assert '"postCreateCommand": "bash .devcontainer/post-create.sh"' in devcontainer
     assert "docker-outside-of-docker" not in devcontainer
-    assert 'eval "$(python3 scripts/ci_contract.py shell-exports)"' in post_create
+    assert 'eval "$(python3 scripts/ci/contract.py shell-exports)"' in post_create
     assert "STRICT_CI_DEVCONTAINER_WORKSPACE_FOLDER" in post_create
     assert "STRICT_CI_UV_VERSION" in post_create
     assert "STRICT_CI_NODE_MAJOR" in post_create
@@ -159,7 +161,7 @@ def test_collect_ci_kpi_reports_artifact_and_topology_metrics(tmp_path: Path) ->
     result = subprocess.run(
         [
             sys.executable,
-            str(_repo_root() / "scripts" / "collect_ci_kpi.py"),
+            str(_repo_root() / "scripts" / "ci" / "collect_kpi.py"),
             "--junit-glob",
             str(junit),
             "--coverage-xml-glob",

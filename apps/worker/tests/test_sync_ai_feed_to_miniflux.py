@@ -5,7 +5,7 @@ from pathlib import Path
 
 
 def _load_module():
-    module_path = Path(__file__).resolve().parents[3] / "scripts" / "sync_ai_feed_to_miniflux.py"
+    module_path = Path(__file__).resolve().parents[3] / "scripts" / "runtime" / "sync_ai_feed_to_miniflux.py"
     spec = importlib.util.spec_from_file_location("sync_ai_feed_to_miniflux", module_path)
     assert spec is not None
     assert spec.loader is not None

@@ -20,16 +20,28 @@ def _choose_free_tcp_port() -> int:
 
 
 def _run_ci_api_real_smoke_script(*, database_url: str | None) -> subprocess.CompletedProcess[str]:
-    source = (_repo_root() / "scripts" / "ci_api_real_smoke.sh").read_text(encoding="utf-8")
+    source = (_repo_root() / "scripts" / "ci" / "api_real_smoke.sh").read_text(encoding="utf-8")
     with tempfile.TemporaryDirectory() as tmp_dir:
         repo_root = Path(tmp_dir)
         scripts_dir = repo_root / "scripts"
+        scripts_runtime_dir = scripts_dir / "runtime"
+        scripts_ci_dir = scripts_dir / "ci"
         bin_dir = repo_root / "bin"
         scripts_dir.mkdir()
+        scripts_runtime_dir.mkdir()
+        scripts_ci_dir.mkdir()
         bin_dir.mkdir()
 
-        (scripts_dir / "ci_api_real_smoke.sh").write_text(source, encoding="utf-8")
-        (scripts_dir / "api_real_smoke_local.sh").write_text(
+        (scripts_ci_dir / "api_real_smoke.sh").write_text(source, encoding="utf-8")
+        (scripts_runtime_dir / "logging.sh").write_text(
+            (_repo_root() / "scripts" / "runtime" / "logging.sh").read_text(encoding="utf-8"),
+            encoding="utf-8",
+        )
+        (scripts_runtime_dir / "log_jsonl_event.py").write_text(
+            (_repo_root() / "scripts" / "runtime" / "log_jsonl_event.py").read_text(encoding="utf-8"),
+            encoding="utf-8",
+        )
+        (scripts_ci_dir / "api_real_smoke_local.sh").write_text(
             "#!/usr/bin/env bash\n"
             "set -euo pipefail\n"
             "printf 'DATABASE_URL=%s\\n' \"${DATABASE_URL:-}\"\n"
@@ -43,7 +55,13 @@ def _run_ci_api_real_smoke_script(*, database_url: str | None) -> subprocess.Com
             encoding="utf-8",
         )
 
-        for path in (scripts_dir / "ci_api_real_smoke.sh", scripts_dir / "api_real_smoke_local.sh", bin_dir / "uv"):
+        for path in (
+            scripts_ci_dir / "api_real_smoke_local.sh",
+            scripts_runtime_dir / "log_jsonl_event.py",
+            scripts_runtime_dir / "logging.sh",
+            scripts_ci_dir / "api_real_smoke.sh",
+            bin_dir / "uv",
+        ):
             path.chmod(0o755)
 
         env = {
@@ -53,7 +71,7 @@ def _run_ci_api_real_smoke_script(*, database_url: str | None) -> subprocess.Com
             env["DATABASE_URL"] = database_url
 
         return subprocess.run(
-            ["bash", str(scripts_dir / "ci_api_real_smoke.sh")],
+            ["bash", str(scripts_ci_dir / "api_real_smoke.sh")],
             cwd=repo_root,
             env=env,
             capture_output=True,
@@ -67,16 +85,28 @@ def _run_ci_api_real_smoke_temporal_bootstrap(
     temporal_target_host: str | None,
     existing_temporal: bool,
 ) -> subprocess.CompletedProcess[str]:
-    source = (_repo_root() / "scripts" / "ci_api_real_smoke.sh").read_text(encoding="utf-8")
+    source = (_repo_root() / "scripts" / "ci" / "api_real_smoke.sh").read_text(encoding="utf-8")
     with tempfile.TemporaryDirectory() as tmp_dir:
         repo_root = Path(tmp_dir)
         scripts_dir = repo_root / "scripts"
+        scripts_runtime_dir = scripts_dir / "runtime"
+        scripts_ci_dir = scripts_dir / "ci"
         bin_dir = repo_root / "bin"
         scripts_dir.mkdir()
+        scripts_runtime_dir.mkdir()
+        scripts_ci_dir.mkdir()
         bin_dir.mkdir()
 
-        (scripts_dir / "ci_api_real_smoke.sh").write_text(source, encoding="utf-8")
-        (scripts_dir / "api_real_smoke_local.sh").write_text(
+        (scripts_ci_dir / "api_real_smoke.sh").write_text(source, encoding="utf-8")
+        (scripts_runtime_dir / "logging.sh").write_text(
+            (_repo_root() / "scripts" / "runtime" / "logging.sh").read_text(encoding="utf-8"),
+            encoding="utf-8",
+        )
+        (scripts_runtime_dir / "log_jsonl_event.py").write_text(
+            (_repo_root() / "scripts" / "runtime" / "log_jsonl_event.py").read_text(encoding="utf-8"),
+            encoding="utf-8",
+        )
+        (scripts_ci_dir / "api_real_smoke_local.sh").write_text(
             "#!/usr/bin/env bash\n"
             "set -euo pipefail\n"
             "printf 'TEMPORAL_TARGET_HOST=%s\\n' \"${TEMPORAL_TARGET_HOST:-}\"\n",
@@ -118,8 +148,10 @@ def _run_ci_api_real_smoke_temporal_bootstrap(
         )
 
         for path in (
-            scripts_dir / "ci_api_real_smoke.sh",
-            scripts_dir / "api_real_smoke_local.sh",
+            scripts_ci_dir / "api_real_smoke_local.sh",
+            scripts_runtime_dir / "log_jsonl_event.py",
+            scripts_runtime_dir / "logging.sh",
+            scripts_ci_dir / "api_real_smoke.sh",
             bin_dir / "uv",
             bin_dir / "temporal",
         ):
@@ -140,7 +172,7 @@ def _run_ci_api_real_smoke_temporal_bootstrap(
 
         try:
             return subprocess.run(
-                ["bash", str(scripts_dir / "ci_api_real_smoke.sh")],
+            ["bash", str(scripts_ci_dir / "api_real_smoke.sh")],
                 cwd=repo_root,
                 env=env,
                 capture_output=True,
@@ -159,14 +191,34 @@ def _run_strict_ci_api_real_smoke_entry(
     temporal_target_host: str | None,
     run_inside_child_process: bool = False,
 ) -> subprocess.CompletedProcess[str]:
-    strict_entry_source = (_repo_root() / "scripts" / "strict_ci_entry.sh").read_text(encoding="utf-8")
+    strict_entry_wrapper = (_repo_root() / "scripts" / "strict_ci_entry.sh").read_text(
+        encoding="utf-8"
+    )
+    strict_entry_source = (_repo_root() / "scripts" / "ci" / "strict_entry.sh").read_text(
+        encoding="utf-8"
+    )
     with tempfile.TemporaryDirectory() as tmp_dir:
         repo_root = Path(tmp_dir)
         scripts_dir = repo_root / "scripts"
+        scripts_ci_dir = scripts_dir / "ci"
+        scripts_runtime_dir = scripts_dir / "runtime"
         scripts_dir.mkdir()
+        scripts_ci_dir.mkdir()
+        scripts_runtime_dir.mkdir()
 
-        (scripts_dir / "strict_ci_entry.sh").write_text(strict_entry_source, encoding="utf-8")
-        (scripts_dir / "ci_contract.py").write_text(
+        (scripts_dir / "strict_ci_entry.sh").write_text(strict_entry_wrapper, encoding="utf-8")
+        (scripts_ci_dir / "strict_entry.sh").write_text(strict_entry_source, encoding="utf-8")
+        (scripts_runtime_dir / "logging.sh").write_text(
+            (_repo_root() / "scripts" / "runtime" / "logging.sh").read_text(encoding="utf-8"),
+            encoding="utf-8",
+        )
+        (scripts_runtime_dir / "log_jsonl_event.py").write_text(
+            (_repo_root() / "scripts" / "runtime" / "log_jsonl_event.py").read_text(
+                encoding="utf-8"
+            ),
+            encoding="utf-8",
+        )
+        (scripts_ci_dir / "contract.py").write_text(
             "import sys\n"
             "if sys.argv[1:] == ['shell-exports']:\n"
             "    print('export STRICT_CI_STANDARD_IMAGE_REF=test-image')\n"
@@ -177,27 +229,27 @@ def _run_strict_ci_api_real_smoke_entry(
             encoding="utf-8",
         )
         if run_inside_child_process:
-            (scripts_dir / "bootstrap_strict_ci_runtime.sh").write_text(
+            (scripts_ci_dir / "bootstrap_strict_ci_runtime.sh").write_text(
                 "#!/usr/bin/env bash\n"
                 "set -euo pipefail\n"
                 'export TEMPORAL_TARGET_HOST="${TEMPORAL_TARGET_HOST:-127.0.0.1:7233}"\n',
                 encoding="utf-8",
             )
-            (scripts_dir / "ci_api_real_smoke.sh").write_text(
+            (scripts_ci_dir / "api_real_smoke.sh").write_text(
                 "#!/usr/bin/env bash\n"
                 "set -euo pipefail\n"
                 "printf 'DATABASE_URL=%s\\n' \"${DATABASE_URL:-}\"\n"
                 "printf 'TEMPORAL_TARGET_HOST=%s\\n' \"${TEMPORAL_TARGET_HOST:-}\"\n",
                 encoding="utf-8",
             )
-            (scripts_dir / "run_in_standard_env.sh").write_text(
+            (scripts_ci_dir / "run_in_standard_env.sh").write_text(
                 "#!/usr/bin/env bash\n"
                 "set -euo pipefail\n"
                 'exec "$@"\n',
                 encoding="utf-8",
             )
         else:
-            (scripts_dir / "run_in_standard_env.sh").write_text(
+            (scripts_ci_dir / "run_in_standard_env.sh").write_text(
                 "#!/usr/bin/env bash\n"
                 "set -euo pipefail\n"
                 "printf 'DATABASE_URL=%s\\n' \"${DATABASE_URL:-}\"\n"
@@ -207,13 +259,17 @@ def _run_strict_ci_api_real_smoke_entry(
 
         executable_paths = [
             scripts_dir / "strict_ci_entry.sh",
-            scripts_dir / "run_in_standard_env.sh",
+            scripts_ci_dir / "strict_entry.sh",
+            scripts_ci_dir / "run_in_standard_env.sh",
+            scripts_runtime_dir / "logging.sh",
+            scripts_runtime_dir / "log_jsonl_event.py",
+            scripts_ci_dir / "contract.py",
         ]
         if run_inside_child_process:
             executable_paths.extend(
                 [
-                    scripts_dir / "bootstrap_strict_ci_runtime.sh",
-                    scripts_dir / "ci_api_real_smoke.sh",
+                    scripts_ci_dir / "bootstrap_strict_ci_runtime.sh",
+                    scripts_ci_dir / "api_real_smoke.sh",
                 ]
             )
 
@@ -237,7 +293,9 @@ def _run_strict_ci_api_real_smoke_entry(
 
 
 def test_api_real_smoke_script_enforces_real_postgres_and_strict_mode() -> None:
-    script = (_repo_root() / "scripts" / "api_real_smoke_local.sh").read_text(encoding="utf-8")
+    script = (_repo_root() / "scripts" / "ci" / "api_real_smoke_local.sh").read_text(
+        encoding="utf-8"
+    )
 
     assert 'driver_name" != "postgresql+psycopg"' in script
     assert "creating isolated smoke database" in script
@@ -283,7 +341,9 @@ def test_api_real_smoke_script_enforces_real_postgres_and_strict_mode() -> None:
 
 
 def test_api_real_smoke_script_can_run_inside_standard_env_without_host_specific_bootstrap() -> None:
-    script = (_repo_root() / "scripts" / "api_real_smoke_local.sh").read_text(encoding="utf-8")
+    script = (_repo_root() / "scripts" / "ci" / "api_real_smoke_local.sh").read_text(
+        encoding="utf-8"
+    )
 
     assert "run_in_standard_env.sh" not in script
     assert 'VD_IN_STANDARD_ENV="${VD_IN_STANDARD_ENV:-0}"' in script
@@ -419,14 +479,34 @@ def test_strict_ci_entry_exports_api_real_smoke_temporal_target_host_to_standard
 
 
 def test_strict_ci_entry_injects_web_e2e_postgres_default_before_standard_env() -> None:
-    strict_entry_source = (_repo_root() / "scripts" / "strict_ci_entry.sh").read_text(encoding="utf-8")
+    strict_entry_wrapper = (_repo_root() / "scripts" / "strict_ci_entry.sh").read_text(
+        encoding="utf-8"
+    )
+    strict_entry_source = (_repo_root() / "scripts" / "ci" / "strict_entry.sh").read_text(
+        encoding="utf-8"
+    )
     with tempfile.TemporaryDirectory() as tmp_dir:
         repo_root = Path(tmp_dir)
         scripts_dir = repo_root / "scripts"
+        scripts_ci_dir = scripts_dir / "ci"
+        scripts_runtime_dir = scripts_dir / "runtime"
         scripts_dir.mkdir()
+        scripts_ci_dir.mkdir()
+        scripts_runtime_dir.mkdir()
 
-        (scripts_dir / "strict_ci_entry.sh").write_text(strict_entry_source, encoding="utf-8")
-        (scripts_dir / "ci_contract.py").write_text(
+        (scripts_dir / "strict_ci_entry.sh").write_text(strict_entry_wrapper, encoding="utf-8")
+        (scripts_ci_dir / "strict_entry.sh").write_text(strict_entry_source, encoding="utf-8")
+        (scripts_runtime_dir / "logging.sh").write_text(
+            (_repo_root() / "scripts" / "runtime" / "logging.sh").read_text(encoding="utf-8"),
+            encoding="utf-8",
+        )
+        (scripts_runtime_dir / "log_jsonl_event.py").write_text(
+            (_repo_root() / "scripts" / "runtime" / "log_jsonl_event.py").read_text(
+                encoding="utf-8"
+            ),
+            encoding="utf-8",
+        )
+        (scripts_ci_dir / "contract.py").write_text(
             "import sys\n"
             "if sys.argv[1:] == ['shell-exports']:\n"
             "    print('export STRICT_CI_STANDARD_IMAGE_REF=test-image')\n"
@@ -436,7 +516,7 @@ def test_strict_ci_entry_injects_web_e2e_postgres_default_before_standard_env() 
             "    print('export STRICT_CI_UV_CACHE_DIR=/tmp/uv-cache')\n",
             encoding="utf-8",
         )
-        (scripts_dir / "run_in_standard_env.sh").write_text(
+        (scripts_ci_dir / "run_in_standard_env.sh").write_text(
             "#!/usr/bin/env bash\n"
             "set -euo pipefail\n"
             "printf 'DATABASE_URL=%s\\n' \"${DATABASE_URL:-}\"\n",
@@ -444,7 +524,11 @@ def test_strict_ci_entry_injects_web_e2e_postgres_default_before_standard_env() 
         )
         for path in (
             scripts_dir / "strict_ci_entry.sh",
-            scripts_dir / "run_in_standard_env.sh",
+            scripts_ci_dir / "strict_entry.sh",
+            scripts_ci_dir / "run_in_standard_env.sh",
+            scripts_runtime_dir / "logging.sh",
+            scripts_runtime_dir / "log_jsonl_event.py",
+            scripts_ci_dir / "contract.py",
         ):
             path.chmod(0o755)
 
@@ -462,3 +546,12 @@ def test_strict_ci_entry_injects_web_e2e_postgres_default_before_standard_env() 
             "DATABASE_URL=postgresql+psycopg://postgres:postgres@127.0.0.1:5432/postgres"
             in result.stdout
         )
+
+
+def test_strict_ci_entry_marks_debug_build_as_diagnostic_only() -> None:
+    strict_entry = (_repo_root() / "scripts" / "ci" / "strict_entry.sh").read_text(
+        encoding="utf-8"
+    )
+
+    assert 'vd_log info strict_ci_entry_diagnostic_mode "using debug-build diagnostic path"' in strict_entry
+    assert 'vd_log info strict_ci_entry_release_qualifying "using pinned-image release-qualifying path"' in strict_entry

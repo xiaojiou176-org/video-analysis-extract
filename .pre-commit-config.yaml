@@ -56,8 +56,8 @@ repos:
             "--disable-error-code=call-arg",
             "apps/api/app/config.py",
             "apps/worker/worker/config.py",
-            "scripts/check_env_contract.py",
-            "scripts/check_worker_line_limits.py",
+            "scripts/governance/check_env_contract.py",
+            "scripts/governance/check_worker_line_limits.py",
           ]
         pass_filenames: false
         files: ^(apps/(api|worker|mcp)|scripts)/.*\.(py|pyi)$
@@ -173,10 +173,10 @@ repos:
 
       - id: check-ai-context-files
         name: ensure AI context files exist
-        entry: bash -c 'test -f AGENTS.md && test -f CLAUDE.md && test -f .cursorrules'
+        entry: bash -c 'test -f AGENTS.md && test -f CLAUDE.md'
         language: system
         pass_filenames: false
-        files: ^(AGENTS\.md|CLAUDE\.md|\.cursorrules|\.pre-commit-config\.yaml)$
+        files: ^(AGENTS\.md|CLAUDE\.md|\.pre-commit-config\.yaml)$
 
       - id: check-iac-exists
         name: IaC entrypoint guard
@@ -187,7 +187,7 @@ repos:
 
       - id: check-env-count
         name: env contract guard
-        entry: python3 scripts/check_env_contract.py --strict
+        entry: python3 scripts/governance/check_env_contract.py --strict
         language: system
         pass_filenames: false
         files: ^(\.env\.example|ENVIRONMENT\.md|infra/config/env\.contract\.json|scripts/check_env_contract\.py|env/.*\.env)$
@@ -213,14 +213,14 @@ repos:
 
       - id: check-design-tokens
         name: design token guard (no hardcoded color literals)
-        entry: python3 scripts/check_design_tokens.py --staged-only
+        entry: python3 scripts/governance/check_design_tokens.py --staged-only
         language: system
         files: ^apps/web/.*\.(css|scss|tsx|jsx)$
         pass_filenames: true
 
       - id: gemini-ui-ux-audit
         name: gemini ui/ux semantic audit (gemini-3.0-flash)
-        entry: uv run python scripts/gemini_ui_ux_audit.py
+        entry: uv run python scripts/ci/gemini_ui_ux_audit.py
         language: system
         files: ^apps/web/(app|components)/.*\.(ts|tsx|js|jsx|css|scss|sass|html)$
         stages: [pre-push]

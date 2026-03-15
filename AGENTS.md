@@ -98,7 +98,7 @@
 
 - `./scripts/bootstrap_full_stack.sh`
   - `./scripts/full_stack.sh up`
-  - `./scripts/smoke_full_stack.sh`
+  - `./scripts/ci/smoke_full_stack.sh`
   - `./scripts/strict_ci_entry.sh --mode pre-push --strict-full-run 1 --ci-dedupe 0`
 
 ### 模式 C：标准环境（AI 执行必须）
@@ -126,7 +126,7 @@ npm --prefix apps/web ci
 
 ```bash
 cp .env.example .env
-python3 scripts/check_env_contract.py --strict
+python3 scripts/governance/check_env_contract.py --strict
 set -a; source .env; set +a
 ```
 
@@ -140,7 +140,7 @@ set -a; source .env; set +a
 - 禁止将 shell 登录配置作为运行时密钥来源。
 - 初始化环境时必须执行：
   - `cp .env.example .env`
-  - `python3 scripts/check_env_contract.py --strict`
+  - `python3 scripts/governance/check_env_contract.py --strict`
 
 ### 3.3 启动基础服务
 
@@ -182,13 +182,13 @@ curl -sS -X POST http://127.0.0.1:9000/api/v1/ingest/poll \
 ```bash
 ./scripts/bootstrap_full_stack.sh
 ./scripts/full_stack.sh up
-./scripts/smoke_full_stack.sh --offline-fallback 0
+./scripts/ci/smoke_full_stack.sh --offline-fallback 0
 ```
 
 ### 3.8 安装 Git 门禁 Hooks
 
 ```bash
-./scripts/install_git_hooks.sh
+./scripts/governance/install_git_hooks.sh
 ```
 
 ## 4. Safety 边界（强制）
@@ -223,10 +223,10 @@ curl -sS -X POST http://127.0.0.1:9000/api/v1/ingest/poll \
 - `.githooks/commit-msg` → `npx --yes --package @commitlint/cli commitlint --config <tmp-config> --edit <commit-msg-file>`
   - Conventional Commits 强制门禁（无根级 `package.json` 依赖时，使用 `npx --yes` + hook 内置最小规则配置）
 - `.githooks/pre-commit` → `./scripts/quality_gate.sh --mode pre-commit --profile local`
-  - 包含：`scripts/ci_or_local_gate_doc_drift.sh --scope staged`
+  - 包含：`scripts/governance/ci_or_local_gate_doc_drift.sh --scope staged`
   - 包含：`check_docs_governance`、`check_test_assertions`、`web lint`、`ruff critical`、`secrets scan`、`gitleaks fast scan`、`structured log guard`、`env budget guard`、`IaC entrypoint guard`
 - `.githooks/pre-push` → `./scripts/strict_ci_entry.sh --mode pre-push --heartbeat-seconds 20 --ci-dedupe 0`
-  - 包含：`scripts/ci_or_local_gate_doc_drift.sh --scope push`
+  - 包含：`scripts/governance/ci_or_local_gate_doc_drift.sh --scope push`
   - 包含：`coverage>=95`、`core coverage>=95`、`web unit tests`、`python tests(no-silent-skip)`、`api cors preflight smoke`、`contract diff local gate`
   - 包含：与 `preflight-fast`/`web-test-build` 对齐的本地硬门禁：`check_docs_governance`、`check_ci_docs_parity(legacy advisory)`、`docs env canonical guard`、`provider residual guard`、`worker line limits guard`、`schema parity gate`、`web design token guard`、`web build`、`web button coverage`
   - 分层解释：本地 pre-push 比 pre-commit 更严格；启用变更感知，后端变更命中时强制 mutation，无后端变更时跳过 mutation 以避免无效本地消耗。
@@ -247,11 +247,11 @@ curl -sS -X POST http://127.0.0.1:9000/api/v1/ingest/poll \
 
 1. 文档联动已完成（触发器对应文档已同步）。
 2. 变更由标准环境执行（`.devcontainer/devcontainer.json` 或等价隔离环境）并保留命令证据。
-3. 环境契约校验通过：`python3 scripts/check_env_contract.py --strict`。
+3. 环境契约校验通过：`python3 scripts/governance/check_env_contract.py --strict`。
 4. 后端测试通过：
    - `PYTHONPATH="$PWD:$PWD/apps/worker" DATABASE_URL='sqlite+pysqlite:///:memory:' uv run pytest apps/worker/tests apps/api/tests apps/mcp/tests -q`
 5. 前端 lint 通过：`npm --prefix apps/web run lint`。
-6. 假断言门禁通过：`python3 scripts/check_test_assertions.py`。
+6. 假断言门禁通过：`python3 scripts/governance/check_test_assertions.py`。
 7. 改动启动或链路逻辑时必须通过严格验收唯一入口：`./scripts/strict_ci_entry.sh --mode pre-push --strict-full-run 1 --ci-dedupe 0`。
 8. 覆盖率与变异门禁通过：总覆盖率 `>=95%`、核心覆盖率 `>=95%`，且 `DATABASE_URL='sqlite+pysqlite:///:memory:' uv run --extra dev --with mutmut mutmut run` 满足 `score>=0.64`、`effective_ratio>=0.27`、`no_tests_ratio<=0.72`。
 

@@ -25,9 +25,9 @@ from support.runtime_utils import (
     worker_dist_dir,
 )
 
-PROJECT_ROOT = Path(__file__).resolve().parents[4]
+PROJECT_ROOT = Path(os.environ.get("VIDEO_ANALYSIS_REPO_ROOT") or Path(__file__).resolve().parents[4])
 WEB_DIR = PROJECT_ROOT / "apps" / "web"
-WEB_E2E_ARTIFACT_ROOT = PROJECT_ROOT / ".runtime-cache" / "web-e2e-artifacts"
+WEB_E2E_ARTIFACT_ROOT = PROJECT_ROOT / ".runtime-cache" / "evidence" / "tests" / "web-e2e-artifacts"
 WEB_E2E_VIDEO_DIR = WEB_E2E_ARTIFACT_ROOT / "videos"
 WEB_E2E_TRACE_DIR = WEB_E2E_ARTIFACT_ROOT / "traces"
 WEB_E2E_SCREENSHOT_DIR = WEB_E2E_ARTIFACT_ROOT / "screenshots"
@@ -87,6 +87,13 @@ def _read_real_api_base_url(config: pytest.Config) -> str:
             f"--web-e2e-api-base-url must be an absolute http(s) URL, got: {raw_value!r}"
         )
     return raw_value
+
+
+def _runtime_web_dir() -> Path:
+    runtime_dir = os.environ.get("WEB_E2E_RUNTIME_WEB_DIR") or os.environ.get("WEB_RUNTIME_WEB_DIR")
+    if runtime_dir:
+        return Path(runtime_dir)
+    return WEB_DIR
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:
@@ -332,8 +339,12 @@ def web_base_url(
         raise RuntimeError(
             "npm is required for web E2E. Install Node.js/npm in CI before running tests."
         )
-    if not (WEB_DIR / "node_modules").exists():
-        raise RuntimeError("apps/web/node_modules is missing. Run `npm ci` in apps/web before E2E.")
+    runtime_web_dir = _runtime_web_dir()
+    if not (runtime_web_dir / "node_modules").exists():
+        raise RuntimeError(
+            f"runtime web workspace is missing node_modules: {runtime_web_dir}. "
+            "Prepare it via scripts/ci/prepare_web_runtime.sh before E2E."
+        )
 
     process: subprocess.Popen[str] | None = None
     output_thread: threading.Thread | None = None
@@ -371,7 +382,7 @@ def web_base_url(
 
         local_process = subprocess.Popen(
             ["npm", "run", "dev", "--", "--hostname", "127.0.0.1", "--port", str(web_port)],
-            cwd=WEB_DIR,
+            cwd=runtime_web_dir,
             env=env,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,

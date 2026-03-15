@@ -9,11 +9,7 @@ User=vd
 Group=vd
 WorkingDirectory=/opt/vd/repo
 EnvironmentFile=/opt/vd/.env
-ExecStart=/opt/vd/repo/.venv/bin/uvicorn apps.api.app.main:app \
-    --host 127.0.0.1 \
-    --port 8000 \
-    --workers 2 \
-    --log-level info
+ExecStart=/usr/bin/bash -lc 'exec "${UV_PROJECT_ENVIRONMENT:-/var/cache/vd/project-venv}/bin/uvicorn" apps.api.app.main:app --host 127.0.0.1 --port 8000 --workers 2 --log-level info'
 Restart=always
 RestartSec=5
 StandardOutput=journal

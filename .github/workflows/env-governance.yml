@@ -10,8 +10,8 @@ on:
       - "infra/config/contract.core.json"
       - "apps/mcp/schemas/tools.json"
       - "packages/shared-contracts/jsonschema/mcp-tools.schema.json"
-      - "scripts/check_env_contract.py"
-      - "scripts/report_env_governance.py"
+      - "scripts/governance/check_env_contract.py"
+      - "scripts/governance/report_env_governance.py"
       - ".github/workflows/env-governance.yml"
       - ".github/actions/**"
   push:
@@ -26,8 +26,8 @@ on:
       - "infra/config/contract.core.json"
       - "apps/mcp/schemas/tools.json"
       - "packages/shared-contracts/jsonschema/mcp-tools.schema.json"
-      - "scripts/check_env_contract.py"
-      - "scripts/report_env_governance.py"
+      - "scripts/governance/check_env_contract.py"
+      - "scripts/governance/report_env_governance.py"
       - ".github/workflows/env-governance.yml"
       - ".github/actions/**"
 
@@ -44,16 +44,7 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Normalize self-hosted workspace (pre-checkout)
-        shell: bash
-        run: |
-          set -euo pipefail
-          workspace="${GITHUB_WORKSPACE:?}"
-          helper="$workspace/scripts/normalize_self_hosted_pre_checkout.sh"
-          if [[ -x "$helper" ]]; then
-            bash "$helper" --workspace "$workspace"
-          else
-            rm -rf "$workspace/.runtime-cache" "$workspace/.venv" "$workspace/apps/web/node_modules" || true
-          fi
+        uses: ./.github/actions/normalize-self-hosted-workspace
 
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -66,14 +57,14 @@ jobs:
           uv-cache-dir: /tmp/ci-cache/uv
 
       - name: Validate env contract
-        run: python scripts/check_env_contract.py --strict --env-file .env.example
+        run: python scripts/governance/check_env_contract.py --strict --env-file .env.example
 
       - name: Generate env governance report
         run: |
-          mkdir -p .runtime-cache
-          python scripts/report_env_governance.py \
-            --json-out .runtime-cache/env-governance.json \
-            --md-out .runtime-cache/env-governance.md
+          mkdir -p .runtime-cache/reports/governance
+          python scripts/governance/report_env_governance.py \
+            --json-out .runtime-cache/reports/governance/env-governance.json \
+            --md-out .runtime-cache/reports/governance/env-governance.md
 
       - name: Upload env governance artifacts
         if: always()
@@ -81,8 +72,8 @@ jobs:
         with:
           name: env-governance-report
           path: |
-            .runtime-cache/env-governance.json
-            .runtime-cache/env-governance.md
+            .runtime-cache/reports/governance/env-governance.json
+            .runtime-cache/reports/governance/env-governance.md
 
       - name: Validate schema contract parity (apps/mcp vs shared-contracts)
         run: |
@@ -118,16 +109,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Normalize self-hosted workspace (pre-checkout)
-        shell: bash
-        run: |
-          set -euo pipefail
-          workspace="${GITHUB_WORKSPACE:?}"
-          helper="$workspace/scripts/normalize_self_hosted_pre_checkout.sh"
-          if [[ -x "$helper" ]]; then
-            bash "$helper" --workspace "$workspace"
-          else
-            rm -rf "$workspace/.runtime-cache" "$workspace/.venv" "$workspace/apps/web/node_modules" || true
-          fi
+        uses: ./.github/actions/normalize-self-hosted-workspace
 
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4

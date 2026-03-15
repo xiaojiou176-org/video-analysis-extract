@@ -2,7 +2,7 @@
 set -euo pipefail
 
 export PATH="$HOME/.local/bin:$PATH"
-eval "$(python3 scripts/ci_contract.py shell-exports)"
+eval "$(python3 scripts/ci/contract.py shell-exports)"
 
 if [[ "${PWD}" != "${STRICT_CI_DEVCONTAINER_WORKSPACE_FOLDER}" ]]; then
   echo "[devcontainer] expected workspace folder ${STRICT_CI_DEVCONTAINER_WORKSPACE_FOLDER}, got ${PWD}" >&2
@@ -43,4 +43,4 @@ then
   exit 1
 fi
 
-python3 scripts/check_env_contract.py --strict --env-file .env.example
+python3 scripts/governance/check_env_contract.py --strict --env-file .env.example

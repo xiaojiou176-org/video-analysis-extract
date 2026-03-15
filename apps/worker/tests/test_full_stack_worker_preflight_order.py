@@ -33,11 +33,18 @@ def _prepare_full_stack_script(tmp_path: Path) -> Path:
     root = _repo_root()
     target_script_dir = tmp_path / "scripts"
     target_lib_dir = target_script_dir / "lib"
+    target_runtime_dir = target_script_dir / "runtime"
     target_lib_dir.mkdir(parents=True, exist_ok=True)
+    target_runtime_dir.mkdir(parents=True, exist_ok=True)
 
     full_stack_target = target_script_dir / "full_stack.sh"
+    runtime_full_stack_target = target_runtime_dir / "full_stack.sh"
     full_stack_target.write_text(
         (root / "scripts" / "full_stack.sh").read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+    runtime_full_stack_target.write_text(
+        (root / "scripts" / "runtime" / "full_stack.sh").read_text(encoding="utf-8"),
         encoding="utf-8",
     )
     (target_lib_dir / "load_env.sh").write_text(
@@ -48,7 +55,16 @@ def _prepare_full_stack_script(tmp_path: Path) -> Path:
         (root / "scripts" / "lib" / "temporal_ready.sh").read_text(encoding="utf-8"),
         encoding="utf-8",
     )
+    (target_runtime_dir / "logging.sh").write_text(
+        (root / "scripts" / "runtime" / "logging.sh").read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+    (target_runtime_dir / "log_jsonl_event.py").write_text(
+        (root / "scripts" / "runtime" / "log_jsonl_event.py").read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
     full_stack_target.chmod(0o755)
+    runtime_full_stack_target.chmod(0o755)
     return full_stack_target
 
 
@@ -84,9 +100,9 @@ def test_full_stack_up_fails_worker_env_preflight_before_any_service_start(
     assert proc.returncode != 0
     assert "DIAGNOSE stage=worker_preflight_env conclusion=missing_required_env" in proc.stderr
 
-    api_pid = tmp_path / ".runtime-cache" / "full-stack" / "api.pid"
+    api_pid = tmp_path / ".runtime-cache" / "run" / "full-stack" / "api.pid"
     api_log = tmp_path / "logs" / "full-stack" / "api.log"
-    last_failure_reason = tmp_path / ".runtime-cache" / "full-stack" / "last_failure_reason"
+    last_failure_reason = tmp_path / ".runtime-cache" / "run" / "full-stack" / "last_failure_reason"
 
     assert not api_pid.exists()
     assert not api_log.exists()
@@ -117,9 +133,9 @@ def test_full_stack_up_records_temporal_preflight_failure_before_service_start(
     assert proc.returncode != 0
     assert "DIAGNOSE stage=worker_preflight_temporal conclusion=invalid_temporal_target_host" in proc.stderr
 
-    api_pid = tmp_path / ".runtime-cache" / "full-stack" / "api.pid"
+    api_pid = tmp_path / ".runtime-cache" / "run" / "full-stack" / "api.pid"
     api_log = tmp_path / "logs" / "full-stack" / "api.log"
-    last_failure_reason = tmp_path / ".runtime-cache" / "full-stack" / "last_failure_reason"
+    last_failure_reason = tmp_path / ".runtime-cache" / "run" / "full-stack" / "last_failure_reason"
 
     assert not api_pid.exists()
     assert not api_log.exists()
@@ -255,8 +271,8 @@ PY
         in proc.stderr
     )
 
-    worker_pid = tmp_path / ".runtime-cache" / "full-stack" / "worker.pid"
-    last_failure_reason = tmp_path / ".runtime-cache" / "full-stack" / "last_failure_reason"
+    worker_pid = tmp_path / ".runtime-cache" / "run" / "full-stack" / "worker.pid"
+    last_failure_reason = tmp_path / ".runtime-cache" / "run" / "full-stack" / "last_failure_reason"
 
     assert not worker_pid.exists()
     assert last_failure_reason.exists()

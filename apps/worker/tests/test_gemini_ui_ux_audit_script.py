@@ -8,7 +8,7 @@ from pathlib import Path
 
 
 def _load_module():
-    module_path = Path(__file__).resolve().parents[3] / "scripts" / "gemini_ui_ux_audit.py"
+    module_path = Path(__file__).resolve().parents[3] / "scripts" / "ci" / "gemini_ui_ux_audit.py"
     spec = importlib.util.spec_from_file_location("gemini_ui_ux_audit", module_path)
     assert spec is not None
     assert spec.loader is not None

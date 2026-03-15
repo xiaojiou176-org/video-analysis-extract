@@ -11,6 +11,7 @@ dependencies = [
   "markdown>=3.8.2,<4",
   "mcp>=1.13.1,<2",
   "psycopg[binary]>=3.2.10,<4",
+  "pyjwt[crypto]>=2.12.0,<3",
   "pydantic>=2.11.7,<3",
   "sqlalchemy>=2.0.43,<3",
   "temporalio>=1.17.0,<2",
@@ -36,11 +37,15 @@ pythonpath = [
   ".",
   "apps/worker",
 ]
+cache_dir = ".runtime-cache/temp/pytest-cache"
 markers = [
   "allow_unauth_write: enable VD_ALLOW_UNAUTH_WRITE for tests that explicitly opt in",
 ]
 reruns = 0
 reruns_delay = 0
+
+[tool.coverage.run]
+data_file = ".runtime-cache/reports/python/.coverage"
 
 [tool.coverage.report]
 fail_under = 95
@@ -51,6 +56,7 @@ show_missing = true
 target-version = "py311"
 line-length = 100
 fix = true
+cache-dir = ".runtime-cache/temp/ruff-cache"
 
 [tool.ruff.lint]
 select = ["ALL"]

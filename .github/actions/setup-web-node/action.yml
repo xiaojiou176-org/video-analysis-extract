@@ -11,7 +11,7 @@ inputs:
     required: false
     default: "apps/web/package-lock.json"
   install-command:
-    description: Optional install command to run after setup.
+    description: Optional web runtime preparation command.
     required: false
     default: ""
 
@@ -28,4 +28,11 @@ runs:
     - name: Install web deps
       if: ${{ inputs.install-command != '' }}
       shell: bash
-      run: ${{ inputs.install-command }}
+      run: |
+        set -euo pipefail
+        if [[ -x scripts/ci/prepare_web_runtime.sh ]]; then
+          eval "$(bash scripts/ci/prepare_web_runtime.sh --shell-exports)"
+          echo "WEB_RUNTIME_WEB_DIR=$WEB_RUNTIME_WEB_DIR" >> "$GITHUB_ENV"
+        else
+          ${{ inputs.install-command }}
+        fi

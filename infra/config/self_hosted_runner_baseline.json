@@ -16,9 +16,6 @@
       },
       "purge_paths": [
         ".runtime-cache",
-        ".venv",
-        "apps/web/node_modules",
-        "apps/web/.next-e2e-*",
         "mutants/",
         "/tmp/video-digestor-strict-ci"
       ]
@@ -41,8 +38,6 @@
       },
       "purge_paths": [
         ".runtime-cache",
-        ".venv",
-        "apps/web/node_modules",
         "_diag/pages/*"
       ]
     },
@@ -60,9 +55,6 @@
       },
       "purge_paths": [
         ".runtime-cache",
-        ".venv",
-        "apps/web/node_modules",
-        "apps/web/.next-e2e-*",
         "mutants/",
         "/tmp/video-digestor-strict-ci",
         "/tmp/video-digestor-*",

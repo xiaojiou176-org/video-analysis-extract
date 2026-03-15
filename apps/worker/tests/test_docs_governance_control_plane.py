@@ -35,7 +35,7 @@ def test_docs_control_plane_files_exist_and_reference_real_paths() -> None:
 def test_render_docs_governance_check_passes_for_repo_snapshot() -> None:
     root = _repo_root()
     result = subprocess.run(
-        [sys.executable, str(root / "scripts/render_docs_governance.py"), "--check"],
+        [sys.executable, str(root / "scripts/governance/render_docs_governance.py"), "--check"],
         cwd=root,
         capture_output=True,
         text=True,
@@ -48,7 +48,7 @@ def test_render_docs_governance_check_passes_for_repo_snapshot() -> None:
 def test_docs_governance_blocking_check_passes_for_repo_snapshot() -> None:
     root = _repo_root()
     result = subprocess.run(
-        [sys.executable, str(root / "scripts/check_docs_governance.py")],
+        [sys.executable, str(root / "scripts" / "governance" / "check_docs_governance.py")],
         cwd=root,
         capture_output=True,
         text=True,
@@ -59,7 +59,7 @@ def test_docs_governance_blocking_check_passes_for_repo_snapshot() -> None:
 
 
 def test_doc_drift_script_uses_control_plane_contract() -> None:
-    script = (_repo_root() / "scripts/ci_or_local_gate_doc_drift.sh").read_text(encoding="utf-8")
+    script = (_repo_root() / "scripts/governance/ci_or_local_gate_doc_drift.sh").read_text(encoding="utf-8")
 
     assert "config/docs/change-contract.json" in script
     assert "PIPELINE_STEPS_CHANGED" in script

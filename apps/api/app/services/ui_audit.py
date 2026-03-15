@@ -51,7 +51,7 @@ _MAX_GEMINI_IMAGES = 4
 _MAX_GEMINI_TEXT_SNIPPETS = 4
 _TEXT_SUFFIXES = {".md", ".txt", ".json", ".ndjson", ".log"}
 _DEFAULT_ARTIFACT_BASE_ROOT = tempfile.gettempdir()
-_DEFAULT_UI_AUDIT_RUN_STORE = ".runtime-cache/ui-audit-runs"
+_DEFAULT_UI_AUDIT_RUN_STORE = ".runtime-cache/evidence/tests/ui-audit-runs"
 _DEFAULT_MODEL_TIMEOUT_SECONDS = 15.0
 _DEFAULT_MODEL_MAX_RETRIES = 1
 

@@ -27,9 +27,9 @@ def _run_bash(
 
 def test_resolve_runtime_route_value_precedence(tmp_path: Path) -> None:
     root = _repo_root()
-    (tmp_path / ".runtime-cache" / "full-stack").mkdir(parents=True, exist_ok=True)
+    (tmp_path / ".runtime-cache" / "run" / "full-stack").mkdir(parents=True, exist_ok=True)
     (tmp_path / ".env").write_text("export API_PORT='3009'\n", encoding="utf-8")
-    (tmp_path / ".runtime-cache" / "full-stack" / "resolved.env").write_text(
+    (tmp_path / ".runtime-cache" / "run" / "full-stack" / "resolved.env").write_text(
         "export API_PORT='18000'\n",
         encoding="utf-8",
     )
@@ -46,7 +46,9 @@ printf '%s\\n' "$(resolve_runtime_route_value "{tmp_path}" "MISSING_KEY" "" "300
 
 
 def test_bootstrap_runtime_values_do_not_persist_into_repo_env() -> None:
-    script = (_repo_root() / "scripts" / "bootstrap_full_stack.sh").read_text(encoding="utf-8")
+    script = (_repo_root() / "scripts" / "runtime" / "bootstrap_full_stack.sh").read_text(
+        encoding="utf-8"
+    )
 
     assert "write_runtime_resolved_env" in script
     assert 'cat >> "$ROOT_DIR/.env"' not in script
@@ -59,17 +61,33 @@ def test_full_stack_status_handles_stale_pid_metadata(tmp_path: Path) -> None:
     root = _repo_root()
     target_script_dir = tmp_path / "scripts"
     target_lib_dir = target_script_dir / "lib"
+    target_runtime_dir = target_script_dir / "runtime"
     target_lib_dir.mkdir(parents=True, exist_ok=True)
+    target_runtime_dir.mkdir(parents=True, exist_ok=True)
 
     full_stack_target = target_script_dir / "full_stack.sh"
+    runtime_full_stack_target = target_runtime_dir / "full_stack.sh"
     load_env_target = target_lib_dir / "load_env.sh"
+    logging_target = target_runtime_dir / "logging.sh"
     temporal_ready_target = target_lib_dir / "temporal_ready.sh"
     full_stack_target.write_text(
         (root / "scripts" / "full_stack.sh").read_text(encoding="utf-8"),
         encoding="utf-8",
     )
+    runtime_full_stack_target.write_text(
+        (root / "scripts" / "runtime" / "full_stack.sh").read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
     load_env_target.write_text(
         (root / "scripts" / "lib" / "load_env.sh").read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+    logging_target.write_text(
+        (root / "scripts" / "runtime" / "logging.sh").read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+    (target_runtime_dir / "log_jsonl_event.py").write_text(
+        (root / "scripts" / "runtime" / "log_jsonl_event.py").read_text(encoding="utf-8"),
         encoding="utf-8",
     )
     temporal_ready_target.write_text(
@@ -77,8 +95,9 @@ def test_full_stack_status_handles_stale_pid_metadata(tmp_path: Path) -> None:
         encoding="utf-8",
     )
     full_stack_target.chmod(0o755)
+    runtime_full_stack_target.chmod(0o755)
 
-    pid_file = tmp_path / ".runtime-cache" / "full-stack" / "api.pid"
+    pid_file = tmp_path / ".runtime-cache" / "run" / "full-stack" / "api.pid"
     pid_file.parent.mkdir(parents=True, exist_ok=True)
     pid_file.write_text(
         (
@@ -100,10 +119,10 @@ def test_full_stack_status_handles_stale_pid_metadata(tmp_path: Path) -> None:
 def test_api_base_resolution_is_unified_across_scripts() -> None:
     root = _repo_root()
     http_api = (root / "scripts" / "lib" / "http_api.sh").read_text(encoding="utf-8")
-    daily_digest = (root / "scripts" / "run_daily_digest.sh").read_text(encoding="utf-8")
-    failure_alerts = (root / "scripts" / "run_failure_alerts.sh").read_text(encoding="utf-8")
-    ai_feed_sync = (root / "scripts" / "run_ai_feed_sync.sh").read_text(encoding="utf-8")
-    smoke_full_stack = (root / "scripts" / "smoke_full_stack.sh").read_text(encoding="utf-8")
+    daily_digest = (root / "scripts" / "runtime" / "run_daily_digest.sh").read_text(encoding="utf-8")
+    failure_alerts = (root / "scripts" / "runtime" / "run_failure_alerts.sh").read_text(encoding="utf-8")
+    ai_feed_sync = (root / "scripts" / "runtime" / "run_ai_feed_sync.sh").read_text(encoding="utf-8")
+    smoke_full_stack = (root / "scripts" / "ci" / "smoke_full_stack.sh").read_text(encoding="utf-8")
 
     assert "resolve_http_api_base_url" in http_api
     assert "apply_http_api_base_url" in http_api
@@ -123,18 +142,19 @@ def test_api_base_resolution_is_unified_across_scripts() -> None:
 
 def test_smoke_full_stack_defaults_are_strict_for_local_validation() -> None:
     root = _repo_root()
-    smoke_full_stack = (root / "scripts" / "smoke_full_stack.sh").read_text(encoding="utf-8")
+    smoke_full_stack = (root / "scripts" / "ci" / "smoke_full_stack.sh").read_text(encoding="utf-8")
 
-    assert 'OFFLINE_FALLBACK="0"' in smoke_full_stack
     assert 'LIVE_SMOKE_REQUIRE_SECRETS="1"' in smoke_full_stack
-    assert "Allow offline fallback marker skip (default: 0)" in smoke_full_stack
+    assert "--offline-fallback" not in smoke_full_stack
     assert "e2e live smoke require secrets (default: 1)" in smoke_full_stack
     assert '--require-secrets "$LIVE_SMOKE_REQUIRE_SECRETS"' in smoke_full_stack
 
 
 def test_e2e_live_smoke_defaults_require_secrets_and_keep_opt_out_explicit() -> None:
     root = _repo_root()
-    e2e_live_smoke = (root / "scripts" / "e2e_live_smoke.sh").read_text(encoding="utf-8")
+    e2e_live_smoke = (root / "scripts" / "ci" / "e2e_live_smoke.sh").read_text(
+        encoding="utf-8"
+    )
 
     assert 'LIVE_SMOKE_REQUIRE_SECRETS="1"' in e2e_live_smoke
     assert "Require secrets gate (default: 1)" in e2e_live_smoke

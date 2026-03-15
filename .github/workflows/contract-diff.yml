@@ -6,8 +6,8 @@ on:
       - "apps/api/**"
       - "apps/mcp/**"
       - "packages/shared-contracts/**"
-      - "scripts/export_api_contract.py"
-      - "scripts/check_contract_diff.py"
+      - "scripts/governance/export_api_contract.py"
+      - "scripts/governance/check_contract_diff.py"
       - ".github/workflows/contract-diff.yml"
       - ".github/actions/**"
 
@@ -29,16 +29,7 @@ jobs:
     timeout-minutes: 25
     steps:
       - name: Normalize self-hosted workspace (pre-checkout)
-        shell: bash
-        run: |
-          set -euo pipefail
-          workspace="${GITHUB_WORKSPACE:?}"
-          helper="$workspace/scripts/normalize_self_hosted_pre_checkout.sh"
-          if [[ -x "$helper" ]]; then
-            bash "$helper" --workspace "$workspace"
-          else
-            rm -rf "$workspace/.runtime-cache" "$workspace/.venv" "$workspace/apps/web/node_modules" || true
-          fi
+        uses: ./.github/actions/normalize-self-hosted-workspace
 
       - name: Checkout (head)
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -55,30 +46,30 @@ jobs:
       - name: Export head contract
         run: |
           mkdir -p .runtime-cache
-          uv run python scripts/export_api_contract.py \
+          uv run python scripts/governance/export_api_contract.py \
             --repo-root . \
-            --output .runtime-cache/contract-head.json
+            --output .runtime-cache/reports/contracts/contract-head.json
 
       - name: Prepare base worktree
         run: |
           mkdir -p .runtime-cache
-          git worktree add --detach .runtime-cache/base-tree "${{ github.event.pull_request.base.sha }}"
+          git worktree add --detach .runtime-cache/temp/base-tree "${{ github.event.pull_request.base.sha }}"
 
       - name: Export base contract
         run: |
-          uv run python scripts/export_api_contract.py \
-            --repo-root .runtime-cache/base-tree \
-            --output .runtime-cache/contract-base.json
+          uv run python scripts/governance/export_api_contract.py \
+            --repo-root .runtime-cache/temp/base-tree \
+            --output .runtime-cache/reports/contracts/contract-base.json
 
       - name: Compare base/head contract
         id: compare
         run: |
           set +e
-          uv run python scripts/check_contract_diff.py \
-            --base .runtime-cache/contract-base.json \
-            --head .runtime-cache/contract-head.json \
-            --report .runtime-cache/contract-diff.md \
-            --json-report .runtime-cache/contract-diff.json
+          uv run python scripts/governance/check_contract_diff.py \
+            --base .runtime-cache/reports/contracts/contract-base.json \
+            --head .runtime-cache/reports/contracts/contract-head.json \
+            --report .runtime-cache/reports/contracts/contract-diff.md \
+            --json-report .runtime-cache/reports/contracts/contract-diff.json
           exit_code=$?
           echo "exit_code=${exit_code}" >> "$GITHUB_OUTPUT"
           exit 0
@@ -90,15 +81,15 @@ jobs:
           name: contract-diff-${{ github.run_id }}-${{ github.run_attempt }}
           if-no-files-found: error
           path: |
-            .runtime-cache/contract-base.json
-            .runtime-cache/contract-head.json
-            .runtime-cache/contract-diff.md
-            .runtime-cache/contract-diff.json
+            .runtime-cache/reports/contracts/contract-base.json
+            .runtime-cache/reports/contracts/contract-head.json
+            .runtime-cache/reports/contracts/contract-diff.md
+            .runtime-cache/reports/contracts/contract-diff.json
 
       - name: Cleanup base worktree
         if: always()
         run: |
-          git worktree remove --force .runtime-cache/base-tree || true
+          git worktree remove --force .runtime-cache/temp/base-tree || true
 
       - name: Fail on breaking changes
         if: steps.compare.outputs.exit_code != '0'
