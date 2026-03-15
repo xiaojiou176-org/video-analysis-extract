@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 
 REQUIRED_CWV_METRICS = ("lcp_ms_p75", "inp_ms_p75", "cls_p75")
-RELEASE_REPORTS_DIR = Path("reports") / "releases"
+RELEASE_REPORTS_DIR = Path("artifacts") / "releases"
 
 
 def _latest_tag(repo_root: Path) -> str | None:
