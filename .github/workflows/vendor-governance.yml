@@ -4,6 +4,9 @@ on:
   pull_request:
     paths:
       - "scripts/vendor/**"
+      - "config/governance/active-upstreams.json"
+      - "config/governance/upstream-templates.json"
+      - "config/governance/upstream-compat-matrix.json"
       - "docs/reference/dependency-governance.md"
       - ".github/workflows/vendor-governance.yml"
       - ".github/actions/**"
@@ -13,6 +16,9 @@ on:
       - codex/**
     paths:
       - "scripts/vendor/**"
+      - "config/governance/active-upstreams.json"
+      - "config/governance/upstream-templates.json"
+      - "config/governance/upstream-compat-matrix.json"
       - "docs/reference/dependency-governance.md"
       - ".github/workflows/vendor-governance.yml"
       - ".github/actions/**"
@@ -30,16 +36,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Normalize self-hosted workspace (pre-checkout)
-        shell: bash
-        run: |
-          set -euo pipefail
-          workspace="${GITHUB_WORKSPACE:?}"
-          helper="$workspace/scripts/normalize_self_hosted_pre_checkout.sh"
-          if [[ -x "$helper" ]]; then
-            bash "$helper" --workspace "$workspace"
-          else
-            rm -rf "$workspace/.runtime-cache" "$workspace/.venv" "$workspace/apps/web/node_modules" || true
-          fi
+        uses: ./.github/actions/normalize-self-hosted-workspace
 
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -51,5 +48,15 @@ jobs:
           bash -n scripts/vendor/upstream_sync.sh
           bash -n scripts/vendor/validate_upstream_lock.sh
 
-      - name: Validate UPSTREAM.lock files
-        run: bash scripts/vendor/validate_upstream_lock.sh --root .
+      - name: Validate active vendor locks
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -d vendor ]]; then
+            bash scripts/vendor/validate_upstream_lock.sh --root . --strict-no-files
+          else
+            echo "[vendor-governance] N/A: no active vendor surfaces"
+          fi
+
+      - name: Validate upstream governance inventory
+        run: bash scripts/governance_gate.sh --mode ci

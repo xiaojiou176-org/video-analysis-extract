@@ -10,7 +10,7 @@ on:
     paths:
       - ".github/workflows/runner-health.yml"
       - "infra/config/self_hosted_runner_baseline.json"
-      - "scripts/check_runner_baseline.py"
+      - "scripts/governance/check_runner_baseline.py"
 
 permissions:
   contents: read
@@ -29,16 +29,7 @@ jobs:
       GH_TOKEN: ${{ secrets.ORG_RUNNER_TOKEN }}
     steps:
       - name: Normalize self-hosted workspace (pre-checkout)
-        shell: bash
-        run: |
-          set -euo pipefail
-          workspace="${GITHUB_WORKSPACE:?}"
-          helper="$workspace/scripts/normalize_self_hosted_pre_checkout.sh"
-          if [[ -x "$helper" ]]; then
-            bash "$helper" --workspace "$workspace" --include-runner-diag 1
-          else
-            rm -rf "$workspace/.runtime-cache" "$workspace/.venv" "$workspace/apps/web/node_modules" || true
-          fi
+        uses: ./.github/actions/normalize-self-hosted-workspace
 
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -54,7 +45,7 @@ jobs:
           [[ -n "${GCP_WIF_SERVICE_ACCOUNT:-}" ]] || { echo "Missing repo var GCP_WIF_SERVICE_ACCOUNT"; exit 1; }
 
       - name: Validate self-hosted runner baseline
-        run: python3 scripts/check_runner_baseline.py --profile runner-health
+        run: python3 scripts/governance/check_runner_baseline.py --profile runner-health
 
       - name: Auth to Google Cloud
         uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed # v2

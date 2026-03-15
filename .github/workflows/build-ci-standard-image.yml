@@ -8,7 +8,7 @@ on:
     paths:
       - ".devcontainer/**"
       - ".github/workflows/build-ci-standard-image.yml"
-      - "scripts/build_ci_standard_image.sh"
+      - "scripts/ci/build_standard_image.sh"
 
 permissions:
   contents: write
@@ -23,16 +23,7 @@ jobs:
     timeout-minutes: 90
     steps:
       - name: Normalize self-hosted workspace (pre-checkout)
-        shell: bash
-        run: |
-          set -euo pipefail
-          workspace="${GITHUB_WORKSPACE:?}"
-          helper="$workspace/scripts/normalize_self_hosted_pre_checkout.sh"
-          if [[ -x "$helper" ]]; then
-            bash "$helper" --workspace "$workspace" --include-runner-diag 1
-          else
-            rm -rf "$workspace/.runtime-cache" "$workspace/.venv" "$workspace/apps/web/node_modules" || true
-          fi
+        uses: ./.github/actions/normalize-self-hosted-workspace
 
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -41,15 +32,15 @@ jobs:
 
       - name: Enforce runner disk budget
         run: |
-          bash scripts/runner_workspace_maintenance.sh --workspace "$GITHUB_WORKSPACE" --include-runner-diag 1
-          python3 scripts/check_runner_baseline.py --profile ci-heavy --workspace "$GITHUB_WORKSPACE"
+          bash scripts/governance/runner_workspace_maintenance.sh --workspace "$GITHUB_WORKSPACE" --include-runner-diag 1
+          python3 scripts/governance/check_runner_baseline.py --profile ci-heavy --workspace "$GITHUB_WORKSPACE"
 
       - name: Login to GHCR
         run: |
           echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
 
       - name: Build and push strict CI standard image
-        run: ./scripts/build_ci_standard_image.sh --push --tag "${{ github.sha }}" --metadata-file .runtime-cache/build-ci-standard-image-metadata.json
+        run: ./scripts/ci/build_standard_image.sh --push --tag "${{ github.sha }}" --metadata-file .runtime-cache/reports/build-ci-standard-image/metadata.json
 
       - name: Resolve published image digest
         id: digest
@@ -58,7 +49,7 @@ jobs:
           import json
           from pathlib import Path
 
-          metadata = json.loads(Path(".runtime-cache/build-ci-standard-image-metadata.json").read_text(encoding="utf-8"))
+          metadata = json.loads(Path(".runtime-cache/reports/build-ci-standard-image/metadata.json").read_text(encoding="utf-8"))
           print(metadata["containerimage.digest"])
           PY
           )"
@@ -69,7 +60,7 @@ jobs:
         with:
           image: ghcr.io/xiaojiou176-org/video-analysis-extract-ci-standard:${{ github.sha }}
           format: spdx-json
-          output-file: .runtime-cache/attestations/strict-ci-image.spdx.json
+          output-file: .runtime-cache/reports/attestations/strict-ci-image.spdx.json
           upload-artifact: false
           registry-username: ${{ github.actor }}
           registry-password: ${{ secrets.GITHUB_TOKEN }}
@@ -80,8 +71,8 @@ jobs:
           name: strict-ci-image-supply-chain-${{ github.run_id }}-${{ github.run_attempt }}
           if-no-files-found: error
           path: |
-            .runtime-cache/build-ci-standard-image-metadata.json
-            .runtime-cache/attestations/strict-ci-image.spdx.json
+            .runtime-cache/reports/build-ci-standard-image/metadata.json
+            .runtime-cache/reports/attestations/strict-ci-image.spdx.json
 
       - name: Attest strict CI image provenance
         uses: actions/attest-build-provenance@b3e506e8c389afc651c5bacf2b8f2a1ea0557215 # v4
@@ -95,7 +86,7 @@ jobs:
         with:
           subject-name: ghcr.io/xiaojiou176-org/video-analysis-extract-ci-standard
           subject-digest: ${{ steps.digest.outputs.digest }}
-          sbom-path: .runtime-cache/attestations/strict-ci-image.spdx.json
+          sbom-path: .runtime-cache/reports/attestations/strict-ci-image.spdx.json
           push-to-registry: true
 
       - name: Update strict CI contract digest

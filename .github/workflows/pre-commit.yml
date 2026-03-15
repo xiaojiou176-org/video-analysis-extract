@@ -5,18 +5,18 @@ on:
     paths:
       - ".githooks/**"
       - ".pre-commit-config.yaml"
-      - "scripts/check_test_assertions.py"
-      - "scripts/check_required_ci_secrets.py"
-      - "scripts/check_ci_workflow_strictness.py"
+      - "scripts/governance/check_test_assertions.py"
+      - "scripts/governance/check_required_ci_secrets.py"
+      - "scripts/governance/check_ci_workflow_strictness.py"
       - ".github/workflows/pre-commit.yml"
       - ".github/actions/**"
   push:
     paths:
       - ".githooks/**"
       - ".pre-commit-config.yaml"
-      - "scripts/check_test_assertions.py"
-      - "scripts/check_required_ci_secrets.py"
-      - "scripts/check_ci_workflow_strictness.py"
+      - "scripts/governance/check_test_assertions.py"
+      - "scripts/governance/check_required_ci_secrets.py"
+      - "scripts/governance/check_ci_workflow_strictness.py"
       - ".github/workflows/pre-commit.yml"
       - ".github/actions/**"
 
@@ -38,16 +38,7 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Normalize self-hosted workspace (pre-checkout)
-        shell: bash
-        run: |
-          set -euo pipefail
-          workspace="${GITHUB_WORKSPACE:?}"
-          helper="$workspace/scripts/normalize_self_hosted_pre_checkout.sh"
-          if [[ -x "$helper" ]]; then
-            bash "$helper" --workspace "$workspace"
-          else
-            rm -rf "$workspace/.runtime-cache" "$workspace/.venv" "$workspace/apps/web/node_modules" || true
-          fi
+        uses: ./.github/actions/normalize-self-hosted-workspace
 
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4

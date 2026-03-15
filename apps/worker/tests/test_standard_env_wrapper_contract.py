@@ -100,7 +100,7 @@ printf '%s\\n' "{simulated_arch}"
             "PATH": f"{bin_dir}:{os.environ.get('PATH', '')}",
         }
         result = subprocess.run(
-            ["bash", "scripts/build_ci_standard_image.sh", *args],
+            ["bash", "scripts/ci/build_standard_image.sh", *args],
             cwd=root,
             env=env,
             capture_output=True,
@@ -116,7 +116,7 @@ printf '%s\\n' "{simulated_arch}"
 
 def test_standard_env_wrapper_and_helper_contract_exist() -> None:
     root = _repo_root()
-    runner = (root / "scripts" / "run_in_standard_env.sh").read_text(encoding="utf-8")
+    runner = (root / "scripts" / "ci" / "run_in_standard_env.sh").read_text(encoding="utf-8")
     helper = (root / "scripts" / "lib" / "standard_env.sh").read_text(encoding="utf-8")
 
     assert 'source "$ROOT_DIR/scripts/lib/standard_env.sh"' in runner
@@ -125,11 +125,15 @@ def test_standard_env_wrapper_and_helper_contract_exist() -> None:
     assert 'if [[ "$ALLOW_LOCAL_BUILD" == "1" ]]; then' in runner
     assert 'run_in_standard_env "$@"' in runner
 
-    assert 'eval "$(python3 "$ROOT_DIR/scripts/ci_contract.py" shell-exports)"' in helper
+    assert 'eval "$(python3 "$ROOT_DIR/scripts/ci/contract.py" shell-exports)"' in helper
     assert 'STANDARD_ENV_IMAGE="${VD_STANDARD_ENV_IMAGE:-$STRICT_CI_STANDARD_IMAGE_REF}"' in helper
     assert 'STANDARD_ENV_DOCKERFILE="${VD_STANDARD_ENV_DOCKERFILE:-$ROOT_DIR/$STRICT_CI_STANDARD_IMAGE_DOCKERFILE}"' in helper
     assert 'STANDARD_ENV_WORKDIR="${VD_STANDARD_ENV_WORKDIR:-$STRICT_CI_STANDARD_IMAGE_WORKDIR}"' in helper
     assert 'docker pull "$STANDARD_ENV_IMAGE"' in helper
+    assert "GHCR_USERNAME:-${GITHUB_ACTOR:-}" in helper
+    assert "GHCR_TOKEN:-${GITHUB_TOKEN:-${GH_TOKEN:-}}" in helper
+    assert "gh auth status -t" in helper
+    assert "gh auth token" in helper
     assert "-e VD_IN_STANDARD_ENV=1" in helper
     assert 'STANDARD_ENV_HOST_GATEWAY="${VD_STANDARD_ENV_HOST_GATEWAY:-host.docker.internal}"' in helper
     assert "resolve_standard_env_runtime_value() {" in helper

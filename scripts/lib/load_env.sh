@@ -68,7 +68,7 @@ get_runtime_resolved_env_path() {
   if [[ -z "$root_dir" ]]; then
     return 1
   fi
-  printf '%s\n' "$root_dir/.runtime-cache/full-stack/resolved.env"
+  printf '%s\n' "$root_dir/.runtime-cache/run/full-stack/resolved.env"
 }
 
 read_env_value_from_file() {

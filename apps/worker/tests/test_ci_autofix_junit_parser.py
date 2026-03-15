@@ -5,7 +5,7 @@ from pathlib import Path
 
 
 def _load_ci_autofix_module():
-    module_path = Path(__file__).resolve().parents[3] / "scripts" / "ci_autofix.py"
+    module_path = Path(__file__).resolve().parents[3] / "scripts" / "ci" / "autofix.py"
     spec = importlib.util.spec_from_file_location("ci_autofix", module_path)
     assert spec is not None
     assert spec.loader is not None

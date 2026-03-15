@@ -14,33 +14,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Normalize self-hosted workspace (pre-checkout)
-        shell: bash
-        run: |
-          set -euo pipefail
-          workspace="${GITHUB_WORKSPACE:?}"
-          uid="$(id -u)"
-          gid="$(id -g)"
-          stale_paths=(
-            "$workspace/.runtime-cache"
-            "$workspace/.venv"
-            "$workspace/apps/web/node_modules"
-          )
-          if command -v sudo >/dev/null 2>&1; then
-            if sudo find "$workspace" -mindepth 1 -uid 0 -print -quit | grep -q .; then
-              echo "Detected root-owned residue under $workspace; normalizing ownership"
-              sudo chown -R "$uid:$gid" "$workspace"
-            fi
-            for path in "${stale_paths[@]}"; do
-              if sudo test -e "$path"; then
-                echo "Removing stale workspace path: $path"
-                sudo rm -rf "$path"
-              fi
-            done
-          else
-            for path in "${stale_paths[@]}"; do
-              rm -rf "$path" || true
-            done
-          fi
+        uses: ./.github/actions/normalize-self-hosted-workspace
 
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -53,10 +27,10 @@ jobs:
           python-version: "3.12"
 
       - name: Validate self-hosted runner baseline
-        run: python3 scripts/check_runner_baseline.py --profile preflight-fast
+        run: python3 scripts/governance/check_runner_baseline.py --profile preflight-fast
 
       - name: Env contract strict check
-        run: python3 scripts/check_env_contract.py --strict --env-file .env.example
+        run: python3 scripts/governance/check_env_contract.py --strict --env-file .env.example
 
       - name: computer_use smoke CLI contract check
         run: |
@@ -64,7 +38,7 @@ jobs:
           import re
           from pathlib import Path
 
-          script = Path("scripts/e2e_live_smoke.sh").read_text(encoding="utf-8")
+          script = Path("scripts/ci/e2e_live_smoke.sh").read_text(encoding="utf-8")
           required = [
               "--api-base-url <url>",
               "--require-api <0|1>",
@@ -94,9 +68,9 @@ jobs:
         continue-on-error: true
         run: bash scripts/check_ci_smoke_drift.sh
 
-      - name: CI docs parity check (advisory)
+      - name: Contract surface check
         continue-on-error: true
-        run: python3 scripts/check_ci_docs_parity.py
+        run: python3 scripts/governance/check_contract_surfaces.py
 
       - name: Docs env canonical check
         run: |
@@ -121,25 +95,25 @@ jobs:
           fi
 
       - name: Provider residual guard (blocking)
-        run: bash scripts/guard_provider_residuals.sh .
+        run: bash scripts/governance/guard_provider_residuals.sh .
 
       - name: Worker file line limits (pipeline/steps + temporal <= 750)
-        run: python3 scripts/check_worker_line_limits.py
+        run: python3 scripts/governance/check_worker_line_limits.py
 
       - name: Test focus/todo marker guard
         run: python3 scripts/check_test_focus_markers.py
 
       - name: E2E strictness guard
-        run: python3 scripts/check_e2e_strictness.py
+        run: python3 scripts/governance/check_e2e_strictness.py
 
       - name: Mutation scope guard
-        run: python3 scripts/check_mutation_scope.py
+        run: python3 scripts/governance/check_mutation_scope.py
 
       - name: Mutation test selection guard
-        run: python3 scripts/check_mutation_test_selection.py
+        run: python3 scripts/governance/check_mutation_test_selection.py
 
       - name: CI workflow strictness guard
-        run: python3 scripts/check_ci_workflow_strictness.py
+        run: python3 scripts/governance/check_ci_workflow_strictness.py
 
       - name: Schema parity check (apps/mcp vs shared-contracts)
         run: |
