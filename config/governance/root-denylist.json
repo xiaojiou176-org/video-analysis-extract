@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "forbidden_exact_paths": [
+    "data",
+    "logs",
+    "reports",
+    "coverage",
+    "dist",
+    "build",
+    "tmp",
+    "misc",
+    "vendor",
+    "patches"
+  ],
+  "forbidden_semantic_tokens": [
+    "backup",
+    "bak",
+    "tmp",
+    "misc",
+    "final-v2",
+    "final_v2",
+    "copy",
+    "old",
+    "legacy-dump"
+  ]
+}

@@ -990,7 +990,7 @@ PY
 }
 
 run_cleanup_workflow_via_api() {
-  local probe_root="$ROOT_DIR/.runtime-cache/temp/e2e-live-smoke-cleanup"
+  local probe_root="$ROOT_DIR/.runtime-cache/tmp/e2e-live-smoke-cleanup"
   local workspace_dir="$probe_root/workspace"
   local cache_dir="$probe_root/cache"
   local media_file="$workspace_dir/job-cleanup/downloads/media.mp4"

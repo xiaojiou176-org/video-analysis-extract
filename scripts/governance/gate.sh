@@ -55,14 +55,17 @@ python3 scripts/governance/check_root_layout_budget.py
 python3 scripts/governance/check_root_zero_unknowns.py
 python3 scripts/governance/check_bridge_expiry.py
 python3 scripts/governance/check_public_entrypoint_manifests.py
+python3 scripts/governance/check_public_entrypoint_references.py
 python3 scripts/governance/check_runtime_outputs.py
 python3 scripts/governance/check_runtime_artifact_writer_coverage.py
 python3 scripts/governance/check_runtime_cache_retention.py
 bash scripts/runtime/run_runtime_cache_maintenance.sh --normalize-only --subdir run --subdir logs --subdir reports --subdir evidence
+python3 scripts/governance/check_runtime_metadata_completeness.py
 python3 scripts/governance/check_runtime_cache_freshness.py
 python3 scripts/governance/check_governance_language.py
 python3 scripts/governance/check_dependency_boundaries.py
 python3 scripts/governance/check_module_ownership.py
+python3 scripts/governance/check_governance_schema_references_exist.py
 python3 scripts/governance/check_contract_locality.py
 python3 scripts/governance/check_no_cross_app_implementation_imports.py
 python3 scripts/governance/check_logging_contract.py

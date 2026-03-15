@@ -1,0 +1,60 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+sys.dont_write_bytecode = True
+
+ROOT = Path(__file__).resolve().parents[2]
+if str(ROOT / "scripts" / "governance") not in sys.path:
+    sys.path.insert(0, str(ROOT / "scripts" / "governance"))
+
+from common import load_governance_json, read_runtime_metadata
+
+REQUIRED_METADATA_FIELDS = (
+    "created_at",
+    "source_entrypoint",
+    "source_run_id",
+    "source_commit",
+    "verification_scope",
+    "freshness_window_hours",
+)
+
+
+def main() -> int:
+    config = load_governance_json("runtime-outputs.json")
+    runtime_root = ROOT / str(config["runtime_root"])
+    errors: list[str] = []
+
+    for name, subconfig in config.get("subdirectories", {}).items():
+        if not bool(subconfig.get("freshness_required")):
+            continue
+        base = runtime_root / name
+        if not base.exists():
+            continue
+
+        for artifact in sorted(item for item in base.rglob("*") if item.is_file() and not item.name.endswith(".meta.json")):
+            metadata = read_runtime_metadata(artifact)
+            if metadata is None:
+                errors.append(f"{artifact}: missing runtime metadata sidecar")
+                continue
+            for field in REQUIRED_METADATA_FIELDS:
+                value = metadata.get(field)
+                if value is None or (isinstance(value, str) and not value.strip()):
+                    errors.append(f"{artifact}: metadata field `{field}` is missing or blank")
+            if not isinstance(metadata.get("freshness_window_hours"), int):
+                errors.append(f"{artifact}: metadata field `freshness_window_hours` must be an integer")
+
+    if errors:
+        print("[runtime-metadata-completeness] FAIL")
+        for item in errors[:20]:
+            print(f"  - {item}")
+        return 1
+
+    print("[runtime-metadata-completeness] PASS")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

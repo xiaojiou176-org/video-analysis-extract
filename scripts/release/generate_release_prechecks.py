@@ -399,7 +399,7 @@ def main() -> int:
     parser.add_argument("--repo-root", default=".")
     parser.add_argument(
         "--output",
-        default=".runtime-cache/temp/release-readiness/prechecks.json",
+        default=".runtime-cache/tmp/release-readiness/prechecks.json",
     )
     parser.add_argument(
         "--skip-observability-checks",
@@ -532,7 +532,7 @@ def main() -> int:
             "value": missing_policy_count,
             "evidence": (
                 "missing_policy="
-                f"{missing_policy_count}; report=.runtime-cache/temp/release-readiness/db-rollback-readiness.json"
+                f"{missing_policy_count}; report=.runtime-cache/tmp/release-readiness/db-rollback-readiness.json"
             ),
         },
         {

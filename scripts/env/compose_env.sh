@@ -19,7 +19,7 @@ Compose effective env by order:
 
 Examples:
   bash scripts/env/compose_env.sh --profile local
-  bash scripts/env/compose_env.sh --profile local --write .runtime-cache/temp/.env.local.resolved
+  bash scripts/env/compose_env.sh --profile local --write .runtime-cache/tmp/.env.local.resolved
 USAGE
 }
 

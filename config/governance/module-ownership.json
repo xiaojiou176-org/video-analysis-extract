@@ -26,7 +26,7 @@
       ],
       "allowed_internal_prefixes": [
         "apps.worker.worker.",
-        "packages."
+        "integrations."
       ]
     },
     {
@@ -40,7 +40,7 @@
       ],
       "allowed_internal_prefixes": [
         "apps.mcp.",
-        "packages."
+        "integrations."
       ]
     },
     {

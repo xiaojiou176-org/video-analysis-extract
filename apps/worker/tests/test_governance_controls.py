@@ -15,6 +15,8 @@ def test_governance_control_plane_files_exist_and_are_populated() -> None:
     config_dir = root / "config" / "governance"
     required = [
         "root-allowlist.json",
+        "root-denylist.json",
+        "public-entrypoints.json",
         "runtime-outputs.json",
         "logging-contract.json",
         "dependency-boundaries.json",
@@ -37,7 +39,6 @@ def test_governance_control_plane_files_exist_and_are_populated() -> None:
         "reports",
         "evidence",
         "tmp",
-        "temp",
     }
 
     logging_contract = json.loads((config_dir / "logging-contract.json").read_text(encoding="utf-8"))
@@ -90,8 +91,10 @@ def test_governance_gate_script_wires_all_terminal_checks() -> None:
     assert "--mode pre-commit|pre-push|ci|audit" in script
     assert "python3 scripts/governance/check_root_allowlist.py" in script
     assert "python3 scripts/governance/check_public_entrypoint_manifests.py" in script
+    assert "python3 scripts/governance/check_public_entrypoint_references.py" in script
     assert "python3 scripts/governance/check_runtime_outputs.py" in script
     assert "python3 scripts/governance/check_runtime_artifact_writer_coverage.py" in script
+    assert "python3 scripts/governance/check_runtime_metadata_completeness.py" in script
     assert "python3 scripts/governance/check_governance_language.py" in script
     assert "python3 scripts/governance/check_dependency_boundaries.py" in script
     assert "python3 scripts/governance/check_logging_contract.py" in script

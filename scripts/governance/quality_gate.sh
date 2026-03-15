@@ -719,7 +719,7 @@ PY
 
 run_contract_diff_local_gate() {
   local base_sha=""
-  local contract_dir="$ROOT_DIR/.runtime-cache/temp/contract-diff-local"
+  local contract_dir="$ROOT_DIR/.runtime-cache/tmp/contract-diff-local"
   local base_tree="$contract_dir/base-tree"
   local base_json="$contract_dir/contract-base.json"
   local head_json="$contract_dir/contract-head.json"

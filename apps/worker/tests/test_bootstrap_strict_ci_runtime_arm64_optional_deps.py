@@ -105,14 +105,14 @@ def test_web_node_modules_ready_rejects_corrupt_dependency_tree() -> None:
         repo_root = Path(tmp_dir)
         scripts_dir = repo_root / "scripts"
         ci_dir = scripts_dir / "ci"
-        runtime_web_dir = repo_root / ".runtime-cache" / "temp" / "web-runtime" / "workspace" / "apps" / "web"
+        runtime_web_dir = repo_root / ".runtime-cache" / "tmp" / "web-runtime" / "workspace" / "apps" / "web"
         bin_dir = repo_root / "bin"
 
         scripts_dir.mkdir(parents=True)
         ci_dir.mkdir(parents=True)
         _write_prepare_web_runtime_stub(
             repo_root,
-            runtime_relative=".runtime-cache/temp/web-runtime/workspace/apps/web",
+            runtime_relative=".runtime-cache/tmp/web-runtime/workspace/apps/web",
         )
         (runtime_web_dir / "node_modules" / ".bin").mkdir(parents=True)
         bin_dir.mkdir()
@@ -174,7 +174,7 @@ def test_bootstrap_runtime_fails_fast_when_linux_arm64_optional_native_web_packa
         bin_dir.mkdir()
         _write_prepare_web_runtime_stub(
             repo_root,
-            runtime_relative=".runtime-cache/temp/web-runtime/workspace/apps/web",
+            runtime_relative=".runtime-cache/tmp/web-runtime/workspace/apps/web",
         )
 
         (ci_dir / "bootstrap_strict_ci_runtime.sh").write_text(source, encoding="utf-8")
@@ -308,7 +308,7 @@ def test_bootstrap_runtime_allows_followup_ci_retry_when_arm64_native_web_packag
         bin_dir.mkdir()
         _write_prepare_web_runtime_stub(
             repo_root,
-            runtime_relative=".runtime-cache/temp/web-runtime/workspace/apps/web",
+            runtime_relative=".runtime-cache/tmp/web-runtime/workspace/apps/web",
         )
 
         (ci_dir / "bootstrap_strict_ci_runtime.sh").write_text(source, encoding="utf-8")
@@ -440,7 +440,7 @@ def test_ci_web_test_build_fails_fast_when_arm64_optional_native_web_packages_ar
         bin_dir.mkdir()
         _write_prepare_web_runtime_stub(
             repo_root,
-            runtime_relative=".runtime-cache/temp/web-runtime/workspace/apps/web",
+            runtime_relative=".runtime-cache/tmp/web-runtime/workspace/apps/web",
         )
 
         (ci_dir / "bootstrap_strict_ci_runtime.sh").write_text(
@@ -600,7 +600,7 @@ def test_bootstrap_runtime_reinstalls_web_dependencies_when_transitive_lint_depe
         bin_dir.mkdir()
         _write_prepare_web_runtime_stub(
             repo_root,
-            runtime_relative=".runtime-cache/temp/web-runtime/workspace/apps/web",
+            runtime_relative=".runtime-cache/tmp/web-runtime/workspace/apps/web",
         )
 
         (ci_dir / "bootstrap_strict_ci_runtime.sh").write_text(source, encoding="utf-8")

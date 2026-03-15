@@ -15,7 +15,7 @@
 
 - 清单：`apps/web/package.json`
 - 锁文件：`apps/web/package-lock.json`
-- 安装命令：`bash scripts/ci/prepare_web_runtime.sh`
+- 安装命令：`./bin/prepare-web-runtime`
 - 覆盖率运行依赖：`@vitest/coverage-v8`（`vitest run --coverage` 必需）
 - UI 基座依赖：当前 Web shell 使用 `tailwindcss@4` + `@tailwindcss/postcss` + `radix-ui` + `next-themes` + `geist`；
   若继续扩展 UI primitives，优先复用现有 shadcn/radix 风格组件，不要并行引入第二套组件体系。
@@ -78,8 +78,8 @@
 3. 校验：
 
 ```bash
-bash scripts/ci/prepare_web_runtime.sh
-eval "$(bash scripts/ci/prepare_web_runtime.sh --shell-exports)"
+./bin/prepare-web-runtime
+eval "$(./bin/prepare-web-runtime --shell-exports)"
 npm --prefix "$WEB_RUNTIME_WEB_DIR" run lint
 npm --prefix "$WEB_RUNTIME_WEB_DIR" run test
 npm --prefix "$WEB_RUNTIME_WEB_DIR" run test:a11y
@@ -92,7 +92,7 @@ npm --prefix "$WEB_RUNTIME_WEB_DIR" run build
 - 若依赖升级影响到本地严格验收链路，还必须验证：
 
 ```bash
-./scripts/ci/api_real_smoke_local.sh
+./bin/api-real-smoke-local
 ./bin/quality-gate --mode pre-push --strict-full-run 1 --profile ci --profile live-smoke --ci-dedupe 0
 ```
 

@@ -7,18 +7,6 @@ import sys
 sys.dont_write_bytecode = True
 
 from common import load_governance_json
-
-FORBIDDEN_SEGMENTS = {
-    "backup",
-    "bak",
-    "tmp",
-    "misc",
-    "final-v2",
-    "final_v2",
-    "copy",
-    "old",
-    "legacy-dump",
-}
 ALLOWED_DOTFILES = {
     ".agents",
     ".devcontainer",
@@ -57,14 +45,19 @@ def _normalized_tokens(path: str) -> list[str]:
 
 def main() -> int:
     payload = load_governance_json("root-allowlist.json")
+    denylist = load_governance_json("root-denylist.json")
     entries = payload.get("tracked_root_allowlist", []) + payload.get("local_private_root_tolerations", [])
     errors: list[str] = []
+    forbidden_exact_paths = {str(item) for item in denylist.get("forbidden_exact_paths", [])}
+    forbidden_segments = {str(item).lower() for item in denylist.get("forbidden_semantic_tokens", [])}
 
     for item in entries:
         path = str(item.get("path") or "")
         if not path:
             errors.append("root semantic cleanliness: empty allowlist path")
             continue
+        if path in forbidden_exact_paths:
+            errors.append(f"root semantic cleanliness: top-level path is explicitly denylisted: {path}")
         if path.startswith(".") and path not in ALLOWED_DOTFILES:
             errors.append(f"root semantic cleanliness: undeclared dotfile style path `{path}` is not allowed")
         if "__" in path:
@@ -72,7 +65,7 @@ def main() -> int:
         if re.search(r"[A-Z]", path) and path not in ALLOWED_ROOT_FILES:
             errors.append(f"root semantic cleanliness: top-level path must be lowercase or conventional dotfile: {path}")
         tokens = set(_normalized_tokens(path))
-        bad = sorted(tokens & FORBIDDEN_SEGMENTS)
+        bad = sorted(tokens & forbidden_segments)
         if bad:
             errors.append(
                 f"root semantic cleanliness: top-level path `{path}` contains forbidden semantic token(s): "

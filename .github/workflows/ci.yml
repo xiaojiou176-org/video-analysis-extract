@@ -1111,7 +1111,7 @@ jobs:
           NOTIFICATION_ENABLED: "0"
         run: |
           mkdir -p .runtime-cache/logs/tests
-          ./scripts/dev_worker.sh --no-show-hints > .runtime-cache/logs/tests/web-e2e-perceived-worker.log 2>&1 &
+          ./bin/dev-worker --no-show-hints > .runtime-cache/logs/tests/web-e2e-perceived-worker.log 2>&1 &
           echo "WEB_E2E_PERCEIVED_WORKER_PID=$!" >> "$GITHUB_ENV"
           for attempt in $(seq 1 10); do
             if ! kill -0 "${WEB_E2E_PERCEIVED_WORKER_PID:-$!}" >/dev/null 2>&1; then

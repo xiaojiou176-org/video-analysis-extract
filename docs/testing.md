@@ -70,7 +70,7 @@
 
 - 只读巡检脚本：`scripts/governance/audit_github_runner_host.sh`
 - Startup script 真相源：`infra/gce/github-runner-org-startup.sh`
-- 同步 metadata 脚本：`scripts/deploy/apply_github_runner_startup_metadata.sh`
+- 同步 metadata 脚本：`./bin/apply-runner-startup-metadata`
 
 只读巡检示例：
 
@@ -85,7 +85,7 @@ scripts/governance/audit_github_runner_host.sh \
 
 作用：
 
-- 记录 instance metadata / serial port / SSH 巡检证据到 `.runtime-cache/temp/runner-health/<instance>/`
+- 记录 instance metadata / serial port / SSH 巡检证据到 `.runtime-cache/tmp/runner-health/<instance>/`
 - 检查 `_work` 下是否存在 `~/.cache`、`.cache`、异常 repo-side 浏览器缓存路径
 - 检查 `_work` 和目标 repo 下是否存在非 `ubuntu` owner 文件
 - 汇总串口里的 `left-over process` / `Runner listener exited with error code 143` 证据
@@ -93,7 +93,7 @@ scripts/governance/audit_github_runner_host.sh \
 同步改良版 startup-script 到 runner 实例 metadata：
 
 ```bash
-scripts/deploy/apply_github_runner_startup_metadata.sh \
+./bin/apply-runner-startup-metadata \
   --project project-73ca1c4a-1270-4025-a65 \
   --zone us-central1-a \
   --instance github-runner-core-02
@@ -104,7 +104,7 @@ scripts/deploy/apply_github_runner_startup_metadata.sh \
 - D1 `main` / `release` / nightly 强制 live-smoke（不得 skip）：
 
 ```bash
-scripts/ci/e2e_live_smoke.sh \
+./bin/live-smoke \
   --api-base-url "http://127.0.0.1:18080" \
   --require-api "1" \
   --require-secrets "1" \
@@ -115,7 +115,7 @@ scripts/ci/e2e_live_smoke.sh \
   --diagnostics-json ".runtime-cache/reports/tests/e2e-live-smoke-result.json"
 ```
 
-说明：`scripts/quality_gate.sh` 的 live-smoke profile gate 会校验 `scripts/ci/e2e_live_smoke.sh` 默认值，其中 secrets requirement 必须保持为强制开启（与 D1 强制 secrets 口径一致）。
+说明：`./bin/quality-gate` 的 live-smoke profile gate 会校验 `./bin/live-smoke` 默认值，其中 secrets requirement 必须保持为强制开启（与 D1 强制 secrets 口径一致）。
 
 - D2 mutation 硬门禁阈值 `0.64`（并新增结构质量约束）：
 
@@ -143,14 +143,14 @@ python3 scripts/governance/check_web_coverage_threshold.py \
 
 本地验收口径同步（与 CI 对齐）：
 
-- 默认快速回归仍使用 sqlite 口径；但当 `quality_gate` 判定存在后端改动时，`pre-push` 会强制执行 `scripts/ci/api_real_smoke_local.sh`（真实 Postgres + Temporal + worker）。
-- 本地真实 Postgres integration smoke 的真相源是 `./scripts/ci/api_real_smoke_local.sh`。
-- `scripts/ci/api_real_smoke_local.sh` 默认使用 `127.0.0.1:18080`；若默认端口已被占用且未显式传 `--api-port`，脚本会自动回退到下一个可用端口并记录诊断日志。
-- `scripts/ci/api_real_smoke_local.sh` 会在 cleanup workflow closure probe 前临时拉起一个本地 worker，并在脚本退出时自动回收，因此不再要求调用方先手动启动 worker。
-- `scripts/ci/api_real_smoke_local.sh` 现在包含本机 IPv4 loopback preflight；若主机先天无法建立 `127.0.0.1` 自连接，会直接输出 `failure_kind=host_loopback_ipv4_exhausted` 并 fail-fast，这属于环境级阻塞，不应误判为 API/worker 业务回归。
+- 默认快速回归仍使用 sqlite 口径；但当 `quality_gate` 判定存在后端改动时，`pre-push` 会强制执行 `./bin/api-real-smoke-local`（真实 Postgres + Temporal + worker）。
+- 本地真实 Postgres integration smoke 的真相源是 `./bin/api-real-smoke-local`。
+- `./bin/api-real-smoke-local` 默认使用 `127.0.0.1:18080`；若默认端口已被占用且未显式传 `--api-port`，脚本会自动回退到下一个可用端口并记录诊断日志。
+- `./bin/api-real-smoke-local` 会在 cleanup workflow closure probe 前临时拉起一个本地 worker，并在脚本退出时自动回收，因此不再要求调用方先手动启动 worker。
+- `./bin/api-real-smoke-local` 现在包含本机 IPv4 loopback preflight；若主机先天无法建立 `127.0.0.1` 自连接，会直接输出 `failure_kind=host_loopback_ipv4_exhausted` 并 fail-fast，这属于环境级阻塞，不应误判为 API/worker 业务回归。
 - 当执行 `./bin/quality-gate --mode pre-push --strict-full-run 1 ...` 时，必须额外跑本地真实 Postgres smoke。
 - `strict-full-run=1` 会强制关闭 `--ci-dedupe` 且禁止 `--skip-mutation`，确保本地执行真实全量门禁。
-- `scripts/ci/smoke_full_stack.sh` 负责本地联调与 live smoke 相关检查，不是 `api-real-smoke` 的替代品。
+- `./bin/smoke-full-stack` 负责本地联调与 live smoke 相关检查，不是 `api-real-smoke` 的替代品。
 - `UI Audit` 结果现会落盘到 `UI_AUDIT_RUN_STORE_DIR`（默认 `.runtime-cache/evidence/tests/ui-audit-runs/`），避免 API 重启后审查记录丢失。
 - `POST /api/v1/ui-audit/run` 的响应会携带 `gemini_review` 元信息；若返回 `status=completed_with_gemini_failure`，表示证据采集完成但 Gemini 深审失败，不能当作 UI 深审通过。
 - UI Audit 高级运行时调优当前仅作为运行时可选覆盖，不属于 `.env.example` 的 strict contract 白名单；如需调整，请以服务端实现与严格 CI 契约为准。
@@ -204,11 +204,11 @@ Live 诊断与执行策略（本地/CI 一致）：
 - Batch B 契约口径：`e2e_live_smoke.sh` 与 `smoke_llm_real_local.sh` 的运行参数以 CLI 为唯一治理口径；`.env` 中旧参数不再视为受支持治理入口。
 - `YOUTUBE_API_KEY` 失效修复：`e2e_live_smoke.sh` 会按 `.env` → 当前 shell 环境变量自动探测可用 key，并在修复成功后回写 `.env`（日志仅展示脱敏 key 片段）。
 - 若所有来源都无效：脚本直接失败，并输出“需要用户提供有效key”。
-- `scripts/ci/smoke_computer_use_local.sh` 默认严格判定：只有 `status=200` 且响应字段完整才算 `passed`；遇到 provider 未开通能力会失败（不是隐式 skip）。
+- `./bin/smoke-computer-use-local` 默认严格判定：只有 `status=200` 且响应字段完整才算 `passed`；遇到 provider 未开通能力会失败（不是隐式 skip）。
 - 若确需允许 provider 能力未开通时的跳过，必须显式传 `--allow-unsupported-skip=1`，并在日志中出现 `result=skipped`。
 - 失败分类：诊断 JSON 必须携带 `failure_kind`，取值为 `code_logic_error` 或 `network_or_environment_timeout`。
 - Full-stack / smoke 口径（硬切后）：
-  - `scripts/ci/smoke_full_stack.sh` 统一 fail-fast，不再接受 offline fallback。
+  - `./bin/smoke-full-stack` 统一 fail-fast，不再接受 offline fallback。
   - `scripts/bootstrap_full_stack.sh` 在 core/reader 启动失败、数据库迁移失败时直接退出，不再回退到临时数据库或降级 reader 检查。
   - `smoke_full_stack.sh` 是本地联调 smoke，不是 `api-real-smoke` 的替代品。
 - 长任务可观测：live 脚本输出 heartbeat 与 phase 进度日志（`phase=short_tests` / `phase=long_tests`）。
@@ -222,7 +222,7 @@ Live 诊断与执行策略（本地/CI 一致）：
 ```bash
 uv sync --frozen --extra dev --extra e2e
 uv run --with playwright python -m playwright install --with-deps chromium
-uv run --with playwright bash scripts/ci/external_playwright_smoke.sh \
+uv run --with playwright ./bin/external-playwright-smoke \
   --url "https://example.com" \
   --browser "chromium" \
   --expect-text "Example Domain" \
@@ -251,7 +251,7 @@ for _ in $(seq 1 30); do
   curl -fsS "http://127.0.0.1:18081/healthz" >/dev/null && break
   sleep 1
 done
-scripts/ci/smoke_llm_real_local.sh --api-base-url "http://127.0.0.1:18081"
+./bin/smoke-llm-real-local --api-base-url "http://127.0.0.1:18081"
 ```
 
 3. 复现本地真实 Postgres integration smoke（对齐 CI `api-real-smoke`）：
@@ -259,7 +259,7 @@ scripts/ci/smoke_llm_real_local.sh --api-base-url "http://127.0.0.1:18081"
 ```bash
 export DATABASE_URL='postgresql+psycopg://postgres:postgres@127.0.0.1:5432/video_analysis'
 export API_INTEGRATION_SMOKE_STRICT='1'
-./scripts/ci/api_real_smoke_local.sh
+./bin/api-real-smoke-local
 ```
 
 说明：
@@ -323,21 +323,21 @@ python3 scripts/governance/check_test_assertions.py
 
 ```bash
 ./bin/full-stack up
-./scripts/ci/api_real_smoke_local.sh
-./scripts/ci/smoke_full_stack.sh
+./bin/api-real-smoke-local
+./bin/smoke-full-stack
 ./bin/quality-gate --mode pre-push --strict-full-run 1 --profile ci --profile live-smoke --ci-dedupe 0
 ```
 
 ### 0.1.1) 一键最终门禁集成验收（profile -> pre-commit -> pre-push）
 
 ```bash
-bash scripts/env/final_governance_check.sh
+./bin/final-governance-check
 ```
 
 如需仅执行到 pre-commit（跳过 pre-push）：
 
 ```bash
-bash scripts/env/final_governance_check.sh --skip-prepush
+./bin/final-governance-check --skip-prepush
 ```
 
 默认策略（阻断）：
@@ -391,7 +391,7 @@ artifact 口径：
 ### 0.2) Git Hook 强制门禁（commit-msg / pre-commit / pre-push）
 
 ```bash
-./scripts/governance/install_git_hooks.sh
+./bin/install-git-hooks
 ```
 
 可选：直接安装 pre-commit framework hooks（会写入当前 `core.hooksPath`）：
@@ -492,7 +492,7 @@ echo "feat(api): add ingest health guard" > /tmp/commit-msg-ok.txt
 - 新增/修改环境变量：同步 `.env.example`、`ENVIRONMENT.md`、`infra/config/env.contract.json`。
 - 调整 API 行为或签名（`apps/api/app/routers/*.py`、`apps/api/app/services/*.py`、`apps/mcp/**/*.py`）：同步 `README.md`、`docs/runbook-local.md`、`docs/testing.md`。
 - 调整 Schema 签名（`apps/mcp/schemas/tools.json`、`contracts/generated/jsonschema/*.json`）：同步 `docs/testing.md`。
-- 调整本地启动脚本参数/默认值（`scripts/dev_*.sh`、`scripts/full_stack.sh`、`scripts/bootstrap_full_stack.sh`、`scripts/ci/smoke_full_stack.sh`）：同步 `docs/start-here.md`、`docs/runbook-local.md`、`README.md`。
+- 调整本地启动脚本参数/默认值（`bin/dev-*`、`bin/full-stack`、`bin/bootstrap-full-stack`、`bin/smoke-full-stack`）：同步 `docs/start-here.md`、`docs/runbook-local.md`、`README.md`。
 - 调整日志/缓存/依赖策略：同步 `docs/reference/logging.md`、`docs/reference/cache.md`、`docs/reference/dependency-governance.md`。
 
 ### 1) Python tests (worker/api/mcp, xdist=2)
@@ -551,7 +551,7 @@ uv run --with pytest --with playwright pytest apps/web/tests/e2e -q
 
 - E2E CI 主路径必须连接 real API（真实 API），覆盖端到端关键旅程，不允许使用 mock API 作为 CI 默认路径。
 - mock API 仅允许本地调试（developer debug）使用，且不得作为 PR/main/release 门禁证据。
-- 运行前需先准备 Web runtime workspace：`bash scripts/ci/prepare_web_runtime.sh`。主链不再要求 `apps/web/node_modules` 常驻在仓库源码树中。
+- 运行前需先准备 Web runtime workspace：`./bin/prepare-web-runtime`。主链不再要求 `apps/web/node_modules` 常驻在仓库源码树中。
 
 CI 中 `web-e2e` 的 real API 启动口径（Postgres + migrations + uvicorn）：
 
@@ -585,7 +585,7 @@ uv run --with uvicorn uvicorn apps.api.app.main:app --host 127.0.0.1 --port 1808
 
 顺序必须是先启动并确认 Temporal（`127.0.0.1:7233`）可用，再启动 `uvicorn`，避免 real API 在 Temporal 未就绪时失败。
 
-- stronger Temporal readiness 也已接入 `./scripts/ci/web_e2e.sh`：脚本会先 `start_temporal` 并阻塞到 `wait_for_tcp "$WEB_E2E_TEMPORAL_PORT"` 成功，再依次启动 API 与 worker，避免把 Temporal 未就绪误判成后续 API/worker 启动问题。
+- stronger Temporal readiness 也已接入 `./bin/web-e2e`：脚本会先 `start_temporal` 并阻塞到 `wait_for_tcp "$WEB_E2E_TEMPORAL_PORT"` 成功，再依次启动 API 与 worker，避免把 Temporal 未就绪误判成后续 API/worker 启动问题。
 
 `conftest` 参数 `--web-e2e-api-base-url` 用法（将 Web E2E 指向 real API）：
 

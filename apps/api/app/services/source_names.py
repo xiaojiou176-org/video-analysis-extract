@@ -4,7 +4,9 @@ import json
 from functools import lru_cache
 from pathlib import Path
 
-_MAPPING_FILE = Path(__file__).resolve().parents[4] / "data" / "subscriptions.up_names.json"
+_MAPPING_FILE = (
+    Path(__file__).resolve().parents[4] / "config" / "source-names" / "subscriptions.up_names.json"
+)
 
 
 @lru_cache(maxsize=1)

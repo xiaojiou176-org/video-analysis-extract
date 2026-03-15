@@ -36,7 +36,7 @@ uv run pytest apps/api/tests -q
 1. 涉及 API 逻辑改动时，必须通过 `apps/api/tests`。
 2. 涉及跨模块改动时，必须遵循根门禁：env contract + backend pytest + web lint + fake assertion gate。
 3. 不允许提交 `expect(true).toBe(true)` 或无效断言测试。
-4. 涉及启动/链路改动时，必须补一次 `./scripts/ci/smoke_full_stack.sh` 或在交付中说明未执行原因。
+4. 涉及启动/链路改动时，必须补一次 `./bin/smoke-full-stack` 或在交付中说明未执行原因。
 
 ## 4. 文档优先级（模块内）
 

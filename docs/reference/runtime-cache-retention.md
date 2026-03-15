@@ -41,8 +41,9 @@
 ```bash
 python3 scripts/runtime/prune_runtime_cache.py --assert-clean
 python3 scripts/governance/check_runtime_cache_retention.py
+python3 scripts/governance/check_runtime_metadata_completeness.py
 python3 scripts/governance/check_runtime_cache_freshness.py
-bash scripts/runtime/run_runtime_cache_maintenance.sh --normalize-only
+./bin/runtime-cache-maintenance --normalize-only
 ```
 
 ## 硬规则

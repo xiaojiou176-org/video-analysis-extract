@@ -35,7 +35,7 @@ uv run pytest apps/mcp/tests -q
 1. 涉及 MCP 工具参数、返回结构或路由改动时，必须通过 `apps/mcp/tests`。
 2. 涉及 API/MCP 契约联动改动时，必须补充对应测试并同步 `README.md`。
 3. 涉及跨模块改动时，必须遵循根门禁：env contract + backend pytest + web lint + fake assertion gate。
-4. 涉及启动/联调路径改动时，必须补一次 `./scripts/ci/smoke_full_stack.sh` 或在交付中说明未执行原因。
+4. 涉及启动/联调路径改动时，必须补一次 `./bin/smoke-full-stack` 或在交付中说明未执行原因。
 
 ## 4. 文档优先级（模块内）
 

@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "surfaces": [
+    "README.md",
+    "AGENTS.md",
+    "CLAUDE.md",
+    "docs/start-here.md",
+    "docs/runbook-local.md",
+    "docs/testing.md",
+    ".githooks/pre-commit",
+    ".githooks/pre-push",
+    ".github/workflows/ci.yml",
+    ".github/workflows/monthly-governance-audit.yml",
+    ".github/workflows/vendor-governance.yml"
+  ],
+  "legacy_public_paths": [
+    "./scripts/bootstrap_full_stack.sh",
+    "./scripts/dev_api.sh",
+    "./scripts/dev_worker.sh",
+    "./scripts/dev_mcp.sh",
+    "./scripts/full_stack.sh",
+    "./scripts/quality_gate.sh",
+    "./scripts/strict_ci_entry.sh",
+    "bash scripts/governance_gate.sh"
+  ],
+  "required_public_entrypoints": [
+    "bin/install-git-hooks",
+    "bin/api-real-smoke-local",
+    "bin/bootstrap-full-stack",
+    "bin/dev-api",
+    "bin/dev-worker",
+    "bin/dev-mcp",
+    "bin/full-stack",
+    "bin/quality-gate",
+    "bin/smoke-full-stack",
+    "bin/strict-ci",
+    "bin/governance-audit"
+  ]
+}

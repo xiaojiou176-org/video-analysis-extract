@@ -185,6 +185,7 @@ def main() -> int:
         report_path,
         source_entrypoint="scripts/runtime/prune_runtime_cache.py",
         verification_scope="runtime-cache-maintenance",
+        source_run_id="runtime-cache-maintenance",
         freshness_window_hours=24,
         extra={"report_kind": "runtime-cache-maintenance"},
     )

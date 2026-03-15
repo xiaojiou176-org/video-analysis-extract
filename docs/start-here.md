@@ -56,19 +56,19 @@ python3 scripts/governance/check_env_contract.py --strict
 说明：
 
 - `.env.example` 现在只保留最小可启动键和少量高频覆盖键，默认足够完成一次本地启动。
-- 标准初始化路径是 `.env.example -> .env`；`scripts/env/init_example.sh` 仅作为辅助模板生成工具，不是默认入口。
+- 标准初始化路径是 `.env.example -> .env`；`./bin/init-env-example` 仅作为辅助模板生成工具，不是默认入口。
 - 脚本参数全集见 `docs/reference/env-script-overrides.md`（按需覆盖，不必全量写入 `.env`）。
 
 ## 一键验证（最短路径）
 
 ```bash
-bash scripts/env/validate_profile.sh --profile local
+./bin/validate-profile --profile local
 ```
 
 ## 初始化质量门禁（建议在首次 clone 后执行）
 
 ```bash
-./scripts/governance/install_git_hooks.sh
+./bin/install-git-hooks
 ```
 
 可选：如果你希望把 `pre-commit` framework 也直接挂到 Git 生命周期（除仓库默认 `.githooks` 外），执行：
@@ -119,7 +119,7 @@ pre-commit run --all-files
 可选排障命令：
 
 ```bash
-bash scripts/env/compose_env.sh --profile local --write .runtime-cache/temp/.env.resolved
+./bin/compose-env --profile local --write .runtime-cache/tmp/.env.resolved
 ```
 
 迁移规则：
@@ -141,11 +141,11 @@ DevContainer 启动拓扑补充（2026-03）：
 
 - `.devcontainer/post-create.sh` 已移除 `curl|sh` 安装模式，改为 `python3 -m pip install --user --upgrade "uv>=0.10,<1.0"`；当前会直接校验 strict contract 里的 Chromium 是否可启动，失败时直接报 drift，不再 `playwright install ... || true`。
 - 并发 Web E2E 场景可通过 `WEB_E2E_NEXT_DIST_DIR` 隔离 Next.js `distDir`，避免 `.next/dev/lock` 冲突（默认常规开发无需设置）。
-- `infra/config/strict_ci_contract.json` 现在是标准镜像真相源；`bin/strict-ci` / `scripts/ci/run_in_standard_env.sh` 只接受 digest-pinned 标准镜像，拉取失败会直接终止，不再静默回退到旧本地镜像。
+- `infra/config/strict_ci_contract.json` 现在是标准镜像真相源；`bin/strict-ci` / `./bin/run-in-standard-env` 只接受 digest-pinned 标准镜像，拉取失败会直接终止，不再静默回退到旧本地镜像。
 - 关键 correctness gates（`preflight-heavy`、`db-migration-smoke`、`dependency-vuln-scan`、`web-e2e-perceived`、后端/前端 lint hosted/fallback）已经跟 `python-tests` / `api-real-smoke` / `web-e2e` 一样迁入标准镜像执行，因此宿主 Docker 可用性现在是 CI 等价本地验收的前提。
 - self-hosted runner 基线合同已独立成 `infra/config/self_hosted_runner_baseline.json`；主 `ci.yml` 不再预热/拉起 runner，runner 健康检查改由 `runner-health.yml` 负责。
 - DevContainer 现在固定挂载到 `/workspace`，并通过 `post-create.sh` 校验 `uv` / `node` / cache 路径是否与 strict contract 一致。
-- Web 依赖树统一进入 `.runtime-cache/temp/web-runtime/workspace/apps/web`，不再把 `apps/web/node_modules` 作为仓库源码树中的合法长期状态。
+- Web 依赖树统一进入 `.runtime-cache/tmp/web-runtime/workspace/apps/web`，不再把 `apps/web/node_modules` 作为仓库源码树中的合法长期状态。
 - CI/release 生成式参考页：
   - `docs/generated/ci-topology.md`
   - `docs/generated/runner-baseline.md`
@@ -155,7 +155,7 @@ DevContainer 启动拓扑补充（2026-03）：
 
 ```bash
 uv sync --frozen --extra dev --extra e2e
-bash scripts/ci/prepare_web_runtime.sh
+./bin/prepare-web-runtime
 
 brew services start postgresql@16
 brew services start redis
@@ -184,7 +184,7 @@ curl -sS -X POST http://127.0.0.1:9000/api/v1/ingest/poll -H 'Content-Type: appl
 ```bash
 ./bin/bootstrap-full-stack
 ./bin/full-stack up
-./scripts/ci/smoke_full_stack.sh
+./bin/smoke-full-stack
 ```
 
 默认行为：
@@ -198,8 +198,8 @@ curl -sS -X POST http://127.0.0.1:9000/api/v1/ingest/poll -H 'Content-Type: appl
 - `bin/dev-mcp` 为交互式 stdio 入口，不作为 `full_stack.sh` 的后台守护进程管理；需要 MCP 本地调试时单独开一个终端运行。
 - `bin/dev-api` 在检测到 `uv` 时会调用 `uv run python -m uvicorn ...`，避免某些 self-hosted/隔离环境缺少 `uvicorn` console entry 时启动失败。
 - `smoke_full_stack.sh` 会执行本地联调烟测并覆盖 reader 栈检查；core/reader 任一异常都会直接 fail-fast，不再保留 offline fallback 降级路径。
-- `smoke_full_stack.sh` 不是 `api-real-smoke` 替代；后端真实 Postgres integration smoke 必须单独执行 `scripts/ci/api_real_smoke_local.sh`。
-- `scripts/ci/api_real_smoke_local.sh` 现在会先做本机 IPv4 loopback 预检；若命中 `failure_kind=host_loopback_ipv4_exhausted`（常见于当前机器本地 127.0.0.1 临时端口池被大量 MCP/Codex 连接占满），脚本会直接 fail-fast，而不是继续启动 API/worker/Temporal 后才深处报错。
+- `smoke_full_stack.sh` 不是 `api-real-smoke` 替代；后端真实 Postgres integration smoke 必须单独执行 `./bin/api-real-smoke-local`。
+- `./bin/api-real-smoke-local` 现在会先做本机 IPv4 loopback 预检；若命中 `failure_kind=host_loopback_ipv4_exhausted`（常见于当前机器本地 127.0.0.1 临时端口池被大量 MCP/Codex 连接占满），脚本会直接 fail-fast，而不是继续启动 API/worker/Temporal 后才深处报错。
 - 本地脚本排障时优先看 `.runtime-cache/logs/components/full-stack/*.log`、`.runtime-cache/run/full-stack/resolved.env` 与 `.runtime-cache/logs/tests/api-real-smoke-local.log`，这样能先区分“端口/路由漂移”还是“业务失败”。
 - `pr-llm-real-smoke`、`live-smoke`、`web-e2e` 的日志统一看 `.runtime-cache/logs/tests/`；对应 diagnostics/JUnit 看 `.runtime-cache/reports/tests/`。
 

@@ -163,13 +163,6 @@
       "mutable": false
     },
     {
-      "path": "data",
-      "kind": "data",
-      "reason": "Curated local data inputs and fixtures.",
-      "owner": "platform",
-      "mutable": false
-    },
-    {
       "path": "docs",
       "kind": "docs",
       "reason": "Repository knowledge, runbooks, generated references, and governance contracts.",

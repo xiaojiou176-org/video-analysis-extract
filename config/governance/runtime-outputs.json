@@ -76,17 +76,7 @@
       "max_file_count": 30000,
       "rebuild_entrypoint": "scripts/runtime/run_runtime_cache_maintenance.sh --normalize-only --subdir tmp",
       "freshness_required": false,
-      "description": "Final-form scratch root for short-lived temporary files and repo-side execution state during the temp-to-tmp bridge window."
-    },
-    "temp": {
-      "owner": "platform",
-      "classification": "scratch",
-      "ttl_days": 2,
-      "max_total_size_mb": 1024,
-      "max_file_count": 30000,
-      "rebuild_entrypoint": "scripts/runtime/run_runtime_cache_maintenance.sh --normalize-only --subdir temp",
-      "freshness_required": false,
-      "description": "Short-lived temporary files, isolated workdirs, repo-side short-lived execution state, and quarantined local private state."
+      "description": "Final-form scratch root for short-lived temporary files, isolated workdirs, repo-side execution state, and quarantined local private state."
     }
   }
 }

@@ -40,7 +40,7 @@ python3 scripts/release/verify_db_rollback_readiness.py \
 1. Route traffic back to stable immediately.
 
 ```bash
-TARGET_WEIGHT=0 scripts/deploy/canary_rollout.sh --target 0 --step 100
+TARGET_WEIGHT=0 ./bin/canary-rollout --target 0 --step 100
 ```
 
 2. Checkout and restore the previous known-good tag.
@@ -56,7 +56,7 @@ git checkout <N-1-tag>
 
 ```bash
 uv sync --frozen
-bash scripts/ci/prepare_web_runtime.sh
+./bin/prepare-web-runtime
 npm --prefix apps/web run build
 sudo systemctl restart vd-api vd-worker vd-web
 ```

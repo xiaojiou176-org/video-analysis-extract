@@ -34,6 +34,7 @@
 python3 scripts/governance/check_public_entrypoint_manifests.py
 python3 scripts/governance/check_run_manifest_completeness.py
 python3 scripts/governance/check_runtime_artifact_writer_coverage.py
+python3 scripts/governance/check_runtime_metadata_completeness.py
 python3 scripts/runtime/build_evidence_index.py --rebuild-all
 python3 scripts/governance/check_no_unindexed_evidence.py
 python3 scripts/governance/check_log_correlation_completeness.py

@@ -24,7 +24,7 @@
 ### 3.1 模块命令
 
 ```bash
-bash scripts/ci/prepare_web_runtime.sh
+./bin/prepare-web-runtime
 npm --prefix apps/web run lint
 npm --prefix apps/web run test
 
@@ -36,7 +36,7 @@ uv run --with pytest --with playwright pytest apps/web/tests/e2e -q
 1. 涉及页面、交互、状态流改动时，必须通过 `lint + test`。
 2. 涉及 E2E 口径改动时，必须同步 `docs/testing.md`。
 3. 涉及跨模块改动时，必须遵循根门禁：env contract + backend pytest + web lint + fake assertion gate。
-4. 涉及启动/联调路径改动时，必须补一次 `./scripts/ci/smoke_full_stack.sh` 或在交付中说明未执行原因。
+4. 涉及启动/联调路径改动时，必须补一次 `./bin/smoke-full-stack` 或在交付中说明未执行原因。
 
 ## 4. 文档优先级（模块内）
 

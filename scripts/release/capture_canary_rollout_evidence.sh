@@ -8,7 +8,7 @@ RELEASE_DIR="$REPO_ROOT/artifacts/releases/$RELEASE_TAG"
 CANARY_DIR="$RELEASE_DIR/canary"
 EVIDENCE_JSON="$CANARY_DIR/canary-rollout-evidence.json"
 EVIDENCE_LOG="$CANARY_DIR/canary-rollout-dryrun.log"
-TMP_ROUTING="$REPO_ROOT/.runtime-cache/temp/release-readiness/canary-routing.dryrun.conf"
+TMP_ROUTING="$REPO_ROOT/.runtime-cache/tmp/release-readiness/canary-routing.dryrun.conf"
 
 mkdir -p "$CANARY_DIR" "$(dirname "$TMP_ROUTING")"
 

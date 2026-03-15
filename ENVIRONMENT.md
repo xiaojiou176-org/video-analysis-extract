@@ -252,7 +252,7 @@ Live smoke includes strict computer-use controls via CLI flags in `scripts/ci/e2
     - `1`: strict mode; unmet requirements or failures are blocking.
   - `WEB_E2E_USE_MOCK_API`: local-only debug toggle for web E2E mock API wiring; CI/mainline must keep real API path.
 - `WEB_E2E_NEXT_DIST_DIR`: optional E2E-only Next.js distDir isolation; used to avoid concurrent `.next/dev/lock` contention across parallel E2E workers.
-- `WEB_RUNTIME_WEB_DIR`: runtime workspace path prepared by `scripts/ci/prepare_web_runtime.sh`; points to the isolated apps/web execution tree under `.runtime-cache/temp/web-runtime`.
+- `WEB_RUNTIME_WEB_DIR`: runtime workspace path prepared by `scripts/ci/prepare_web_runtime.sh`; points to the isolated apps/web execution tree under `.runtime-cache/tmp/web-runtime`.
 - `WEB_E2E_RUNTIME_WEB_DIR`: optional E2E override for the prepared runtime apps/web workspace path.
 - `VIDEO_ANALYSIS_REPO_ROOT`: explicit repo root override used when Web runtime workspaces execute from copied paths outside the checked-in `apps/web` tree.
 
@@ -295,7 +295,7 @@ cp .env.example .env
 Optional helper (not the default path):
 
 ```bash
-./scripts/env/init_example.sh --output .runtime-cache/temp/.env.generated.example --force
+./scripts/env/init_example.sh --output .runtime-cache/tmp/.env.generated.example --force
 ```
 
 ## Minimal Required Variables by Profile
@@ -342,9 +342,9 @@ bash scripts/env/validate_profile.sh --profile local
 
 Notes:
 
-- `validate_profile.sh` writes resolved snapshot to `.runtime-cache/temp/.env.<profile>.resolved`.
+- `validate_profile.sh` writes resolved snapshot to `.runtime-cache/tmp/.env.<profile>.resolved`.
 - For debugging resolved values, run:
-  - `bash scripts/env/compose_env.sh --profile local --write .runtime-cache/temp/.env.local.resolved`
+  - `bash scripts/env/compose_env.sh --profile local --write .runtime-cache/tmp/.env.local.resolved`
 
 1. Create canonical core env:
    - `cp .env.example .env`

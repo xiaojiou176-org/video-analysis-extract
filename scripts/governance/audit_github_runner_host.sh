@@ -18,7 +18,7 @@ Usage:
     --instance github-runner-core-02 \
     [--runner-name pool-core02-03] \
     [--repo-name video-analysis-extract] \
-    [--out-dir .runtime-cache/temp/runner-health/core02]
+    [--out-dir .runtime-cache/tmp/runner-health/core02]
 USAGE
 }
 
@@ -39,7 +39,7 @@ done
 [[ -n "$INSTANCE" ]] || { echo "missing --instance" >&2; exit 2; }
 
 if [[ -z "$OUT_DIR" ]]; then
-  OUT_DIR="$ROOT_DIR/.runtime-cache/temp/runner-health/${INSTANCE}"
+  OUT_DIR="$ROOT_DIR/.runtime-cache/tmp/runner-health/${INSTANCE}"
 fi
 mkdir -p "$OUT_DIR"
 

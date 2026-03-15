@@ -319,7 +319,7 @@ on:
   pull_request:
 env:
   CI_CACHE_ROOT: ${{ runner.temp }}/ci-cache
-  PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.runtime-cache/temp/ms-playwright
+  PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.runtime-cache/tmp/ms-playwright
 jobs:
       lint:
         runs-on: ubuntu-latest
@@ -332,7 +332,7 @@ jobs:
       - name: Cache Playwright browsers
         uses: actions/cache@1234567890abcdef1234567890abcdef12345678
         with:
-          path: ${{ github.workspace }}/.runtime-cache/temp/ms-playwright
+          path: ${{ github.workspace }}/.runtime-cache/tmp/ms-playwright
   required-ci-secrets:
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -348,7 +348,7 @@ jobs:
         in failures
     )
     assert (
-        "ci.yml:17: actions/cache path `${{ github.workspace }}/.runtime-cache/temp/ms-playwright` must resolve under runner.temp/CI_CACHE_ROOT"
+        "ci.yml:17: actions/cache path `${{ github.workspace }}/.runtime-cache/tmp/ms-playwright` must resolve under runner.temp/CI_CACHE_ROOT"
         in failures
     )
 

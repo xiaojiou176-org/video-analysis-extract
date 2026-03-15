@@ -37,7 +37,7 @@ pythonpath = [
   ".",
   "apps/worker",
 ]
-cache_dir = ".runtime-cache/temp/pytest-cache"
+cache_dir = ".runtime-cache/tmp/pytest-cache"
 markers = [
   "allow_unauth_write: enable VD_ALLOW_UNAUTH_WRITE for tests that explicitly opt in",
 ]
@@ -56,7 +56,7 @@ show_missing = true
 target-version = "py311"
 line-length = 100
 fix = true
-cache-dir = ".runtime-cache/temp/ruff-cache"
+cache-dir = ".runtime-cache/tmp/ruff-cache"
 
 [tool.ruff.lint]
 select = ["ALL"]

@@ -11,7 +11,7 @@
         "apps.api.app.",
         "integrations."
       ],
-      "reason": "API may depend only on its own implementation namespace and shared contract packages."
+      "reason": "API may depend only on its own implementation namespace and explicit integration adapters."
     },
     {
       "scope": "apps/worker/worker",
@@ -19,22 +19,15 @@
         "apps.worker.worker.",
         "integrations."
       ],
-      "reason": "Worker may depend only on its own implementation namespace and shared contract packages."
+      "reason": "Worker may depend only on its own implementation namespace and explicit integration adapters."
     },
     {
       "scope": "apps/mcp",
       "allow_internal_prefixes": [
         "apps.mcp.",
-        "packages."
+        "integrations."
       ],
-      "reason": "MCP must stay inside its own namespace or shared contract packages; runtime crossings happen over HTTP/contracts."
-    },
-    {
-      "scope": "packages",
-      "allow_internal_prefixes": [
-        "packages."
-      ],
-      "reason": "Shared packages must stay pure and self-contained."
+      "reason": "MCP must stay inside its own namespace or explicit integration adapters; runtime crossings happen over HTTP/contracts."
     }
   ],
   "frontend_rules": [
@@ -50,8 +43,7 @@
       "forbid_substrings": [
         "apps/api/",
         "apps/worker/",
-        "apps/mcp/",
-        "packages/"
+        "apps/mcp/"
       ],
       "reason": "Web may import only web-local aliases/relative paths and must not reach into sibling apps or repo packages by file path."
     }

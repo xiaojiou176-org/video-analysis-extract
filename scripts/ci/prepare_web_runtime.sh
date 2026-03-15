@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-RUNTIME_ROOT="$ROOT_DIR/.runtime-cache/temp/web-runtime"
+RUNTIME_ROOT="$ROOT_DIR/.runtime-cache/tmp/web-runtime"
 WORKSPACE_WEB_DIR="$RUNTIME_ROOT/workspace/apps/web"
 STATE_DIR="$ROOT_DIR/.runtime-cache/run/web-runtime"
 HASH_FILE="$STATE_DIR/package.sha256"
@@ -15,7 +15,7 @@ usage() {
   cat <<'EOF'
 Usage: scripts/ci/prepare_web_runtime.sh [--shell-exports] [--skip-install 0|1]
 
-Creates a repo-side runtime workspace for apps/web under .runtime-cache/temp/web-runtime
+Creates a repo-side runtime workspace for apps/web under .runtime-cache/tmp/web-runtime
 so repo-tracked source directories do not host machine dependency state.
 EOF
 }

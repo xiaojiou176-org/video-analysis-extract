@@ -6,7 +6,7 @@
 
 - AI 执行 lint/test/live smoke 必须在标准环境完成：`.devcontainer/devcontainer.json`。
 - 基础设施编排真相源固定为：`infra/compose/core-services.compose.yml`（核心服务镜像已收口为 digest-pinned service images，并优先接受 strict contract 导出的 `STRICT_CI_SERVICE_IMAGE_*` 值）与 `infra/compose/miniflux-nextflux.compose.yml`。
-- 严格 CI 标准镜像真相源固定为：`infra/config/strict_ci_contract.json`。`scripts/ci/run_in_standard_env.sh` 现在要求 contract 中的标准镜像必须是 digest-pinned，且拉取失败时直接报错，不再回退到旧本地镜像。
+- 严格 CI 标准镜像真相源固定为：`infra/config/strict_ci_contract.json`。`./bin/run-in-standard-env` 现在要求 contract 中的标准镜像必须是 digest-pinned，且拉取失败时直接报错，不再回退到旧本地镜像。
 - self-hosted runner 基线真相源固定为：`infra/config/self_hosted_runner_baseline.json`。`_preflight-fast-steps.yml` 与 `runner-health.yml` 都通过 `scripts/governance/check_runner_baseline.py` 验证 runner 前提，缺失工具直接失败，不再在 workflow 中临时安装。
 - 若不使用 DevContainer，必须提供等价隔离环境（依赖版本、工具链、Compose 服务拓扑一致），否则验证结果不具备门禁效力。
 
@@ -21,7 +21,7 @@ devcontainer up --workspace-folder .
 - 宿主 Docker daemon 必须可用；`strict_ci_entry.sh`、`run_in_standard_env.sh` 与 DevContainer 都共享这一前提。
 - 当前关键 correctness jobs 已统一按标准镜像口径对齐，包括 `preflight-heavy`、`db-migration-smoke`、`dependency-vuln-scan`、`web-e2e-perceived`、`backend-lint` hosted/fallback、`frontend-lint` hosted/fallback。
 - DevContainer 工作目录已固定为 `/workspace`，并复用 strict contract 的 `UV_CACHE_DIR` / `PLAYWRIGHT_BROWSERS_PATH` 等标准缓存路径约定。
-- Web runtime workspace 固定收口到 `.runtime-cache/temp/web-runtime/workspace/apps/web`；`apps/web/node_modules` 与 `apps/web/.next*` 不再视为仓库内合法长期机器态。
+- Web runtime workspace 固定收口到 `.runtime-cache/tmp/web-runtime/workspace/apps/web`；`apps/web/node_modules` 与 `apps/web/.next*` 不再视为仓库内合法长期机器态。
 - `.devcontainer/post-create.sh` 现在会直接校验 strict contract 的 Chromium 是否可启动；若浏览器缺失，标准环境初始化会直接失败，而不是继续用 best-effort 安装掩盖漂移。
 
 <!-- docs:generated governance-snapshot start -->
@@ -71,13 +71,13 @@ brew install postgresql@16 redis temporal
 
 ```bash
 uv sync --frozen --extra dev --extra e2e
-bash scripts/ci/prepare_web_runtime.sh
+./bin/prepare-web-runtime
 ```
 
 ### 1.1) 初始化 Git 质量门禁（建议首次 clone 后执行）
 
 ```bash
-./scripts/governance/install_git_hooks.sh
+./bin/install-git-hooks
 ```
 
 可选：安装 pre-commit framework hooks（会写入当前 `core.hooksPath`）：
@@ -142,8 +142,8 @@ set -a; source .env; set +a
 
 说明：
 
-- `scripts/dev_api.sh`、`scripts/dev_worker.sh`、`scripts/dev_mcp.sh`、`scripts/runtime/run_daily_digest.sh`、`scripts/runtime/run_failure_alerts.sh` 均会优先自动加载 `.env`。
-- 标准初始化路径是 `.env.example -> .env`；`scripts/env/init_example.sh` 仅用于按需生成辅助模板。
+- `./bin/dev-api`、`./bin/dev-worker`、`./bin/dev-mcp`、`./bin/run-daily-digest`、`./bin/run-failure-alerts` 均会优先自动加载 `.env`。
+- 标准初始化路径是 `.env.example -> .env`；`./bin/init-env-example` 仅用于按需生成辅助模板。
 - 环境契约真相源：`ENVIRONMENT.md` + `infra/config/env.contract.json`。
 
 ### 4) 初始化数据库（统一迁移命令）
@@ -195,7 +195,7 @@ curl -sS http://127.0.0.1:9000/api/v1/jobs/<job_id>
 python3 scripts/release/generate_release_prechecks.py
 python3 scripts/release/build_readiness_report.py \
   --kpi-json artifacts/release-readiness/ci-kpi-summary.json \
-  --check-json .runtime-cache/temp/release-readiness/prechecks.json
+  --check-json .runtime-cache/tmp/release-readiness/prechecks.json
 
 scripts/release/capture_release_manifest.sh <release-tag>
 
@@ -209,15 +209,15 @@ python3 scripts/release/verify_db_rollback_readiness.py \
 ### 手动触发日报与失败告警
 
 ```bash
-./scripts/runtime/run_daily_digest.sh
-./scripts/runtime/run_failure_alerts.sh
+./bin/run-daily-digest
+./bin/run-failure-alerts
 ```
 
 常用覆盖参数：
 
 ```bash
-./scripts/runtime/run_daily_digest.sh --date 2026-02-21 --to-email 'you@example.com'
-./scripts/runtime/run_failure_alerts.sh --lookback-hours 6 --limit 10 --to-email 'you@example.com'
+./bin/run-daily-digest --date 2026-02-21 --to-email 'you@example.com'
+./bin/run-failure-alerts --lookback-hours 6 --limit 10 --to-email 'you@example.com'
 ```
 
 ### 清理 workflow（媒体与缓存）
@@ -233,13 +233,13 @@ python3 scripts/release/verify_db_rollback_readiness.py \
 注意：`cron` 与下方“实时稳定推送（常驻 workflow）”必须二选一，避免重复触发同类任务。
 
 ```cron
-0 9 * * * /bin/bash -lc 'cd "<repo-path>" && ./scripts/runtime/run_daily_digest.sh >> ./.runtime-cache/logs/app/daily_digest.log 2>&1'
-*/30 * * * * /bin/bash -lc 'cd "<repo-path>" && ./scripts/runtime/run_failure_alerts.sh >> ./.runtime-cache/logs/app/failure_alerts.log 2>&1'
+0 9 * * * /bin/bash -lc 'cd "<repo-path>" && ./bin/run-daily-digest >> ./.runtime-cache/logs/app/daily_digest.log 2>&1'
+*/30 * * * * /bin/bash -lc 'cd "<repo-path>" && ./bin/run-failure-alerts >> ./.runtime-cache/logs/app/failure_alerts.log 2>&1'
 ```
 
 ### 实时稳定推送（生产建议）
 
-仓库内置了 `scripts/runtime/start_ops_workflows.sh`，用于一次性启动/确保以下长期运行 workflow：
+仓库内置了 `./bin/start-ops-workflows`，用于一次性启动/确保以下长期运行 workflow：
 
 - `daily_digest`（日报）
 - `notification_retry`（失败投递重试）
@@ -251,14 +251,14 @@ python3 scripts/release/verify_db_rollback_readiness.py \
 1. 基础用法
 
 ```bash
-./scripts/runtime/start_ops_workflows.sh
+./bin/start-ops-workflows
 ```
 
 2. 推荐参数（生产）
 
 ```bash
 mkdir -p .runtime-cache/logs/app .runtime-cache/logs/governance
-./scripts/runtime/start_ops_workflows.sh \
+./bin/start-ops-workflows \
   --daily-local-hour 9 \
   --daily-timezone Asia/Shanghai \
   --notification-interval-minutes 5 \
@@ -286,7 +286,7 @@ mkdir -p .runtime-cache/logs/app .runtime-cache/logs/governance
 - `--cleanup-workspace-dir` / `--cleanup-cache-dir`：可选目录覆盖。安全限制：仅允许落在 `${REPO_ROOT}/.runtime-cache`、`${REPO_ROOT}/cache`、`${REPO_ROOT}/.cache`、`/tmp/video-digestor*`、`/tmp/video-analysis*` 前缀下，超出白名单会直接失败。
 - `--daily-timezone-offset-minutes`：可选，显式 UTC 偏移分钟。
 - `--show-hints` / `--no-show-hints`：开关脚本启动摘要日志（默认显示）。
-- `--dry-run`：只打印命令不执行（等价 `./scripts/runtime/start_ops_workflows.sh --dry-run`）。
+- `--dry-run`：只打印命令不执行（等价 `./bin/start-ops-workflows --dry-run`）。
 
 5. 调度互斥策略（必须执行）
 
@@ -298,8 +298,8 @@ mkdir -p .runtime-cache/logs/app .runtime-cache/logs/governance
 
 ```bash
 bash -n scripts/runtime/start_ops_workflows.sh
-./scripts/runtime/start_ops_workflows.sh --help
-./scripts/runtime/start_ops_workflows.sh --dry-run
+./bin/start-ops-workflows --help
+./bin/start-ops-workflows --dry-run
 ```
 
 5. 告警与重试调优建议（基于现有能力）
@@ -314,7 +314,7 @@ bash -n scripts/runtime/start_ops_workflows.sh
 ```bash
 ./bin/bootstrap-full-stack
 ./bin/full-stack up
-./scripts/ci/smoke_full_stack.sh
+./bin/smoke-full-stack
 ```
 
 脚本说明：
@@ -327,10 +327,10 @@ bash -n scripts/runtime/start_ops_workflows.sh
 - 本地路由真相源是 `API_PORT/WEB_PORT`；`VD_API_BASE_URL` 与 `NEXT_PUBLIC_API_BASE_URL` 为派生地址。
 - `full_stack.sh` 的启动顺序是“API health -> Web -> Worker”；Worker 启动前会先做 stronger Temporal readiness：先校验 worker 必需环境，再对 `TEMPORAL_TARGET_HOST`（默认 `localhost:7233`）做 `host:port` 解析与 TCP 探测；不可达时直接以 `stage=worker_preflight_temporal` / `conclusion=temporal_not_ready` fail-fast，不会先把 API/Web 拉起来。
 - `smoke_full_stack.sh`：执行端到端 smoke（含 feed/web 检查，可选 reader 检查）。
-- `smoke_full_stack.sh` 不是 `api-real-smoke` 替代；后端真实 Postgres integration smoke 需单独执行 `scripts/ci/api_real_smoke_local.sh`。
-- `scripts/ci/api_real_smoke_local.sh` 默认监听 `127.0.0.1:18080`；若该默认端口被其他本地服务占用且未显式传 `--api-port`，脚本会自动选择下一个空闲端口。
-- `scripts/ci/api_real_smoke_local.sh` 会在 cleanup workflow closure probe 前临时启动 worker；脚本退出时会一并清理 API/worker 与隔离数据库。
-- `scripts/ci/api_real_smoke_local.sh` 现在会先检测本机 IPv4 loopback 是否健康；如果一开始就报 `failure_kind=host_loopback_ipv4_exhausted`，优先处理主机环境（减少本地 MCP/Codex bridge 长连接、换更干净 runner），而不是继续追 API/Temporal 业务日志。
+- `smoke_full_stack.sh` 不是 `api-real-smoke` 替代；后端真实 Postgres integration smoke 需单独执行 `./bin/api-real-smoke-local`。
+- `./bin/api-real-smoke-local` 默认监听 `127.0.0.1:18080`；若该默认端口被其他本地服务占用且未显式传 `--api-port`，脚本会自动选择下一个空闲端口。
+- `./bin/api-real-smoke-local` 会在 cleanup workflow closure probe 前临时启动 worker；脚本退出时会一并清理 API/worker 与隔离数据库。
+- `./bin/api-real-smoke-local` 现在会先检测本机 IPv4 loopback 是否健康；如果一开始就报 `failure_kind=host_loopback_ipv4_exhausted`，优先处理主机环境（减少本地 MCP/Codex bridge 长连接、换更干净 runner），而不是继续追 API/Temporal 业务日志。
 - 运行时排障优先顺序：先看 `.runtime-cache/run/full-stack/resolved.env` 与 `.runtime-cache/logs/components/full-stack/*.log`，再看 `.runtime-cache/logs/tests/api-real-smoke-local.log`，最后才下钻到 API/worker 业务栈日志。
 - `pr-llm-real-smoke` / `live-smoke` / `web-e2e` 证据统一收口到：
   - `.runtime-cache/logs/tests/`
@@ -370,7 +370,7 @@ Live smoke 执行约束（2026-02 更新）：
 
 ```bash
 ./bin/quality-gate --mode pre-push --profile ci --profile live-smoke --ci-dedupe 0
-./scripts/ci/api_real_smoke_local.sh
+./bin/api-real-smoke-local
 ./bin/quality-gate --mode pre-push --strict-full-run 1 --profile ci --profile live-smoke --ci-dedupe 0
 ```
 
@@ -378,8 +378,8 @@ Live smoke 执行约束（2026-02 更新）：
 
 ```bash
 ./bin/full-stack up
-./scripts/ci/api_real_smoke_local.sh
-./scripts/ci/smoke_full_stack.sh
+./bin/api-real-smoke-local
+./bin/smoke-full-stack
 ./bin/quality-gate --mode pre-push --strict-full-run 1 --profile ci --profile live-smoke --ci-dedupe 0
 ```
 
@@ -464,7 +464,7 @@ curl -sS -X POST http://127.0.0.1:9000/api/v1/videos/process \
 
 ## GCE Instance Scope 最小权限（2026-03）
 
-`scripts/deploy/recreate_gce_instance.sh` 已切换为“默认最小权限 scopes”，不再默认 `cloud-platform` 全权限。
+`./bin/recreate-gce-instance` 已切换为“默认最小权限 scopes”，不再默认 `cloud-platform` 全权限。
 
 - 默认 scopes：
   - `https://www.googleapis.com/auth/devstorage.read_only`

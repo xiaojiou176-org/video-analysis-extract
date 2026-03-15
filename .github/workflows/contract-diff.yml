@@ -53,12 +53,12 @@ jobs:
       - name: Prepare base worktree
         run: |
           mkdir -p .runtime-cache
-          git worktree add --detach .runtime-cache/temp/base-tree "${{ github.event.pull_request.base.sha }}"
+          git worktree add --detach .runtime-cache/tmp/base-tree "${{ github.event.pull_request.base.sha }}"
 
       - name: Export base contract
         run: |
           uv run python scripts/governance/export_api_contract.py \
-            --repo-root .runtime-cache/temp/base-tree \
+            --repo-root .runtime-cache/tmp/base-tree \
             --output .runtime-cache/reports/contracts/contract-base.json
 
       - name: Compare base/head contract
@@ -89,7 +89,7 @@ jobs:
       - name: Cleanup base worktree
         if: always()
         run: |
-          git worktree remove --force .runtime-cache/temp/base-tree || true
+          git worktree remove --force .runtime-cache/tmp/base-tree || true
 
       - name: Fail on breaking changes
         if: steps.compare.outputs.exit_code != '0'

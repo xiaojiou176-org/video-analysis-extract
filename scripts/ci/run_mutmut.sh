@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-WORKDIR_ROOT="$ROOT_DIR/.runtime-cache/temp/mutation/workdir"
+WORKDIR_ROOT="$ROOT_DIR/.runtime-cache/tmp/mutation/workdir"
 WORKSPACE="$WORKDIR_ROOT/repo"
 REPORT_DIR="$ROOT_DIR/.runtime-cache/reports/mutation"
 REPORT_PATH="$REPORT_DIR/mutmut-cicd-stats.json"
@@ -37,7 +37,7 @@ for item in "${TOP_LEVEL_ITEMS[@]}"; do
   fi
 done
 
-mkdir -p "$WORKSPACE/.runtime-cache/temp" "$WORKSPACE/.runtime-cache/reports"
+mkdir -p "$WORKSPACE/.runtime-cache/tmp" "$WORKSPACE/.runtime-cache/reports"
 
 (
   cd "$WORKSPACE"

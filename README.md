@@ -40,7 +40,7 @@
 ```bash
 ./bin/bootstrap-full-stack
 ./bin/full-stack up
-./scripts/ci/smoke_full_stack.sh
+./bin/smoke-full-stack
 ```
 
 这三步会把仓库拉到“可运行 + 可验证”的状态（本地优先）。
@@ -55,14 +55,14 @@
 - `full_stack.sh` 会按 `API health -> Web -> Worker` 顺序启动；Worker 启动前会先做 Temporal preflight（`TEMPORAL_TARGET_HOST`，默认 `localhost:7233`），不可达时直接 fail-fast。
 - `smoke_full_stack.sh` 默认会校验 reader stack，并执行一次 `AI Feed -> Miniflux` 回写检查；core/reader 任一异常都会直接 fail-fast，不再保留 offline fallback 降级路径。
 - reader overlay 只会补齐缺失的 `MINIFLUX_*` / `NEXTFLUX_*` 变量；当前 shell 中显式注入的 reader 凭证优先级更高，不会再被 `env/profiles/reader.env` 模板覆盖。
-- 若你临时不想检查 reader：`./scripts/ci/smoke_full_stack.sh --require-reader 0`
-- `smoke_full_stack.sh` 是本地联调 smoke，不是 `api-real-smoke` 的替代品；后端真实 Postgres 集成验收需要单独执行 `scripts/ci/api_real_smoke_local.sh`。
-- `scripts/ci/api_real_smoke_local.sh` 默认尝试 `127.0.0.1:18080`；若默认端口已被其他本地服务占用且未显式传 `--api-port`，脚本会自动选择下一个空闲端口并在日志中说明。
-- `scripts/ci/api_real_smoke_local.sh` 现在会为 cleanup workflow closure probe 临时拉起本地 worker，并在脚本退出时自动清理，不再要求你先手动起 worker。
-- `scripts/ci/api_real_smoke_local.sh` 现在会先检查本机 IPv4 loopback；如果直接报 `failure_kind=host_loopback_ipv4_exhausted`，说明当前主机 `127.0.0.1` 自连接本身异常，应先处理本机环境而不是继续追仓库业务日志。
+- 若你临时不想检查 reader：`./bin/smoke-full-stack --require-reader 0`
+- `smoke_full_stack.sh` 是本地联调 smoke，不是 `api-real-smoke` 的替代品；后端真实 Postgres 集成验收需要单独执行 `./bin/api-real-smoke-local`。
+- `./bin/api-real-smoke-local` 默认尝试 `127.0.0.1:18080`；若默认端口已被其他本地服务占用且未显式传 `--api-port`，脚本会自动选择下一个空闲端口并在日志中说明。
+- `./bin/api-real-smoke-local` 现在会为 cleanup workflow closure probe 临时拉起本地 worker，并在脚本退出时自动清理，不再要求你先手动起 worker。
+- `./bin/api-real-smoke-local` 现在会先检查本机 IPv4 loopback；如果直接报 `failure_kind=host_loopback_ipv4_exhausted`，说明当前主机 `127.0.0.1` 自连接本身异常，应先处理本机环境而不是继续追仓库业务日志。
 - 运行 `full_stack.sh` / `api_real_smoke_local.sh` 时，优先排查 `.runtime-cache/logs/components/full-stack/*.log` 与 `.runtime-cache/logs/tests/api-real-smoke-local.log`，不要先去猜是业务代码还是本机端口漂移。
 - `UI audit` 结果默认会写入 `.runtime-cache/evidence/tests/ui-audit-runs/`；`autofix` 当前只会返回持久化 dry-run 计划，不会假装已经落盘改代码。
-- `scripts/ci/smoke_computer_use_local.sh` 默认严格口径：provider 未开通 computer use 会直接失败；仅显式传 `--allow-unsupported-skip=1` 才允许按 skip 通过。
+- `./bin/smoke-computer-use-local` 默认严格口径：provider 未开通 computer use 会直接失败；仅显式传 `--allow-unsupported-skip=1` 才允许按 skip 通过。
 - self-hosted runner 基线真相源：`infra/config/self_hosted_runner_baseline.json`，说明文档见 `docs/reference/runner-baseline.md`。主 `ci.yml` 不再负责 runner 运维；runner 健康检查已拆到 `runner-health.yml`。
 
 ## 本地验收分层（必须区分）
@@ -74,8 +74,8 @@
 
 ```bash
 ./bin/full-stack up
-./scripts/ci/api_real_smoke_local.sh
-./scripts/ci/smoke_full_stack.sh
+./bin/api-real-smoke-local
+./bin/smoke-full-stack
 ./bin/quality-gate --mode pre-push --strict-full-run 1 --profile ci --profile live-smoke --ci-dedupe 0
 ```
 
@@ -99,7 +99,7 @@
 
 - Docker Compose（基础设施真相源）：`infra/compose/core-services.compose.yml`（核心服务镜像已收口为 digest-pinned service images，可直接对齐 strict contract）、`infra/compose/miniflux-nextflux.compose.yml`
 - DevContainer（AI/自动化标准执行环境）：`.devcontainer/devcontainer.json`。当前已移除浮动 devcontainer feature 依赖，`post-create.sh` 会直接校验 strict contract 的 `uv/node/chromium` 是否可用，不再用 best-effort 浏览器安装掩盖漂移。
-- 严格 CI 标准镜像真相源：`infra/config/strict_ci_contract.json`。`bin/strict-ci` / `scripts/ci/run_in_standard_env.sh` 现在只接受 digest-pinned 标准镜像，不再允许静默回退到旧的本地 tag 镜像。
+- 严格 CI 标准镜像真相源：`infra/config/strict_ci_contract.json`。`bin/strict-ci` / `./bin/run-in-standard-env` 现在只接受 digest-pinned 标准镜像，不再允许静默回退到旧的本地 tag 镜像。
 - 标准镜像供应链增强：`build-ci-standard-image.yml` 现在会产出镜像 SBOM artifact，并对镜像本体与 SBOM 做 GitHub attestation。
 - Release 证据 attestation：新增 `release-evidence-attest.yml`，会把 `artifacts/releases/<tag>/` 下的 manifest/checksums/rollback 证据打包并出 provenance attestation。
 - 生成式治理参考：
@@ -117,7 +117,7 @@ devcontainer up --workspace-folder .
 # 2) 在容器内执行（开发/联调）
 ./bin/bootstrap-full-stack
 ./bin/full-stack up
-./scripts/ci/smoke_full_stack.sh
+./bin/smoke-full-stack
 
 # 3) 在容器镜像内执行（CI 等价严格验收）
 ./bin/strict-ci --mode pre-push --strict-full-run 1 --ci-dedupe 0
@@ -125,7 +125,7 @@ devcontainer up --workspace-folder .
 
 运行风险说明：
 
-- 现有 `scripts/deploy/core_services.sh` 与 `scripts/deploy/reader_stack.sh` 已直接绑定上述 compose 文件，不需要改脚本。
+- 现有 `scripts/deploy/core_services.sh` 与 `./bin/reader-stack` 已直接绑定上述 compose 文件，不需要改脚本。
 - 风险 1：DevContainer 依赖宿主 Docker（通过 `/var/run/docker.sock`），若宿主未启动 Docker，容器内 compose 无法拉起。
 - 风险 1.1：严格验收入口 `bin/strict-ci` 同样依赖宿主 Docker 与可拉取的标准镜像；若 Docker daemon 未启动，或当前环境无法获取 contract 中声明的 digest 镜像，脚本会直接 fail-fast，不再回退到旧本地镜像。
 - 风险 1.2：本地执行正式 pinned-image strict 链时，必须具备 GHCR 拉取身份；仓库脚本会优先读取 `GHCR_USERNAME/GHCR_TOKEN`，否则复用 `gh auth` 当前登录态。两者都不存在时会直接 fail-fast。
@@ -215,7 +215,7 @@ Article pipeline（`videos.content_type='article'`）：
 
 ```bash
 uv sync --frozen --extra dev --extra e2e
-bash scripts/ci/prepare_web_runtime.sh
+./bin/prepare-web-runtime
 ```
 
 ### 2) 启动基础服务（Host Fallback，仅故障应急）
@@ -234,7 +234,7 @@ python3 scripts/governance/check_env_contract.py --strict
 set -a; source .env; set +a
 ```
 
-说明：标准初始化路径是 `.env.example -> .env`；`scripts/env/init_example.sh` 仅用于按需生成辅助模板。`scripts/dev_*.sh` 会自动加载仓库根目录 `.env`；reader 专用命令路径（如 `./bin/run-ai-feed-sync`、`scripts/ci/smoke_full_stack.sh` 的 reader 检查）会额外读取 `env/profiles/reader.env` 补齐缺失 reader 变量，但不会覆盖当前 shell 已显式注入的值。额外配置优先通过当前 shell 环境变量显式注入。
+说明：标准初始化路径是 `.env.example -> .env`；`./bin/init-env-example` 仅用于按需生成辅助模板。`./bin/dev-*` 会自动加载仓库根目录 `.env`；reader 专用命令路径（如 `./bin/run-ai-feed-sync`、`./bin/smoke-full-stack` 的 reader 检查）会额外读取 `env/profiles/reader.env` 补齐缺失 reader 变量，但不会覆盖当前 shell 已显式注入的值。额外配置优先通过当前 shell 环境变量显式注入。
 补充：`.env.example` 已精简为最小可启动模板；脚本参数全集请查看 `docs/reference/env-script-overrides.md`。
 
 ### 4) 初始化数据库
@@ -264,7 +264,7 @@ sqlite3 "$SQLITE_PATH" < infra/sql/sqlite_state_init.sql
 - `./bin/dev-api --app apps.api.app.main:app --no-reload`
 - `./bin/dev-worker --worker-dir "$PWD/apps/worker" --entry worker.main --command run-worker --no-show-hints`
 - `./bin/dev-mcp --entry apps.mcp.server --mcp-dir "$PWD/apps/mcp"`
-- 可选辅助模板命令：`./scripts/env/init_example.sh --output "$PWD/.env.generated.example" --force`
+- 可选辅助模板命令：`./bin/init-env-example --output "$PWD/.env.generated.example" --force`
 
 补充说明：
 
@@ -293,7 +293,7 @@ python3 scripts/governance/check_test_assertions.py
 
 ./bin/quality-gate
 
-./scripts/governance/install_git_hooks.sh
+./bin/install-git-hooks
 
 PYTHONPATH="$PWD:$PWD/apps/worker" \
 DATABASE_URL='sqlite+pysqlite:///:memory:' \
@@ -327,7 +327,7 @@ uv run --with pytest --with playwright pytest \
 - Web/依赖变更命中时，CI 还会额外执行阻断式 `Gemini UI/UX audit`；只有 `status=passed`、`reason_code=ok`、批次全成功且存在真实 `model_attempts` 才算通过。
 - 本地 `pre-push` 新增硬门禁：`api cors preflight smoke (OPTIONS DELETE)` 与 `contract diff local gate (base vs head)`，先于远程 CI 拦截跨端链路与契约回归。
 - 本地 `pre-push` 进一步对齐远端 `preflight-fast` + `web-test-build`：`contract surface gate`、`docs env canonical guard`、`provider residual guard`、`worker line limits`、`schema parity`、`web design token guard`、`web build`、`web button coverage`。
-- 本地验收分层：sqlite 口径用于默认快速回归；真实 Postgres integration smoke 必须单独跑 `scripts/ci/api_real_smoke_local.sh`，用于对齐 CI `api-real-smoke`。
+- 本地验收分层：sqlite 口径用于默认快速回归；真实 Postgres integration smoke 必须单独跑 `./bin/api-real-smoke-local`，用于对齐 CI `api-real-smoke`。
 - Web E2E 默认轻量化：trace 默认 `off`、video 默认 `retain-on-failure`，并仅在失败时上传重工件。
 - 测试分层主责明确：API 负责字段级契约断言，Web E2E 聚焦用户旅程，MCP 聚焦工具语义与路由动作。
 
@@ -342,7 +342,7 @@ uv run --with pytest --with playwright pytest \
 首次初始化（推荐）：
 
 ```bash
-./scripts/governance/install_git_hooks.sh
+./bin/install-git-hooks
 ```
 
 可选：如果你要直接启用 pre-commit framework hook（会写入当前 `core.hooksPath` 的 hook 文件）：
@@ -386,8 +386,8 @@ pre-commit run --all-files
 - 若要复用外部 Web 实例，可用：`uv run --with pytest --with playwright pytest apps/web/tests/e2e -q --web-e2e-base-url 'http://127.0.0.1:3000'`。
 - PR 不强制 `live-smoke`；`main` push 与 nightly schedule 强制 `live-smoke=success`。
 - `live-smoke` 为真实 LLM/provider 链路，CI 需要：`GEMINI_API_KEY`、`RESEND_API_KEY`、`RESEND_FROM_EMAIL`、`YOUTUBE_API_KEY`；工作流会拉起本地 API/Worker，并固定通过 `http://127.0.0.1:18080` 作为 smoke 目标。
-- `scripts/ci/smoke_full_stack.sh` 是本地联调用 smoke，不等同于 CI 强制 `live-smoke` 门禁。
-- `scripts/ci/smoke_full_stack.sh` 同样不是 `api-real-smoke` 替代；后端真实 Postgres 集成验收需执行 `scripts/ci/api_real_smoke_local.sh`。
+- `./bin/smoke-full-stack` 是本地联调用 smoke，不等同于 CI 强制 `live-smoke` 门禁。
+- `./bin/smoke-full-stack` 同样不是 `api-real-smoke` 替代；后端真实 Postgres 集成验收需执行 `./bin/api-real-smoke-local`。
 - 两类真实 smoke 的本地复现命令见 `docs/testing.md` 的“本地复现两类真实 Smoke（CI 同口径）”。
 
 ## API 路由与管理端点契约
@@ -471,20 +471,20 @@ pre-commit run --all-files
 如果你要“AI 处理流水线 + 漂亮阅读器 UI + 多端访问”，仓库已内置可选部署栈：
 
 - Compose: `infra/compose/miniflux-nextflux.compose.yml`
-- 脚本: `scripts/deploy/reader_stack.sh`
+- 脚本: `./bin/reader-stack`
 - GCE 指南: `docs/deploy/miniflux-nextflux-gce.md`
 
 快速启动：
 
 ```bash
 # 编辑 env/profiles/reader.env，至少设置 MINIFLUX_DB_PASSWORD / MINIFLUX_ADMIN_PASSWORD / MINIFLUX_BASE_URL
-./scripts/deploy/reader_stack.sh up --env-file env/profiles/reader.env
-./scripts/deploy/reader_stack.sh status --env-file env/profiles/reader.env
+./bin/reader-stack up --env-file env/profiles/reader.env
+./bin/reader-stack status --env-file env/profiles/reader.env
 ```
 
 ## 可选：实时稳定推送 workflow
 
-仓库内置 `scripts/runtime/start_ops_workflows.sh`，用于一次性启动/确保以下长期运行 workflow：
+仓库内置 `./bin/start-ops-workflows`，用于一次性启动/确保以下长期运行 workflow：
 
 - `daily_digest`
 - `notification_retry`
@@ -494,13 +494,13 @@ pre-commit run --all-files
 基础用法：
 
 ```bash
-./scripts/runtime/start_ops_workflows.sh
+./bin/start-ops-workflows
 ```
 
 常用参数：
 
 ```bash
-./scripts/runtime/start_ops_workflows.sh \
+./bin/start-ops-workflows \
   --daily-local-hour 9 \
   --daily-timezone Asia/Shanghai \
   --notification-interval-minutes 5 \
@@ -522,7 +522,7 @@ python3 scripts/release/generate_release_prechecks.py
 # 2) 合并到发布 readiness 报告
 python3 scripts/release/build_readiness_report.py \
   --kpi-json artifacts/release-readiness/ci-kpi-summary.json \
-  --check-json .runtime-cache/temp/release-readiness/prechecks.json \
+  --check-json .runtime-cache/tmp/release-readiness/prechecks.json \
   --json-out artifacts/release-readiness/release-readiness.json \
   --md-out artifacts/release-readiness/release-readiness.md
 

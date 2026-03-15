@@ -8,7 +8,9 @@
 ## 公共仓库资产真相源
 
 - `config/governance/root-allowlist.json` 的 `tracked_root_allowlist`
+- `config/governance/root-denylist.json`
 - `config/governance/root-layout-budget.json`
+- `config/governance/public-entrypoints.json`
 
 ## 终局入口约束
 
@@ -32,11 +34,13 @@ python3 scripts/governance/check_root_allowlist.py --strict-local-private
 python3 scripts/governance/check_root_layout_budget.py
 python3 scripts/governance/check_root_zero_unknowns.py
 python3 scripts/governance/check_root_dirtiness_after_tasks.py --compare-snapshot <snapshot>
+python3 scripts/governance/check_public_entrypoint_references.py
 ```
 
 ## 硬规则
 
 - 禁止新增未登记顶级项。
+- 禁止把 denylist 中的泛化目录重新放回根目录。
 - 禁止将本地私有容忍项纳入 Git。
 - 禁止把局部 helper、实验脚本、一次性输出平铺到根目录。
 - 禁止为方便起见绕过 `bin/*` 直接把 `scripts/*` 暴露给文档、Hook 或 Workflow 作为公共入口。

@@ -11,7 +11,7 @@ usage() {
 Usage: bash scripts/env/validate_profile.sh [--profile <name>]
 
 Validate profile composition and write resolved snapshot:
-  .runtime-cache/temp/.env.<profile>.resolved
+  .runtime-cache/tmp/.env.<profile>.resolved
 
 Examples:
   bash scripts/env/validate_profile.sh --profile local
@@ -69,7 +69,7 @@ if (( ${#ENV_FILES[@]} == 0 )); then
   exit 1
 fi
 
-RESOLVED_PATH="$ROOT_DIR/.runtime-cache/temp/.env.${ENV_PROFILE}.resolved"
+RESOLVED_PATH="$ROOT_DIR/.runtime-cache/tmp/.env.${ENV_PROFILE}.resolved"
 log "heartbeat: composing effective env for profile=$ENV_PROFILE"
 if ! bash "$ROOT_DIR/scripts/env/compose_env.sh" --profile "$ENV_PROFILE" --write "$RESOLVED_PATH" >/dev/null; then
   log "error: compose failed for profile=$ENV_PROFILE"

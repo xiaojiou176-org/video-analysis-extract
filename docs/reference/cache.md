@@ -108,7 +108,7 @@
 通过常驻 ops 启动脚本接入 cleanup（推荐）：
 
 ```bash
-./scripts/runtime/start_ops_workflows.sh \
+./bin/start-ops-workflows \
   --cleanup-interval-hours 6 \
   --cleanup-older-than-hours 24
 ```
@@ -143,7 +143,7 @@
 
 ```bash
 python3 scripts/runtime/prune_runtime_cache.py --assert-clean
-bash scripts/runtime/run_runtime_cache_maintenance.sh --normalize-only
+./bin/runtime-cache-maintenance --normalize-only
 python3 scripts/governance/check_runtime_cache_retention.py
 python3 scripts/governance/check_runtime_cache_freshness.py
 ```
@@ -151,7 +151,7 @@ python3 scripts/governance/check_runtime_cache_freshness.py
 ## Doc-Drift Enforcement
 
 - 触发文件：
-  - `scripts/runtime/start_ops_workflows.sh`
+  - `./bin/start-ops-workflows`
   - `scripts/cleanup_workspace.sh`
 - 触发后必须同步更新：`docs/reference/cache.md`
 - 校验脚本：`scripts/governance/ci_or_local_gate_doc_drift.sh`
@@ -176,14 +176,14 @@ python3 scripts/governance/check_runtime_cache_freshness.py
 
 ## Full-stack / Smoke 运行时缓存边界（2026-03）
 
-- `scripts/ci/smoke_full_stack.sh` 与 `scripts/ci/e2e_live_smoke.sh` 产生的 `.runtime-cache/*` 文件属于一次性诊断产物，不应被当作长期缓存命中来源。
-- `scripts/ci/api_real_smoke_local.sh` 创建的隔离 smoke 数据库会在退出时删除；它依赖 `.runtime-cache/run/api-real-smoke-local-state.sqlite3` 作为临时状态文件，不进入长期保留策略。
-- Web 依赖工作区与 `.next*` 临时产物统一进入 `.runtime-cache/temp/web-runtime/`，由 `scripts/ci/prepare_web_runtime.sh` 重建与清场。
+- `./bin/smoke-full-stack` 与 `./bin/live-smoke` 产生的 `.runtime-cache/*` 文件属于一次性诊断产物，不应被当作长期缓存命中来源。
+- `./bin/api-real-smoke-local` 创建的隔离 smoke 数据库会在退出时删除；它依赖 `.runtime-cache/run/api-real-smoke-local-state.sqlite3` 作为临时状态文件，不进入长期保留策略。
+- Web 依赖工作区与 `.next*` 临时产物统一进入 `.runtime-cache/tmp/web-runtime/`，由 `./bin/prepare-web-runtime` 重建与清场。
 - smoke / e2e / live-smoke / pr-llm-real-smoke 的输出现在按测试语义分舱：
   - 日志：`.runtime-cache/logs/tests/`
   - JUnit/diagnostics：`.runtime-cache/reports/tests/`
   - 浏览器证据：`.runtime-cache/evidence/tests/`
-- 终局治理分舱固定为：`.runtime-cache/run/`、`.runtime-cache/logs/`、`.runtime-cache/reports/`、`.runtime-cache/evidence/`、`.runtime-cache/tmp/`；当前仍保留 `.runtime-cache/temp/` 作为受治理迁移桥。
+- 终局治理分舱固定为：`.runtime-cache/run/`、`.runtime-cache/logs/`、`.runtime-cache/reports/`、`.runtime-cache/evidence/`、`.runtime-cache/tmp/`。
 
 
 <!-- doc-sync: api/worker reliability + auth guard update (2026-03-03) -->

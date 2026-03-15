@@ -57,7 +57,7 @@ gcloud compute instances create vd-server \
 可选：使用仓库脚本重建实例（高风险操作默认受保护）：
 
 ```bash
-./scripts/deploy/recreate_gce_instance.sh \
+./bin/recreate-gce-instance \
   --project YOUR_PROJECT \
   --zone us-west1-b \
   --instance vd-prod \
@@ -140,7 +140,7 @@ cd /opt/vd/repo
 uv sync --frozen --extra dev
 
 # 安装 Node 依赖 & 构建 Next.js
-bash scripts/ci/prepare_web_runtime.sh
+./bin/prepare-web-runtime
 npm --prefix apps/web run build
 ```
 
@@ -275,7 +275,7 @@ sudo journalctl -u vd-web    -f --no-pager
 cd /opt/vd/repo
 git pull
 uv sync --frozen
-bash scripts/ci/prepare_web_runtime.sh && eval "$(bash scripts/ci/prepare_web_runtime.sh --shell-exports)" && npm --prefix "$WEB_RUNTIME_WEB_DIR" run build
+./bin/prepare-web-runtime && eval "$(./bin/prepare-web-runtime --shell-exports)" && npm --prefix "$WEB_RUNTIME_WEB_DIR" run build
 sudo systemctl restart vd-api vd-worker vd-web
 
 # 执行新迁移
@@ -302,13 +302,13 @@ sudo systemctl restart vd-worker
 ```bash
 cd /opt/vd/repo
 HEALTH_URL='http://127.0.0.1/healthz' \
-scripts/deploy/canary_rollout.sh --target 10 --step 5 --settle-seconds 20
+./bin/canary-rollout --target 10 --step 5 --settle-seconds 20
 ```
 
 3. 若需要紧急回滚，直接置零：
 
 ```bash
-TARGET_WEIGHT=0 scripts/deploy/canary_rollout.sh --target 0 --step 100
+TARGET_WEIGHT=0 ./bin/canary-rollout --target 0 --step 100
 ```
 
 完整流程与 RTO 目标见 [`rollback-runbook.md`](rollback-runbook.md)。

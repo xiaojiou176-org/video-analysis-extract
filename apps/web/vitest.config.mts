@@ -5,7 +5,7 @@ const repoRoot = process.env.VIDEO_ANALYSIS_REPO_ROOT
 	? path.resolve(process.env.VIDEO_ANALYSIS_REPO_ROOT)
 	: path.resolve(__dirname, "../..");
 const coverageDirectory = path.resolve(repoRoot, ".runtime-cache/reports/web-coverage");
-const coverageRuntimeDirectory = path.resolve(repoRoot, ".runtime-cache/temp/vitest-coverage");
+const coverageRuntimeDirectory = path.resolve(repoRoot, ".runtime-cache/tmp/vitest-coverage");
 const coverageSummaryFile = path.relative(
 	coverageRuntimeDirectory,
 	path.join(coverageDirectory, "coverage-summary.json"),

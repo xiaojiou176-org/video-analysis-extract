@@ -8,7 +8,7 @@
 - `.env` 仅保留核心运行配置与密钥，不承载脚本行为开关。
 - 如需覆盖默认值，优先在命令行一次性传参。
 
-## Daily Digest (`scripts/runtime/run_daily_digest.sh`)
+## Daily Digest (`bin/run-daily-digest`)
 
 使用 CLI flags：
 
@@ -25,10 +25,10 @@
 ```bash
 # 旧：通过环境变量覆盖
 # 新：直接传 flag
-./scripts/runtime/run_daily_digest.sh --date 2026-02-27 --to-email you@example.com --api-base-url http://127.0.0.1:9000
+./bin/run-daily-digest --date 2026-02-27 --to-email you@example.com --api-base-url http://127.0.0.1:9000
 ```
 
-## Failure Alerts (`scripts/runtime/run_failure_alerts.sh`)
+## Failure Alerts (`bin/run-failure-alerts`)
 
 使用 CLI flags：
 
@@ -44,10 +44,10 @@
 迁移示例：
 
 ```bash
-./scripts/runtime/run_failure_alerts.sh --lookback-hours 6 --limit 10 --to-email you@example.com --api-base-url http://127.0.0.1:9000
+./bin/run-failure-alerts --lookback-hours 6 --limit 10 --to-email you@example.com --api-base-url http://127.0.0.1:9000
 ```
 
-## Live Smoke (`scripts/ci/e2e_live_smoke.sh`)
+## Live Smoke (`bin/live-smoke`)
 
 使用 CLI flags：
 
@@ -71,14 +71,14 @@
 迁移示例：
 
 ```bash
-./scripts/ci/e2e_live_smoke.sh \
+./bin/live-smoke \
   --api-base-url http://127.0.0.1:9000 \
   --timeout-seconds 240 \
   --heartbeat-seconds 20 \
   --diagnostics-json .runtime-cache/reports/tests/e2e-live-smoke-result.json
 ```
 
-## PR LLM Smoke (`scripts/ci/smoke_llm_real_local.sh`)
+## PR LLM Smoke (`bin/smoke-llm-real-local`)
 
 使用 CLI flags：
 
@@ -91,7 +91,7 @@
 
 ```bash
 export VD_API_KEY='local-dev-token'
-./scripts/ci/smoke_llm_real_local.sh --api-base-url http://127.0.0.1:18081 --heartbeat-seconds 20
+./bin/smoke-llm-real-local --api-base-url http://127.0.0.1:18081 --heartbeat-seconds 20
 ```
 
 ## Script Entrypoints
@@ -113,7 +113,7 @@ export VD_API_KEY='local-dev-token'
 - `--entry`
 - `--mcp-dir`
 
-### `scripts/env/init_example.sh`
+### `bin/init-env-example`
 
 - `--output`
 - `--force`
@@ -123,7 +123,7 @@ export VD_API_KEY='local-dev-token'
 - 该脚本只是辅助模板生成工具，不是默认初始化入口。
 - 标准初始化路径固定为：`cp .env.example .env`。
 
-## Ops Workflows (`scripts/runtime/start_ops_workflows.sh`)
+## Ops Workflows (`bin/start-ops-workflows`)
 
 基础频率和调度参数：
 
@@ -157,7 +157,7 @@ workflow 管理参数：
 迁移示例：
 
 ```bash
-./scripts/runtime/start_ops_workflows.sh \
+./bin/start-ops-workflows \
   --daily-local-hour 9 \
   --daily-timezone Asia/Shanghai \
   --notification-interval-minutes 5 \
@@ -199,7 +199,7 @@ workflow 管理参数：
 - `full_stack.sh` 读取 `API_PORT/WEB_PORT` 作为本地路由真相源。
 - `VD_API_BASE_URL` 与 `NEXT_PUBLIC_API_BASE_URL` 默认由路由真相源派生，必要时可通过 CLI 显式覆盖。
 
-### `scripts/ci/smoke_full_stack.sh`
+### `bin/smoke-full-stack`
 
 - `--profile`
 - `--api-base-url`
@@ -219,7 +219,7 @@ workflow 管理参数：
 迁移示例：
 
 ```bash
-./scripts/ci/smoke_full_stack.sh \
+./bin/smoke-full-stack \
   --profile local \
   --require-reader 1 \
   --live-smoke-api-base-url http://127.0.0.1:9000
@@ -247,7 +247,7 @@ workflow 管理参数：
   --miniflux-base-url http://127.0.0.1:8080
 ```
 
-## Recreate GCE Instance (`scripts/deploy/recreate_gce_instance.sh`)
+## Recreate GCE Instance (`bin/recreate-gce-instance`)
 
 使用 CLI flags：
 

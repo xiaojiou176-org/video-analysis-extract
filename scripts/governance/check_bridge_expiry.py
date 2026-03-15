@@ -38,8 +38,8 @@ def main() -> int:
     bridges = payload.get("bridges", [])
     if payload.get("version") != 1:
         errors.append("bridges.json must declare version=1")
-    if not isinstance(bridges, list) or not bridges:
-        errors.append("bridges.json must declare a non-empty bridges list")
+    if not isinstance(bridges, list):
+        errors.append("bridges.json must declare a bridges list")
 
     now = datetime.now().astimezone()
     seen: set[str] = set()

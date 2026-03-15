@@ -280,7 +280,7 @@ log "no active temporal worker pollers detected on ${TEMPORAL_TASK_QUEUE}; start
     cd "$ROOT_DIR"
     export DATABASE_URL TEMPORAL_TARGET_HOST TEMPORAL_NAMESPACE TEMPORAL_TASK_QUEUE
     export SQLITE_PATH UI_AUDIT_GEMINI_ENABLED NOTIFICATION_ENABLED PYTHONPATH
-    export PIPELINE_WORKSPACE_DIR="${PIPELINE_WORKSPACE_DIR:-$ROOT_DIR/.runtime-cache/temp/api-real-smoke-worker-workspace}"
+    export PIPELINE_WORKSPACE_DIR="${PIPELINE_WORKSPACE_DIR:-$ROOT_DIR/.runtime-cache/tmp/api-real-smoke-worker-workspace}"
     export PIPELINE_ARTIFACT_ROOT="${PIPELINE_ARTIFACT_ROOT:-$ROOT_DIR/.runtime-cache/evidence/tests/api-real-smoke-worker-artifacts}"
     ./scripts/dev_worker.sh --no-show-hints >"$WORKER_LOG" 2>&1
   ) &
@@ -302,7 +302,7 @@ log "no active temporal worker pollers detected on ${TEMPORAL_TASK_QUEUE}; start
 }
 
 run_cleanup_workflow_closure_probe() {
-  WORKFLOW_PROBE_ROOT="$ROOT_DIR/.runtime-cache/temp/api-real-smoke-workflow-${SMOKE_DATABASE_NAME}"
+  WORKFLOW_PROBE_ROOT="$ROOT_DIR/.runtime-cache/tmp/api-real-smoke-workflow-${SMOKE_DATABASE_NAME}"
   local workspace_dir="$WORKFLOW_PROBE_ROOT/workspace"
   local cache_dir="$WORKFLOW_PROBE_ROOT/cache"
   local media_file="$workspace_dir/job-1/downloads/media.mp4"
