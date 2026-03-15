@@ -2,7 +2,7 @@
 set -euo pipefail
 
 SCRIPT_NAME="init_env_example"
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
 OUTPUT_PATH="$ROOT_DIR/.env.generated.example"
 INIT_ENV_FORCE=0
@@ -46,7 +46,7 @@ print_next_steps() {
 [${SCRIPT_NAME}]   2) edit "$ROOT_DIR/.env" and fill RESEND_* values
 [${SCRIPT_NAME}]   3) source "$ROOT_DIR/.env"
 [${SCRIPT_NAME}]   4) if needed, export temporary overrides in current shell
-[${SCRIPT_NAME}]   5) run scripts/run_daily_digest.sh or scripts/run_failure_alerts.sh
+[${SCRIPT_NAME}]   5) run scripts/runtime/run_daily_digest.sh or scripts/runtime/run_failure_alerts.sh
 EOF
 }
 
@@ -66,7 +66,7 @@ main() {
         ;;
       -h|--help)
         cat <<EOF
-Usage: ./scripts/init_env_example.sh [--output <path>] [--force]
+Usage: ./scripts/env/init_example.sh [--output <path>] [--force]
 
 Options:
   --output <path>  Output file path (default: $ROOT_DIR/.env.generated.example)

@@ -8,7 +8,7 @@
 - `.env` 仅保留核心运行配置与密钥，不承载脚本行为开关。
 - 如需覆盖默认值，优先在命令行一次性传参。
 
-## Daily Digest (`scripts/run_daily_digest.sh`)
+## Daily Digest (`scripts/runtime/run_daily_digest.sh`)
 
 使用 CLI flags：
 
@@ -25,10 +25,10 @@
 ```bash
 # 旧：通过环境变量覆盖
 # 新：直接传 flag
-./scripts/run_daily_digest.sh --date 2026-02-27 --to-email you@example.com --api-base-url http://127.0.0.1:9000
+./scripts/runtime/run_daily_digest.sh --date 2026-02-27 --to-email you@example.com --api-base-url http://127.0.0.1:9000
 ```
 
-## Failure Alerts (`scripts/run_failure_alerts.sh`)
+## Failure Alerts (`scripts/runtime/run_failure_alerts.sh`)
 
 使用 CLI flags：
 
@@ -44,10 +44,10 @@
 迁移示例：
 
 ```bash
-./scripts/run_failure_alerts.sh --lookback-hours 6 --limit 10 --to-email you@example.com --api-base-url http://127.0.0.1:9000
+./scripts/runtime/run_failure_alerts.sh --lookback-hours 6 --limit 10 --to-email you@example.com --api-base-url http://127.0.0.1:9000
 ```
 
-## Live Smoke (`scripts/e2e_live_smoke.sh`)
+## Live Smoke (`scripts/ci/e2e_live_smoke.sh`)
 
 使用 CLI flags：
 
@@ -71,14 +71,14 @@
 迁移示例：
 
 ```bash
-./scripts/e2e_live_smoke.sh \
+./scripts/ci/e2e_live_smoke.sh \
   --api-base-url http://127.0.0.1:9000 \
   --timeout-seconds 240 \
   --heartbeat-seconds 20 \
-  --diagnostics-json .runtime-cache/e2e-live-smoke-result.json
+  --diagnostics-json .runtime-cache/reports/tests/e2e-live-smoke-result.json
 ```
 
-## PR LLM Smoke (`scripts/smoke_llm_real_local.sh`)
+## PR LLM Smoke (`scripts/ci/smoke_llm_real_local.sh`)
 
 使用 CLI flags：
 
@@ -91,7 +91,7 @@
 
 ```bash
 export VD_API_KEY='local-dev-token'
-./scripts/smoke_llm_real_local.sh --api-base-url http://127.0.0.1:18081 --heartbeat-seconds 20
+./scripts/ci/smoke_llm_real_local.sh --api-base-url http://127.0.0.1:18081 --heartbeat-seconds 20
 ```
 
 ## Script Entrypoints
@@ -113,7 +113,7 @@ export VD_API_KEY='local-dev-token'
 - `--entry`
 - `--mcp-dir`
 
-### `scripts/init_env_example.sh`
+### `scripts/env/init_example.sh`
 
 - `--output`
 - `--force`
@@ -123,7 +123,7 @@ export VD_API_KEY='local-dev-token'
 - 该脚本只是辅助模板生成工具，不是默认初始化入口。
 - 标准初始化路径固定为：`cp .env.example .env`。
 
-## Ops Workflows (`scripts/start_ops_workflows.sh`)
+## Ops Workflows (`scripts/runtime/start_ops_workflows.sh`)
 
 基础频率和调度参数：
 
@@ -157,7 +157,7 @@ workflow 管理参数：
 迁移示例：
 
 ```bash
-./scripts/start_ops_workflows.sh \
+./scripts/runtime/start_ops_workflows.sh \
   --daily-local-hour 9 \
   --daily-timezone Asia/Shanghai \
   --notification-interval-minutes 5 \
@@ -180,12 +180,11 @@ workflow 管理参数：
 - `--with-core-services`
 - `--with-reader-stack`
 - `--reader-env-file`
-- `--offline-fallback`
 
 说明：
 
 - `bootstrap_full_stack.sh` 不再持久化改写 `.env`（仅在 `.env` 缺失时复制 `.env.example`）。
-- 端口冲突与回退等运行时决策会写入 `.runtime-cache/full-stack/resolved.env`。
+- 端口冲突与运行时路由决策会写入 `.runtime-cache/run/full-stack/resolved.env`。
 - 本地路由真相源是 `API_PORT/WEB_PORT`；`VD_API_BASE_URL` 与 `NEXT_PUBLIC_API_BASE_URL` 为派生地址。
 
 ### `scripts/full_stack.sh`
@@ -200,13 +199,12 @@ workflow 管理参数：
 - `full_stack.sh` 读取 `API_PORT/WEB_PORT` 作为本地路由真相源。
 - `VD_API_BASE_URL` 与 `NEXT_PUBLIC_API_BASE_URL` 默认由路由真相源派生，必要时可通过 CLI 显式覆盖。
 
-### `scripts/smoke_full_stack.sh`
+### `scripts/ci/smoke_full_stack.sh`
 
 - `--profile`
 - `--api-base-url`
 - `--web-base-url`
 - `--require-reader`
-- `--offline-fallback`
 - `--reader-env-file`
 - `--heartbeat-seconds`
 - `--live-smoke-api-base-url`
@@ -221,10 +219,9 @@ workflow 管理参数：
 迁移示例：
 
 ```bash
-./scripts/smoke_full_stack.sh \
+./scripts/ci/smoke_full_stack.sh \
   --profile local \
   --require-reader 1 \
-  --offline-fallback 0 \
   --live-smoke-api-base-url http://127.0.0.1:9000
 ```
 
@@ -233,7 +230,7 @@ workflow 管理参数：
 - `env/profiles/reader.env` 仅用于补齐 reader 相关默认值（如 `MINIFLUX_BASE_URL`、`NEXTFLUX_PORT`）。
 - 当前 shell 已显式注入的 `MINIFLUX_*` / `NEXTFLUX_*` 变量优先级更高，不会被 reader profile 模板覆盖。
 
-### `scripts/run_ai_feed_sync.sh`
+### `scripts/runtime/run_ai_feed_sync.sh`
 
 - `--profile`
 - `--reader-env-file`
@@ -243,14 +240,14 @@ workflow 管理参数：
 迁移示例：
 
 ```bash
-./scripts/run_ai_feed_sync.sh \
+./scripts/runtime/run_ai_feed_sync.sh \
   --profile local \
   --reader-env-file env/profiles/reader.env \
   --api-base-url http://127.0.0.1:9000 \
   --miniflux-base-url http://127.0.0.1:8080
 ```
 
-## Recreate GCE Instance (`scripts/recreate_gce_instance.sh`)
+## Recreate GCE Instance (`scripts/deploy/recreate_gce_instance.sh`)
 
 使用 CLI flags：
 
@@ -266,16 +263,16 @@ workflow 管理参数：
 - `--force-delete-instance`
 - `--force-replace-app-dir`
 
-## Env Governance Report (`scripts/report_env_governance.py`)
+## Env Governance Report (`scripts/governance/report_env_governance.py`)
 
 用于输出环境变量治理报表（删除候选、残留引用、文档漂移）。
 
 示例：
 
 ```bash
-python3 scripts/report_env_governance.py \
-  --json-out .runtime-cache/env-governance.json \
-  --md-out .runtime-cache/env-governance.md
+python3 scripts/governance/report_env_governance.py \
+  --json-out .runtime-cache/reports/governance/env-governance.json \
+  --md-out .runtime-cache/reports/governance/env-governance.md
 ```
 
 输出说明：
