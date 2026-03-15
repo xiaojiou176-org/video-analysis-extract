@@ -5,10 +5,10 @@ This repository uses a contract-first environment model:
 1. Source of truth: `infra/config/env.contract.json`
 2. Local template: `.env.example` (copied to `.env`)
 3. Runtime access: configuration modules (`apps/api/app/config.py`, `apps/worker/worker/config.py`, `apps/mcp/server.py`)
-4. Gate: `python3 scripts/check_env_contract.py --strict`
+4. Gate: `python3 scripts/governance/check_env_contract.py --strict`
 
 `.env.example` is intentionally minimal (required + critical + high-frequency overrides). For the full script override catalog, see `docs/reference/env-script-overrides.md`.
-Standard initialization path is fixed to `.env.example -> .env` (`cp .env.example .env`); `scripts/init_env_example.sh` is an optional helper for generating auxiliary templates only.
+Standard initialization path is fixed to `.env.example -> .env` (`cp .env.example .env`); `scripts/env/init_example.sh` is an optional helper for generating auxiliary templates only.
 
 ## Core/Profile Overlay Architecture
 
@@ -23,9 +23,9 @@ Overlay scope rules:
 
 - `.env` is the canonical runtime baseline for API/Worker/MCP/Web scripts.
 - `env/profiles/reader.env` is not global; it is applied only in reader-stack flows such as:
-  - `scripts/deploy_reader_stack.sh` (default path: `env/profiles/reader.env`)
-  - `scripts/smoke_full_stack.sh` (reader checks)
-  - `scripts/run_ai_feed_sync.sh` (reader sync path)
+  - `scripts/deploy/reader_stack.sh` (default path: `env/profiles/reader.env`)
+  - `scripts/ci/smoke_full_stack.sh` (reader checks)
+  - `scripts/runtime/run_ai_feed_sync.sh` (reader sync path)
 - Process env is allowed for temporary overrides and CI injection.
 
 ## Loading Order
@@ -54,9 +54,9 @@ For full-stack local scripts (`bootstrap_full_stack.sh` / `full_stack.sh` / `smo
 
 1. `API_PORT` and `WEB_PORT` are the routing source of truth.
 2. `VD_API_BASE_URL` and `NEXT_PUBLIC_API_BASE_URL` are derived URLs by default (unless explicitly overridden by CLI flags such as `--api-base-url`).
-3. Runtime decisions (port fallback, derived routing values) are written to `.runtime-cache/full-stack/resolved.env`.
+3. Runtime decisions (port fallback, derived routing values) are written to `.runtime-cache/run/full-stack/resolved.env`.
 4. `bootstrap_full_stack.sh` does not persist runtime decisions back into `.env` (except first-copy from `.env.example` when `.env` is missing).
-5. `bootstrap_full_stack.sh` defaults to `--offline-fallback 1` (may write `.runtime-cache/full-stack/offline-fallback.flag`), while `smoke_full_stack.sh` defaults to `--offline-fallback 0`; reader checks are skipped only when smoke is explicitly run with `--offline-fallback 1` and the marker exists.
+5. `bootstrap_full_stack.sh` defaults to `--offline-fallback 1` (may write `.runtime-cache/run/full-stack/offline-fallback.flag`), while `smoke_full_stack.sh` defaults to `--offline-fallback 0`; reader checks are skipped only when smoke is explicitly run with `--offline-fallback 1` and the marker exists.
 
 ## Fail-Fast Rules
 
@@ -157,10 +157,11 @@ Default model lane:
 - Web runtime: `NEXT_PUBLIC_API_BASE_URL` (web client only reads this variable for API base URL; usually derived from `API_PORT` in local full-stack flows)
 - `UI_AUDIT_GEMINI_ENABLED` (API-side Gemini UI audit toggle, default `true`)
 - `UI_AUDIT_ARTIFACT_BASE_ROOT` (UI audit artifact directory whitelist root; only `artifact_root` paths within this base are accepted; defaults to OS temp directory when unset)
-- `UI_AUDIT_RUN_STORE_DIR` (persisted UI audit run snapshot directory, default `.runtime-cache/ui-audit-runs`)
+- `UI_AUDIT_RUN_STORE_DIR` (persisted UI audit run snapshot directory, default `.runtime-cache/evidence/tests/ui-audit-runs`)
+- `UV_PROJECT_ENVIRONMENT` (hard-cut Python virtual environment path; recommended local default `$HOME/.cache/video-digestor/project-venv`, replacing workspace-root `.venv`)
 - `VD_MCP_MAX_BASE64_BYTES` (MCP base64 payload size limit, bytes)
 - `WEB_ACTION_SESSION_TOKEN` (optional server-action session secret)
-- CI UI/UX audit report output path is fixed to `.runtime-cache/ui-audit/gemini-ui-ux-audit-report.json` in the strict CI workflow.
+- CI UI/UX audit report output path is fixed to `.runtime-cache/reports/ui-audit/gemini-ui-ux-audit-report.json` in the strict CI workflow.
 
 Write auth behavior contract (`apps/api/app/security.py`):
 
@@ -206,35 +207,35 @@ Exception detail sanitization contract:
 ### Script Runtime
 
 - Full script override catalog: `docs/reference/env-script-overrides.md`
-- `scripts/run_daily_digest.sh` now uses CLI flags only (no `DIGEST_*` env contract vars)
-- `scripts/run_failure_alerts.sh` now uses CLI flags only (no `FAILURE_*` env contract vars)
+- `scripts/runtime/run_daily_digest.sh` now uses CLI flags only (no `DIGEST_*` env contract vars)
+- `scripts/runtime/run_failure_alerts.sh` now uses CLI flags only (no `FAILURE_*` env contract vars)
 - Live-smoke and PR LLM smoke controls are CLI-first (see `docs/reference/env-script-overrides.md`).
-- `scripts/external_playwright_smoke.sh` now uses CLI flags only (no `EXTERNAL_SMOKE_*` env contract vars)
+- `scripts/ci/external_playwright_smoke.sh` now uses CLI flags only (no `EXTERNAL_SMOKE_*` env contract vars)
 - Script entry controls for `dev_api/dev_worker/dev_mcp/init_env_example` are CLI-only after Batch C (see `docs/reference/env-script-overrides.md`)
-- `scripts/recreate_gce_instance.sh` now uses CLI flags only (no GCE recreate env contract vars)
+- `scripts/deploy/recreate_gce_instance.sh` now uses CLI flags only (no GCE recreate env contract vars)
 - `CORE_POSTGRES_PORT`, `CORE_POSTGRES_PASSWORD` (docker compose core-services overrides)
 - `GHCR_USERNAME`, `GHCR_TOKEN` are optional local-only credentials for pulling the private strict CI standard image from `ghcr.io` during `scripts/strict_ci_entry.sh` runs.
 - `VD_STANDARD_ENV_LOAD_PLATFORM_ARCH`, `API_REAL_SMOKE_DATABASE_URL`, `API_REAL_SMOKE_TEMPORAL_TARGET_HOST`, and `FULL_STACK_TEMPORAL_POLLER_READY_TIMEOUT_SECONDS` are optional script/runtime overrides for strict standard image loading, API real-smoke targeting, and full-stack Temporal readiness waits.
-- `TMPDIR`, `UV_LINK_MODE`, `UV_PROJECT_ENVIRONMENT` are optional local strict-runtime overrides used by `scripts/bootstrap_strict_ci_runtime.sh` and `scripts/ci_web_e2e.sh` to place uv-managed environments under a stable temp root instead of mutating the workspace `.venv`.
+- `TMPDIR`, `UV_LINK_MODE`, `UV_PROJECT_ENVIRONMENT`, and `PYTHONDONTWRITEBYTECODE` are optional local strict-runtime overrides used by `scripts/ci/bootstrap_strict_ci_runtime.sh`, `scripts/ci/python_tests.sh`, and `scripts/governance/quality_gate.sh` to keep Python verification environments out of the workspace and suppress repo-side `__pycache__` / `*.pyc` residue.
 - `GCP_PROJECT_ID`, `GCP_ZONE` are optional defaults for runner maintenance helpers:
-  - `scripts/audit_github_runner_host.sh`
-  - `scripts/apply_github_runner_startup_metadata.sh`
+  - `scripts/governance/audit_github_runner_host.sh`
+  - `scripts/deploy/apply_github_runner_startup_metadata.sh`
   - CLI flags still take precedence over env defaults
 
-Live smoke includes strict computer-use controls via CLI flags in `scripts/e2e_live_smoke.sh`.
-- `scripts/e2e_live_smoke.sh` default contract is `--require-api=1` and `--require-secrets=1`; `scripts/quality_gate.sh` live-smoke profile gate enforces these defaults.
+Live smoke includes strict computer-use controls via CLI flags in `scripts/ci/e2e_live_smoke.sh`.
+- `scripts/ci/e2e_live_smoke.sh` default contract is `--require-api=1` and `--require-secrets=1`; `scripts/quality_gate.sh` live-smoke profile gate enforces these defaults.
 
-- `scripts/smoke_computer_use_local.sh` uses CLI flags (`--retries`, `--heartbeat-seconds`) with internal defaults.
+- `scripts/ci/smoke_computer_use_local.sh` uses CLI flags (`--retries`, `--heartbeat-seconds`) with internal defaults.
 - `YOUTUBE_API_KEY` resolution for live smoke: current environment / `.env`; no `.env.local` / `.env.bak` / shell login fallback probing.
-- Batch B CLI controls in `scripts/e2e_live_smoke.sh` (not env contract vars):
+- Batch B CLI controls in `scripts/ci/e2e_live_smoke.sh` (not env contract vars):
   - `--health-path` (default `/healthz`)
   - `--timeout-seconds` (default `180`)
   - `--poll-interval-seconds` (default `3`)
   - `--heartbeat-seconds` (default `30`)
   - `--external-probe-timeout-seconds` (default `20`)
   - `--max-retries` (default `2`)
-  - `--diagnostics-json` (default `.runtime-cache/e2e-live-smoke-result.json`)
-  - `--computer-use-cmd` (default `scripts/smoke_computer_use_local.sh`)
+  - `--diagnostics-json` (default `.runtime-cache/reports/tests/e2e-live-smoke-result.json`)
+  - `--computer-use-cmd` (default `scripts/ci/smoke_computer_use_local.sh`)
   - `--bilibili-url` (default `https://www.bilibili.com/video/BV1xx411c7mD`)
 - Full-stack bootstrap/smoke fallback behavior is controlled by CLI flags in the scripts above.
 - Failure-kind contract alignment: `e2e_live_smoke` diagnostics keep `failure_kind` in `{code_logic_error, network_or_environment_timeout}`; enabling offline fallback does not add new `failure_kind` enum values.
@@ -250,28 +251,31 @@ Live smoke includes strict computer-use controls via CLI flags in `scripts/e2e_l
     - `unset/0`: local default fast mode; unmet real-Postgres requirements can `xfail`.
     - `1`: strict mode; unmet requirements or failures are blocking.
   - `WEB_E2E_USE_MOCK_API`: local-only debug toggle for web E2E mock API wiring; CI/mainline must keep real API path.
-  - `WEB_E2E_NEXT_DIST_DIR`: optional E2E-only Next.js distDir isolation; used to avoid concurrent `.next/dev/lock` contention across parallel E2E workers.
+- `WEB_E2E_NEXT_DIST_DIR`: optional E2E-only Next.js distDir isolation; used to avoid concurrent `.next/dev/lock` contention across parallel E2E workers.
+- `WEB_RUNTIME_WEB_DIR`: runtime workspace path prepared by `scripts/ci/prepare_web_runtime.sh`; points to the isolated apps/web execution tree under `.runtime-cache/temp/web-runtime`.
+- `WEB_E2E_RUNTIME_WEB_DIR`: optional E2E override for the prepared runtime apps/web workspace path.
+- `VIDEO_ANALYSIS_REPO_ROOT`: explicit repo root override used when Web runtime workspaces execute from copied paths outside the checked-in `apps/web` tree.
 
 Local verification boundary:
 
 - `DATABASE_URL='sqlite+pysqlite:///:memory:'` is the default fast regression path.
-- Real Postgres integration smoke must run separately via `./scripts/api_real_smoke_local.sh` (for CI parity), and `smoke_full_stack.sh` is not a replacement for that backend integration gate.
+- Real Postgres integration smoke must run separately via `./scripts/ci/api_real_smoke_local.sh` (for CI parity), and `smoke_full_stack.sh` is not a replacement for that backend integration gate.
 
-`scripts/external_playwright_smoke.sh` defaults (override via CLI flags):
+`scripts/ci/external_playwright_smoke.sh` defaults (override via CLI flags):
 
 - `--url=https://example.com`
 - `--browser=chromium`
 - `--timeout-ms=45000`
 - `--expect-text='Example Domain'`
-- `--output-dir=.runtime-cache/external-playwright-smoke`
+- `--output-dir=.runtime-cache/evidence/tests/external-playwright-smoke`
 - `--retries=2`
-- `--diagnostics-json=.runtime-cache/external-playwright-smoke-result.json`
+- `--diagnostics-json=.runtime-cache/reports/tests/external-playwright-smoke-result.json`
 - `--heartbeat-seconds=30`
 
-`scripts/smoke_llm_real_local.sh` defaults:
+`scripts/ci/smoke_llm_real_local.sh` defaults:
 
 - API base URL defaults to `http://127.0.0.1:8000` unless overridden by CLI.
-- `--diagnostics-json=.runtime-cache/pr-llm-real-smoke-result.json` (CLI)
+- `--diagnostics-json=.runtime-cache/reports/tests/pr-llm-real-smoke-result.json` (CLI)
 - `--heartbeat-seconds=30` (CLI)
 - `--max-retries=2` (CLI)
 
@@ -291,7 +295,7 @@ cp .env.example .env
 Optional helper (not the default path):
 
 ```bash
-./scripts/init_env_example.sh --output .runtime-cache/temp/.env.generated.example --force
+./scripts/env/init_example.sh --output .runtime-cache/temp/.env.generated.example --force
 ```
 
 ## Minimal Required Variables by Profile
@@ -350,14 +354,14 @@ Notes:
    - keep reader-only credentials in `env/profiles/reader.env`
 4. Do not use `.env.local` / `.env.bak` as runtime secret inputs.
 5. Validate contract:
-   - `python3 scripts/check_env_contract.py --strict`
+   - `python3 scripts/governance/check_env_contract.py --strict`
 6. For reader stack startup, use explicit env file flag:
-   - default: `./scripts/deploy_reader_stack.sh up`
-   - custom path: `./scripts/deploy_reader_stack.sh up --env-file <path>`
+   - default: `./scripts/deploy/reader_stack.sh up`
+   - custom path: `./scripts/deploy/reader_stack.sh up --env-file <path>`
 
 ## Env Budget Guard (Anti-Bloat)
 
-Quality gates enforce hard ceilings through `python3 scripts/check_env_budget.py`:
+Quality gates enforce hard ceilings through `python3 scripts/governance/check_env_budget.py`:
 
 - `core <= 20`
 - `runtime <= 100`
@@ -376,7 +380,7 @@ If a change must exceed any limit, raise a governance PR that includes:
 GitHub Actions workflow: `.github/workflows/env-governance.yml`
 
 1. Environment contract check:
-   - `python3 scripts/check_env_contract.py --strict --env-file .env.example`
+   - `python3 scripts/governance/check_env_contract.py --strict --env-file .env.example`
    - Validates:
      - all referenced env vars are registered in `infra/config/env.contract.json`
      - every `required=true` contract variable has `default=null`
@@ -390,7 +394,7 @@ GitHub Actions workflow: `.github/workflows/env-governance.yml`
 - Workflow `ci.yml` includes `autofix-dry-run` job.
 - Trigger: runs when either `python-tests` or `web-e2e` fails.
 - Input artifacts: junit/log files from `.runtime-cache/`.
-- Output artifact: `autofix-dry-run-report-<run_id>-<run_attempt>` containing `.runtime-cache/autofix-report.json`.
+- Output artifact: `autofix-dry-run-report-<run_id>-<run_attempt>` containing `.runtime-cache/reports/autofix/autofix-report.json`.
 - Safety: dry-run only, no code mutation.
 
 ## CI Job Topology and Cache Policy (`.github/workflows/ci.yml`)
@@ -405,7 +409,7 @@ GitHub Actions workflow: `.github/workflows/env-governance.yml`
 - Cache and artifacts:
   - Node deps: `actions/setup-node@v4` with `cache: npm` and `apps/web/package-lock.json`.
   - Python deps: deterministic `uv sync --frozen --extra dev --extra e2e` + explicit `actions/cache@v4` for `~/.cache/uv`.
-  - Test diagnostics: `.runtime-cache/*.xml` and `.runtime-cache/*.log` are uploaded as CI artifacts; web e2e traces/videos are uploaded from `.runtime-cache/web-e2e-artifacts`.
+  - Test diagnostics: `.runtime-cache/*.xml` and `.runtime-cache/*.log` are uploaded as CI artifacts; web e2e traces/videos are uploaded from `.runtime-cache/evidence/tests/web-e2e-artifacts`.
 
 ### CI Trigger Boundary (PR vs main vs nightly)
 

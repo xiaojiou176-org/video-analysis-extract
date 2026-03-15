@@ -6,7 +6,7 @@
 
 **Goal:** Move strict CI and strict local validation onto one repo-pinned Docker environment while keeping host-friendly local development scripts.
 
-**Architecture:** Build one standard environment image from repo-controlled files and execute strict gates through a new `scripts/run_in_standard_env.sh` wrapper. Keep `scripts/full_stack.sh`, `scripts/api_real_smoke_local.sh`, and `scripts/smoke_full_stack.sh` as ergonomic local entrypoints, but make CI jobs and strict local gates call the same repo scripts from inside the standard container so host drift stops mattering.
+**Architecture:** Build one standard environment image from repo-controlled files and execute strict gates through a new `scripts/ci/run_in_standard_env.sh` wrapper. Keep `scripts/full_stack.sh`, `scripts/ci/api_real_smoke_local.sh`, and `scripts/ci/smoke_full_stack.sh` as ergonomic local entrypoints, but make CI jobs and strict local gates call the same repo scripts from inside the standard container so host drift stops mattering.
 
 **Tech Stack:** GitHub Actions, Docker, DevContainer, Bash, uv, pytest, Playwright, FastAPI, Next.js
 
@@ -84,7 +84,7 @@ def test_strict_ci_jobs_use_standard_env_wrapper_and_drop_host_bootstrap() -> No
     workflow = (_repo_root() / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
 
     for job_name in ("quality-gate-pre-push", "python-tests", "api-real-smoke", "web-e2e", "live-smoke"):
-        assert "scripts/run_in_standard_env.sh" in workflow
+        assert "scripts/ci/run_in_standard_env.sh" in workflow
 
     assert "sudo apt-get install -y postgresql-client" not in workflow
     assert "actions/setup-python" in workflow  # bootstrap jobs may still use it
@@ -105,7 +105,7 @@ Expected: FAIL because the wrapper script does not exist yet and the workflow/sc
 
 **Step 3: Write minimal implementation placeholders**
 
-- Create `scripts/run_in_standard_env.sh` with `usage`, `docker build`, and `docker run` skeleton.
+- Create `scripts/ci/run_in_standard_env.sh` with `usage`, `docker build`, and `docker run` skeleton.
 - Add the minimal `quality_gate.sh` hook point for strict re-exec.
 - Add placeholder workflow calls to the wrapper before removing old host bootstrap logic.
 
@@ -122,7 +122,7 @@ git add \
   apps/worker/tests/test_standard_env_wrapper_contract.py \
   apps/api/tests/test_quality_gate_script_contract.py \
   apps/worker/tests/test_ci_workflow_strictness.py \
-  scripts/run_in_standard_env.sh \
+  scripts/ci/run_in_standard_env.sh \
   scripts/quality_gate.sh \
   .github/workflows/ci.yml
 git commit -m "test: lock standard env container contract"
@@ -136,7 +136,7 @@ git commit -m "test: lock standard env container contract"
 - Modify: `.devcontainer/Dockerfile`
 - Modify: `.devcontainer/devcontainer.json`
 - Create: `scripts/lib/standard_env.sh`
-- Create: `scripts/run_in_standard_env.sh`
+- Create: `scripts/ci/run_in_standard_env.sh`
 - Test: `apps/worker/tests/test_standard_env_wrapper_contract.py`
 
 **Step 1: Write the failing test for the helper library contract**
@@ -191,7 +191,7 @@ run_in_standard_env() {
 }
 ```
 
-`./scripts/run_in_standard_env.sh`
+`./scripts/ci/run_in_standard_env.sh`
 ```bash
 #!/usr/bin/env bash
 set -euo pipefail
@@ -263,7 +263,7 @@ Expected: PASS.
 
 Run:
 ```bash
-./scripts/run_in_standard_env.sh bash -lc 'python3 --version && uv --version && pwd'
+./scripts/ci/run_in_standard_env.sh bash -lc 'python3 --version && uv --version && pwd'
 ```
 
 Expected: container boots, versions print, working directory is `/workspace`.
@@ -271,7 +271,7 @@ Expected: container boots, versions print, working directory is `/workspace`.
 **Step 6: Commit**
 
 ```bash
-git add .devcontainer/Dockerfile .devcontainer/devcontainer.json scripts/lib/standard_env.sh scripts/run_in_standard_env.sh apps/worker/tests/test_standard_env_wrapper_contract.py
+git add .devcontainer/Dockerfile .devcontainer/devcontainer.json scripts/lib/standard_env.sh scripts/ci/run_in_standard_env.sh apps/worker/tests/test_standard_env_wrapper_contract.py
 git commit -m "feat(env): add shared standard environment wrapper"
 ```
 
@@ -293,7 +293,7 @@ def test_quality_gate_supports_containerized_strict_mode_without_recursion() -> 
     assert 'CONTAINERIZED="auto"' in script
     assert '--containerized 0|1|auto' in script
     assert 'if [[ "${VD_IN_STANDARD_ENV:-0}" != "1" ]]' in script
-    assert 'exec "$ROOT_DIR/scripts/run_in_standard_env.sh"' in script
+    assert 'exec "$ROOT_DIR/scripts/ci/run_in_standard_env.sh"' in script
 ```
 
 **Step 2: Run test to verify it fails**
@@ -315,7 +315,7 @@ CONTAINERIZED="auto"
 # parse --containerized 0|1|auto
 
 if [[ "$MODE" == "pre-push" && "$STRICT_FULL_RUN" == "1" && "$CONTAINERIZED" != "0" && "${VD_IN_STANDARD_ENV:-0}" != "1" ]]; then
-  exec "$ROOT_DIR/scripts/run_in_standard_env.sh" \
+  exec "$ROOT_DIR/scripts/ci/run_in_standard_env.sh" \
     bash -lc "./scripts/quality_gate.sh $* --containerized 0"
 fi
 ```
@@ -358,7 +358,7 @@ git commit -m "feat(gate): re-exec strict validation in standard env"
 
 **Files:**
 - Create: `scripts/ci_python_tests.sh`
-- Modify: `scripts/api_real_smoke_local.sh`
+- Modify: `scripts/ci/api_real_smoke_local.sh`
 - Modify: `.github/workflows/ci.yml`
 - Modify: `apps/worker/tests/test_ci_workflow_strictness.py`
 - Modify: `apps/api/tests/test_api_real_smoke_script_contract.py`
@@ -369,7 +369,7 @@ git commit -m "feat(gate): re-exec strict validation in standard env"
 def test_python_tests_job_calls_repo_script_in_standard_env() -> None:
     workflow = (_repo_root() / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
     assert "scripts/ci_python_tests.sh" in workflow
-    assert "./scripts/run_in_standard_env.sh bash -lc './scripts/ci_python_tests.sh'" in workflow
+    assert "./scripts/ci/run_in_standard_env.sh bash -lc './scripts/ci_python_tests.sh'" in workflow
 ```
 
 ```python
@@ -406,9 +406,9 @@ uv run pytest apps/worker/tests apps/api/tests apps/mcp/tests -q -rA -n 2 \
   --cov=apps/mcp/server.py \
   --cov=apps/mcp/tools \
   --cov-report=term-missing:skip-covered \
-  --cov-report=xml:.runtime-cache/python-coverage.xml \
+  --cov-report=xml:.runtime-cache/reports/python/python-coverage.xml \
   --cov-fail-under=95 \
-  --junitxml=.runtime-cache/python-tests-junit.xml
+  --junitxml=.runtime-cache/reports/python/python-tests-junit.xml
 uv run coverage report \
   --include="apps/worker/worker/pipeline/orchestrator.py,*/apps/worker/worker/pipeline/orchestrator.py,apps/worker/worker/pipeline/policies.py,*/apps/worker/worker/pipeline/policies.py,apps/worker/worker/pipeline/runner.py,*/apps/worker/worker/pipeline/runner.py,apps/worker/worker/pipeline/types.py,*/apps/worker/worker/pipeline/types.py" \
   --show-missing \
@@ -422,10 +422,10 @@ uv run coverage report \
 Make `python-tests` and `api-real-smoke` jobs thin in `.github/workflows/ci.yml`:
 ```yaml
 - name: Run python tests in standard env
-  run: ./scripts/run_in_standard_env.sh bash -lc './scripts/ci_python_tests.sh'
+  run: ./scripts/ci/run_in_standard_env.sh bash -lc './scripts/ci_python_tests.sh'
 
 - name: Run API real smoke in standard env
-  run: ./scripts/run_in_standard_env.sh bash -lc './scripts/api_real_smoke_local.sh'
+  run: ./scripts/ci/run_in_standard_env.sh bash -lc './scripts/ci/api_real_smoke_local.sh'
 ```
 
 Remove from those jobs:
@@ -443,8 +443,8 @@ Expected: PASS.
 
 Run:
 ```bash
-./scripts/run_in_standard_env.sh bash -lc './scripts/ci_python_tests.sh'
-./scripts/run_in_standard_env.sh bash -lc './scripts/api_real_smoke_local.sh'
+./scripts/ci/run_in_standard_env.sh bash -lc './scripts/ci_python_tests.sh'
+./scripts/ci/run_in_standard_env.sh bash -lc './scripts/ci/api_real_smoke_local.sh'
 ```
 
 Expected: commands execute through the same container path CI will use.
@@ -452,7 +452,7 @@ Expected: commands execute through the same container path CI will use.
 **Step 6: Commit**
 
 ```bash
-git add scripts/ci_python_tests.sh scripts/api_real_smoke_local.sh .github/workflows/ci.yml apps/worker/tests/test_ci_workflow_strictness.py apps/api/tests/test_api_real_smoke_script_contract.py
+git add scripts/ci_python_tests.sh scripts/ci/api_real_smoke_local.sh .github/workflows/ci.yml apps/worker/tests/test_ci_workflow_strictness.py apps/api/tests/test_api_real_smoke_script_contract.py
 git commit -m "feat(ci): run backend validation through standard env"
 ```
 
@@ -473,7 +473,7 @@ def test_web_e2e_job_calls_repo_script_in_standard_env() -> None:
     workflow = (_repo_root() / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
 
     assert "scripts/ci_web_e2e.sh" in workflow
-    assert "./scripts/run_in_standard_env.sh bash -lc './scripts/ci_web_e2e.sh" in workflow
+    assert "./scripts/ci/run_in_standard_env.sh bash -lc './scripts/ci_web_e2e.sh" in workflow
     assert "Install Temporal CLI" not in workflow
 ```
 
@@ -497,7 +497,7 @@ set -euo pipefail
 BROWSER="${1:-chromium}"
 mkdir -p .runtime-cache
 uv sync --frozen --extra dev --extra e2e
-npm --prefix apps/web ci
+bash scripts/ci/prepare_web_runtime.sh
 # allocate ports
 # start temporal
 # run migrations
@@ -510,7 +510,7 @@ npm --prefix apps/web ci
 Make `.github/workflows/ci.yml` call the repo script:
 ```yaml
 - name: Run web e2e in standard env
-  run: ./scripts/run_in_standard_env.sh bash -lc './scripts/ci_web_e2e.sh ${{ matrix.browser }}'
+  run: ./scripts/ci/run_in_standard_env.sh bash -lc './scripts/ci_web_e2e.sh ${{ matrix.browser }}'
 ```
 
 Rules:
@@ -529,7 +529,7 @@ Expected: PASS.
 
 Run:
 ```bash
-./scripts/run_in_standard_env.sh bash -lc './scripts/ci_web_e2e.sh chromium'
+./scripts/ci/run_in_standard_env.sh bash -lc './scripts/ci_web_e2e.sh chromium'
 ```
 
 Expected: the same orchestration path CI uses runs locally.
@@ -557,7 +557,7 @@ git commit -m "feat(web-ci): run web e2e through standard env"
 def test_live_smoke_job_calls_repo_script_in_standard_env() -> None:
     workflow = (_repo_root() / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
     assert "scripts/ci_live_smoke.sh" in workflow
-    assert "./scripts/run_in_standard_env.sh bash -lc './scripts/ci_live_smoke.sh'" in workflow
+    assert "./scripts/ci/run_in_standard_env.sh bash -lc './scripts/ci_live_smoke.sh'" in workflow
 ```
 
 ```python
@@ -590,14 +590,14 @@ uv sync --frozen --extra dev --extra e2e
 # start temporal
 # start api + worker
 # validate secrets
-# run scripts/e2e_live_smoke.sh with the same strict flags from ci.yml
+# run scripts/ci/e2e_live_smoke.sh with the same strict flags from ci.yml
 # stop processes on exit
 ```
 
 Make `.github/workflows/ci.yml` call it:
 ```yaml
 - name: Run live smoke in standard env
-  run: ./scripts/run_in_standard_env.sh bash -lc './scripts/ci_live_smoke.sh'
+  run: ./scripts/ci/run_in_standard_env.sh bash -lc './scripts/ci_live_smoke.sh'
 ```
 
 Rules:
@@ -615,7 +615,7 @@ Expected: PASS.
 
 Run:
 ```bash
-./scripts/run_in_standard_env.sh bash -lc './scripts/ci_live_smoke.sh'
+./scripts/ci/run_in_standard_env.sh bash -lc './scripts/ci_live_smoke.sh'
 ```
 
 Expected: PASS when secrets exist; otherwise fail for the correct reason (missing secrets), not because of host drift.
@@ -641,7 +641,7 @@ git commit -m "feat(live-smoke): run strict smoke through standard env"
 
 The docs must state all of the following after the change:
 - local daily development remains host-friendly,
-- strict CI and strict local validation use `scripts/run_in_standard_env.sh`,
+- strict CI and strict local validation use `scripts/ci/run_in_standard_env.sh`,
 - `.devcontainer/Dockerfile` is the repo-pinned standard environment base,
 - CI workflow shell logic moved into repo scripts,
 - the strict validation chain is unchanged in semantics, only in execution environment.
@@ -653,18 +653,18 @@ Add these ideas:
 `README.md`
 ```md
 - Daily local development can still use `./scripts/full_stack.sh up` on the host.
-- Strict validation and CI parity use `./scripts/run_in_standard_env.sh ...`.
+- Strict validation and CI parity use `./scripts/ci/run_in_standard_env.sh ...`.
 ```
 
 `docs/start-here.md`
 ```md
 - Mixed mode: host for day-to-day dev, standard container for strict validation.
-- Use `./scripts/run_in_standard_env.sh bash -lc './scripts/quality_gate.sh --mode pre-push --strict-full-run 1 ...'` for CI-parity local validation.
+- Use `./scripts/ci/run_in_standard_env.sh bash -lc './scripts/quality_gate.sh --mode pre-push --strict-full-run 1 ...'` for CI-parity local validation.
 ```
 
 `docs/runbook-local.md`
 ```md
-- `scripts/run_in_standard_env.sh` is the mandatory path for CI-parity runs.
+- `scripts/ci/run_in_standard_env.sh` is the mandatory path for CI-parity runs.
 - `full_stack.sh` remains the convenience path for interactive local development.
 ```
 
@@ -678,8 +678,8 @@ Add these ideas:
 
 Run:
 ```bash
-python3 scripts/check_ci_docs_parity.py
-bash scripts/ci_or_local_gate_doc_drift.sh --scope staged
+python3 scripts/governance/check_contract_surfaces.py
+bash scripts/governance/ci_or_local_gate_doc_drift.sh --scope staged
 ```
 
 Expected: PASS.
@@ -715,7 +715,7 @@ Expected: PASS.
 **Step 2: Smoke the standard environment wrapper directly**
 
 ```bash
-./scripts/run_in_standard_env.sh bash -lc 'python3 --version && uv --version && env | rg "^(CI|GITHUB_ACTIONS|VD_IN_STANDARD_ENV)=" || true'
+./scripts/ci/run_in_standard_env.sh bash -lc 'python3 --version && uv --version && env | rg "^(CI|GITHUB_ACTIONS|VD_IN_STANDARD_ENV)=" || true'
 ```
 
 Expected: `VD_IN_STANDARD_ENV=1` is visible in-container.
@@ -723,8 +723,8 @@ Expected: `VD_IN_STANDARD_ENV=1` is visible in-container.
 **Step 3: Run backend parity path**
 
 ```bash
-./scripts/run_in_standard_env.sh bash -lc './scripts/ci_python_tests.sh'
-./scripts/run_in_standard_env.sh bash -lc './scripts/api_real_smoke_local.sh'
+./scripts/ci/run_in_standard_env.sh bash -lc './scripts/ci_python_tests.sh'
+./scripts/ci/run_in_standard_env.sh bash -lc './scripts/ci/api_real_smoke_local.sh'
 ```
 
 Expected: PASS.
@@ -732,7 +732,7 @@ Expected: PASS.
 **Step 4: Run web parity path**
 
 ```bash
-./scripts/run_in_standard_env.sh bash -lc './scripts/ci_web_e2e.sh chromium'
+./scripts/ci/run_in_standard_env.sh bash -lc './scripts/ci_web_e2e.sh chromium'
 ```
 
 Expected: PASS for at least one browser locally before matrix fan-out in CI.
@@ -741,8 +741,8 @@ Expected: PASS for at least one browser locally before matrix fan-out in CI.
 
 ```bash
 ./scripts/full_stack.sh up
-./scripts/api_real_smoke_local.sh
-./scripts/smoke_full_stack.sh --offline-fallback 0
+./scripts/ci/api_real_smoke_local.sh
+./scripts/ci/smoke_full_stack.sh --offline-fallback 0
 ./scripts/quality_gate.sh --mode pre-push --strict-full-run 1 --profile ci --profile live-smoke --ci-dedupe 0
 ```
 

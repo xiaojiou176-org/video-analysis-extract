@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import json
 import re
 import threading
 import time
 import uuid
 from collections import defaultdict
+from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -44,6 +46,8 @@ _REQUEST_COUNTER: dict[tuple[str, str, str], int] = defaultdict(int)
 _REQUEST_DURATION: dict[tuple[str, str], dict[str, float]] = defaultdict(
     lambda: {"count": 0.0, "sum": 0.0}
 )
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+_APP_LOG_PATH = _REPO_ROOT / ".runtime-cache" / "logs" / "app" / "api-http.jsonl"
 
 
 def _escape_metric_label(value: str) -> str:
@@ -71,6 +75,35 @@ def _resolve_trace_id(request: Request) -> str:
     return uuid.uuid4().hex
 
 
+def _append_app_request_log(
+    *,
+    trace_id: str,
+    route_label: str,
+    method: str,
+    status_code: int,
+    elapsed_seconds: float,
+) -> None:
+    _APP_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "run_id": trace_id,
+        "trace_id": trace_id,
+        "request_id": trace_id,
+        "service": "api",
+        "component": "http",
+        "channel": "app",
+        "event": "http_request",
+        "severity": "info",
+        "source_kind": "app",
+        "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "method": method,
+        "route": route_label,
+        "status_code": status_code,
+        "duration_seconds": round(elapsed_seconds, 6),
+    }
+    with _APP_LOG_PATH.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(payload, ensure_ascii=False) + "\n")
+
+
 @app.middleware("http")
 async def request_observability_middleware(request: Request, call_next):
     trace_id = _resolve_trace_id(request)
@@ -90,6 +123,13 @@ async def request_observability_middleware(request: Request, call_next):
             duration = _REQUEST_DURATION[(method, route_label)]
             duration["count"] += 1.0
             duration["sum"] += elapsed
+        _append_app_request_log(
+            trace_id=trace_id,
+            route_label=route_label,
+            method=method,
+            status_code=status_code,
+            elapsed_seconds=elapsed,
+        )
         raise
 
     elapsed = max(0.0, time.perf_counter() - started)
@@ -98,6 +138,13 @@ async def request_observability_middleware(request: Request, call_next):
         duration = _REQUEST_DURATION[(method, route_label)]
         duration["count"] += 1.0
         duration["sum"] += elapsed
+    _append_app_request_log(
+        trace_id=trace_id,
+        route_label=route_label,
+        method=method,
+        status_code=status_code,
+        elapsed_seconds=elapsed,
+    )
     response.headers["X-Trace-Id"] = trace_id
     return response
 

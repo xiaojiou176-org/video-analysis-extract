@@ -32,8 +32,8 @@ NEXTFLUX_PORT=3000
 ## 3) Start Stack
 
 ```bash
-./scripts/deploy_reader_stack.sh up --env-file env/profiles/reader.env
-./scripts/deploy_reader_stack.sh status --env-file env/profiles/reader.env
+./scripts/deploy/reader_stack.sh up --env-file env/profiles/reader.env
+./scripts/deploy/reader_stack.sh status --env-file env/profiles/reader.env
 ```
 
 ## 4) GCE Firewall
@@ -68,7 +68,7 @@ Two practical modes:
 ## 8) Operations
 
 ```bash
-./scripts/deploy_reader_stack.sh logs --env-file env/profiles/reader.env
-./scripts/deploy_reader_stack.sh restart --env-file env/profiles/reader.env
-./scripts/deploy_reader_stack.sh down --env-file env/profiles/reader.env
+./scripts/deploy/reader_stack.sh logs --env-file env/profiles/reader.env
+./scripts/deploy/reader_stack.sh restart --env-file env/profiles/reader.env
+./scripts/deploy/reader_stack.sh down --env-file env/profiles/reader.env
 ```

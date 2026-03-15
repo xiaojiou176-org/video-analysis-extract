@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import base64
+import json
 import sys
 import tempfile
 import types
 import uuid
 from datetime import UTC, datetime
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -36,10 +38,26 @@ def test_metrics_endpoint_exposes_prometheus_text(api_client: TestClient) -> Non
 
 
 def test_trace_id_is_echoed_back_in_response_header(api_client: TestClient) -> None:
+    repo_root = Path(__file__).resolve().parents[3]
+    app_log_path = repo_root / ".runtime-cache" / "logs" / "app" / "api-http.jsonl"
+    existing_lines = []
+    if app_log_path.exists():
+        existing_lines = [line for line in app_log_path.read_text(encoding="utf-8").splitlines() if line.strip()]
+
     response = api_client.get("/healthz", headers={"x-trace-id": "trace-audit-0001"})
 
     assert response.status_code == 200
     assert response.headers.get("x-trace-id") == "trace-audit-0001"
+    assert app_log_path.is_file()
+    lines = [line for line in app_log_path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    assert len(lines) >= len(existing_lines) + 1
+    payload = json.loads(lines[-1])
+    assert payload["channel"] == "app"
+    assert payload["event"] == "http_request"
+    assert payload["trace_id"] == "trace-audit-0001"
+    assert payload["run_id"] == "trace-audit-0001"
+    assert payload["service"] == "api"
+    assert payload["source_kind"] == "app"
 
 
 def test_ingest_poll_returns_candidates(

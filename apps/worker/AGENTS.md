@@ -35,7 +35,7 @@ uv run pytest apps/worker/tests -q
 1. 涉及 pipeline 行为改动时，必须通过 `apps/worker/tests`。
 2. 涉及 `PIPELINE_STEPS` 改动时，必须同步 `docs/state-machine.md` 并完成对应验证。
 3. 涉及跨模块改动时，必须遵循根门禁：env contract + backend pytest + web lint + fake assertion gate。
-4. 涉及启动/链路改动时，必须补一次 `./scripts/smoke_full_stack.sh` 或在交付中说明未执行原因。
+4. 涉及启动/链路改动时，必须补一次 `./scripts/ci/smoke_full_stack.sh` 或在交付中说明未执行原因。
 
 ## 4. 文档优先级（模块内）
 
@@ -56,5 +56,5 @@ uv run pytest apps/worker/tests -q
 
 ## 6. Hooks 对齐
 
-- pre-commit：`./scripts/quality_gate.sh --mode pre-commit`（含 `scripts/ci_or_local_gate_doc_drift.sh --scope staged`）。
-- pre-push：`./scripts/quality_gate.sh --mode pre-push --heartbeat-seconds 20`（含 `scripts/ci_or_local_gate_doc_drift.sh --scope push`）。
+- pre-commit：`./scripts/quality_gate.sh --mode pre-commit`（含 `scripts/governance/ci_or_local_gate_doc_drift.sh --scope staged`）。
+- pre-push：`./scripts/quality_gate.sh --mode pre-push --heartbeat-seconds 20`（含 `scripts/governance/ci_or_local_gate_doc_drift.sh --scope push`）。

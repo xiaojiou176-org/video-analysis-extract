@@ -7,7 +7,7 @@ from pathlib import Path
 
 
 def _script_path() -> Path:
-    return Path(__file__).resolve().parents[3] / "scripts" / "report_env_governance.py"
+    return Path(__file__).resolve().parents[3] / "scripts" / "governance" / "report_env_governance.py"
 
 
 def _write_contract(path: Path, variables: list[dict]) -> None:
@@ -62,7 +62,7 @@ def test_residual_refs_hit_and_fail_on_returns_1(tmp_path: Path) -> None:
     (tmp_path / ".env").write_text("KNOWN_VAR=1\n", encoding="utf-8")
     (tmp_path / "docs/testing.md").write_text("`KNOWN_VAR`\n", encoding="utf-8")
 
-    out_json = tmp_path / ".runtime-cache/report.json"
+    out_json = tmp_path / ".runtime-cache/reports/governance/report.json"
     proc = _run_report(
         tmp_path,
         "--fail-on",
@@ -100,7 +100,7 @@ def test_delete_candidates_hit_but_not_in_fail_on_returns_0(tmp_path: Path) -> N
     (tmp_path / ".env").write_text("OLD_VAR=1\n", encoding="utf-8")
     (tmp_path / "docs/testing.md").write_text("`OLD_VAR`\n", encoding="utf-8")
 
-    out_json = tmp_path / ".runtime-cache/report.json"
+    out_json = tmp_path / ".runtime-cache/reports/governance/report.json"
     proc = _run_report(
         tmp_path,
         "--fail-on",
@@ -142,7 +142,7 @@ def test_doc_drift_hit_and_fail_on_returns_1(tmp_path: Path) -> None:
     (tmp_path / ".env").write_text("SQLITE_PATH=ok\n", encoding="utf-8")
     (tmp_path / "docs/testing.md").write_text("no env vars documented\n", encoding="utf-8")
 
-    out_json = tmp_path / ".runtime-cache/report.json"
+    out_json = tmp_path / ".runtime-cache/reports/governance/report.json"
     proc = _run_report(
         tmp_path,
         "--fail-on",

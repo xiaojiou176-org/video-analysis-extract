@@ -110,7 +110,7 @@
 - `steps`
 - `degradations`
 - `pipeline_final_status`
-- `kind`（`video_digest_v1`，兼容历史 `phase2_ingest_stub`）
+- `kind`（`video_digest_v1`；历史存量值可能为 `phase2_ingest_stub`，读取时会归一化）
 - `llm_required`
 - `llm_gate_passed`
 - `hard_fail_reason`
@@ -123,7 +123,7 @@
 - `steps[].result.llm_meta.thinking.thought_signature_digest`
 - `steps[].result.llm_meta.function_calling`（`calls`、`termination_reason` 等）
 - `steps[].cache_key`
-- `steps[].thought_metadata`（兼容提取位，统一归一化，缺失时为空结构）
+- `steps[].thought_metadata`（统一归一化后的提取位，缺失时为空结构）
 - `degradations[].cache_meta`
 
 ### Feed Read Contract（`GET /api/v1/feed/digests`）

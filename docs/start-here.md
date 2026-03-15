@@ -44,13 +44,13 @@
 
 ```bash
 cp .env.example .env
-python3 scripts/check_env_contract.py --strict
+python3 scripts/governance/check_env_contract.py --strict
 ```
 
 说明：
 
 - `.env.example` 现在只保留最小可启动键和少量高频覆盖键，默认足够完成一次本地启动。
-- 标准初始化路径是 `.env.example -> .env`；`scripts/init_env_example.sh` 仅作为辅助模板生成工具，不是默认入口。
+- 标准初始化路径是 `.env.example -> .env`；`scripts/env/init_example.sh` 仅作为辅助模板生成工具，不是默认入口。
 - 脚本参数全集见 `docs/reference/env-script-overrides.md`（按需覆盖，不必全量写入 `.env`）。
 
 ## 一键验证（最短路径）
@@ -62,7 +62,7 @@ bash scripts/env/validate_profile.sh --profile local
 ## 初始化质量门禁（建议在首次 clone 后执行）
 
 ```bash
-./scripts/install_git_hooks.sh
+./scripts/governance/install_git_hooks.sh
 ```
 
 可选：如果你希望把 `pre-commit` framework 也直接挂到 Git 生命周期（除仓库默认 `.githooks` 外），执行：
@@ -135,10 +135,11 @@ DevContainer 启动拓扑补充（2026-03）：
 
 - `.devcontainer/post-create.sh` 已移除 `curl|sh` 安装模式，改为 `python3 -m pip install --user --upgrade "uv>=0.10,<1.0"`；当前会直接校验 strict contract 里的 Chromium 是否可启动，失败时直接报 drift，不再 `playwright install ... || true`。
 - 并发 Web E2E 场景可通过 `WEB_E2E_NEXT_DIST_DIR` 隔离 Next.js `distDir`，避免 `.next/dev/lock` 冲突（默认常规开发无需设置）。
-- `infra/config/strict_ci_contract.json` 现在是标准镜像真相源；`scripts/strict_ci_entry.sh` / `scripts/run_in_standard_env.sh` 只接受 digest-pinned 标准镜像，拉取失败会直接终止，不再静默回退到旧本地镜像。
+- `infra/config/strict_ci_contract.json` 现在是标准镜像真相源；`scripts/strict_ci_entry.sh` / `scripts/ci/run_in_standard_env.sh` 只接受 digest-pinned 标准镜像，拉取失败会直接终止，不再静默回退到旧本地镜像。
 - 关键 correctness gates（`preflight-heavy`、`db-migration-smoke`、`dependency-vuln-scan`、`web-e2e-perceived`、后端/前端 lint hosted/fallback）已经跟 `python-tests` / `api-real-smoke` / `web-e2e` 一样迁入标准镜像执行，因此宿主 Docker 可用性现在是 CI 等价本地验收的前提。
 - self-hosted runner 基线合同已独立成 `infra/config/self_hosted_runner_baseline.json`；主 `ci.yml` 不再预热/拉起 runner，runner 健康检查改由 `runner-health.yml` 负责。
 - DevContainer 现在固定挂载到 `/workspace`，并通过 `post-create.sh` 校验 `uv` / `node` / cache 路径是否与 strict contract 一致。
+- Web 依赖树统一进入 `.runtime-cache/temp/web-runtime/workspace/apps/web`，不再把 `apps/web/node_modules` 作为仓库源码树中的合法长期状态。
 - CI/release 生成式参考页：
   - `docs/generated/ci-topology.md`
   - `docs/generated/runner-baseline.md`
@@ -148,14 +149,14 @@ DevContainer 启动拓扑补充（2026-03）：
 
 ```bash
 uv sync --frozen --extra dev --extra e2e
-npm --prefix apps/web ci
+bash scripts/ci/prepare_web_runtime.sh
 
 brew services start postgresql@16
 brew services start redis
 temporal server start-dev --ip 127.0.0.1 --port 7233
 
 cp .env.example .env
-python3 scripts/check_env_contract.py --strict
+python3 scripts/governance/check_env_contract.py --strict
 set -a; source .env; set +a
 
 createdb video_analysis 2>/dev/null || true
@@ -177,23 +178,24 @@ curl -sS -X POST http://127.0.0.1:9000/api/v1/ingest/poll -H 'Content-Type: appl
 ```bash
 ./scripts/bootstrap_full_stack.sh
 ./scripts/full_stack.sh up
-./scripts/smoke_full_stack.sh --offline-fallback 0
+./scripts/ci/smoke_full_stack.sh
 ```
 
 默认行为：
 
 - `bootstrap_full_stack.sh` 会拉起 core services + Miniflux + Nextflux。
-- `bootstrap_full_stack.sh` 除首次 `.env` 不存在时复制模板外，不再持久化改写 `.env`；端口冲突与回退等运行时决策会写入 `.runtime-cache/full-stack/resolved.env`，仅对当前运行生效。
-- `core-services.compose.yml` 现在使用 digest-pinned fallback 镜像（Postgres/Redis/Temporal），并优先接受 strict contract 导出的 `STRICT_CI_SERVICE_IMAGE_*` 值；端口与 Postgres `DB/User` 仍收口为固定默认（`6379` / `7233` / `video_analysis` / `postgres`）。
+- `bootstrap_full_stack.sh` 除首次 `.env` 不存在时复制模板外，不再持久化改写 `.env`；端口冲突与运行时路由决策会写入 `.runtime-cache/run/full-stack/resolved.env`，仅对当前运行生效。
+- `core-services.compose.yml` 现在使用 digest-pinned service 镜像（Postgres/Redis/Temporal），并优先接受 strict contract 导出的 `STRICT_CI_SERVICE_IMAGE_*` 值；端口与 Postgres `DB/User` 仍收口为固定默认（`6379` / `7233` / `video_analysis` / `postgres`）。
 - `miniflux-nextflux.compose.yml` 的 Miniflux 端口与 `DB/User/DB_NAME` 已收口为固定默认（`8080` / `miniflux` / `miniflux`）。
 - 本地路由真相源是 `API_PORT/WEB_PORT`；`VD_API_BASE_URL` 与 `NEXT_PUBLIC_API_BASE_URL` 属于派生目标地址。
 - `full_stack.sh up` 会按 `API health -> Web -> Worker` 顺序启动；Worker 启动前会先做 Temporal preflight（`TEMPORAL_TARGET_HOST`，默认 `localhost:7233`），不通时直接 fail-fast。
 - `scripts/dev_mcp.sh` 为交互式 stdio 入口，不作为 `full_stack.sh` 的后台守护进程管理；需要 MCP 本地调试时单独开一个终端运行。
 - `scripts/dev_api.sh` 在检测到 `uv` 时会调用 `uv run python -m uvicorn ...`，避免某些 self-hosted/隔离环境缺少 `uvicorn` console entry 时启动失败。
-- `smoke_full_stack.sh` 会执行本地联调烟测并覆盖 reader 栈检查；默认 `--offline-fallback 0`，只有显式传 `--offline-fallback 1` 且命中 `.runtime-cache/full-stack/offline-fallback.flag` 才会降级跳过 reader checks。
-- `smoke_full_stack.sh` 不是 `api-real-smoke` 替代；后端真实 Postgres integration smoke 必须单独执行 `scripts/api_real_smoke_local.sh`。
-- `scripts/api_real_smoke_local.sh` 现在会先做本机 IPv4 loopback 预检；若命中 `failure_kind=host_loopback_ipv4_exhausted`（常见于当前机器本地 127.0.0.1 临时端口池被大量 MCP/Codex 连接占满），脚本会直接 fail-fast，而不是继续启动 API/worker/Temporal 后才深处报错。
-- 本地脚本排障时优先看 `logs/full-stack/*.log`、`.runtime-cache/full-stack/resolved.env` 与 `.runtime-cache/api-real-smoke-local.log`，这样能先区分“端口/路由漂移”还是“业务失败”。
+- `smoke_full_stack.sh` 会执行本地联调烟测并覆盖 reader 栈检查；core/reader 任一异常都会直接 fail-fast，不再保留 offline fallback 降级路径。
+- `smoke_full_stack.sh` 不是 `api-real-smoke` 替代；后端真实 Postgres integration smoke 必须单独执行 `scripts/ci/api_real_smoke_local.sh`。
+- `scripts/ci/api_real_smoke_local.sh` 现在会先做本机 IPv4 loopback 预检；若命中 `failure_kind=host_loopback_ipv4_exhausted`（常见于当前机器本地 127.0.0.1 临时端口池被大量 MCP/Codex 连接占满），脚本会直接 fail-fast，而不是继续启动 API/worker/Temporal 后才深处报错。
+- 本地脚本排障时优先看 `.runtime-cache/logs/components/full-stack/*.log`、`.runtime-cache/run/full-stack/resolved.env` 与 `.runtime-cache/logs/tests/api-real-smoke-local.log`，这样能先区分“端口/路由漂移”还是“业务失败”。
+- `pr-llm-real-smoke`、`live-smoke`、`web-e2e` 的日志统一看 `.runtime-cache/logs/tests/`；对应 diagnostics/JUnit 看 `.runtime-cache/reports/tests/`。
 
 边界说明：
 
@@ -209,7 +211,14 @@ curl -sS -X POST http://127.0.0.1:9000/api/v1/ingest/poll -H 'Content-Type: appl
 ./scripts/strict_ci_entry.sh --mode pre-push --strict-full-run 1 --ci-dedupe 0
 ```
 
-门禁口径补充：总覆盖率硬门禁 `>=95%`，Web `lines/functions/branches` 必须同时满足 `global >=95%` 且 `core >=95%`；`strict-full-run=1` 还会强制执行 mutation `score>=0.64 / effective_ratio>=0.27 / no_tests_ratio<=0.72`，并禁止 `ci-dedupe` 与 `skip-mutation`。`--offline-fallback 1` 仅限排障，不得用于 pre-push 或 CI 对齐验收。
+门禁口径补充：总覆盖率硬门禁 `>=95%`，Web `lines/functions/branches` 必须同时满足 `global >=95%` 且 `core >=95%`；`strict-full-run=1` 还会强制执行 mutation `score>=0.64 / effective_ratio>=0.27 / no_tests_ratio<=0.72`，并禁止 `ci-dedupe` 与 `skip-mutation`。本地 smoke 与 strict 验收统一采用 fail-fast，不再保留 offline fallback。
+
+本地执行正式 pinned-image 严格验收时，必须满足以下其一：
+
+- 已显式导出 `GHCR_USERNAME` + `GHCR_TOKEN`
+- `gh auth` 当前登录态可用（仓库脚本会自动复用该身份）
+
+`--debug-build` 只用于排障标准环境构建问题，不计入 CI 等价完成信号。
 
 可选阅读栈（Miniflux + Nextflux）：
 

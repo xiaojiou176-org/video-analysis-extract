@@ -1,16 +1,17 @@
 import path from "node:path";
-import react from "@vitejs/plugin-react";
 import { defineConfig } from "vitest/config";
 
-const coverageDirectory = path.resolve(__dirname, "coverage");
-const coverageRuntimeDirectory = path.resolve(__dirname, ".vitest-coverage");
+const repoRoot = process.env.VIDEO_ANALYSIS_REPO_ROOT
+	? path.resolve(process.env.VIDEO_ANALYSIS_REPO_ROOT)
+	: path.resolve(__dirname, "../..");
+const coverageDirectory = path.resolve(repoRoot, ".runtime-cache/reports/web-coverage");
+const coverageRuntimeDirectory = path.resolve(repoRoot, ".runtime-cache/temp/vitest-coverage");
 const coverageSummaryFile = path.relative(
 	coverageRuntimeDirectory,
 	path.join(coverageDirectory, "coverage-summary.json"),
 );
 
 export default defineConfig({
-	plugins: [react()],
 	test: {
 		environment: "jsdom",
 		globals: true,
