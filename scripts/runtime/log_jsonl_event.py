@@ -4,7 +4,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 
@@ -53,7 +53,7 @@ def main() -> int:
         }.get(args.channel, "app")
 
     payload = {
-        "ts": datetime.now(UTC).isoformat(),
+        "ts": datetime.now(timezone.utc).isoformat(),
         "run_id": args.run_id,
         "trace_id": args.trace_id or "missing_trace",
         "request_id": args.request_id or "",
