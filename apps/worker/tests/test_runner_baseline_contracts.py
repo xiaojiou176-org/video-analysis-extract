@@ -10,7 +10,7 @@ def _repo_root() -> Path:
 
 
 def _load_module():
-    module_path = _repo_root() / "scripts" / "check_runner_baseline.py"
+    module_path = _repo_root() / "scripts" / "governance" / "check_runner_baseline.py"
     spec = importlib.util.spec_from_file_location("check_runner_baseline", module_path)
     assert spec is not None
     assert spec.loader is not None

@@ -15,15 +15,20 @@
       ]
     },
     {
-      "id": "ci_topology_reference",
-      "path": "docs/generated/ci-topology.md",
-      "kind": "render_only",
-      "sources": [
-        ".github/workflows/ci.yml",
-        "infra/config/strict_ci_contract.json",
-        "config/docs/change-contract.json",
-        "config/docs/boundary-policy.json"
-      ]
+        "id": "ci_topology_reference",
+        "path": "docs/generated/ci-topology.md",
+        "kind": "render_only",
+        "sources": [
+          ".github/workflows/ci.yml",
+          ".github/workflows/monthly-governance-audit.yml",
+          "infra/config/strict_ci_contract.json",
+          "config/governance/root-allowlist.json",
+          "config/governance/runtime-outputs.json",
+          "config/governance/active-upstreams.json",
+          "config/governance/upstream-templates.json",
+          "config/docs/change-contract.json",
+          "config/docs/boundary-policy.json"
+        ]
     },
     {
       "id": "required_checks_reference",
@@ -35,23 +40,30 @@
       ]
     },
     {
-      "id": "runner_baseline_reference",
-      "path": "docs/generated/runner-baseline.md",
-      "kind": "render_only",
-      "sources": [
-        "infra/config/self_hosted_runner_baseline.json"
-      ]
-    },
-    {
-      "id": "release_evidence_reference",
-      "path": "docs/generated/release-evidence.md",
-      "kind": "render_only",
-      "sources": [
-        ".github/workflows/release-evidence-attest.yml",
-        "scripts/release/capture_release_manifest.sh",
-        "reports/releases/README.md"
-      ]
-    }
+        "id": "runner_baseline_reference",
+        "path": "docs/generated/runner-baseline.md",
+        "kind": "render_only",
+        "sources": [
+          "infra/config/self_hosted_runner_baseline.json",
+          ".github/workflows/monthly-governance-audit.yml",
+          "config/governance/root-allowlist.json",
+          "config/governance/runtime-outputs.json"
+        ]
+      },
+      {
+        "id": "release_evidence_reference",
+        "path": "docs/generated/release-evidence.md",
+        "kind": "render_only",
+        "sources": [
+          ".github/workflows/release-evidence-attest.yml",
+          ".github/workflows/monthly-governance-audit.yml",
+          "scripts/release/capture_release_manifest.sh",
+          "reports/releases/README.md",
+          "config/governance/active-upstreams.json",
+          "config/governance/upstream-templates.json",
+          "config/governance/upstream-compat-matrix.json"
+        ]
+      }
   ],
   "fragments": [
     {

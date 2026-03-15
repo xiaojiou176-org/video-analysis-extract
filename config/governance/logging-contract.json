@@ -1,0 +1,81 @@
+{
+  "version": 1,
+  "minimum_common_fields": [
+    "run_id",
+    "trace_id",
+    "request_id",
+    "service",
+    "component",
+    "channel",
+    "event",
+    "severity",
+    "source_kind",
+    "ts"
+  ],
+  "channels": {
+    "app": ".runtime-cache/logs/app",
+    "components": ".runtime-cache/logs/components",
+    "tests": ".runtime-cache/logs/tests",
+    "governance": ".runtime-cache/logs/governance",
+    "infra": ".runtime-cache/logs/infra"
+  },
+  "reports_root": ".runtime-cache/reports",
+  "evidence_root": ".runtime-cache/evidence",
+  "channel_source_kind_map": {
+    "app": "app",
+    "components": "app",
+    "tests": "test",
+    "governance": "governance",
+    "infra": "infra"
+  },
+  "sample_targets": {
+    "app": ".runtime-cache/logs/app/api-http.jsonl",
+    "components": ".runtime-cache/logs/components/full-stack/logging-contract-components.jsonl",
+    "tests": ".runtime-cache/logs/tests/logging-contract-tests.jsonl",
+    "governance": ".runtime-cache/logs/governance/governance-gate.jsonl",
+    "infra": ".runtime-cache/logs/infra/bootstrap/logging-contract-infra.jsonl"
+  },
+  "critical_checks": [
+    {
+      "path": "apps/api/app/main.py",
+      "contains": [
+        "def _resolve_trace_id",
+        "response.headers[\"X-Trace-Id\"] = trace_id"
+      ]
+    },
+    {
+      "path": "apps/worker/worker/main.py",
+      "contains": [
+        "\"run_id\": run_id"
+      ]
+    },
+    {
+      "path": "apps/mcp/server.py",
+      "contains": [
+        "def _redact_sensitive_text",
+        "_redact_sensitive_text(self.message)"
+      ]
+    },
+    {
+      "path": "docs/reference/logging.md",
+      "contains": [
+        ".runtime-cache/logs/",
+        "run_id"
+      ]
+    },
+    {
+      "path": "scripts/runtime/logging.sh",
+      "contains": [
+        "vd_log_init()",
+        "scripts/runtime/log_jsonl_event.py"
+      ]
+    },
+    {
+      "path": "scripts/governance/gate.sh",
+      "contains": [
+        "source \"$ROOT_DIR/scripts/runtime/logging.sh\"",
+        "vd_log_init \"governance\""
+      ]
+    }
+  ]
+}

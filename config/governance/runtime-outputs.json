@@ -1,0 +1,57 @@
+{
+  "version": 1,
+  "runtime_root": ".runtime-cache",
+  "root_forbidden": [
+    ".coverage",
+    ".pytest_cache",
+    ".ruff_cache",
+    ".venv",
+    "logs",
+    "mutants",
+    "playwright-report",
+    "test-results",
+    "htmlcov"
+  ],
+  "nested_forbidden": [
+    ".runtime-cache",
+    "__pycache__",
+    ".pytest_cache",
+    ".ruff_cache",
+    "node_modules",
+    ".next",
+    ".next-e2e-*",
+    "playwright-report",
+    "test-results",
+    "htmlcov",
+    "mutants",
+    "*.pyc",
+    "*.pyo"
+  ],
+  "subdirectories": {
+    "run": {
+      "owner": "platform",
+      "ttl_days": 1,
+      "description": "PID files, lock files, resolved runtime routing state, and ephemeral process metadata."
+    },
+    "logs": {
+      "owner": "platform",
+      "ttl_days": 30,
+      "description": "Structured runtime, governance, infra, and test logs."
+    },
+    "reports": {
+      "owner": "platform",
+      "ttl_days": 30,
+      "description": "Machine-consumable summaries, junit, coverage, mutation, and audit reports."
+    },
+    "evidence": {
+      "owner": "platform",
+      "ttl_days": 14,
+      "description": "Trace, screenshot, HAR, video, and persisted UI audit evidence."
+    },
+    "temp": {
+      "owner": "platform",
+      "ttl_days": 2,
+      "description": "Short-lived temporary files, isolated workdirs, repo-side short-lived execution state, and quarantined local private state."
+    }
+  }
+}

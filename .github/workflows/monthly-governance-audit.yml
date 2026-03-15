@@ -1,0 +1,62 @@
+name: monthly-governance-audit
+
+on:
+  schedule:
+    - cron: "0 10 1 * *"
+  workflow_dispatch:
+
+concurrency:
+  group: monthly-governance-audit-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  governance-audit:
+    runs-on: [self-hosted, video-analysis-extract]
+    timeout-minutes: 20
+    steps:
+      - name: Normalize self-hosted workspace (pre-checkout)
+        uses: ./.github/actions/normalize-self-hosted-workspace
+
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          clean: true
+
+      - name: Capture root snapshot before audit
+        run: python3 scripts/governance/check_root_dirtiness_after_tasks.py --write-snapshot .runtime-cache/reports/governance/root-before.json
+
+      - name: Run governance audit
+        run: bash scripts/governance_gate.sh --mode audit
+
+      - name: Capture root snapshot after audit
+        run: python3 scripts/governance/check_root_dirtiness_after_tasks.py --write-snapshot .runtime-cache/reports/governance/root-after.json
+
+      - name: Verify root stayed clean during audit
+        run: python3 scripts/governance/check_root_dirtiness_after_tasks.py --compare-snapshot .runtime-cache/reports/governance/root-before.json
+
+      - name: Record governance observation
+        if: success()
+        run: |
+          python3 scripts/governance/record_governance_observation.py \
+            --kind monthly-governance-audit \
+            --status pass \
+            --evidence-artifact .runtime-cache/reports/governance/upstream-compat-report.json
+
+      - name: Verify recent governance observation window
+        if: success()
+        run: python3 scripts/governance/check_governance_observation_window.py --kind monthly-governance-audit --count 3
+
+      - name: Upload governance audit artifacts
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: monthly-governance-audit
+          path: |
+            .runtime-cache/reports/governance/root-before.json
+            .runtime-cache/reports/governance/root-after.json
+            .runtime-cache/reports/governance/upstream-compat-report.json
+            .runtime-cache/reports/governance/observation-history.jsonl
+          if-no-files-found: warn

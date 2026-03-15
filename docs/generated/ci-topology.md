@@ -18,6 +18,14 @@
 - core coverage min: `95`
 - mutation min score: `0.64`
 
+## Governance Control Plane
+
+- root allowlist entries: `33`
+- runtime root: `.runtime-cache`
+- active upstream inventory entries: `19`
+- upstream templates: `1`
+- governance gate entrypoint: `./scripts/governance_gate.sh --mode pre-commit|pre-push|ci|audit`
+
 ## Aggregate Gate Inventory
 
 | Job | Role |
@@ -41,6 +49,10 @@
 | `web-e2e-perceived` | integration or end-to-end evidence |
 | `external-playwright-smoke` | conditional edge or live evidence input |
 | `dependency-vuln-scan` | required chain input |
+
+## Governance Audit Workflows
+
+- `monthly-governance-audit.yml`: emits recurring root/runtime/logging/upstream governance evidence
 
 ## Trigger Surfaces
 

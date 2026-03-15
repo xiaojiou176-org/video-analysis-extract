@@ -5,14 +5,15 @@
 本仓库日志策略覆盖：
 
 - 开发启动脚本：`scripts/dev_api.sh`、`scripts/dev_worker.sh`、`scripts/dev_mcp.sh`
-- 通知脚本：`scripts/run_daily_digest.sh`、`scripts/run_failure_alerts.sh`
+- 通知脚本：`scripts/runtime/run_daily_digest.sh`、`scripts/runtime/run_failure_alerts.sh`
 - 服务运行日志（Uvicorn/Worker/MCP）
 
 ## Output Contract
 
-- 默认输出到标准输出/标准错误，不在代码内写固定日志文件。
-- 计划任务（cron/launchd）场景，日志应重定向到 `logs/`（该目录已在 `.gitignore`）。
+- 开发脚本默认输出到标准输出/标准错误；需要跨运行关联的结构化事件写入 `.runtime-cache/logs/**`，例如 API HTTP 请求日志会写入 `.runtime-cache/logs/app/api-http.jsonl`。
+- 计划任务（cron/launchd）场景，日志统一重定向到 `.runtime-cache/logs/`，不再向仓库根级 `logs/` 写入。
 - 脚本日志必须带前缀（如 `[run_daily_digest]`、`[dev_worker]`）以便 grep。
+- 关键运行链必须能按“案号”串联：HTTP 至少保留 `trace_id/request_id`，异步作业至少保留 `run_id`。
 
 ## No Logs No Merge
 
@@ -20,21 +21,23 @@
 - 关键日志字段至少包含：`trace_id`、`user`、`error`（异常路径还需 stack，使用 `logger.exception(...)`）。
 - 禁止空洞日志文案（如 `Something went wrong`、`unexpected error`、`error occurred`、`unknown error`）。
 - 质量门禁包含空洞日志检查：`./scripts/quality_gate.sh --mode pre-commit`。
-- 质量门禁包含结构化日志关键路径检查：`python3 scripts/check_structured_logs.py`（由 `quality_gate.sh` 与 CI `preflight` 执行）。
+- 质量门禁包含结构化日志关键路径检查：`python3 scripts/governance/check_structured_logs.py`（由 `quality_gate.sh` 与 CI `preflight` 执行）。
 
 ## Log Directory Initialization
 
 首次启用定时任务或常驻 ops workflow 前，先创建日志目录：
 
 ```bash
-mkdir -p logs logs/ops
-touch logs/daily_digest.log logs/failure_alerts.log logs/ops/workflows.log
+mkdir -p .runtime-cache/logs/app .runtime-cache/logs/governance
+touch .runtime-cache/logs/app/daily_digest.log \
+  .runtime-cache/logs/app/failure_alerts.log \
+  .runtime-cache/logs/governance/workflows.log
 ```
 
 推荐重定向方式：
 
 ```bash
-./scripts/start_ops_workflows.sh >> ./logs/ops/workflows.log 2>&1
+./scripts/runtime/start_ops_workflows.sh >> ./.runtime-cache/logs/governance/workflows.log 2>&1
 ```
 
 脚本入口参数（Batch C）：
@@ -46,9 +49,10 @@ touch logs/daily_digest.log logs/failure_alerts.log logs/ops/workflows.log
 启动约束补充：
 
 - `scripts/dev_api.sh` 在检测到 `uv` 时通过 `uv run python -m uvicorn ...` 启动 API，不依赖 `uvicorn` console entry；日志排障时若看到 `Failed to spawn: uvicorn`，优先检查是否绕开了该脚本入口。
-- `scripts/full_stack.sh` 与 `scripts/api_real_smoke_local.sh` 会把 API 启动日志落到 `logs/full-stack/api.log` 与 `.runtime-cache/api-real-smoke-local.log`；本地严格验收时优先检查这两个文件。
-- `scripts/full_stack.sh` 还会把运行时路由决议写到 `.runtime-cache/full-stack/resolved.env`；排查“明明起在 18001，前端还在打 9000”这类问题时，应把它和 `logs/full-stack/*.log` 一起看。
-- `scripts/api_real_smoke_local.sh` 会刻意让 pytest 子进程保持“未配置写 token”的 integration harness 语义，同时允许 `dev_api.sh` 为真实 HTTP smoke 进程注入本地 token；排查 401/403 时要区分“测试进程环境”和“API 进程环境”。
+- `scripts/full_stack.sh` 与 `scripts/ci/api_real_smoke_local.sh` 会把 API 启动日志落到 `.runtime-cache/logs/components/full-stack/api.log` 与 `.runtime-cache/logs/tests/api-real-smoke-local.log`；本地严格验收时优先检查这两个文件。
+- `ci_pr_llm_real_smoke.sh`、`ci_live_smoke.sh`、`ci_web_e2e.sh` 的测试日志统一进入 `.runtime-cache/logs/tests/`，对应 JUnit/diagnostics 进入 `.runtime-cache/reports/tests/`，浏览器证据进入 `.runtime-cache/evidence/tests/`。
+- `scripts/full_stack.sh` 还会把运行时路由决议写到 `.runtime-cache/run/full-stack/resolved.env`；排查“明明起在 18001，前端还在打 9000”这类问题时，应把它和 `.runtime-cache/logs/components/full-stack/*.log` 一起看。
+- `scripts/ci/api_real_smoke_local.sh` 会刻意让 pytest 子进程保持“未配置写 token”的 integration harness 语义，同时允许 `dev_api.sh` 为真实 HTTP smoke 进程注入本地 token；排查 401/403 时要区分“测试进程环境”和“API 进程环境”。
 
 ## Sensitive Data Rules
 
@@ -87,32 +91,32 @@ API 异常详情（`apps/api/app/security.py`）使用 `sanitize_exception_detai
 查看计划任务日志：
 
 ```bash
-tail -f logs/daily_digest.log
-tail -f logs/failure_alerts.log
+tail -f .runtime-cache/logs/app/daily_digest.log
+tail -f .runtime-cache/logs/app/failure_alerts.log
 ```
 
 筛选错误：
 
 ```bash
-rg -n "ERROR|failed|status=5" logs scripts -g '*.log'
+rg -n "ERROR|failed|status=5" .runtime-cache/logs scripts -g '*.log'
 ```
 
 定位 Computer Use（函数调用）安全闸/终止原因：
 
 ```bash
-rg -n "function_calling|termination_reason|max_function_call_rounds|tool_not_allowed" logs -g '*.log'
+rg -n "function_calling|termination_reason|max_function_call_rounds|tool_not_allowed" .runtime-cache/logs -g '*.log'
 ```
 
 定位缓存自愈与缓存来源：
 
 ```bash
-rg -n "cache_hit|cache_recreate|cache_bypass_reason|checkpoint_recovered|cache_meta|cache_key" logs -g '*.log'
+rg -n "cache_hit|cache_recreate|cache_bypass_reason|checkpoint_recovered|cache_meta|cache_key" .runtime-cache/logs -g '*.log'
 ```
 
 定位 thought metadata/signatures（来自 job read model）：
 
 ```bash
-rg -n "thought_signatures|thought_signature_digest|thought_metadata|llm_meta" logs -g '*.log'
+rg -n "thought_signatures|thought_signature_digest|thought_metadata|llm_meta" .runtime-cache/logs -g '*.log'
 ```
 
 ## Rotation and Retention
@@ -124,8 +128,8 @@ rg -n "thought_signatures|thought_signature_digest|thought_metadata|llm_meta" lo
 - 轮转周期：`daily`
 - 单文件大小：`50M`（触发提前轮转）
 - 保留策略：
-  - `logs/ops/workflows.log`：保留 `30` 天（运维审计）
-  - `logs/daily_digest.log`、`logs/failure_alerts.log`：保留 `14` 天
+  - `.runtime-cache/logs/governance/workflows.log`：保留 `30` 天（运维审计）
+  - `.runtime-cache/logs/app/daily_digest.log`、`.runtime-cache/logs/app/failure_alerts.log`：保留 `14` 天
 - 压缩：开启（`compress`）
 
 互斥策略（必须）：

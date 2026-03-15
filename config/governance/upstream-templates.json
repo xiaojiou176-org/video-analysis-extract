@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "entries": [
+    {
+      "name": "yt-dlp-vendor-template",
+      "kind": "vendor",
+      "owner": "platform",
+      "upgrade_owner": "platform",
+      "source": "https://github.com/yt-dlp/yt-dlp.git",
+      "pin": "docs/vendor/upstream-sync-runbook.md example ref; inactive until vendor/yt-dlp exists",
+      "interface_type": "public_contract",
+      "integration_surface": "public_schema",
+      "how_introduced": "template_only",
+      "private_coupling_risk": "localized",
+      "verification_suite": "vendor-governance workflow + UPSTREAM.lock validation",
+      "rollback_path": "Remove vendor subtree or re-sync through scripts/vendor/upstream_sync.sh with updated lock.",
+      "evidence_artifact": ".runtime-cache/reports/governance/upstream-compat-report.json",
+      "license": "open-source",
+      "security_posture": "template-only",
+      "risk_class": "low"
+    }
+  ]
+}

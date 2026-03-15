@@ -5,7 +5,7 @@
 ## 真相源
 
 - 合同文件：`infra/config/self_hosted_runner_baseline.json`
-- 检查脚本：`scripts/check_runner_baseline.py`
+- 检查脚本：`scripts/governance/check_runner_baseline.py`
 - 调用位置：
   - `.github/workflows/_preflight-fast-steps.yml` 使用 `--profile preflight-fast`
   - `.github/workflows/runner-health.yml` 使用 `--profile runner-health`
