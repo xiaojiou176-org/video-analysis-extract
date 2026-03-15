@@ -4,14 +4,14 @@
 
 - Plan Title: Repo Governance Final Form Execution Plan
 - Created At: 2026-03-15 06:07:57 America/Los_Angeles
-- Last Updated: 2026-03-15 07:05:10 America/Los_Angeles
+- Last Updated: 2026-03-15 07:55:40 America/Los_Angeles
 - Repo Name: 视频分析提取
 - Repo Path: /Users/yuyifeng/Documents/VS Code/1_Personal_Project/[其他项目]Useful_Tools/📺视频分析提取
 - Repo Archetype: hybrid-repo
 - Final Goal: Push the repository to final-form governance for architecture, cache, logging, root cleanliness, and upstream integration.
 - Current Status: Partially Completed
-- Current Phase: Phase F - Batch 3 Run Manifest Foundation
-- Current Workstream: WS-05 Logging And Correlation Hardening
+- Current Phase: Phase H - Batch 5 Integration First Slice + Root Artifact Migration
+- Current Workstream: WS-07 Integration Boundary Refactor
 
 ## Objective
 
@@ -46,9 +46,9 @@ This file is the single execution truth source for the current governance refact
 | WS-02 Root Governance Alignment | Completed | P0 | Codex | Legalized `.agents` and `bin` in allowlist, semantic cleanliness, and budget | Preserve root budget headroom in later phases | Verified |
 | WS-03 Bridge Registry And Expiry Gate | Completed | P1 | Codex | Added bridge registry, bridge expiry gate, and wired it into governance audit | Use the registry to close future bridges instead of adding ad-hoc shims | Verified |
 | WS-04 Runtime Output And Metadata Hardening | In Progress | P1 | Codex | Added managed artifact writer coverage gate after migrating more high-value report writers | Continue covering deeper release/runtime writers and then hard-cut `temp -> tmp` | Partially Verified |
-| WS-05 Logging And Correlation Hardening | In Progress | P1 | Codex | Added run-manifest bootstrap for stable public entrypoints and wired a manifest coverage gate | Extend manifests into stronger completeness validation and upstream-specific logging channels | Partially Verified |
-| WS-06 Contracts And Generated Surface Split | Blocked | P1 | Codex | Deferred after stabilizing entrypoint/root/runtime control plane | Requires broad repo move from `packages/shared-contracts` to `contracts/` on a cleaner shared-file baseline | Not Started |
-| WS-07 Integration Boundary Refactor | Blocked | P1 | Codex | Deferred after stabilizing public entrypoints and governance control plane | Requires large-scale extraction of direct upstream coupling into `integrations/*` on a cleaner shared-file baseline | Not Started |
+| WS-05 Logging And Correlation Hardening | In Progress | P1 | Codex | Added run-manifest bootstrap and now a passing manifest completeness gate | Add an upstream-specific log channel and richer provider failure attribution | Verified |
+| WS-06 Contracts And Generated Surface Split | Completed | P1 | Codex | Hard-cut source and generated contract surfaces out of `packages/shared-contracts` into `contracts/` and rewired active references | Keep watching for stale bridge references, but active migration is finished | Verified |
+| WS-07 Integration Boundary Refactor | In Progress | P1 | Codex | Introduced `integrations/`, completed the media-binary slice, and extracted the Resend provider slice into `integrations/providers` | Continue with the next upstream family after validating the provider slice and choosing the next narrow extraction target | Partially Verified |
 | WS-08 Docs And Governance Surface Repoint | Partially Completed | P2 | Codex | Repointed active top-level and module docs to `bin/*`; historical/generated surfaces intentionally left untouched in this batch | Finish render-driven and historical-surface cleanup when the contract and integration moves start | Partially Verified |
 | WS-09 Validation And Closure | Partially Completed | P0 | Codex | Root, bridge, doctor, governance audit, and targeted pytest all passed for batch 1 | Keep re-running after later structural batches | Verified |
 
@@ -143,18 +143,50 @@ This file is the single execution truth source for the current governance refact
   - Goal: `bin/*` entrypoints should not rely on downstream scripts to invent their run correlation context.
   - Validation: `python3 scripts/governance/check_public_entrypoint_manifests.py`
   - Evidence: all governed `bin/*` entrypoints now source `scripts/runtime/entrypoint.sh` and call `vd_entrypoint_bootstrap`
+- [x] Add manifest completeness gate
+  - Goal: Confirm the run manifest is not just a cover page, but that it actually points to current runtime evidence.
+  - Validation: `python3 scripts/governance/check_run_manifest_completeness.py`
+  - Evidence: governance audit and standalone manifest completeness checks now pass after fresh manifest regeneration
 
 ### WS-06 Contracts And Generated Surface Split
 
-- [ ] Design `contracts/source` and `contracts/generated` move
-- [ ] Freeze new writes into `packages/shared-contracts`
-- [ ] Add migration bridge and cutover checkpoints
+- [x] Design `contracts/source` and `contracts/generated` move
+  - Goal: Split handwritten source contracts from generated contract surfaces.
+  - Validation: `contracts/source/openapi.yaml` and `contracts/generated/jsonschema/*` exist.
+- [x] Freeze new writes into `packages/shared-contracts`
+  - Goal: Stop using the legacy shared-contracts path as the active contract root.
+  - Validation: active refs in workflows/docs/gates/tests repointed to `contracts/*`.
+- [x] Add migration bridge and cutover checkpoints
+  - Goal: Record the move in `bridges.json` and make the bridge state explicit.
+  - Validation: bridge updated to completed and governance audit remains green.
+- [x] Move contract files into final-form contracts root
+  - Goal: Make `contracts/` the real contract room, not just a future sketch.
+  - Validation: contract files now live under `contracts/`, and `packages/` no longer exists.
+  - Evidence: `contracts/README.md`, `contracts/AGENTS.md`, `contracts/CLAUDE.md`, `contracts/source/openapi.yaml`, `contracts/generated/jsonschema/*`
+- [x] Repoint active references from shared-contracts to contracts
+  - Goal: Remove active-path drift after the move.
+  - Validation: targeted residual-path scan; governance gates and tests pass.
+  - Evidence: workflows, docs, gates, and tests now reference `contracts/*`
 
 ### WS-07 Integration Boundary Refactor
 
-- [ ] Inventory direct upstream coupling points
-- [ ] Define explicit `integrations/` target tree
-- [ ] Prepare hard-cut migration rules for direct upstream calls
+- [x] Inventory direct upstream coupling points
+  - Goal: Identify which upstream family is safest for the first explicit extraction slice.
+  - Validation: targeted grep over active non-test coupling points.
+- [x] Define explicit `integrations/` target tree
+  - Goal: Establish a real root-level integration boundary rather than leaving the layer as a plan-only concept.
+  - Validation: `integrations/README.md` exists and root governance accepts the new directory.
+- [-] Prepare hard-cut migration rules for direct upstream calls
+  - Goal: Move direct upstream command construction out of worker business steps and into the integration layer in narrow slices.
+  - Validation: first slice tests and governance audit pass.
+- [x] Extract media binary command construction into integration layer
+  - Goal: Move `yt-dlp` / `ffmpeg` / `bbdown` command building out of worker step modules.
+  - Validation: targeted worker tests pass and governance audit remains green.
+  - Evidence: `integrations/binaries/media_commands.py`, worker step modules updated to consume it
+- [x] Extract Resend provider implementation into integration layer
+  - Goal: Move outbound Resend request construction and sanitization logic out of service/activity implementation layers.
+  - Validation: targeted API + worker notification tests pass and governance audit remains green.
+  - Evidence: `integrations/providers/resend.py`, API notifications and worker email activities now act as thin wrappers
 
 ### WS-08 Docs And Governance Surface Repoint
 
@@ -185,6 +217,11 @@ This file is the single execution truth source for the current governance refact
 | 2026-03-15 06:47:00 | Make `bin/doctor` set `PYTHONDONTWRITEBYTECODE=1` unconditionally | The official doctor entrypoint must not be allowed to create its own `__pycache__` residue under source directories | Accept `doctor` as a special-case dirty command | Keeps the diagnosis entrypoint aligned with root cleanliness rules |
 | 2026-03-15 06:54:00 | Add a runtime artifact writer coverage gate after migrating the first high-value writers | Without a gate, WS-04 would regress back into manual spot-checking | Keep inventory only in the execution plan | Turns the remaining runtime metadata hardening work into a machine-audited backlog instead of a memory task |
 | 2026-03-15 07:01:00 | Start WS-05 with static public-entrypoint manifest enforcement instead of historical run-data enforcement | Historical `.runtime-cache` contents are noisy and would make a first manifest gate brittle | Fail builds on missing manifests for old run data before the new entrypoints have had time to populate clean manifests | Gives the repo a reliable run-manifest foundation without being blocked by historical artifacts |
+| 2026-03-15 07:14:00 | Re-open WS-06 once the worktree is clean and the active contract move is small enough to finish end-to-end in one batch | The earlier blocker was about doing a broad shared-file migration on a dirty baseline, not about the move being impossible | Keep deferring `contracts/` even after the repository reached a clean baseline | Allowed the contract hard cut to be finished safely instead of lingering as a permanent bridge |
+| 2026-03-15 07:27:00 | Start WS-07 with a narrow media-binary slice instead of trying to relocate every upstream family at once | `yt-dlp / ffmpeg / bbdown` command construction is a clean, high-signal extraction target with direct tests and low API-surface ambiguity | Attempt a repo-wide `integrations/` move in one batch | Converts WS-07 from “blocked giant project” into “running migration with a proven first slice” |
+| 2026-03-15 07:29:00 | Migrate root `reports/` into `artifacts/` before raising root cleanliness claims further | The root directory cannot reach final-form cleanliness while long-lived artifacts still occupy the hallway | Leave `reports/` in place until every other workstream is finished | Frees the root from a permanent semantic conflict and makes the remaining R4 gap much smaller |
+| 2026-03-15 07:43:00 | Scope manifest completeness to fresh current-run manifests and exclude evidence-index self-reference | The first completeness pass was catching stale/current mixed manifests and the index file trying to reference itself | Force historical manifests to satisfy a current-run gate | Makes WS-05 validate the thing it is actually supposed to validate: that new public entrypoints produce a coherent current-run case file |
+| 2026-03-15 07:52:00 | Extract Resend as the second integration slice by moving the real provider logic into `integrations/providers/resend.py` while keeping service/activity wrappers stable | Resend is a narrow, test-rich provider family with clear boundaries and low migration ambiguity | Jump directly to a larger provider family like Gemini or a multi-service reader slice | Expands WS-07 from binary-only to provider API extraction without breaking existing API or worker call sites |
 
 ## Validation Log
 
@@ -202,6 +239,11 @@ This file is the single execution truth source for the current governance refact
 | Runtime artifact writer coverage gate | Completed | `python3 scripts/governance/check_runtime_artifact_writer_coverage.py` + targeted pytest | PASS | The new gate is wired, documented, and currently passes on the active script surface |
 | Public entrypoint manifest gate | Completed | `bash -n bin/* scripts/runtime/entrypoint.sh && python3 scripts/governance/check_public_entrypoint_manifests.py` | PASS | Static gate confirms all governed `bin/*` entrypoints write manifests before handoff |
 | Run manifest foundation | Completed | `./bin/doctor && ./bin/governance-audit --help >/dev/null && ./bin/strict-ci --help >/dev/null` plus manifest directory inspection | PASS | Public entrypoints now create `.runtime-cache/run/manifests/<run_id>.json` artifacts |
+| Run manifest completeness gate | Completed | clean manifest regeneration + `./bin/governance-audit --mode audit` + standalone `python3 scripts/governance/check_run_manifest_completeness.py` | PASS | Current-run manifests now prove they point to real runtime logs and indexed runtime artifacts |
+| Contracts hard-cut batch | Completed | `python3 scripts/governance/check_contract_locality.py && python3 scripts/governance/check_contract_surfaces.py && python3 scripts/governance/check_generated_vs_handwritten_contract_surfaces.py` + targeted pytest + governance audit | PASS | Contract root is now `contracts/`, and active gate/test/workflow/docs references were updated successfully |
+| Root artifact migration batch | Completed | residual `reports/*` scan + root/governance checks + targeted release governance tests | PASS | Root long-lived report surfaces moved to `artifacts/`, and the root allowlist now accepts `artifacts` instead of `reports` |
+| Integration first slice batch | Completed | `PYTHONDONTWRITEBYTECODE=1 UV_PROJECT_ENVIRONMENT=.runtime-cache/temp/pytest-governance-env uv run pytest apps/worker/tests/test_metadata_and_prompts.py apps/worker/tests/test_runner_fallbacks.py apps/worker/tests/test_worker_step_branches.py apps/worker/tests/test_governance_controls.py -q` + governance audit | PASS (27 passed) | Media binary command construction now lives in the integration layer without breaking worker flow tests |
+| Resend provider slice batch | Completed | `PYTHONDONTWRITEBYTECODE=1 UV_PROJECT_ENVIRONMENT=.runtime-cache/temp/pytest-governance-env uv run pytest apps/api/tests/test_notifications_service.py apps/api/tests/test_notifications_service_extra_coverage.py apps/worker/tests/test_temporal_helpers_coverage.py apps/worker/tests/test_governance_controls.py -q` + governance audit | PASS (39 passed) | Resend outbound provider logic now lives in `integrations/providers/resend.py` while API/worker layers keep thin compatibility wrappers |
 
 ## Risk / Blocker Log
 
@@ -217,6 +259,11 @@ This file is the single execution truth source for the current governance refact
 | 2026-03-15 06:49:40 | Resolved | `bin/doctor` created `__pycache__` under `scripts/governance`, violating root/runtime cleanliness by using plain `python3` semantics | Would have made the official diagnosis entrypoint self-contradictory | Resolved in batch 2 | `bin/doctor` now exports `PYTHONDONTWRITEBYTECODE=1` and passes clean rerun validation |
 | 2026-03-15 06:56:30 | Risk | The new coverage gate only audits script-side runtime report/evidence writers with recognizable direct write patterns; it does not yet prove every possible runtime artifact path across the whole repo is helper-backed | WS-04 is stronger but still not complete | Continue migrating deeper release/runtime writers and expand the gate if new patterns emerge | Finish writer inventory and add post-generation metadata completeness validation |
 | 2026-03-15 07:05:10 | Risk | WS-05 currently guarantees that stable public entrypoints create run manifests, but it does not yet guarantee that every downstream log/report/evidence path is linked back to a manifest in a completeness gate | Correlation is better, but not yet final-form complete | Continue with manifest completeness validation and upstream channel planning | Add a manifest completeness gate that checks current-run artifacts against generated manifests |
+| 2026-03-15 07:47:40 | Resolved | WS-05 previously had only a static manifest coverage gate, not a current-run completeness gate | Manifest foundations were good, but not yet sufficient for stronger correlation claims | Resolved in batch 6 | `check_run_manifest_completeness.py` now passes as part of governance audit after fresh manifest generation |
+| 2026-03-15 07:19:20 | Resolved | `contracts/` hard cut was previously blocked because the worktree was too dirty for a safe shared-file migration | Would have made the contract move too risky earlier | Resolved in batch 4 | The repository baseline is clean enough and the contract move has now been completed with gate/test closure |
+| 2026-03-15 07:19:20 | Mitigated | `integrations/` extraction was still a broad multi-surface migration across app logic, runtime scripts, CI scripts, and upstream governance surfaces | High risk of partial glue-layer duplication if forced too quickly | Mitigated by narrowing the first slice to media-binary command construction | Continue slicing the remaining upstream families incrementally instead of forcing a repo-wide glue rewrite in one jump |
+| 2026-03-15 07:34:30 | Risk | WS-07 is now real, but only the media-binary family has moved; provider APIs, reader services, and runtime images are still distributed across worker/app/runtime/CI surfaces | The integration layer is no longer hypothetical, but it is not yet complete enough for a U4 verdict | Further slices can continue safely now that the pattern is proven | Extract the next upstream family with the same narrow-slice discipline |
+| 2026-03-15 07:55:40 | Risk | WS-07 now has both a binary slice and a provider API slice, but reader services, provider health probes, and runtime image glue are still distributed across the old layers | The integration layer direction is now proven, but the remaining surfaces are still large enough to create duplication if rushed | Continue with narrow provider/reader slices | Choose the next family based on boundary clarity and test coverage, not on raw dependency count |
 
 ## Files Changed Log
 
@@ -231,13 +278,17 @@ This file is the single execution truth source for the current governance refact
 | 2026-03-15 06:49:40 | `bin/doctor` hardened to suppress repo-side bytecode residue; validation rerun confirmed no lingering `__pycache__` under `apps/` or `scripts/` |
 | 2026-03-15 06:56:30 | `scripts/ci/collect_kpi.py` and `scripts/release/build_readiness_report.py` migrated to managed artifact helpers; added `scripts/governance/check_runtime_artifact_writer_coverage.py`; wired the new gate into governance control plane and evidence docs |
 | 2026-03-15 07:05:10 | Added `scripts/runtime/entrypoint.sh`, `scripts/runtime/write_run_manifest.py`, and `scripts/governance/check_public_entrypoint_manifests.py`; wired stable `bin/*` entrypoints to emit run manifests before handoff |
+| 2026-03-15 07:19:20 | Moved active contract source and generated schema surfaces from `packages/shared-contracts` into `contracts/`; removed the old packages tree; rewired workflows, docs, gates, tests, module ownership, and dependency-boundary policy to the new contract root |
+| 2026-03-15 07:34:30 | Migrated root `reports/` contents into `artifacts/`; added `artifacts/README.md`; rewired release/readiness/performance paths; introduced `integrations/` and extracted media binary command construction into `integrations/binaries/media_commands.py` |
+| 2026-03-15 07:47:40 | Added `scripts/governance/check_run_manifest_completeness.py`; wired it into governance audit, docs, and governance tests; adjusted entrypoint bootstrap to emit a first log event so fresh manifests point at real log files |
+| 2026-03-15 07:55:40 | Added `integrations/providers/resend.py`; rewired API notification service and worker email activity helpers into thin wrappers over the integration module; updated dependency policy to allow API access to `integrations.` |
 
 ## Next Actions
 
-1. Continue WS-04 by inventorying the remaining deeper release/runtime writers and expanding helper coverage beyond the current script-side hot paths.
-2. Continue WS-05 by adding a manifest completeness gate that validates current-run logs/reports/evidence against run manifests, not just static entrypoint wiring.
-3. Re-enter WS-06/WS-07 only after agreeing on a clean shared-file baseline for the broad `contracts/` and `integrations/` moves.
-4. Extend the `bin/*` cutover to generated and historical explanatory surfaces only if they become active governance inputs again.
+1. Continue WS-07 with the next narrow extraction slice, prioritizing one reader/provider-health family rather than a repo-wide glue rewrite.
+2. Finish the remaining WS-04 helper coverage on deeper release/runtime writers.
+3. Re-run root budget and governance assertions after the `artifacts/` migration settles to confirm the root hallway stays stable.
+4. Add an explicit `upstreams` log channel once the next integration slice lands.
 5. Keep this file current before any later structural batch starts.
 
 ## Final Completion Summary
@@ -272,5 +323,40 @@ Batch 3 progress completed and verified:
 - Verified that public entrypoints now emit `.runtime-cache/run/manifests/<run_id>.json` without leaving bytecode residue.
 
 WS-05 is no longer “not started”; it now has a concrete run-manifest-first foundation. It remains incomplete because there is not yet a stronger manifest completeness gate for current-run logs/reports/evidence, and there is not yet an upstream-specific logging channel plan.
+
+Batch 4 progress completed and verified:
+
+- Hard-cut the active contract root from `packages/shared-contracts` to `contracts/`.
+- Split handwritten contract source and generated schema surfaces into `contracts/source` and `contracts/generated/jsonschema`.
+- Rewired active workflows, docs, gates, tests, module ownership, and dependency-boundary policy to the new contract paths.
+- Removed the legacy `packages/shared-contracts` tree after validation.
+
+WS-06 is now effectively complete for the active contract root migration.
+
+Batch 5 progress completed and verified:
+
+- Migrated the root long-lived `reports/` tree into `artifacts/`, reducing the root hallway’s semantic conflict.
+- Added `artifacts/README.md` so the new long-lived artifact room is explicit and documented.
+- Introduced the root-level `integrations/` layer and completed the first narrow extraction slice for media binaries.
+- Rewired worker media steps to consume `integrations/binaries/media_commands.py` instead of building upstream binary commands inline.
+
+WS-07 is no longer “blocked and untouched”; it is now in progress with one proven narrow slice. The remaining structural blocker is not “whether” to build the integration layer, but how many additional upstream families can be safely extracted per batch without duplicating glue across old and new surfaces.
+
+Batch 6 progress completed and verified:
+
+- Added a current-run manifest completeness gate on top of the earlier public-entrypoint manifest coverage gate.
+- Adjusted the entrypoint bootstrap so fresh manifests always point at a real log file, not an empty path.
+- Verified that fresh public-entrypoint manifests now resolve to real logs and indexed runtime artifacts.
+
+WS-05 is now materially stronger: it has both entrypoint coverage and current-run completeness. The remaining logging-correlation gap is the lack of an explicit upstream-specific log channel and richer provider failure attribution.
+
+Batch 7 progress completed and verified:
+
+- Added a second explicit integration slice for the Resend provider.
+- Moved provider request construction, sanitization, HTML rendering, and idempotency-header handling into `integrations/providers/resend.py`.
+- Kept API and worker call surfaces stable by turning them into thin wrappers over the integration module.
+- Verified the slice with targeted API + worker tests and a full governance audit pass.
+
+WS-07 is now more than a proof of concept: it has one binary slice and one provider API slice. The remaining work is to keep extending this pattern to reader services, provider health probes, and runtime image glue until the distributed integration logic is gone.
 
 WS-04 remains in progress because the repository still contains additional freshness-required report/evidence writers that have not yet been migrated to the helper path.

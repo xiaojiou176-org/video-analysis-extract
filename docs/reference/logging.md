@@ -135,6 +135,7 @@ python3 scripts/governance/check_no_unindexed_evidence.py
 - 结构化日志必须包含：`run_id`、`trace_id`、`request_id`、`repo_commit`、`entrypoint`、`env_profile`
 - `tests` 通道额外必须带 `test_run_id`
 - `governance` 通道额外必须带 `gate_run_id`
+- `upstreams` 通道额外必须带 `upstream_id` 与 `upstream_operation`
 - `reports` / `evidence` artifact 必须带 sidecar metadata，避免历史 artifact 冒充 current verification
 
 互斥策略（必须）：

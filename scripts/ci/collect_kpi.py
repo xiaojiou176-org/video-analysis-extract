@@ -431,12 +431,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--run-attempt", default="")
     parser.add_argument(
         "--json-out",
-        default="reports/release-readiness/ci-kpi-summary.json",
+        default="artifacts/release-readiness/ci-kpi-summary.json",
         help="Output JSON path.",
     )
     parser.add_argument(
         "--md-out",
-        default="reports/release-readiness/ci-kpi-summary.md",
+        default="artifacts/release-readiness/ci-kpi-summary.md",
         help="Output Markdown path.",
     )
     return parser.parse_args()

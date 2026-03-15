@@ -21,12 +21,18 @@ FORBIDDEN_SUBSTRINGS = {
 
 def main() -> int:
     root = repo_root()
-    contract_root = root / "packages" / "shared-contracts"
+    contract_root = root / "contracts"
     errors: list[str] = []
 
-    for required in ("README.md", "AGENTS.md", "CLAUDE.md", "openapi.yaml"):
-        if not (contract_root / required).is_file():
-            errors.append(f"packages/shared-contracts missing required file: {required}")
+    required_paths = (
+        contract_root / "README.md",
+        contract_root / "AGENTS.md",
+        contract_root / "CLAUDE.md",
+        contract_root / "source" / "openapi.yaml",
+    )
+    for required in required_paths:
+        if not required.is_file():
+            errors.append(f"contracts missing required file: {required.relative_to(root).as_posix()}")
 
     for path in contract_root.rglob("*"):
         if not path.is_file():

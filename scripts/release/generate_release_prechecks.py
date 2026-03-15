@@ -412,8 +412,8 @@ def main() -> int:
     output = Path(args.output).resolve()
 
     changelog_path = repo_root / "CHANGELOG.md"
-    perf_budget_path = repo_root / "reports" / "performance" / "cwv-budget.json"
-    rum_baseline_path = repo_root / "reports" / "performance" / "rum-baseline.json"
+    perf_budget_path = repo_root / "artifacts" / "performance" / "cwv-budget.json"
+    rum_baseline_path = repo_root / "artifacts" / "performance" / "rum-baseline.json"
     testing_slo_path = repo_root / "docs" / "testing-slo.md"
     rollback_runbook_path = repo_root / "docs" / "deploy" / "rollback-runbook.md"
     canary_script_path = repo_root / "scripts" / "deploy" / "canary_rollout.sh"

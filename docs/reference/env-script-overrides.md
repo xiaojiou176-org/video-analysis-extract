@@ -230,7 +230,7 @@ workflow 管理参数：
 - `env/profiles/reader.env` 仅用于补齐 reader 相关默认值（如 `MINIFLUX_BASE_URL`、`NEXTFLUX_PORT`）。
 - 当前 shell 已显式注入的 `MINIFLUX_*` / `NEXTFLUX_*` 变量优先级更高，不会被 reader profile 模板覆盖。
 
-### `scripts/runtime/run_ai_feed_sync.sh`
+### `bin/run-ai-feed-sync`
 
 - `--profile`
 - `--reader-env-file`
@@ -240,7 +240,7 @@ workflow 管理参数：
 迁移示例：
 
 ```bash
-./scripts/runtime/run_ai_feed_sync.sh \
+./bin/run-ai-feed-sync \
   --profile local \
   --reader-env-file env/profiles/reader.env \
   --api-base-url http://127.0.0.1:9000 \

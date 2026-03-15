@@ -5,7 +5,7 @@ on:
     paths:
       - "apps/api/**"
       - "apps/mcp/**"
-      - "packages/shared-contracts/**"
+      - "contracts/**"
       - "scripts/governance/export_api_contract.py"
       - "scripts/governance/check_contract_diff.py"
       - ".github/workflows/contract-diff.yml"

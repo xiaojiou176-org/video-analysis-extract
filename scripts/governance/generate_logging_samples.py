@@ -108,20 +108,62 @@ def main() -> int:
             "infra",
             "sample_ready",
         ),
+        "upstreams": (
+            root / ".runtime-cache" / "logs" / "upstreams" / "logging-contract-upstreams.jsonl",
+            "provider-canary",
+            "provider-canary",
+            "upstream",
+            "probe_ready",
+        ),
     }
     for channel, (path, service, component, source_kind, event) in targets.items():
-        _emit_jsonl_sample(
-            root=root,
-            path=path,
-            run_id=sample_run_id,
-            trace_id=f"trace-{channel}-sample",
-            request_id=f"req-{channel}-sample",
-            service=service,
-            component=component,
-            channel=channel,
-            source_kind=source_kind,
-            event=event,
-            env_profile=env_profile,
+        extra_args: list[str] = []
+        if channel == "upstreams":
+            extra_args = [
+                "--upstream-id",
+                "sample-upstream",
+                "--upstream-operation",
+                "health_probe",
+            ]
+        path.parent.mkdir(parents=True, exist_ok=True)
+        subprocess.run(
+            [
+                sys.executable,
+                str(root / "scripts" / "runtime" / "log_jsonl_event.py"),
+                "--path",
+                str(path),
+                "--run-id",
+                sample_run_id,
+                "--trace-id",
+                f"trace-{channel}-sample",
+                "--request-id",
+                f"req-{channel}-sample",
+                "--service",
+                service,
+                "--component",
+                component,
+                "--channel",
+                channel,
+                "--source-kind",
+                source_kind,
+                "--test-run-id",
+                sample_run_id if channel == "tests" else "",
+                "--gate-run-id",
+                sample_run_id if channel == "governance" else "",
+                "--entrypoint",
+                f"scripts/governance/generate_logging_samples.py:{channel}",
+                "--env-profile",
+                env_profile,
+                "--event",
+                event,
+                "--severity",
+                "info",
+                "--message",
+                f"{channel} logging sample ready",
+                *extra_args,
+            ],
+            check=True,
+            cwd=root,
         )
     return 0
 

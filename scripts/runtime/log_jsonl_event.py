@@ -60,9 +60,10 @@ def main() -> int:
         source_kind = {
             "app": "app",
             "components": "app",
-            "tests": "test",
-            "governance": "governance",
-            "infra": "infra",
+        "tests": "test",
+        "governance": "governance",
+        "infra": "infra",
+        "upstreams": "upstream",
         }.get(args.channel, "app")
 
     payload = {

@@ -52,7 +52,7 @@ jobs:
 
       - name: Package release evidence
         run: |
-          release_dir="reports/releases/${{ steps.release_tag.outputs.release_tag }}"
+          release_dir="artifacts/releases/${{ steps.release_tag.outputs.release_tag }}"
           bundle_path=".runtime-cache/reports/release/release-evidence-${{ steps.release_tag.outputs.release_tag }}.tar.gz"
           mkdir -p .runtime-cache
           tar -czf "$bundle_path" -C "$release_dir" .
@@ -65,10 +65,10 @@ jobs:
           if-no-files-found: error
           path: |
             .runtime-cache/reports/release/release-evidence-${{ steps.release_tag.outputs.release_tag }}.tar.gz
-            reports/releases/${{ steps.release_tag.outputs.release_tag }}/manifest.json
-            reports/releases/${{ steps.release_tag.outputs.release_tag }}/checksums.sha256
-            reports/releases/${{ steps.release_tag.outputs.release_tag }}/rollback/db-rollback-readiness.json
-            reports/releases/${{ steps.release_tag.outputs.release_tag }}/rollback/drill.json
+            artifacts/releases/${{ steps.release_tag.outputs.release_tag }}/manifest.json
+            artifacts/releases/${{ steps.release_tag.outputs.release_tag }}/checksums.sha256
+            artifacts/releases/${{ steps.release_tag.outputs.release_tag }}/rollback/db-rollback-readiness.json
+            artifacts/releases/${{ steps.release_tag.outputs.release_tag }}/rollback/drill.json
 
       - name: Attest release evidence bundle provenance
         uses: actions/attest-build-provenance@b3e506e8c389afc651c5bacf2b8f2a1ea0557215 # v4

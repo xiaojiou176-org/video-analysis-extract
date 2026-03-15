@@ -12,8 +12,8 @@
 
 ## 契约层
 
-- `packages/shared-contracts/openapi.yaml`
-- `packages/shared-contracts/jsonschema/*`
+- `contracts/source/openapi.yaml`
+- `contracts/generated/jsonschema/*`
 
 ## 模块归属真相源
 
@@ -24,7 +24,7 @@
 - 跨 app 共享只允许走 contract/package，不允许走 sibling app 内部实现。
 - `apps/mcp` 不得导入 `apps/api` / `apps/worker` 内部实现。
 - `apps/web` 不得通过路径穿透读取后端实现。
-- `packages/shared-contracts` 不得引入网络、env、subprocess、socket 等运行时 side effect。
+- `contracts/` 不得引入网络、env、subprocess、socket 等运行时 side effect。
 
 ## 门禁
 

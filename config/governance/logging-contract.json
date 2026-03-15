@@ -21,6 +21,10 @@
     ],
     "governance": [
       "gate_run_id"
+    ],
+    "upstreams": [
+      "upstream_id",
+      "upstream_operation"
     ]
   },
   "channels": {
@@ -28,7 +32,8 @@
     "components": ".runtime-cache/logs/components",
     "tests": ".runtime-cache/logs/tests",
     "governance": ".runtime-cache/logs/governance",
-    "infra": ".runtime-cache/logs/infra"
+    "infra": ".runtime-cache/logs/infra",
+    "upstreams": ".runtime-cache/logs/upstreams"
   },
   "reports_root": ".runtime-cache/reports",
   "evidence_root": ".runtime-cache/evidence",
@@ -37,14 +42,16 @@
     "components": "app",
     "tests": "test",
     "governance": "governance",
-    "infra": "infra"
+    "infra": "infra",
+    "upstreams": "upstream"
   },
   "sample_targets": {
     "app": ".runtime-cache/logs/app/api-http.jsonl",
     "components": ".runtime-cache/logs/components/full-stack/logging-contract-components.jsonl",
     "tests": ".runtime-cache/logs/tests/logging-contract-tests.jsonl",
     "governance": ".runtime-cache/logs/governance/governance-gate.jsonl",
-    "infra": ".runtime-cache/logs/infra/bootstrap/logging-contract-infra.jsonl"
+    "infra": ".runtime-cache/logs/infra/bootstrap/logging-contract-infra.jsonl",
+    "upstreams": ".runtime-cache/logs/upstreams/logging-contract-upstreams.jsonl"
   },
   "critical_checks": [
     {

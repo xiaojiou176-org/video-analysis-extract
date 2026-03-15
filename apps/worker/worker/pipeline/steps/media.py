@@ -4,49 +4,14 @@ from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any
 
+from integrations.binaries.media_commands import (
+    bbdown_commands,
+    build_download_provider_chain,
+    normalize_bilibili_downloader,
+    yt_dlp_download_command,
+)
 from worker.config import Settings
 from worker.pipeline.types import CommandResult, PipelineContext, StepExecution, StepStatus
-
-
-def normalize_bilibili_downloader(value: Any) -> str:
-    text = str(value or "auto").strip().lower()
-    if text in {"auto", "yt-dlp", "bbdown"}:
-        return text
-    return "auto"
-
-
-def build_download_provider_chain(platform: str, settings: Settings) -> list[str]:
-    if platform != "bilibili":
-        return ["yt-dlp"]
-    selected = normalize_bilibili_downloader(getattr(settings, "bilibili_downloader", "auto"))
-    if selected == "auto":
-        return ["yt-dlp", "bbdown"]
-    return [selected]
-
-
-def yt_dlp_download_command(source_url: str, output_tmpl: str) -> list[str]:
-    return [
-        "yt-dlp",
-        "--no-progress",
-        "--no-warnings",
-        "--write-auto-sub",
-        "--write-sub",
-        "--sub-format",
-        "vtt",
-        "-o",
-        output_tmpl,
-        "--print",
-        "after_move:filepath",
-        source_url,
-    ]
-
-
-def bbdown_commands(source_url: str, download_dir: Path) -> list[list[str]]:
-    target_dir = str(download_dir.resolve())
-    return [
-        ["BBDown", source_url, "--work-dir", target_dir, "--save-subtitle"],
-        ["bbdown", source_url, "--work-dir", target_dir, "--save-subtitle"],
-    ]
 
 
 def extract_media_file(download_dir: Path, command_stdout: str) -> str | None:
@@ -90,7 +55,7 @@ async def step_download_media(
             degraded=True,
         )
 
-    providers = build_download_provider_chain(platform, ctx.settings)
+    providers = build_download_provider_chain(platform, getattr(ctx.settings, "bilibili_downloader", "auto"))
     output_tmpl = str((ctx.download_dir / "media.%(ext)s").resolve())
     attempts: list[dict[str, Any]] = []
 

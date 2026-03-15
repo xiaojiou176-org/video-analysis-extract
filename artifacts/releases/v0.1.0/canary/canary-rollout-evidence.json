@@ -4,5 +4,5 @@
   "mode": "dry-run",
   "script": "scripts/deploy/canary_rollout.sh",
   "command": "scripts/deploy/canary_rollout.sh --target 10 --step 5 --settle-seconds 1 --routing-snippet <tmp> --dry-run 1",
-  "log_file": "reports/releases/v0.1.0/canary/canary-rollout-dryrun.log"
+  "log_file": "artifacts/releases/v0.1.0/canary/canary-rollout-dryrun.log"
 }

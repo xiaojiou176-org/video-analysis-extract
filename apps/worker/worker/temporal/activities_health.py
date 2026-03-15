@@ -3,9 +3,12 @@ from __future__ import annotations
 import json
 from typing import Any
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
+from integrations.providers import gemini as gemini_provider
+from integrations.providers import resend as resend_provider
+from integrations.providers import rsshub as rsshub_provider
+from integrations.providers import youtube_data_api as youtube_provider
 from sqlalchemy import text
 
 from worker.config import Settings
@@ -157,7 +160,7 @@ async def provider_canary_activity(payload: dict[str, Any] | None = None) -> dic
 
     checks: list[dict[str, Any]] = []
 
-    rsshub_url = f"{settings.rsshub_base_url.rstrip('/')}/healthz"
+    rsshub_url = rsshub_provider.build_health_url(settings.rsshub_base_url)
     checks.append(
         {
             "check_kind": "rsshub",
@@ -166,15 +169,7 @@ async def provider_canary_activity(payload: dict[str, Any] | None = None) -> dic
     )
 
     if settings.youtube_api_key:
-        youtube_query = urlencode(
-            {
-                "part": "id",
-                "id": "dQw4w9WgXcQ",
-                "maxResults": 1,
-                "key": settings.youtube_api_key,
-            }
-        )
-        youtube_url = f"https://www.googleapis.com/youtube/v3/videos?{youtube_query}"
+        youtube_url = youtube_provider.build_video_probe_url(settings.youtube_api_key)
         checks.append(
             {
                 "check_kind": "youtube_data_api",
@@ -193,10 +188,7 @@ async def provider_canary_activity(payload: dict[str, Any] | None = None) -> dic
         )
 
     if settings.gemini_api_key:
-        gemini_url = (
-            "https://generativelanguage.googleapis.com/v1beta/models"
-            f"?{urlencode({'key': settings.gemini_api_key})}"
-        )
+        gemini_url = gemini_provider.build_models_probe_url(settings.gemini_api_key)
         checks.append(
             {
                 "check_kind": "gemini",
@@ -215,12 +207,13 @@ async def provider_canary_activity(payload: dict[str, Any] | None = None) -> dic
         )
 
     if settings.resend_api_key and settings.resend_from_email:
+        resend_url, resend_headers = resend_provider.build_domains_probe_request(settings.resend_api_key)
         checks.append(
             {
                 "check_kind": "resend",
                 **_http_probe(
-                    url="https://api.resend.com/domains",
-                    headers={"Authorization": f"Bearer {settings.resend_api_key}"},
+                    url=resend_url,
+                    headers=resend_headers,
                     timeout_seconds=timeout_seconds,
                 ),
             }

@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 from typing import Any
 
+from integrations.binaries.media_commands import ffmpeg_extract_frames_command
 from worker.pipeline.policies import coerce_int
 from worker.pipeline.types import CommandResult, PipelineContext, StepExecution, StepStatus
 
@@ -32,20 +33,13 @@ async def step_extract_frames(
     )
 
     output_pattern = str((ctx.frames_dir / "frame_%03d.jpg").resolve())
-    cmd = [
-        "ffmpeg",
-        "-hide_banner",
-        "-loglevel",
-        "error",
-        "-y",
-        "-i",
+    cmd = ffmpeg_extract_frames_command(
         str(media_path),
-    ]
-    if frame_method == "scene":
-        cmd += ["-vf", "select='gt(scene,0.3)'", "-vsync", "vfr"]
-    else:
-        cmd += ["-vf", f"fps=1/{frame_interval}"]
-    cmd += ["-frames:v", str(max_frames), output_pattern]
+        output_pattern,
+        frame_method=frame_method,
+        frame_interval=frame_interval,
+        max_frames=max_frames,
+    )
 
     result = await run_command(ctx, cmd)
     if not result.ok:

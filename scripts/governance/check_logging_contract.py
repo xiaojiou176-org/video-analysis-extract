@@ -43,7 +43,7 @@ def main() -> int:
         if not str(value).startswith(".runtime-cache/logs/"):
             errors.append(f"logging channel `{name}` must live under .runtime-cache/logs/: {value}")
 
-    required_channels = {"app", "components", "tests", "governance", "infra"}
+    required_channels = {"app", "components", "tests", "governance", "infra", "upstreams"}
     if set(channels) != required_channels:
         errors.append(
             "logging channels must exactly match: "
@@ -57,6 +57,7 @@ def main() -> int:
         "tests": "test",
         "governance": "governance",
         "infra": "infra",
+        "upstreams": "upstream",
     }
     for channel, source_kind in expected_source_kinds.items():
         if channel_source_kind_map.get(channel) != source_kind:

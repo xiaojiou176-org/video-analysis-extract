@@ -51,7 +51,7 @@
 - `live-smoke`：仅 `main` / `release` / nightly 强制执行，且不得 `skip` / `skipped`；PR 由 `pr-llm-real-smoke` 承担真实 LLM 烟测。
 - `aggregate-gate`：汇总主链路结果；`api-real-smoke` / `web-e2e` 不允许 `skipped`，`live-smoke` 由 `ci-final-gate` 按触发源做强制校验。
 - `ci-final-gate`：最终门禁；`main` / `release` / nightly 要求 `live-smoke=success`，PR 允许 `live-smoke=skipped`。
-- `ci-kpi`：在 `ci-final-gate` 之后汇总 junit/coverage/mutation/artifact bytes/topology duplication，并输出 `reports/release-readiness/ci-kpi-summary.{json,md}` artifact。
+- `ci-kpi`：在 `ci-final-gate` 之后汇总 junit/coverage/mutation/artifact bytes/topology duplication，并输出 `artifacts/release-readiness/ci-kpi-summary.{json,md}` artifact。
 - `build-ci-standard-image.yml` 会产出 strict CI 镜像 SBOM，并对镜像与 SBOM 做 attestation。
 - `release-evidence-attest.yml` 会把 release manifest/checksums/rollback 证据打包成可 attestation 的 bundle。
 - self-hosted CI 信任边界：当前仓库默认只支持 **trusted internal PR** 进入 privileged runner 主链；fork / untrusted PR 属于拒绝口径，不在支持矩阵内。
@@ -449,7 +449,7 @@ echo "feat(api): add ingest health guard" > /tmp/commit-msg-ok.txt
   - secrets 泄漏扫描（阻断）
   - `bash scripts/governance/ci_or_local_gate_doc_drift.sh --scope staged`
   - `python3 scripts/governance/check_contract_surfaces.py`
-  - `schema parity gate`（`apps/mcp/schemas/tools.json` vs `packages/shared-contracts/jsonschema/mcp-tools.schema.json`）
+  - `schema parity gate`（`apps/mcp/schemas/tools.json` vs `contracts/generated/jsonschema/mcp-tools.schema.json`）
   - `python3 scripts/governance/check_mutation_scope.py`
   - `python3 scripts/governance/check_mutation_test_selection.py`
   - `npm --prefix apps/web run lint`
@@ -470,7 +470,7 @@ echo "feat(api): add ingest health guard" > /tmp/commit-msg-ok.txt
   - `python3 scripts/governance/check_contract_surfaces.py`
   - `bash scripts/governance/guard_provider_residuals.sh .`
   - `python3 scripts/governance/check_worker_line_limits.py`
-  - `schema parity gate`（`apps/mcp/schemas/tools.json` vs `packages/shared-contracts/jsonschema/mcp-tools.schema.json`）
+  - `schema parity gate`（`apps/mcp/schemas/tools.json` vs `contracts/generated/jsonschema/mcp-tools.schema.json`）
   - `python3 scripts/governance/check_design_tokens.py --from-ref <merge_base> --to-ref HEAD apps/web`（回退 `--all-lines`）
   - `npm --prefix apps/web run build`
   - `python3 scripts/governance/check_web_button_coverage.py --threshold 1.0 --e2e-threshold 0.6 --unit-threshold 0.93`
@@ -491,7 +491,7 @@ echo "feat(api): add ingest health guard" > /tmp/commit-msg-ok.txt
 - 变更 `apps/worker/worker/pipeline/types.py` 的 `PIPELINE_STEPS`：同步 `docs/state-machine.md`。
 - 新增/修改环境变量：同步 `.env.example`、`ENVIRONMENT.md`、`infra/config/env.contract.json`。
 - 调整 API 行为或签名（`apps/api/app/routers/*.py`、`apps/api/app/services/*.py`、`apps/mcp/**/*.py`）：同步 `README.md`、`docs/runbook-local.md`、`docs/testing.md`。
-- 调整 Schema 签名（`apps/mcp/schemas/tools.json`、`packages/shared-contracts/jsonschema/*.json`）：同步 `docs/testing.md`。
+- 调整 Schema 签名（`apps/mcp/schemas/tools.json`、`contracts/generated/jsonschema/*.json`）：同步 `docs/testing.md`。
 - 调整本地启动脚本参数/默认值（`scripts/dev_*.sh`、`scripts/full_stack.sh`、`scripts/bootstrap_full_stack.sh`、`scripts/ci/smoke_full_stack.sh`）：同步 `docs/start-here.md`、`docs/runbook-local.md`、`README.md`。
 - 调整日志/缓存/依赖策略：同步 `docs/reference/logging.md`、`docs/reference/cache.md`、`docs/reference/dependency-governance.md`。
 

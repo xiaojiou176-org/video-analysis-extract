@@ -47,12 +47,13 @@ def test_governance_control_plane_files_exist_and_are_populated() -> None:
         "tests",
         "governance",
         "infra",
+        "upstreams",
     }
 
     dependency_boundaries = json.loads(
         (config_dir / "dependency-boundaries.json").read_text(encoding="utf-8")
     )
-    assert dependency_boundaries["internal_roots"] == ["apps.", "packages."]
+    assert dependency_boundaries["internal_roots"] == ["apps.", "integrations."]
     for entry in dependency_boundaries["python_rules"]:
         assert "allow_internal_prefixes" in entry
     for entry in dependency_boundaries["frontend_rules"]:
@@ -91,6 +92,7 @@ def test_governance_gate_script_wires_all_terminal_checks() -> None:
     assert "python3 scripts/governance/check_governance_language.py" in script
     assert "python3 scripts/governance/check_dependency_boundaries.py" in script
     assert "python3 scripts/governance/check_logging_contract.py" in script
+    assert "python3 scripts/governance/check_run_manifest_completeness.py" in script
     assert "python3 scripts/governance/check_upstream_governance.py" in script
 
 

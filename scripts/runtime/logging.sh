@@ -44,6 +44,7 @@ vd_log_json_only() {
       tests) source_kind="test" ;;
       governance) source_kind="governance" ;;
       infra) source_kind="infra" ;;
+      upstreams) source_kind="upstream" ;;
       *) source_kind="app" ;;
     esac
   fi

@@ -20,6 +20,7 @@ PY
   source "$ROOT_DIR/scripts/runtime/logging.sh"
   vd_log_entrypoint="$entrypoint_name"
   vd_log_init "$channel" "$entrypoint_name"
+  vd_log info entrypoint_bootstrap "bootstrap entrypoint=${entrypoint_name} channel=${channel}"
 
   export vd_log_channel
   export vd_log_component

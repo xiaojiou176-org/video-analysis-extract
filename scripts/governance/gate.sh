@@ -69,6 +69,7 @@ python3 scripts/governance/check_logging_contract.py
 python3 scripts/governance/check_log_correlation_completeness.py
 python3 scripts/governance/check_log_retention.py
 python3 scripts/governance/check_no_unindexed_evidence.py
+python3 scripts/governance/check_run_manifest_completeness.py
 python3 scripts/governance/check_contract_surfaces.py
 python3 scripts/governance/check_generated_vs_handwritten_contract_surfaces.py
 python3 scripts/governance/check_upstream_governance.py

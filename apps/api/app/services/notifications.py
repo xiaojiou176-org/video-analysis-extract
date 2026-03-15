@@ -9,10 +9,11 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from integrations.providers import resend as resend_provider
 from ..config import settings
 from ..models import NotificationConfig, NotificationDelivery
 
-RESEND_API_URL = "https://api.resend.com/emails"
+RESEND_API_URL = resend_provider.RESEND_API_URL
 
 
 def _utc_now() -> datetime:
@@ -330,44 +331,14 @@ def _send_with_resend(
     resend_api_key: str | None,
     resend_from_email: str | None,
 ) -> str | None:
-    if not resend_api_key or not resend_api_key.strip():
-        raise RuntimeError("RESEND_API_KEY is not configured")
-    if not resend_from_email or not resend_from_email.strip():
-        raise RuntimeError("RESEND_FROM_EMAIL is not configured")
-
-    payload = {
-        "from": resend_from_email,
-        "to": [to_email],
-        "subject": subject,
-        "text": text_body,
-        "html": _to_html(text_body),
-    }
-    try:
-        response = httpx.post(
-            RESEND_API_URL,
-            headers={
-                "Authorization": f"Bearer {resend_api_key}",
-                "Content-Type": "application/json",
-                "Accept": "application/json",
-                "User-Agent": "video-digestor/1.0 (+https://local.video-digestor)",
-            },
-            json=payload,
-            timeout=10.0,
-        )
-    except httpx.RequestError as exc:
-        raise RuntimeError(f"Resend request failed: {exc}") from exc
-    if response.status_code >= 400:
-        raise RuntimeError(f"Resend API returned {response.status_code}: {response.text[:500]}")
-
-    try:
-        parsed = response.json()
-    except ValueError:
-        return None
-
-    message_id = parsed.get("id")
-    if isinstance(message_id, str):
-        return message_id
-    return None
+    return resend_provider.send_with_resend(
+        to_email=to_email,
+        subject=subject,
+        text_body=text_body,
+        resend_api_key=resend_api_key,
+        resend_from_email=resend_from_email,
+        http_post=httpx.post,
+    )
 
 
 def _resolve_recipient_email(config: NotificationConfig, override_email: str | None) -> str | None:
@@ -379,10 +350,7 @@ def _resolve_recipient_email(config: NotificationConfig, override_email: str | N
 
 
 def _normalize_email(raw_email: str | None) -> str | None:
-    if raw_email is None:
-        return None
-    cleaned = raw_email.strip()
-    return cleaned or None
+    return resend_provider.normalize_email(raw_email)
 
 
 def _normalize_dispatch_key(raw_value: str | None) -> str | None:
@@ -500,29 +468,7 @@ def _render_markdown_html(text: str) -> str:
 
 
 def _to_html(text: str) -> str:
-    body = _render_markdown_html(text)
-    return (
-        '<!doctype html><html><head><meta charset="utf-8">'
-        "<style>"
-        "body{margin:0;padding:0;background:#f5f7fb;color:#0f172a;"
-        "font-family:'PingFang SC','Microsoft YaHei',-apple-system,BlinkMacSystemFont,sans-serif;}"
-        ".container{max-width:860px;margin:0 auto;padding:24px;}"
-        ".card{background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:20px 24px;"
-        "box-shadow:0 8px 24px rgba(15,23,42,0.06);line-height:1.65;font-size:15px;}"
-        "h1,h2,h3{line-height:1.35;margin:22px 0 12px;color:#0b1324;}h1{font-size:28px;}h2{font-size:22px;}h3{font-size:18px;}"
-        "p{margin:10px 0;}ul,ol{margin:8px 0 12px 22px;padding:0;}li{margin:4px 0;}"
-        "code{background:#f1f5f9;padding:2px 6px;border-radius:6px;font-size:13px;}"
-        "pre{background:#0f172a;color:#e2e8f0;padding:12px;border-radius:8px;overflow:auto;}"
-        "pre code{background:transparent;color:inherit;padding:0;}"
-        "a{color:#1d4ed8;text-decoration:none;}a:hover{text-decoration:underline;}"
-        "blockquote{border-left:4px solid #94a3b8;margin:12px 0;padding:4px 0 4px 12px;color:#475569;}"
-        "table{border-collapse:collapse;width:100%;margin:12px 0;}"
-        "th,td{border:1px solid #dbe3ee;padding:6px 8px;text-align:left;vertical-align:top;}"
-        "img{max-width:100%;height:auto;border-radius:8px;border:1px solid #e2e8f0;}"
-        "hr{border:none;border-top:1px solid #e2e8f0;margin:20px 0;}"
-        '</style></head><body><div class="container"><article class="card">'
-        f"{body}</article></div></body></html>"
-    )
+    return resend_provider.to_html(text)
 
 
 def _get_video_digest_delivery(

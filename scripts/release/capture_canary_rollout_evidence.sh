@@ -4,7 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 RELEASE_TAG="${1:-$(git -C "$REPO_ROOT" describe --tags --abbrev=0 2>/dev/null || echo v0.0.0)}"
-RELEASE_DIR="$REPO_ROOT/reports/releases/$RELEASE_TAG"
+RELEASE_DIR="$REPO_ROOT/artifacts/releases/$RELEASE_TAG"
 CANARY_DIR="$RELEASE_DIR/canary"
 EVIDENCE_JSON="$CANARY_DIR/canary-rollout-evidence.json"
 EVIDENCE_LOG="$CANARY_DIR/canary-rollout-dryrun.log"

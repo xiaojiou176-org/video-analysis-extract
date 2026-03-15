@@ -12,7 +12,7 @@
       ],
       "allowed_internal_prefixes": [
         "apps.api.app.",
-        "packages."
+        "integrations."
       ]
     },
     {
@@ -61,17 +61,15 @@
       ]
     },
     {
-      "path": "packages/shared-contracts",
+      "path": "contracts",
       "owner": "platform",
-      "responsibility": "Shared OpenAPI and JSON schema contracts only; no runtime side effects allowed.",
+      "responsibility": "Source contracts and generated schema surfaces only; no runtime side effects allowed.",
       "required_docs": [
         "AGENTS.md",
         "CLAUDE.md",
         "README.md"
       ],
-      "allowed_internal_prefixes": [
-        "packages."
-      ]
+      "allowed_internal_prefixes": []
     },
     {
       "path": "scripts/governance",
@@ -93,6 +91,17 @@
       "responsibility": "CI/local smoke and strict validation entrypoints.",
       "required_docs": [],
       "allowed_internal_prefixes": []
+    },
+    {
+      "path": "integrations",
+      "owner": "platform",
+      "responsibility": "Explicit adapters for upstream APIs, binaries, and runtime integration surfaces.",
+      "required_docs": [
+        "README.md"
+      ],
+      "allowed_internal_prefixes": [
+        "integrations."
+      ]
     }
   ]
 }

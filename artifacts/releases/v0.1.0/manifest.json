@@ -11,8 +11,8 @@
     "dirty": true
   },
   "artifacts": {
-    "checksums_file": "reports/releases/v0.1.0/checksums.sha256",
-    "rollback_readiness_file": "reports/releases/v0.1.0/rollback/db-rollback-readiness.json",
-    "rollback_drill_file": "reports/releases/v0.1.0/rollback/drill.json"
+    "checksums_file": "artifacts/releases/v0.1.0/checksums.sha256",
+    "rollback_readiness_file": "artifacts/releases/v0.1.0/rollback/db-rollback-readiness.json",
+    "rollback_drill_file": "artifacts/releases/v0.1.0/rollback/drill.json"
   }
 }

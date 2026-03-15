@@ -102,7 +102,7 @@
 - DevContainer（AI/自动化标准执行环境）：`.devcontainer/devcontainer.json`。当前已移除浮动 devcontainer feature 依赖，`post-create.sh` 会直接校验 strict contract 的 `uv/node/chromium` 是否可用，不再用 best-effort 浏览器安装掩盖漂移。
 - 严格 CI 标准镜像真相源：`infra/config/strict_ci_contract.json`。`bin/strict-ci` / `scripts/ci/run_in_standard_env.sh` 现在只接受 digest-pinned 标准镜像，不再允许静默回退到旧的本地 tag 镜像。
 - 标准镜像供应链增强：`build-ci-standard-image.yml` 现在会产出镜像 SBOM artifact，并对镜像本体与 SBOM 做 GitHub attestation。
-- Release 证据 attestation：新增 `release-evidence-attest.yml`，会把 `reports/releases/<tag>/` 下的 manifest/checksums/rollback 证据打包并出 provenance attestation。
+- Release 证据 attestation：新增 `release-evidence-attest.yml`，会把 `artifacts/releases/<tag>/` 下的 manifest/checksums/rollback 证据打包并出 provenance attestation。
 - 生成式治理参考：
   - CI 主链与 aggregate gate：`docs/generated/ci-topology.md`
   - self-hosted runner baseline：`docs/generated/runner-baseline.md`
@@ -235,7 +235,7 @@ python3 scripts/governance/check_env_contract.py --strict
 set -a; source .env; set +a
 ```
 
-说明：标准初始化路径是 `.env.example -> .env`；`scripts/env/init_example.sh` 仅用于按需生成辅助模板。`scripts/dev_*.sh` 会自动加载仓库根目录 `.env`；reader 专用命令路径（如 `scripts/runtime/run_ai_feed_sync.sh`、`scripts/ci/smoke_full_stack.sh` 的 reader 检查）会额外读取 `env/profiles/reader.env` 补齐缺失 reader 变量，但不会覆盖当前 shell 已显式注入的值。额外配置优先通过当前 shell 环境变量显式注入。
+说明：标准初始化路径是 `.env.example -> .env`；`scripts/env/init_example.sh` 仅用于按需生成辅助模板。`scripts/dev_*.sh` 会自动加载仓库根目录 `.env`；reader 专用命令路径（如 `./bin/run-ai-feed-sync`、`scripts/ci/smoke_full_stack.sh` 的 reader 检查）会额外读取 `env/profiles/reader.env` 补齐缺失 reader 变量，但不会覆盖当前 shell 已显式注入的值。额外配置优先通过当前 shell 环境变量显式注入。
 补充：`.env.example` 已精简为最小可启动模板；脚本参数全集请查看 `docs/reference/env-script-overrides.md`。
 
 ### 4) 初始化数据库
@@ -522,10 +522,10 @@ python3 scripts/release/generate_release_prechecks.py
 
 # 2) 合并到发布 readiness 报告
 python3 scripts/release/build_readiness_report.py \
-  --kpi-json reports/release-readiness/ci-kpi-summary.json \
+  --kpi-json artifacts/release-readiness/ci-kpi-summary.json \
   --check-json .runtime-cache/temp/release-readiness/prechecks.json \
-  --json-out reports/release-readiness/release-readiness.json \
-  --md-out reports/release-readiness/release-readiness.md
+  --json-out artifacts/release-readiness/release-readiness.json \
+  --md-out artifacts/release-readiness/release-readiness.md
 
 # 3) 生成 N-1 回滚制品清单（发版前执行）
 scripts/release/capture_release_manifest.sh <release-tag>
@@ -533,7 +533,7 @@ scripts/release/capture_release_manifest.sh <release-tag>
 # 4) DB 回滚链路门禁（缺失 down / 无效 down / blocker 未清零都会阻断发版）
 python3 scripts/release/verify_db_rollback_readiness.py \
   --release-tag <release-tag> \
-  --output reports/releases/<release-tag>/rollback/db-rollback-readiness.json
+  --output artifacts/releases/<release-tag>/rollback/db-rollback-readiness.json
 ```
 
 ## 文档导航

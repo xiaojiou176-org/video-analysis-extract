@@ -51,7 +51,7 @@
       "id": "schema_contract",
       "when": [
         "apps/mcp/schemas/tools.json",
-        "packages/shared-contracts/jsonschema/*.json"
+        "contracts/generated/jsonschema/*.json"
       ],
       "required_paths": [
         "docs/testing.md",
@@ -113,7 +113,7 @@
         "infra/config/strict_ci_contract.json",
         "infra/config/self_hosted_runner_baseline.json",
         "scripts/release/capture_release_manifest.sh",
-        "reports/releases/README.md",
+        "artifacts/releases/README.md",
         "config/docs/*.json"
       ],
       "required_paths": [

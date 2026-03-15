@@ -42,8 +42,8 @@ def _p75(values: list[float]) -> float:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Generate release-ready RUM baseline from raw samples")
-    parser.add_argument("--input", default="reports/performance/rum-observations.json")
-    parser.add_argument("--output", default="reports/performance/rum-baseline.json")
+    parser.add_argument("--input", default="artifacts/performance/rum-observations.json")
+    parser.add_argument("--output", default="artifacts/performance/rum-baseline.json")
     parser.add_argument("--source", default="rum_observations")
     args = parser.parse_args()
 

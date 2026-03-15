@@ -15,7 +15,7 @@ python - <<'PY'
 import json
 from pathlib import Path
 src = json.loads(Path("apps/mcp/schemas/tools.json").read_text(encoding="utf-8"))
-dst = json.loads(Path("packages/shared-contracts/jsonschema/mcp-tools.schema.json").read_text(encoding="utf-8"))
+dst = json.loads(Path("contracts/generated/jsonschema/mcp-tools.schema.json").read_text(encoding="utf-8"))
 raise SystemExit(0 if src == dst else 1)
 PY
 ```

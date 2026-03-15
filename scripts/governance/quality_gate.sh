@@ -799,7 +799,7 @@ import json
 from pathlib import Path
 
 source_path = Path("apps/mcp/schemas/tools.json")
-shared_path = Path("packages/shared-contracts/jsonschema/mcp-tools.schema.json")
+shared_path = Path("contracts/generated/jsonschema/mcp-tools.schema.json")
 
 source = json.loads(source_path.read_text(encoding="utf-8"))
 shared = json.loads(shared_path.read_text(encoding="utf-8"))
@@ -1452,7 +1452,7 @@ run_pre_commit_mode() {
     "python3 scripts/governance/check_structured_logs.py"
   run_async_gate "iac_entrypoint_guard" "iac entrypoint guard" \
     "bash scripts/governance/check_iac_entrypoint.sh ."
-  run_async_gate "schema_parity_gate" "schema parity gate (apps/mcp vs shared-contracts)" \
+  run_async_gate "schema_parity_gate" "schema parity gate (apps/mcp vs contracts)" \
     "run_schema_parity_gate"
   run_async_gate "env_budget_guard" "env budget guard" \
     "python3 scripts/governance/check_env_budget.py"
@@ -1552,7 +1552,7 @@ run_pre_push_mode() {
     "run_provider_residual_guard"
   run_async_gate "worker_line_limits_guard" "worker line limits guard" \
     "run_worker_line_limits_guard"
-  run_async_gate "schema_parity_gate" "schema parity gate (apps/mcp vs shared-contracts)" \
+  run_async_gate "schema_parity_gate" "schema parity gate (apps/mcp vs contracts)" \
     "run_schema_parity_gate"
   if [[ "$CI_DEDUPE" == "1" ]]; then
     record_gate_status "web_lint" "frontend lint" "skipped" ""

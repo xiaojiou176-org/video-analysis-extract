@@ -58,7 +58,7 @@
           ".github/workflows/release-evidence-attest.yml",
           ".github/workflows/monthly-governance-audit.yml",
           "scripts/release/capture_release_manifest.sh",
-          "reports/releases/README.md",
+          "artifacts/releases/README.md",
           "config/governance/active-upstreams.json",
           "config/governance/upstream-templates.json",
           "config/governance/upstream-compat-matrix.json"

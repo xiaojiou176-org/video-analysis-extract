@@ -272,7 +272,7 @@ def _render_release_evidence() -> str:
     upstreams = _load_json(REPO_ROOT / "config" / "governance" / "active-upstreams.json")
     compat = _load_json(REPO_ROOT / "config" / "governance" / "upstream-compat-matrix.json")
     readme_text = _read_text(REPO_ROOT / "reports" / "releases" / "README.md")
-    inputs = sorted(set(re.findall(r"reports/releases/<tag>/[^\n`]+", readme_text)))
+    inputs = sorted(set(re.findall(r"artifacts/releases/<tag>/[^\n`]+", readme_text)))
     outputs = [
         GENERATED_HEADER,
         "# Release Evidence Reference",
@@ -282,7 +282,7 @@ def _render_release_evidence() -> str:
         "## Canonical Rules",
         "",
         "- current run evidence is the only canonical source for release verdicts",
-        "- historical examples under `reports/releases/*` are documentation examples, not release verdict proof",
+        "- historical examples under `artifacts/releases/*` are documentation examples, not release verdict proof",
         "- manifest paths must be repo-relative, not host-absolute",
         "",
         "## Required Evidence Files",

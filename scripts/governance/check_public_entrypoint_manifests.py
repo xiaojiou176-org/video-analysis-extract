@@ -20,6 +20,7 @@ ENTRYPOINTS = {
     "bin/doctor",
     "bin/prune-runtime",
     "bin/clean-runtime",
+    "bin/run-ai-feed-sync",
 }
 REQUIRED_SNIPPETS = (
     'source "$ROOT_DIR/scripts/runtime/entrypoint.sh"',

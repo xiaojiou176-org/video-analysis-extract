@@ -7,17 +7,17 @@ Generated from the release evidence workflow and manifest capture script.
 ## Canonical Rules
 
 - current run evidence is the only canonical source for release verdicts
-- historical examples under `reports/releases/*` are documentation examples, not release verdict proof
+- historical examples under `artifacts/releases/*` are documentation examples, not release verdict proof
 - manifest paths must be repo-relative, not host-absolute
 
 ## Required Evidence Files
 
-- `reports/releases/<tag>/canary/canary-rollout-dryrun.log`
-- `reports/releases/<tag>/canary/canary-rollout-evidence.json`
-- `reports/releases/<tag>/checksums.sha256`
-- `reports/releases/<tag>/manifest.json`
-- `reports/releases/<tag>/rollback/db-rollback-readiness.json`
-- `reports/releases/<tag>/rollback/drill.json`
+- `artifacts/releases/<tag>/canary/canary-rollout-dryrun.log`
+- `artifacts/releases/<tag>/canary/canary-rollout-evidence.json`
+- `artifacts/releases/<tag>/checksums.sha256`
+- `artifacts/releases/<tag>/manifest.json`
+- `artifacts/releases/<tag>/rollback/db-rollback-readiness.json`
+- `artifacts/releases/<tag>/rollback/drill.json`
 
 ## Workflow Triggers
 

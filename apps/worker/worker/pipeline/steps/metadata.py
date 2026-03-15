@@ -4,6 +4,7 @@ import json
 from collections.abc import Awaitable, Callable
 from typing import Any
 
+from integrations.binaries.media_commands import yt_dlp_metadata_command
 from worker.pipeline.step_executor import utc_now_iso
 from worker.pipeline.types import PipelineContext, StepExecution
 
@@ -31,13 +32,7 @@ async def step_fetch_metadata(
             degraded=True,
         )
 
-    cmd = [
-        "yt-dlp",
-        "--dump-single-json",
-        "--skip-download",
-        "--no-warnings",
-        source_url,
-    ]
+    cmd = yt_dlp_metadata_command(source_url)
     result = await run_command(ctx, cmd)
     if result.ok:
         try:

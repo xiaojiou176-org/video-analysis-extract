@@ -4,7 +4,7 @@ set -euo pipefail
 SCRIPT_NAME="capture_release_manifest"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 RELEASE_TAG="${1:-}"
-OUT_DIR="${2:-$ROOT_DIR/reports/releases}"
+OUT_DIR="${2:-$ROOT_DIR/artifacts/releases}"
 
 if [[ -z "$RELEASE_TAG" ]]; then
   echo "[$SCRIPT_NAME] usage: $0 <release-tag> [output-dir]" >&2

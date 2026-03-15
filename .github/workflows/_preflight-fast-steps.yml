@@ -121,7 +121,7 @@ jobs:
       - name: CI workflow strictness guard
         run: python3 scripts/governance/check_ci_workflow_strictness.py
 
-      - name: Schema parity check (apps/mcp vs shared-contracts)
+      - name: Schema parity check (apps/mcp vs contracts)
         run: |
           python - <<'PY'
           import difflib
@@ -129,7 +129,7 @@ jobs:
           from pathlib import Path
 
           source_path = Path("apps/mcp/schemas/tools.json")
-          shared_path = Path("packages/shared-contracts/jsonschema/mcp-tools.schema.json")
+          shared_path = Path("contracts/generated/jsonschema/mcp-tools.schema.json")
 
           source = json.loads(source_path.read_text(encoding="utf-8"))
           shared = json.loads(shared_path.read_text(encoding="utf-8"))

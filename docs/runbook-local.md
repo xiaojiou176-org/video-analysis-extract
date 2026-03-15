@@ -194,14 +194,14 @@ curl -sS http://127.0.0.1:9000/api/v1/jobs/<job_id>
 ```bash
 python3 scripts/release/generate_release_prechecks.py
 python3 scripts/release/build_readiness_report.py \
-  --kpi-json reports/release-readiness/ci-kpi-summary.json \
+  --kpi-json artifacts/release-readiness/ci-kpi-summary.json \
   --check-json .runtime-cache/temp/release-readiness/prechecks.json
 
 scripts/release/capture_release_manifest.sh <release-tag>
 
 python3 scripts/release/verify_db_rollback_readiness.py \
   --release-tag <release-tag> \
-  --output reports/releases/<release-tag>/rollback/db-rollback-readiness.json
+  --output artifacts/releases/<release-tag>/rollback/db-rollback-readiness.json
 ```
 
 说明：该门禁会同时检查 `missing_policy`、`blocked_without_down` 与 `invalid_down_sql`，任一大于 0 都会阻断发版。
@@ -358,7 +358,7 @@ Live smoke 执行约束（2026-02 更新）：
 当前默认：
 
 - `bootstrap_full_stack.sh` 默认启用 core services 与 reader stack。
-- `smoke_full_stack.sh` 默认执行 reader checks，并会执行 `run_ai_feed_sync.sh` 验证 AI 文本回写 Miniflux。
+- `smoke_full_stack.sh` 默认执行 reader checks，并会执行 `bin/run-ai-feed-sync` 验证 AI 文本回写 Miniflux。
 - `smoke_full_stack.sh` 默认就是 fail-fast；reader/core 服务异常会直接停止，不再保留 offline fallback marker 与降级跳过 reader checks 的路径。
 
 ## 本地验收口径分层（sqlite vs 真实 Postgres）

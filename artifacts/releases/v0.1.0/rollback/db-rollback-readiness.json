@@ -10,7 +10,7 @@
     "gate_status": "fail"
   },
   "drill_evidence": {
-    "path": "reports/releases/v0.1.0/rollback/drill.json",
+    "path": "artifacts/releases/v0.1.0/rollback/drill.json",
     "valid": true,
     "errors": []
   },

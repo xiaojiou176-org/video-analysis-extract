@@ -46,9 +46,9 @@
       "title": "Historical and Evidence",
       "docs": [
         "docs/plans/2026-03-10-container-first-ci-mixed-mode.md",
-        "reports/releases/README.md",
-        "reports/performance/rum-baseline.json",
-        "reports/releases/v0.1.0/manifest.json"
+        "artifacts/releases/README.md",
+        "artifacts/performance/rum-baseline.json",
+        "artifacts/releases/v0.1.0/manifest.json"
       ]
     }
   ]

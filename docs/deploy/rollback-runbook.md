@@ -7,10 +7,10 @@
 
 ## Preconditions
 
-- A release manifest exists under `reports/releases/<tag>/manifest.json`.
-- N-1 artifact checksums exist under `reports/releases/<tag>/checksums.sha256`.
-- DB rollback readiness report exists under `reports/releases/<tag>/rollback/db-rollback-readiness.json`.
-- Rollback drill evidence exists under `reports/releases/<tag>/rollback/drill.json`.
+- A release manifest exists under `artifacts/releases/<tag>/manifest.json`.
+- N-1 artifact checksums exist under `artifacts/releases/<tag>/checksums.sha256`.
+- DB rollback readiness report exists under `artifacts/releases/<tag>/rollback/db-rollback-readiness.json`.
+- Rollback drill evidence exists under `artifacts/releases/<tag>/rollback/drill.json`.
 - `infra/nginx/vd.canary-routing.conf` has been deployed as `/etc/nginx/snippets/vd.canary-routing.conf`.
 
 ## DB Rollback Strategy (Mandatory Gate)
@@ -20,7 +20,7 @@
 ```bash
 python3 scripts/release/verify_db_rollback_readiness.py \
   --release-tag <release-tag> \
-  --output reports/releases/<release-tag>/rollback/db-rollback-readiness.json
+  --output artifacts/releases/<release-tag>/rollback/db-rollback-readiness.json
 ```
 
 2. Gate policy:
@@ -29,7 +29,7 @@ python3 scripts/release/verify_db_rollback_readiness.py \
 - `invalid_down_sql > 0` means release must be blocked (down file exists but has no executable SQL statement).
 - Only `with_down_sql == total_up_migrations` can pass DB rollback gate.
 
-3. Execute rollback drill and write evidence to `reports/releases/<release-tag>/rollback/drill.json`.
+3. Execute rollback drill and write evidence to `artifacts/releases/<release-tag>/rollback/drill.json`.
    Required keys: `release_tag`, `executed_at`, `executor`, `strategy`, `result`, `migrations_checked`.
 
 4. If a migration is irreversible and cannot provide down SQL immediately, it must be listed in `infra/migrations/down/rollback-blockers.json`.

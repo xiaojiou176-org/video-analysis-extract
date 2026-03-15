@@ -2,14 +2,14 @@
   "version": 1,
   "internal_roots": [
     "apps.",
-    "packages."
+    "integrations."
   ],
   "python_rules": [
     {
       "scope": "apps/api/app",
       "allow_internal_prefixes": [
         "apps.api.app.",
-        "packages."
+        "integrations."
       ],
       "reason": "API may depend only on its own implementation namespace and shared contract packages."
     },
@@ -17,7 +17,7 @@
       "scope": "apps/worker/worker",
       "allow_internal_prefixes": [
         "apps.worker.worker.",
-        "packages."
+        "integrations."
       ],
       "reason": "Worker may depend only on its own implementation namespace and shared contract packages."
     },
@@ -58,7 +58,7 @@
   ],
   "package_purity_rules": [
     {
-      "scope": "packages/shared-contracts",
+      "scope": "contracts",
       "forbid_substrings": [
         "httpx",
         "requests",
@@ -68,7 +68,7 @@
         "subprocess",
         "socket"
       ],
-      "reason": "Shared contracts must remain schema-only and free of runtime side effects or environment coupling."
+      "reason": "Contracts must remain schema-only and free of runtime side effects or environment coupling."
     }
   ]
 }

@@ -83,7 +83,7 @@ def _report_missing(
     errors: list[str] = []
     for route, methods in sorted(used_paths.items()):
         if route not in openapi_paths:
-            errors.append(f"{label}: route `{route}` is used but missing from packages/shared-contracts/openapi.yaml")
+            errors.append(f"{label}: route `{route}` is used but missing from contracts/source/openapi.yaml")
             continue
         if not enforce_methods:
             continue
@@ -98,7 +98,7 @@ def _report_missing(
 
 def main() -> int:
     root = repo_root()
-    openapi_paths = _load_openapi_paths(root / "packages" / "shared-contracts" / "openapi.yaml")
+    openapi_paths = _load_openapi_paths(root / "contracts" / "source" / "openapi.yaml")
     web_paths = _extract_web_paths(root / "apps" / "web" / "lib" / "api" / "client.ts")
     mcp_paths = _extract_mcp_paths(root / "apps" / "mcp" / "schemas" / "tools.json")
     errors: list[str] = []

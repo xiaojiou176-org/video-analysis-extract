@@ -156,6 +156,13 @@
       "mutable": false
     },
     {
+      "path": "contracts",
+      "kind": "responsibility-layer",
+      "reason": "Source contracts and generated schema surfaces.",
+      "owner": "platform",
+      "mutable": false
+    },
+    {
       "path": "data",
       "kind": "data",
       "reason": "Curated local data inputs and fixtures.",
@@ -191,9 +198,9 @@
       "mutable": false
     },
     {
-      "path": "packages",
+      "path": "integrations",
       "kind": "responsibility-layer",
-      "reason": "Shared contracts and pure shared artifacts.",
+      "reason": "Explicit adapters for external APIs, binaries, and runtime integration surfaces.",
       "owner": "platform",
       "mutable": false
     },
@@ -212,9 +219,9 @@
       "mutable": false
     },
     {
-      "path": "reports",
+      "path": "artifacts",
       "kind": "responsibility-layer",
-      "reason": "Published long-lived reports and release-readiness artifacts.",
+      "reason": "Long-lived release evidence, performance baselines, and governance snapshots retained outside runtime output roots.",
       "owner": "platform",
       "mutable": false
     },
@@ -222,13 +229,6 @@
       "path": "scripts",
       "kind": "responsibility-layer",
       "reason": "Repository execution entrypoints grouped by governance, runtime, CI, vendor, release, and deploy responsibilities.",
-      "owner": "platform",
-      "mutable": false
-    },
-    {
-      "path": "templates",
-      "kind": "docs",
-      "reason": "Shared document and output templates.",
       "owner": "platform",
       "mutable": false
     },

@@ -73,7 +73,7 @@ def test_release_manifest_capture_uses_relative_artifact_paths_and_current_run_s
 
 def test_sample_release_manifest_is_marked_as_historical_example_with_relative_paths() -> None:
     manifest = json.loads(
-        (_repo_root() / "reports" / "releases" / "v0.1.0" / "manifest.json").read_text(encoding="utf-8")
+        (_repo_root() / "artifacts" / "releases" / "v0.1.0" / "manifest.json").read_text(encoding="utf-8")
     )
 
     assert manifest["manifest_version"] == 1

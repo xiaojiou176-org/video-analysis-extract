@@ -47,7 +47,7 @@
     },
     {
       "name": "shared-contracts-to-contracts-root-cutover",
-      "status": "planned",
+      "status": "completed",
       "owner": "platform",
       "introduced_at": "2026-03-15T06:07:57-07:00",
       "write_forbidden_after": "2026-03-29T00:00:00-07:00",
@@ -59,7 +59,7 @@
         "contracts/source",
         "contracts/generated"
       ],
-      "notes": "Contract source and generated surfaces will split out of packages into a dedicated contracts root."
+      "notes": "Contract source and generated surfaces have been moved into the dedicated contracts root; the old shared-contracts path is retired."
     }
   ]
 }
