@@ -72,6 +72,12 @@ jobs:
         continue-on-error: true
         run: python3 scripts/governance/check_contract_surfaces.py
 
+      - name: Architecture ownership and locality guards
+        run: |
+          python3 scripts/governance/check_module_ownership.py
+          python3 scripts/governance/check_contract_locality.py
+          python3 scripts/governance/check_no_cross_app_implementation_imports.py
+
       - name: Docs env canonical check
         run: |
           ! rg -n 'cp \.env\.local\.example \.env\.local|source \.env\.local|自动加载 `?\.env\.local' README.md docs/runbook-local.md

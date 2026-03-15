@@ -10,6 +10,8 @@
       "verification_status": "verified",
       "last_verified_at": "2026-03-15T06:09:43Z",
       "last_verified_run_id": "local-pr-llm-real-smoke-20260315T060943Z",
+      "freshness_window_hours": 72,
+      "verification_scope": "upstream:gemini-worker-llm-chain",
       "verification_artifacts": [
         ".runtime-cache/reports/governance/upstream-compat-report.json",
         ".runtime-cache/reports/tests/pr-llm-real-smoke-result.json"
@@ -26,6 +28,8 @@
       "verification_status": "verified",
       "last_verified_at": "2026-03-15T06:27:04Z",
       "last_verified_run_id": "local-smoke-full-stack-20260315T062704Z",
+      "freshness_window_hours": 72,
+      "verification_scope": "upstream:rsshub-youtube-ingest-chain",
       "verification_artifacts": [
         ".runtime-cache/reports/governance/upstream-compat-report.json",
         ".runtime-cache/reports/tests/e2e-live-smoke-result.json",
@@ -43,6 +47,8 @@
       "verification_status": "verified",
       "last_verified_at": "2026-03-15T06:18:20Z",
       "last_verified_run_id": "local-resend-daily-digest-20260315T061820Z",
+      "freshness_window_hours": 72,
+      "verification_scope": "upstream:resend-digest-delivery-chain",
       "verification_artifacts": [
         ".runtime-cache/reports/governance/upstream-compat-report.json",
         ".runtime-cache/logs/tests/compat-resend-daily-sent.log"
@@ -59,6 +65,8 @@
       "verification_status": "verified",
       "last_verified_at": "2026-03-15T06:08:14Z",
       "last_verified_run_id": "local-strict-prepush-debugbuild-20260315T060814Z",
+      "freshness_window_hours": 72,
+      "verification_scope": "upstream:strict-ci-compose-image-set",
       "verification_artifacts": [
         ".runtime-cache/reports/governance/upstream-compat-report.json",
         ".runtime-cache/reports/governance/quality-gate/summary.json"
@@ -75,6 +83,8 @@
       "verification_status": "verified",
       "last_verified_at": "2026-03-15T06:30:00Z",
       "last_verified_run_id": "local-hardcut-yt-dlp-20260315T063000Z",
+      "freshness_window_hours": 168,
+      "verification_scope": "upstream:yt-dlp-media-chain",
       "verification_artifacts": [
         ".runtime-cache/reports/governance/upstream-usage-report.json",
         ".runtime-cache/reports/governance/upstream-compat-report.json"
@@ -91,6 +101,8 @@
       "verification_status": "verified",
       "last_verified_at": "2026-03-15T06:30:00Z",
       "last_verified_run_id": "local-hardcut-ffmpeg-20260315T063000Z",
+      "freshness_window_hours": 168,
+      "verification_scope": "upstream:ffmpeg-frame-chain",
       "verification_artifacts": [
         ".runtime-cache/reports/governance/upstream-usage-report.json",
         ".runtime-cache/reports/governance/upstream-compat-report.json"
@@ -107,6 +119,8 @@
       "verification_status": "verified",
       "last_verified_at": "2026-03-15T06:30:00Z",
       "last_verified_run_id": "local-hardcut-bbdown-20260315T063000Z",
+      "freshness_window_hours": 168,
+      "verification_scope": "upstream:bbdown-bilibili-fallback-chain",
       "verification_artifacts": [
         ".runtime-cache/reports/governance/upstream-usage-report.json",
         ".runtime-cache/reports/governance/upstream-compat-report.json"

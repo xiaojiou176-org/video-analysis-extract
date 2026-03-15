@@ -18,6 +18,15 @@
       "license": "commercial-service",
       "security_posture": "managed-service",
       "risk_class": "high",
+      "support_tier": "tier-1",
+      "freshness_required_hours": 72,
+      "latest_verification_status": "verified",
+      "latest_verification_age_hours": 0,
+      "contract_kind": "public-api-contract",
+      "stability_class": "managed",
+      "degradation_mode": "disable provider-dependent flows and keep local/core paths only",
+      "blame_surface": "api-boundary",
+      "owner_rotation": "platform-weekly",
       "usage_patterns": [
         "google.genai",
         "google-genai"
@@ -40,6 +49,15 @@
       "license": "commercial-service",
       "security_posture": "managed-service",
       "risk_class": "medium",
+      "support_tier": "tier-2",
+      "freshness_required_hours": 168,
+      "latest_verification_status": "verified",
+      "latest_verification_age_hours": 0,
+      "contract_kind": "public-api-contract",
+      "stability_class": "managed",
+      "degradation_mode": "disable provider-dependent flows and keep local/core paths only",
+      "blame_surface": "api-boundary",
+      "owner_rotation": "platform-weekly",
       "usage_patterns": [
         "https://api.resend.com/emails",
         "https://api.resend.com/domains"
@@ -62,6 +80,15 @@
       "license": "open-source",
       "security_posture": "community-service",
       "risk_class": "high",
+      "support_tier": "tier-1",
+      "freshness_required_hours": 72,
+      "latest_verification_status": "verified",
+      "latest_verification_age_hours": 0,
+      "contract_kind": "public-api-contract",
+      "stability_class": "community-supported",
+      "degradation_mode": "disable provider-dependent flows and keep local/core paths only",
+      "blame_surface": "api-boundary",
+      "owner_rotation": "platform-weekly",
       "usage_patterns": [
         "https://rsshub.app",
         "rsshub_route",
@@ -84,7 +111,16 @@
       "evidence_artifact": ".runtime-cache/reports/governance/upstream-compat-report.json",
       "license": "external-platform",
       "security_posture": "external-platform",
-      "risk_class": "high"
+      "risk_class": "high",
+      "support_tier": "tier-1",
+      "freshness_required_hours": 72,
+      "latest_verification_status": "verified",
+      "latest_verification_age_hours": 0,
+      "contract_kind": "public-api-contract",
+      "stability_class": "community-platform",
+      "degradation_mode": "disable provider-dependent flows and keep local/core paths only",
+      "blame_surface": "api-boundary",
+      "owner_rotation": "platform-weekly"
     },
     {
       "name": "bilibili-platform",
@@ -102,7 +138,16 @@
       "evidence_artifact": ".runtime-cache/reports/governance/upstream-compat-report.json",
       "license": "external-platform",
       "security_posture": "external-platform",
-      "risk_class": "high"
+      "risk_class": "high",
+      "support_tier": "tier-1",
+      "freshness_required_hours": 72,
+      "latest_verification_status": "verified",
+      "latest_verification_age_hours": 0,
+      "contract_kind": "public-api-contract",
+      "stability_class": "community-platform",
+      "degradation_mode": "disable provider-dependent flows and keep local/core paths only",
+      "blame_surface": "api-boundary",
+      "owner_rotation": "platform-weekly"
     },
     {
       "name": "miniflux-service",
@@ -120,7 +165,16 @@
       "evidence_artifact": ".runtime-cache/reports/governance/upstream-compat-report.json",
       "license": "open-source",
       "security_posture": "community-service",
-      "risk_class": "medium"
+      "risk_class": "medium",
+      "support_tier": "tier-2",
+      "freshness_required_hours": 168,
+      "latest_verification_status": "verified",
+      "latest_verification_age_hours": 0,
+      "contract_kind": "public-api-contract",
+      "stability_class": "community-supported",
+      "degradation_mode": "disable provider-dependent flows and keep local/core paths only",
+      "blame_surface": "api-boundary",
+      "owner_rotation": "platform-weekly"
     },
     {
       "name": "nextflux-service",
@@ -138,7 +192,16 @@
       "evidence_artifact": ".runtime-cache/reports/governance/upstream-compat-report.json",
       "license": "open-source",
       "security_posture": "community-service",
-      "risk_class": "medium"
+      "risk_class": "medium",
+      "support_tier": "tier-2",
+      "freshness_required_hours": 168,
+      "latest_verification_status": "verified",
+      "latest_verification_age_hours": 0,
+      "contract_kind": "public-api-contract",
+      "stability_class": "community-supported",
+      "degradation_mode": "disable provider-dependent flows and keep local/core paths only",
+      "blame_surface": "api-boundary",
+      "owner_rotation": "platform-weekly"
     },
     {
       "name": "strict-ci-standard-image",
@@ -156,7 +219,16 @@
       "evidence_artifact": ".runtime-cache/reports/governance/upstream-compat-report.json",
       "license": "repo-owned",
       "security_posture": "repo-owned-image",
-      "risk_class": "high"
+      "risk_class": "high",
+      "support_tier": "tier-1",
+      "freshness_required_hours": 72,
+      "latest_verification_status": "verified",
+      "latest_verification_age_hours": 0,
+      "contract_kind": "digest-pinned-image",
+      "stability_class": "managed",
+      "degradation_mode": "fail closed on image drift and rebuild/pin before reuse",
+      "blame_surface": "runtime-image-boundary",
+      "owner_rotation": "platform-weekly"
     },
     {
       "name": "pgvector-pg16-image",
@@ -174,7 +246,16 @@
       "evidence_artifact": ".runtime-cache/reports/governance/upstream-compat-report.json",
       "license": "open-source",
       "security_posture": "community-image",
-      "risk_class": "medium"
+      "risk_class": "medium",
+      "support_tier": "tier-2",
+      "freshness_required_hours": 168,
+      "latest_verification_status": "verified",
+      "latest_verification_age_hours": 0,
+      "contract_kind": "digest-pinned-image",
+      "stability_class": "community-supported",
+      "degradation_mode": "fail closed on image drift and rebuild/pin before reuse",
+      "blame_surface": "runtime-image-boundary",
+      "owner_rotation": "platform-weekly"
     },
     {
       "name": "redis-core-image",
@@ -192,7 +273,16 @@
       "evidence_artifact": ".runtime-cache/reports/governance/upstream-compat-report.json",
       "license": "open-source",
       "security_posture": "community-image",
-      "risk_class": "medium"
+      "risk_class": "medium",
+      "support_tier": "tier-2",
+      "freshness_required_hours": 168,
+      "latest_verification_status": "verified",
+      "latest_verification_age_hours": 0,
+      "contract_kind": "digest-pinned-image",
+      "stability_class": "community-supported",
+      "degradation_mode": "fail closed on image drift and rebuild/pin before reuse",
+      "blame_surface": "runtime-image-boundary",
+      "owner_rotation": "platform-weekly"
     },
     {
       "name": "temporal-auto-setup-image",
@@ -210,7 +300,16 @@
       "evidence_artifact": ".runtime-cache/reports/governance/upstream-compat-report.json",
       "license": "open-source",
       "security_posture": "community-image",
-      "risk_class": "medium"
+      "risk_class": "medium",
+      "support_tier": "tier-2",
+      "freshness_required_hours": 168,
+      "latest_verification_status": "verified",
+      "latest_verification_age_hours": 0,
+      "contract_kind": "digest-pinned-image",
+      "stability_class": "community-supported",
+      "degradation_mode": "fail closed on image drift and rebuild/pin before reuse",
+      "blame_surface": "runtime-image-boundary",
+      "owner_rotation": "platform-weekly"
     },
     {
       "name": "miniflux-image",
@@ -228,7 +327,16 @@
       "evidence_artifact": ".runtime-cache/reports/governance/upstream-compat-report.json",
       "license": "open-source",
       "security_posture": "community-image",
-      "risk_class": "medium"
+      "risk_class": "medium",
+      "support_tier": "tier-2",
+      "freshness_required_hours": 168,
+      "latest_verification_status": "verified",
+      "latest_verification_age_hours": 0,
+      "contract_kind": "digest-pinned-image",
+      "stability_class": "community-supported",
+      "degradation_mode": "fail closed on image drift and rebuild/pin before reuse",
+      "blame_surface": "runtime-image-boundary",
+      "owner_rotation": "platform-weekly"
     },
     {
       "name": "postgres-miniflux-image",
@@ -246,7 +354,16 @@
       "evidence_artifact": ".runtime-cache/reports/governance/upstream-compat-report.json",
       "license": "open-source",
       "security_posture": "community-image",
-      "risk_class": "medium"
+      "risk_class": "medium",
+      "support_tier": "tier-2",
+      "freshness_required_hours": 168,
+      "latest_verification_status": "verified",
+      "latest_verification_age_hours": 0,
+      "contract_kind": "digest-pinned-image",
+      "stability_class": "community-supported",
+      "degradation_mode": "fail closed on image drift and rebuild/pin before reuse",
+      "blame_surface": "runtime-image-boundary",
+      "owner_rotation": "platform-weekly"
     },
     {
       "name": "nextflux-image",
@@ -264,7 +381,16 @@
       "evidence_artifact": ".runtime-cache/reports/governance/upstream-compat-report.json",
       "license": "open-source",
       "security_posture": "community-image",
-      "risk_class": "medium"
+      "risk_class": "medium",
+      "support_tier": "tier-2",
+      "freshness_required_hours": 168,
+      "latest_verification_status": "verified",
+      "latest_verification_age_hours": 0,
+      "contract_kind": "digest-pinned-image",
+      "stability_class": "community-supported",
+      "degradation_mode": "fail closed on image drift and rebuild/pin before reuse",
+      "blame_surface": "runtime-image-boundary",
+      "owner_rotation": "platform-weekly"
     },
     {
       "name": "temporal-cli",
@@ -283,6 +409,15 @@
       "license": "open-source",
       "security_posture": "community-binary",
       "risk_class": "high",
+      "support_tier": "tier-1",
+      "freshness_required_hours": 72,
+      "latest_verification_status": "verified",
+      "latest_verification_age_hours": 0,
+      "contract_kind": "public-binary-contract",
+      "stability_class": "community-supported",
+      "degradation_mode": "disable binary-dependent path and keep degraded non-binary fallback where defined",
+      "blame_surface": "binary-boundary",
+      "owner_rotation": "platform-weekly",
       "usage_patterns": [
         "https://github.com/temporalio/cli/releases",
         "TEMPORAL_CLI_VERSION"
@@ -305,6 +440,15 @@
       "license": "open-source",
       "security_posture": "community-binary",
       "risk_class": "medium",
+      "support_tier": "tier-2",
+      "freshness_required_hours": 168,
+      "latest_verification_status": "verified",
+      "latest_verification_age_hours": 0,
+      "contract_kind": "public-binary-contract",
+      "stability_class": "community-supported",
+      "degradation_mode": "disable binary-dependent path and keep degraded non-binary fallback where defined",
+      "blame_surface": "binary-boundary",
+      "owner_rotation": "platform-weekly",
       "usage_patterns": [
         "gitleaks detect"
       ]
@@ -326,6 +470,15 @@
       "license": "open-source",
       "security_posture": "community-binary",
       "risk_class": "high",
+      "support_tier": "tier-1",
+      "freshness_required_hours": 72,
+      "latest_verification_status": "verified",
+      "latest_verification_age_hours": 0,
+      "contract_kind": "public-binary-contract",
+      "stability_class": "community-supported",
+      "degradation_mode": "disable binary-dependent path and keep degraded non-binary fallback where defined",
+      "blame_surface": "binary-boundary",
+      "owner_rotation": "platform-weekly",
       "usage_patterns": [
         "yt-dlp",
         "https://github.com/yt-dlp/yt-dlp.git"
@@ -348,6 +501,15 @@
       "license": "open-source",
       "security_posture": "community-binary",
       "risk_class": "medium",
+      "support_tier": "tier-2",
+      "freshness_required_hours": 168,
+      "latest_verification_status": "verified",
+      "latest_verification_age_hours": 0,
+      "contract_kind": "public-binary-contract",
+      "stability_class": "community-supported",
+      "degradation_mode": "disable binary-dependent path and keep degraded non-binary fallback where defined",
+      "blame_surface": "binary-boundary",
+      "owner_rotation": "platform-weekly",
       "usage_patterns": [
         "ffmpeg"
       ]
@@ -369,6 +531,15 @@
       "license": "open-source",
       "security_posture": "community-binary",
       "risk_class": "medium",
+      "support_tier": "tier-2",
+      "freshness_required_hours": 168,
+      "latest_verification_status": "verified",
+      "latest_verification_age_hours": 0,
+      "contract_kind": "public-binary-contract",
+      "stability_class": "community-supported",
+      "degradation_mode": "disable binary-dependent path and keep degraded non-binary fallback where defined",
+      "blame_surface": "binary-boundary",
+      "owner_rotation": "platform-weekly",
       "usage_patterns": [
         "bbdown",
         "BBDown"

@@ -11,7 +11,7 @@ MCP_ENTRY="apps.mcp.server"
 
 usage() {
   cat <<'EOF'
-Usage: ./scripts/dev_mcp.sh [--entry <module>] [--mcp-dir <path>]
+Usage: ./bin/dev-mcp [--entry <module>] [--mcp-dir <path>]
 
 Options:
   --entry <module>   Python module entry (default: apps.mcp.server)

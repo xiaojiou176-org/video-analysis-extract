@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=./scripts/runtime/entrypoint.sh
+source "$ROOT_DIR/scripts/runtime/entrypoint.sh"
+vd_entrypoint_bootstrap governance doctor "$@"
+cd "$ROOT_DIR"
+export PYTHONDONTWRITEBYTECODE=1
+
+python3 scripts/governance/check_root_allowlist.py --strict-local-private
+python3 scripts/governance/check_root_layout_budget.py
+python3 scripts/governance/check_root_zero_unknowns.py
+python3 scripts/governance/check_bridge_expiry.py
+python3 scripts/governance/check_runtime_outputs.py
+python3 scripts/governance/check_logging_contract.py
+python3 scripts/governance/check_log_correlation_completeness.py
+python3 scripts/governance/check_dependency_boundaries.py
+python3 scripts/governance/check_upstream_governance.py
+python3 scripts/governance/check_unregistered_upstream_usage.py

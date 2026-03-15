@@ -23,6 +23,11 @@
 - `docs/testing.md`
 - `ENVIRONMENT.md`
 - `docs/reference/runner-baseline.md`
+- `docs/reference/root-governance.md`
+- `docs/reference/architecture-governance.md`
+- `docs/reference/runtime-cache-retention.md`
+- `docs/reference/evidence-model.md`
+- `docs/reference/upstream-governance.md`
 
 ## 你需要先知道的 5 件事
 
@@ -37,7 +42,7 @@
 
 - 文档高漂移事实已开始收口到 `docs/generated/*.md`；入口文档只保留 onboarding 必需信息。
 - self-hosted CI 只接受 **trusted internal PR**；若 PR 来自 fork，GitHub Actions 会在边界门禁直接阻断。
-- 严格验收仍以 `./scripts/strict_ci_entry.sh --mode pre-push --strict-full-run 1 --ci-dedupe 0` 为唯一权威入口。
+- 严格验收仍以 `./bin/strict-ci --mode pre-push --strict-full-run 1 --ci-dedupe 0` 为唯一权威入口。
 <!-- docs:generated governance-snapshot end -->
 
 ## 环境文件准备（必做）
@@ -73,7 +78,7 @@ pre-commit install --hook-type pre-commit --hook-type commit-msg --hook-type pre
 
 说明：
 
-- 仓库当前默认强制链路是 `.githooks/* -> scripts/quality_gate.sh`。
+- 仓库当前默认强制链路是 `.githooks/* -> bin/quality-gate`。
 - `.pre-commit-config.yaml` 用于统一定义可复用检查集合，适合手动全量清洗与依赖更新。
 - 若执行 `pre-commit install`，会写入当前 `core.hooksPath` 下的 hook 文件；执行前请确认团队约定。
 
@@ -135,7 +140,7 @@ DevContainer 启动拓扑补充（2026-03）：
 
 - `.devcontainer/post-create.sh` 已移除 `curl|sh` 安装模式，改为 `python3 -m pip install --user --upgrade "uv>=0.10,<1.0"`；当前会直接校验 strict contract 里的 Chromium 是否可启动，失败时直接报 drift，不再 `playwright install ... || true`。
 - 并发 Web E2E 场景可通过 `WEB_E2E_NEXT_DIST_DIR` 隔离 Next.js `distDir`，避免 `.next/dev/lock` 冲突（默认常规开发无需设置）。
-- `infra/config/strict_ci_contract.json` 现在是标准镜像真相源；`scripts/strict_ci_entry.sh` / `scripts/ci/run_in_standard_env.sh` 只接受 digest-pinned 标准镜像，拉取失败会直接终止，不再静默回退到旧本地镜像。
+- `infra/config/strict_ci_contract.json` 现在是标准镜像真相源；`bin/strict-ci` / `scripts/ci/run_in_standard_env.sh` 只接受 digest-pinned 标准镜像，拉取失败会直接终止，不再静默回退到旧本地镜像。
 - 关键 correctness gates（`preflight-heavy`、`db-migration-smoke`、`dependency-vuln-scan`、`web-e2e-perceived`、后端/前端 lint hosted/fallback）已经跟 `python-tests` / `api-real-smoke` / `web-e2e` 一样迁入标准镜像执行，因此宿主 Docker 可用性现在是 CI 等价本地验收的前提。
 - self-hosted runner 基线合同已独立成 `infra/config/self_hosted_runner_baseline.json`；主 `ci.yml` 不再预热/拉起 runner，runner 健康检查改由 `runner-health.yml` 负责。
 - DevContainer 现在固定挂载到 `/workspace`，并通过 `post-create.sh` 校验 `uv` / `node` / cache 路径是否与 strict contract 一致。
@@ -165,9 +170,9 @@ for migration in $(ls infra/migrations/*.sql | sort); do
 done
 sqlite3 "$SQLITE_PATH" < infra/sql/sqlite_state_init.sql
 
-./scripts/dev_api.sh
-./scripts/dev_worker.sh
-./scripts/dev_mcp.sh
+./bin/dev-api
+./bin/dev-worker
+./bin/dev-mcp
 
 curl -sS http://127.0.0.1:9000/healthz
 curl -sS -X POST http://127.0.0.1:9000/api/v1/ingest/poll -H 'Content-Type: application/json' -d '{"max_new_videos": 20}'
@@ -176,8 +181,8 @@ curl -sS -X POST http://127.0.0.1:9000/api/v1/ingest/poll -H 'Content-Type: appl
 ## 一键路径（推荐）
 
 ```bash
-./scripts/bootstrap_full_stack.sh
-./scripts/full_stack.sh up
+./bin/bootstrap-full-stack
+./bin/full-stack up
 ./scripts/ci/smoke_full_stack.sh
 ```
 
@@ -189,8 +194,8 @@ curl -sS -X POST http://127.0.0.1:9000/api/v1/ingest/poll -H 'Content-Type: appl
 - `miniflux-nextflux.compose.yml` 的 Miniflux 端口与 `DB/User/DB_NAME` 已收口为固定默认（`8080` / `miniflux` / `miniflux`）。
 - 本地路由真相源是 `API_PORT/WEB_PORT`；`VD_API_BASE_URL` 与 `NEXT_PUBLIC_API_BASE_URL` 属于派生目标地址。
 - `full_stack.sh up` 会按 `API health -> Web -> Worker` 顺序启动；Worker 启动前会先做 Temporal preflight（`TEMPORAL_TARGET_HOST`，默认 `localhost:7233`），不通时直接 fail-fast。
-- `scripts/dev_mcp.sh` 为交互式 stdio 入口，不作为 `full_stack.sh` 的后台守护进程管理；需要 MCP 本地调试时单独开一个终端运行。
-- `scripts/dev_api.sh` 在检测到 `uv` 时会调用 `uv run python -m uvicorn ...`，避免某些 self-hosted/隔离环境缺少 `uvicorn` console entry 时启动失败。
+- `bin/dev-mcp` 为交互式 stdio 入口，不作为 `full_stack.sh` 的后台守护进程管理；需要 MCP 本地调试时单独开一个终端运行。
+- `bin/dev-api` 在检测到 `uv` 时会调用 `uv run python -m uvicorn ...`，避免某些 self-hosted/隔离环境缺少 `uvicorn` console entry 时启动失败。
 - `smoke_full_stack.sh` 会执行本地联调烟测并覆盖 reader 栈检查；core/reader 任一异常都会直接 fail-fast，不再保留 offline fallback 降级路径。
 - `smoke_full_stack.sh` 不是 `api-real-smoke` 替代；后端真实 Postgres integration smoke 必须单独执行 `scripts/ci/api_real_smoke_local.sh`。
 - `scripts/ci/api_real_smoke_local.sh` 现在会先做本机 IPv4 loopback 预检；若命中 `failure_kind=host_loopback_ipv4_exhausted`（常见于当前机器本地 127.0.0.1 临时端口池被大量 MCP/Codex 连接占满），脚本会直接 fail-fast，而不是继续启动 API/worker/Temporal 后才深处报错。
@@ -208,7 +213,7 @@ curl -sS -X POST http://127.0.0.1:9000/api/v1/ingest/poll -H 'Content-Type: appl
 标准严格验收（唯一权威入口）：
 
 ```bash
-./scripts/strict_ci_entry.sh --mode pre-push --strict-full-run 1 --ci-dedupe 0
+./bin/strict-ci --mode pre-push --strict-full-run 1 --ci-dedupe 0
 ```
 
 门禁口径补充：总覆盖率硬门禁 `>=95%`，Web `lines/functions/branches` 必须同时满足 `global >=95%` 且 `core >=95%`；`strict-full-run=1` 还会强制执行 mutation `score>=0.64 / effective_ratio>=0.27 / no_tests_ratio<=0.72`，并禁止 `ci-dedupe` 与 `skip-mutation`。本地 smoke 与 strict 验收统一采用 fail-fast，不再保留 offline fallback。
@@ -223,7 +228,7 @@ curl -sS -X POST http://127.0.0.1:9000/api/v1/ingest/poll -H 'Content-Type: appl
 可选阅读栈（Miniflux + Nextflux）：
 
 ```bash
-./scripts/bootstrap_full_stack.sh --with-reader-stack 1 --reader-env-file env/profiles/reader.env
+./bin/bootstrap-full-stack --with-reader-stack 1 --reader-env-file env/profiles/reader.env
 ```
 
 ## 下一步看哪里

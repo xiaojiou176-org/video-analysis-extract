@@ -10,8 +10,19 @@
     "event",
     "severity",
     "source_kind",
-    "ts"
+    "ts",
+    "repo_commit",
+    "entrypoint",
+    "env_profile"
   ],
+  "channel_required_fields": {
+    "tests": [
+      "test_run_id"
+    ],
+    "governance": [
+      "gate_run_id"
+    ]
+  },
   "channels": {
     "app": ".runtime-cache/logs/app",
     "components": ".runtime-cache/logs/components",

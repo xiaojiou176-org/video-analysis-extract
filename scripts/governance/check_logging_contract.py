@@ -71,6 +71,11 @@ def main() -> int:
     if set(sample_targets) != required_channels:
         errors.append("logging contract sample_targets must exactly match all required channels")
 
+    channel_required_fields = {
+        str(channel): [str(field) for field in fields]
+        for channel, fields in config.get("channel_required_fields", {}).items()
+    }
+
     for channel, path in sample_targets.items():
         if not path.is_file():
             errors.append(f"logging sample for channel `{channel}` missing: {path.relative_to(root).as_posix()}")
@@ -106,6 +111,11 @@ def main() -> int:
             errors.append(
                 f"logging sample for channel `{channel}` must include non-empty `service` or `component`"
             )
+        for field in channel_required_fields.get(channel, []):
+            if payload.get(field) in (None, ""):
+                errors.append(
+                    f"logging sample for channel `{channel}` missing channel-required field `{field}`"
+                )
         if channel == "app" and payload.get("trace_id") in (None, "", "missing_trace"):
             errors.append("logging sample for channel `app` must include a real trace_id")
 

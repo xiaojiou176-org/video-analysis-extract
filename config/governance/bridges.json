@@ -1,0 +1,65 @@
+{
+  "version": 1,
+  "bridges": [
+    {
+      "name": "public-shell-entrypoints-bin-cutover",
+      "status": "active-bridge",
+      "owner": "platform",
+      "introduced_at": "2026-03-15T06:07:57-07:00",
+      "write_forbidden_after": "2026-03-22T00:00:00-07:00",
+      "remove_after": "2026-03-29T00:00:00-07:00",
+      "source_paths": [
+        "./scripts/bootstrap_full_stack.sh",
+        "./scripts/dev_api.sh",
+        "./scripts/dev_worker.sh",
+        "./scripts/dev_mcp.sh",
+        "./scripts/full_stack.sh",
+        "./scripts/quality_gate.sh",
+        "./scripts/strict_ci_entry.sh",
+        "bash scripts/governance_gate.sh"
+      ],
+      "target_paths": [
+        "./bin/bootstrap-full-stack",
+        "./bin/dev-api",
+        "./bin/dev-worker",
+        "./bin/dev-mcp",
+        "./bin/full-stack",
+        "./bin/quality-gate",
+        "./bin/strict-ci",
+        "./bin/governance-audit"
+      ],
+      "notes": "Public docs, hooks, and workflows must migrate to bin wrappers. Internal script implementation remains valid during the bridge window."
+    },
+    {
+      "name": "runtime-cache-temp-to-tmp-cutover",
+      "status": "planned",
+      "owner": "platform",
+      "introduced_at": "2026-03-15T06:07:57-07:00",
+      "write_forbidden_after": "2026-03-24T00:00:00-07:00",
+      "remove_after": "2026-03-31T00:00:00-07:00",
+      "source_paths": [
+        ".runtime-cache/temp"
+      ],
+      "target_paths": [
+        ".runtime-cache/tmp"
+      ],
+      "notes": "The runtime output tree will hard-cut from temp to tmp after public entrypoint migration stabilizes."
+    },
+    {
+      "name": "shared-contracts-to-contracts-root-cutover",
+      "status": "planned",
+      "owner": "platform",
+      "introduced_at": "2026-03-15T06:07:57-07:00",
+      "write_forbidden_after": "2026-03-29T00:00:00-07:00",
+      "remove_after": "2026-04-12T00:00:00-07:00",
+      "source_paths": [
+        "packages/shared-contracts"
+      ],
+      "target_paths": [
+        "contracts/source",
+        "contracts/generated"
+      ],
+      "notes": "Contract source and generated surfaces will split out of packages into a dedicated contracts root."
+    }
+  ]
+}

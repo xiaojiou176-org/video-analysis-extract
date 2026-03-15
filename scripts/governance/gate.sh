@@ -12,7 +12,7 @@ vd_log_init "governance" "$SCRIPT_NAME" "$ROOT_DIR/.runtime-cache/logs/governanc
 
 usage() {
   cat <<'EOF'
-Usage: ./scripts/governance_gate.sh --mode pre-commit|pre-push|ci|audit
+Usage: ./bin/governance-audit --mode pre-commit|pre-push|ci|audit
 
 Runs repository governance control-plane checks:
   - root allowlist
@@ -49,14 +49,33 @@ fi
 cd "$ROOT_DIR"
 
 vd_log info start "mode=$MODE"
-python3 scripts/governance/check_root_allowlist.py
+python3 scripts/governance/check_root_allowlist.py --strict-local-private
 python3 scripts/governance/check_root_semantic_cleanliness.py
+python3 scripts/governance/check_root_layout_budget.py
+python3 scripts/governance/check_root_zero_unknowns.py
+python3 scripts/governance/check_bridge_expiry.py
+python3 scripts/governance/check_public_entrypoint_manifests.py
 python3 scripts/governance/check_runtime_outputs.py
+python3 scripts/governance/check_runtime_artifact_writer_coverage.py
+python3 scripts/governance/check_runtime_cache_retention.py
+bash scripts/runtime/run_runtime_cache_maintenance.sh --normalize-only --subdir run --subdir logs --subdir reports --subdir evidence
+python3 scripts/governance/check_runtime_cache_freshness.py
 python3 scripts/governance/check_governance_language.py
 python3 scripts/governance/check_dependency_boundaries.py
+python3 scripts/governance/check_module_ownership.py
+python3 scripts/governance/check_contract_locality.py
+python3 scripts/governance/check_no_cross_app_implementation_imports.py
 python3 scripts/governance/check_logging_contract.py
+python3 scripts/governance/check_log_correlation_completeness.py
+python3 scripts/governance/check_log_retention.py
+python3 scripts/governance/check_no_unindexed_evidence.py
 python3 scripts/governance/check_contract_surfaces.py
+python3 scripts/governance/check_generated_vs_handwritten_contract_surfaces.py
 python3 scripts/governance/check_upstream_governance.py
 python3 scripts/governance/check_unregistered_upstream_usage.py
+python3 scripts/governance/check_upstream_compat_freshness.py
+python3 scripts/governance/check_active_upstream_evidence_fresh.py
+python3 scripts/governance/check_upstream_failure_classification.py
+python3 scripts/governance/check_vendor_registry_integrity.py
 
 vd_log info complete "PASS"

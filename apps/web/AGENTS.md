@@ -57,5 +57,5 @@ uv run --with pytest --with playwright pytest apps/web/tests/e2e -q
 
 ## 6. Hooks 对齐
 
-- pre-commit：`./scripts/quality_gate.sh --mode pre-commit`（含 `scripts/governance/ci_or_local_gate_doc_drift.sh --scope staged`）。
-- pre-push：`./scripts/quality_gate.sh --mode pre-push --heartbeat-seconds 20`（含 `scripts/governance/ci_or_local_gate_doc_drift.sh --scope push`）。
+- pre-commit：`./bin/quality-gate --mode pre-commit`（含 `scripts/governance/ci_or_local_gate_doc_drift.sh --scope staged`）。
+- pre-push：`./bin/quality-gate --mode pre-push --heartbeat-seconds 20`（含 `scripts/governance/ci_or_local_gate_doc_drift.sh --scope push`）。

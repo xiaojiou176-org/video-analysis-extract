@@ -5,9 +5,11 @@ on:
     paths:
       - "scripts/vendor/**"
       - "config/governance/active-upstreams.json"
+      - "config/governance/upstream-registry.json"
       - "config/governance/upstream-templates.json"
       - "config/governance/upstream-compat-matrix.json"
       - "docs/reference/dependency-governance.md"
+      - "docs/reference/upstream-governance.md"
       - ".github/workflows/vendor-governance.yml"
       - ".github/actions/**"
   push:
@@ -17,9 +19,11 @@ on:
     paths:
       - "scripts/vendor/**"
       - "config/governance/active-upstreams.json"
+      - "config/governance/upstream-registry.json"
       - "config/governance/upstream-templates.json"
       - "config/governance/upstream-compat-matrix.json"
       - "docs/reference/dependency-governance.md"
+      - "docs/reference/upstream-governance.md"
       - ".github/workflows/vendor-governance.yml"
       - ".github/actions/**"
 
@@ -59,4 +63,6 @@ jobs:
           fi
 
       - name: Validate upstream governance inventory
-        run: bash scripts/governance_gate.sh --mode ci
+        run: |
+          ./bin/governance-audit --mode ci
+          python3 scripts/governance/check_vendor_registry_integrity.py

@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=./scripts/runtime/entrypoint.sh
+source "$ROOT_DIR/scripts/runtime/entrypoint.sh"
+vd_entrypoint_bootstrap governance upstream-verify "$@"
+cd "$ROOT_DIR"
+
+python3 scripts/governance/check_upstream_governance.py
+python3 scripts/governance/check_unregistered_upstream_usage.py
+python3 scripts/governance/check_upstream_compat_freshness.py
+python3 scripts/governance/check_active_upstream_evidence_fresh.py
+python3 scripts/governance/check_upstream_failure_classification.py
+python3 scripts/governance/check_vendor_registry_integrity.py

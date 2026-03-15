@@ -104,7 +104,7 @@ def _render_ci_topology(manifest: dict, boundary: dict) -> str:
         f"- runtime root: `{runtime_outputs.get('runtime_root', '.runtime-cache')}`",
         f"- active upstream inventory entries: `{len(upstreams.get('entries', []))}`",
         f"- upstream templates: `{len(templates.get('entries', []))}`",
-        "- governance gate entrypoint: `./scripts/governance_gate.sh --mode pre-commit|pre-push|ci|audit`",
+        "- governance gate entrypoint: `./bin/governance-audit --mode pre-commit|pre-push|ci|audit`",
         "",
         "## Aggregate Gate Inventory",
         "",
@@ -339,7 +339,7 @@ def _fragment_lines(boundary: dict) -> dict[str, str]:
                 "",
                 "- 文档高漂移事实已开始收口到 `docs/generated/*.md`；入口文档只保留 onboarding 必需信息。",
                 f"- self-hosted CI 只接受 **trusted internal PR**；若 PR 来自 fork，GitHub Actions 会在边界门禁直接阻断。",
-                "- 严格验收仍以 `./scripts/strict_ci_entry.sh --mode pre-push --strict-full-run 1 --ci-dedupe 0` 为唯一权威入口。",
+                "- 严格验收仍以 `./bin/strict-ci --mode pre-push --strict-full-run 1 --ci-dedupe 0` 为唯一权威入口。",
             ]
         )
         + "\n",

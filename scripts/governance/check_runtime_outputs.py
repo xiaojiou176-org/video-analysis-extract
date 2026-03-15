@@ -43,6 +43,29 @@ def main() -> int:
             errors.append(f"forbidden root runtime output present: {path.name}")
 
     allowed_subdirs = set(payload.get("subdirectories", {}).keys())
+    required_subdir_fields = {
+        "owner",
+        "classification",
+        "ttl_days",
+        "max_total_size_mb",
+        "max_file_count",
+        "rebuild_entrypoint",
+        "freshness_required",
+        "description",
+    }
+    for name, config in payload.get("subdirectories", {}).items():
+        missing = sorted(required_subdir_fields - set(config))
+        if missing:
+            errors.append(
+                f"runtime subdirectory `{name}` missing required fields: {', '.join(missing)}"
+            )
+            continue
+        if int(config["ttl_days"]) < 0:
+            errors.append(f"runtime subdirectory `{name}` must declare non-negative ttl_days")
+        if int(config["max_total_size_mb"]) <= 0:
+            errors.append(f"runtime subdirectory `{name}` must declare positive max_total_size_mb")
+        if int(config["max_file_count"]) <= 0:
+            errors.append(f"runtime subdirectory `{name}` must declare positive max_file_count")
     if runtime_root.exists():
         for child in runtime_root.iterdir():
             if child.is_dir() and child.name in allowed_subdirs:

@@ -239,9 +239,9 @@ jobs:
       - name: Profile governance gate (${{ matrix.gate_profile }})
         run: |
           if [[ "${{ matrix.gate_profile }}" == "local" ]]; then
-            ./scripts/quality_gate.sh --mode pre-commit --profile local --profile-only
+            ./bin/quality-gate --mode pre-commit --profile local --profile-only
           else
-            ./scripts/quality_gate.sh \
+            ./bin/quality-gate \
               --mode pre-push \
               --profile ci \
               --profile live-smoke \
@@ -394,7 +394,7 @@ jobs:
 
       - name: Full quality gate (pre-push, mutation handled by dedicated job)
         run: |
-          ./scripts/strict_ci_entry.sh \
+          ./bin/strict-ci \
             --mode pre-push \
             --ci-dedupe 1 \
             --skip-mutation 1 \
@@ -599,7 +599,7 @@ jobs:
           SQLITE_PATH: /tmp/video-digestor-worker-tests.db
           PIPELINE_WORKSPACE_DIR: /tmp/video-digestor-workspace-tests
           PIPELINE_ARTIFACT_ROOT: /tmp/video-digestor-artifacts-tests
-        run: ./scripts/strict_ci_entry.sh --mode python-tests
+        run: ./bin/strict-ci --mode python-tests
 
       - name: Upload CI failure diagnostics (python)
         if: always()
@@ -664,7 +664,7 @@ jobs:
           NOTIFICATION_ENABLED: "0"
           VD_API_KEY: "ci-smoke-write-token"
           WEB_ACTION_SESSION_TOKEN: "ci-smoke-write-token"
-        run: ./scripts/strict_ci_entry.sh --mode api-real-smoke
+        run: ./bin/strict-ci --mode api-real-smoke
 
       - name: Upload CI failure diagnostics (api-real-smoke)
         if: always()
@@ -715,7 +715,7 @@ jobs:
           VD_API_KEY: "ci-pr-llm-write-token"
           COMPUTER_USE_MODEL_TIMEOUT_SECONDS: "30"
           COMPUTER_USE_MODEL_MAX_RETRIES: "2"
-        run: ./scripts/strict_ci_entry.sh --mode pr-llm-real-smoke
+        run: ./bin/strict-ci --mode pr-llm-real-smoke
 
       - name: Upload CI failure diagnostics (pr-llm-real-smoke)
         if: always()
@@ -764,7 +764,7 @@ jobs:
           echo "CI_BASE_REF=${before}" >> "$GITHUB_ENV"
 
       - name: Web test/build strict entry
-        run: ./scripts/strict_ci_entry.sh --mode web-test-build
+        run: ./bin/strict-ci --mode web-test-build
 
   web-e2e:
     runs-on: [self-hosted, video-analysis-extract, core02]
@@ -825,7 +825,7 @@ jobs:
           HOME: /root
           DATABASE_URL: postgresql+psycopg://postgres:postgres@postgres:5432/video_analysis_web_e2e
           WEB_E2E_DB_PORT: "5432"
-        run: ./scripts/strict_ci_entry.sh --mode web-e2e ${{ matrix.browser }}
+        run: ./bin/strict-ci --mode web-e2e ${{ matrix.browser }}
 
       - name: Upload web e2e artifacts
         if: failure()
@@ -1701,7 +1701,7 @@ jobs:
           SQLITE_PATH: /tmp/video-digestor-live-smoke-${{ github.run_id }}-${{ github.run_attempt }}.db
           PIPELINE_WORKSPACE_DIR: /tmp/video-digestor-live-smoke-workspace-${{ github.run_id }}-${{ github.run_attempt }}
           PIPELINE_ARTIFACT_ROOT: /tmp/video-digestor-live-smoke-artifacts-${{ github.run_id }}-${{ github.run_attempt }}
-        run: ./scripts/strict_ci_entry.sh --mode live-smoke
+        run: ./bin/strict-ci --mode live-smoke
 
       - name: Upload live smoke diagnostics
         if: always()

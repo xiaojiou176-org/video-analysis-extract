@@ -33,13 +33,14 @@
 - **CI 信任边界**：`trusted_internal_pr_only`。fork / untrusted PR 不进入 privileged self-hosted 主链。
 - **Strict CI 真相源**：`infra/config/strict_ci_contract.json`。
 - **Generated references**：`docs/generated/ci-topology.md`、`docs/generated/runner-baseline.md`、`docs/generated/release-evidence.md`。
+- **Final-form governance references**：`docs/reference/root-governance.md`、`docs/reference/architecture-governance.md`、`docs/reference/runtime-cache-retention.md`、`docs/reference/evidence-model.md`、`docs/reference/upstream-governance.md`。
 <!-- docs:generated governance-snapshot end -->
 
 ## Clone 后快速跑通（推荐）
 
 ```bash
-./scripts/bootstrap_full_stack.sh
-./scripts/full_stack.sh up
+./bin/bootstrap-full-stack
+./bin/full-stack up
 ./scripts/ci/smoke_full_stack.sh
 ```
 
@@ -49,7 +50,7 @@
 
 - `bootstrap_full_stack.sh` 默认会拉起 core services（Postgres/Redis/Temporal）和 reader stack（Miniflux/Nextflux）。
 - `bootstrap_full_stack.sh` 除首次 `.env` 不存在时复制模板外，不再持久化改写 `.env`；端口冲突和运行时路由决策会写入 `.runtime-cache/run/full-stack/resolved.env`，仅对当前运行生效。
-- `full_stack.sh` 默认只管理 API/Worker/Web；`scripts/dev_mcp.sh` 是交互式 stdio 入口，需要时单独开终端启动。
+- `full_stack.sh` 默认只管理 API/Worker/Web；`bin/dev-mcp` 是交互式 stdio 入口，需要时单独开终端启动。
 - `full_stack.sh` 起 Web 时会自动把当前 API 端口注入为 `NEXT_PUBLIC_API_BASE_URL`，避免开发页在 18000/18001 口径下仍回落到 `127.0.0.1:9000`。
 - 本地路由真相源是 `API_PORT/WEB_PORT`；`VD_API_BASE_URL` 与 `NEXT_PUBLIC_API_BASE_URL` 是派生目标地址。
 - `full_stack.sh` 会按 `API health -> Web -> Worker` 顺序启动；Worker 启动前会先做 Temporal preflight（`TEMPORAL_TARGET_HOST`，默认 `localhost:7233`），不可达时直接 fail-fast。
@@ -73,24 +74,24 @@
 标准严格验收（推荐按顺序执行）：
 
 ```bash
-./scripts/full_stack.sh up
+./bin/full-stack up
 ./scripts/ci/api_real_smoke_local.sh
 ./scripts/ci/smoke_full_stack.sh
-./scripts/quality_gate.sh --mode pre-push --strict-full-run 1 --profile ci --profile live-smoke --ci-dedupe 0
+./bin/quality-gate --mode pre-push --strict-full-run 1 --profile ci --profile live-smoke --ci-dedupe 0
 ```
 
 治理控制面入口：
 
 ```bash
-./scripts/governance_gate.sh --mode pre-commit
-./scripts/governance_gate.sh --mode pre-push
-./scripts/governance_gate.sh --mode audit
+./bin/governance-audit --mode pre-commit
+./bin/governance-audit --mode pre-push
+./bin/governance-audit --mode audit
 ```
 
 日常本地快速回归（速度优先）：
 
 ```bash
-./scripts/quality_gate.sh --mode pre-push --profile ci --profile live-smoke --ci-dedupe 0
+./bin/quality-gate --mode pre-push --profile ci --profile live-smoke --ci-dedupe 0
 ```
 
 ## IaC 与标准环境（AI 必须）
@@ -99,7 +100,7 @@
 
 - Docker Compose（基础设施真相源）：`infra/compose/core-services.compose.yml`（核心服务镜像已收口为 digest-pinned service images，可直接对齐 strict contract）、`infra/compose/miniflux-nextflux.compose.yml`
 - DevContainer（AI/自动化标准执行环境）：`.devcontainer/devcontainer.json`。当前已移除浮动 devcontainer feature 依赖，`post-create.sh` 会直接校验 strict contract 的 `uv/node/chromium` 是否可用，不再用 best-effort 浏览器安装掩盖漂移。
-- 严格 CI 标准镜像真相源：`infra/config/strict_ci_contract.json`。`scripts/strict_ci_entry.sh` / `scripts/ci/run_in_standard_env.sh` 现在只接受 digest-pinned 标准镜像，不再允许静默回退到旧的本地 tag 镜像。
+- 严格 CI 标准镜像真相源：`infra/config/strict_ci_contract.json`。`bin/strict-ci` / `scripts/ci/run_in_standard_env.sh` 现在只接受 digest-pinned 标准镜像，不再允许静默回退到旧的本地 tag 镜像。
 - 标准镜像供应链增强：`build-ci-standard-image.yml` 现在会产出镜像 SBOM artifact，并对镜像本体与 SBOM 做 GitHub attestation。
 - Release 证据 attestation：新增 `release-evidence-attest.yml`，会把 `reports/releases/<tag>/` 下的 manifest/checksums/rollback 证据打包并出 provenance attestation。
 - 生成式治理参考：
@@ -115,19 +116,19 @@
 devcontainer up --workspace-folder .
 
 # 2) 在容器内执行（开发/联调）
-./scripts/bootstrap_full_stack.sh
-./scripts/full_stack.sh up
+./bin/bootstrap-full-stack
+./bin/full-stack up
 ./scripts/ci/smoke_full_stack.sh
 
 # 3) 在容器镜像内执行（CI 等价严格验收）
-./scripts/strict_ci_entry.sh --mode pre-push --strict-full-run 1 --ci-dedupe 0
+./bin/strict-ci --mode pre-push --strict-full-run 1 --ci-dedupe 0
 ```
 
 运行风险说明：
 
 - 现有 `scripts/deploy/core_services.sh` 与 `scripts/deploy/reader_stack.sh` 已直接绑定上述 compose 文件，不需要改脚本。
 - 风险 1：DevContainer 依赖宿主 Docker（通过 `/var/run/docker.sock`），若宿主未启动 Docker，容器内 compose 无法拉起。
-- 风险 1.1：严格验收入口 `scripts/strict_ci_entry.sh` 同样依赖宿主 Docker 与可拉取的标准镜像；若 Docker daemon 未启动，或当前环境无法获取 contract 中声明的 digest 镜像，脚本会直接 fail-fast，不再回退到旧本地镜像。
+- 风险 1.1：严格验收入口 `bin/strict-ci` 同样依赖宿主 Docker 与可拉取的标准镜像；若 Docker daemon 未启动，或当前环境无法获取 contract 中声明的 digest 镜像，脚本会直接 fail-fast，不再回退到旧本地镜像。
 - 风险 1.2：本地执行正式 pinned-image strict 链时，必须具备 GHCR 拉取身份；仓库脚本会优先读取 `GHCR_USERNAME/GHCR_TOKEN`，否则复用 `gh auth` 当前登录态。两者都不存在时会直接 fail-fast。
 - 风险 1.3：DevContainer 现在固定把 workspace 挂到 `/workspace` 并复用 strict contract 的缓存路径；若仍依赖旧 `/workspaces/...` 路径的本地脚本，需要同步修正。
 - `--debug-build` 仅用于本地诊断标准环境问题，不属于 release/pre-push completion evidence。
@@ -254,16 +255,16 @@ sqlite3 "$SQLITE_PATH" < infra/sql/sqlite_state_init.sql
 分别在 3 个终端启动：
 
 ```bash
-./scripts/dev_api.sh
-./scripts/dev_worker.sh
-./scripts/dev_mcp.sh
+./bin/dev-api
+./bin/dev-worker
+./bin/dev-mcp
 ```
 
 脚本入口参数（Batch C）：
 
-- `./scripts/dev_api.sh --app apps.api.app.main:app --no-reload`
-- `./scripts/dev_worker.sh --worker-dir "$PWD/apps/worker" --entry worker.main --command run-worker --no-show-hints`
-- `./scripts/dev_mcp.sh --entry apps.mcp.server --mcp-dir "$PWD/apps/mcp"`
+- `./bin/dev-api --app apps.api.app.main:app --no-reload`
+- `./bin/dev-worker --worker-dir "$PWD/apps/worker" --entry worker.main --command run-worker --no-show-hints`
+- `./bin/dev-mcp --entry apps.mcp.server --mcp-dir "$PWD/apps/mcp"`
 - 可选辅助模板命令：`./scripts/env/init_example.sh --output "$PWD/.env.generated.example" --force`
 
 补充说明：
@@ -291,7 +292,7 @@ curl -sS -X POST http://127.0.0.1:9000/api/v1/ingest/poll -H 'Content-Type: appl
 ```bash
 python3 scripts/governance/check_test_assertions.py
 
-./scripts/quality_gate.sh
+./bin/quality-gate
 
 ./scripts/governance/install_git_hooks.sh
 
@@ -314,8 +315,8 @@ uv run --with pytest --with playwright pytest \
 
 测试与门禁口径更新（2026-02）：
 
-- 远程 CI 成本治理：触发或重跑 GitHub Actions 前，必须先本地跑通 `./scripts/strict_ci_entry.sh --mode pre-push --strict-full-run 1 --ci-dedupe 0`。
-- 如需本地拿到与 CI 同语义的最终验收，使用 `./scripts/strict_ci_entry.sh --mode pre-push --strict-full-run 1 --ci-dedupe 0`；Host Fallback 与 sqlite 快速回归都不能作为 CI 等价证据。
+- 远程 CI 成本治理：触发或重跑 GitHub Actions 前，必须先本地跑通 `./bin/strict-ci --mode pre-push --strict-full-run 1 --ci-dedupe 0`。
+- 如需本地拿到与 CI 同语义的最终验收，使用 `./bin/strict-ci --mode pre-push --strict-full-run 1 --ci-dedupe 0`；Host Fallback 与 sqlite 快速回归都不能作为 CI 等价证据。
 - `strict-full-run=1` 会强制关闭 `ci-dedupe` 且禁止 `skip-mutation`，确保本地跑的是完整门禁而非裁剪版。
 - 远程失败后必须先本地复现与修复，再触发下一次远程运行；禁止连续重跑碰运气。
 - CI 预检拆分为 `preflight-fast` + `preflight-heavy`，多数 job 先依赖 fast 以减少起跑阻塞，最终由 aggregate gate 同时约束两者成功。

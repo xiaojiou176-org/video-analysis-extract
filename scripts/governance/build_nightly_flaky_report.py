@@ -6,6 +6,13 @@ import json
 import os
 import urllib.request
 from pathlib import Path
+import sys
+
+ROOT = Path(__file__).resolve().parents[2]
+if str(ROOT / "scripts" / "governance") not in sys.path:
+    sys.path.insert(0, str(ROOT / "scripts" / "governance"))
+
+from common import write_json_artifact, write_text_artifact
 
 
 def github_get(url: str, token: str) -> dict:
@@ -51,7 +58,15 @@ def collect_recent_schedule_runs(repo: str, token: str, workflow_file: str, limi
 
 
 def write_report(results: list[dict], json_path: Path, md_path: Path) -> None:
-    json_path.write_text(json.dumps({"runs": results}, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    write_json_artifact(
+        json_path,
+        {"runs": results},
+        source_entrypoint="scripts/governance/build_nightly_flaky_report.py",
+        verification_scope="nightly-flaky-report",
+        source_run_id="governance-nightly-flaky-report",
+        freshness_window_hours=24,
+        extra={"report_kind": "nightly-flaky-report"},
+    )
     lines = [
         "# Nightly Flaky Trend",
         "",
@@ -68,7 +83,15 @@ def write_report(results: list[dict], json_path: Path, md_path: Path) -> None:
             f"| `{row['run_id']}` | `{row['created_at']}` | `{row['conclusion']}` | "
             f"`{row['nightly-flaky-python']}` | `{web_value}` |"
         )
-    md_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    write_text_artifact(
+        md_path,
+        "\n".join(lines) + "\n",
+        source_entrypoint="scripts/governance/build_nightly_flaky_report.py",
+        verification_scope="nightly-flaky-report",
+        source_run_id="governance-nightly-flaky-report",
+        freshness_window_hours=24,
+        extra={"report_kind": "nightly-flaky-report-markdown"},
+    )
 
 
 def main() -> int:

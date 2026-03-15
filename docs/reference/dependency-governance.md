@@ -31,15 +31,29 @@
   - web a11y smoke（`npm --prefix apps/web run test:a11y`）
   - runner 策略：所有 CI Job 必须运行在当前仓库专用 self-hosted runner 池（`[self-hosted, video-analysis-extract]`），避免被组织内其他仓库挤占
 - `governance_gate.sh`：
-  - `python3 scripts/governance/check_root_allowlist.py`
+  - `python3 scripts/governance/check_root_allowlist.py --strict-local-private`
   - `python3 scripts/governance/check_root_semantic_cleanliness.py`
+  - `python3 scripts/governance/check_root_layout_budget.py`
+  - `python3 scripts/governance/check_root_zero_unknowns.py`
   - `python3 scripts/governance/check_runtime_outputs.py`
+  - `python3 scripts/governance/check_runtime_cache_retention.py`
+  - `python3 scripts/governance/check_runtime_cache_freshness.py`
   - `python3 scripts/governance/check_governance_language.py`
   - `python3 scripts/governance/check_dependency_boundaries.py`
+  - `python3 scripts/governance/check_module_ownership.py`
+  - `python3 scripts/governance/check_contract_locality.py`
+  - `python3 scripts/governance/check_no_cross_app_implementation_imports.py`
   - `python3 scripts/governance/check_logging_contract.py`
+  - `python3 scripts/governance/check_log_correlation_completeness.py`
+  - `python3 scripts/governance/check_log_retention.py`
+  - `python3 scripts/governance/check_no_unindexed_evidence.py`
   - `python3 scripts/governance/check_contract_surfaces.py`
+  - `python3 scripts/governance/check_generated_vs_handwritten_contract_surfaces.py`
   - `python3 scripts/governance/check_upstream_governance.py`
   - `python3 scripts/governance/check_unregistered_upstream_usage.py`
+  - `python3 scripts/governance/check_upstream_compat_freshness.py`
+  - `python3 scripts/governance/check_active_upstream_evidence_fresh.py`
+  - `python3 scripts/governance/check_upstream_failure_classification.py`
 - `env-governance.yml`：
   - `python scripts/governance/check_env_contract.py --strict`
   - `gitleaks detect --source . --verbose --redact`
@@ -79,7 +93,7 @@ npm --prefix "$WEB_RUNTIME_WEB_DIR" run build
 
 ```bash
 ./scripts/ci/api_real_smoke_local.sh
-./scripts/quality_gate.sh --mode pre-push --strict-full-run 1 --profile ci --profile live-smoke --ci-dedupe 0
+./bin/quality-gate --mode pre-push --strict-full-run 1 --profile ci --profile live-smoke --ci-dedupe 0
 ```
 
 ## Constraints
@@ -91,6 +105,8 @@ npm --prefix "$WEB_RUNTIME_WEB_DIR" run build
 - 使用 `allow_unauth_write` marker 的测试必须显式启用开关环境变量：`VD_ALLOW_UNAUTH_WRITE=true`，且仅允许在 `pytest` 上下文中生效；CI smoke/发布路径不得再依赖 `VD_CI_ALLOW_UNAUTH_WRITE` 旁路。
 - 依赖边界以 `config/governance/dependency-boundaries.json` 为真相源；共享 packages 不得反向依赖 `apps/*`。
 - 外部系统 inventory 与兼容矩阵以 `config/governance/active-upstreams.json`、`config/governance/upstream-templates.json`、`config/governance/upstream-compat-matrix.json` 为真相源。
+- 上游分层注册表以 `config/governance/upstream-registry.json` 为真相源；`template` 不计入现役成熟度。
+- future vendor/fork/patch 一旦现役，必须同步通过 `python3 scripts/governance/check_vendor_registry_integrity.py`。
 - 依赖升级若影响运行命令或环境变量，必须同步更新：
   - `README.md`
   - `docs/runbook-local.md`

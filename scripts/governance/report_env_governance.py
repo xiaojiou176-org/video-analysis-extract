@@ -9,6 +9,11 @@ import sys
 from pathlib import Path
 from typing import Any
 
+if str(Path(__file__).resolve().parents[2] / "scripts" / "governance") not in sys.path:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts" / "governance"))
+
+from common import write_json_artifact, write_text_artifact
+
 EXIT_OK = 0
 EXIT_FAIL_ON = 1
 EXIT_INPUT_ERROR = 2
@@ -486,15 +491,27 @@ def run(argv: list[str] | None = None) -> int:
 
         if args.json_out.strip():
             json_out_path = _resolve_path(root, args.json_out)
-            json_out_path.parent.mkdir(parents=True, exist_ok=True)
-            json_out_path.write_text(
-                json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+            write_json_artifact(
+                json_out_path,
+                report,
+                source_entrypoint="scripts/governance/report_env_governance.py",
+                verification_scope="env-governance-report",
+                source_run_id="governance-env-governance-report",
+                freshness_window_hours=24,
+                extra={"report_kind": "env-governance-json"},
             )
 
         if args.md_out.strip():
             md_out_path = _resolve_path(root, args.md_out)
-            md_out_path.parent.mkdir(parents=True, exist_ok=True)
-            md_out_path.write_text(markdown, encoding="utf-8")
+            write_text_artifact(
+                md_out_path,
+                markdown,
+                source_entrypoint="scripts/governance/report_env_governance.py",
+                verification_scope="env-governance-report",
+                source_run_id="governance-env-governance-report",
+                freshness_window_hours=24,
+                extra={"report_kind": "env-governance-markdown"},
+            )
 
         print(
             "[env-governance] "

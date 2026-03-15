@@ -123,6 +123,8 @@ if ! python3 -c 'import playwright' >/dev/null 2>&1; then
   fi
 fi
 export EXTERNAL_SMOKE_PYTHON_SOURCE="$python_source"
+export EXTERNAL_SMOKE_REPO_ROOT="$ROOT_DIR"
+export EXTERNAL_SMOKE_RUN_ID="${vd_log_run_id:-external-playwright-smoke}"
 
 log "Running external Playwright smoke: browser=$browser url=$url timeout_ms=$timeout_ms retries=$retries heartbeat_seconds=$heartbeat_seconds"
 log "Python runner source: $python_source"
@@ -146,6 +148,12 @@ import traceback
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
+root = Path(os.environ["EXTERNAL_SMOKE_REPO_ROOT"])
+if str(root / "scripts" / "governance") not in sys.path:
+    sys.path.insert(0, str(root / "scripts" / "governance"))
+
+from common import write_json_artifact
 
 from playwright.sync_api import Error as PlaywrightError
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
@@ -312,9 +320,14 @@ def main() -> int:
                     "html": attempt_result.get("html"),
                 },
             }
-            config.diagnostics_json.write_text(
-                json.dumps(summary, ensure_ascii=False, indent=2) + "\n",
-                encoding="utf-8",
+            write_json_artifact(
+                config.diagnostics_json,
+                summary,
+                source_entrypoint="scripts/ci/external_playwright_smoke.sh",
+                verification_scope="tests:external-playwright-smoke",
+                source_run_id=os.environ.get("EXTERNAL_SMOKE_RUN_ID", "external-playwright-smoke"),
+                freshness_window_hours=24,
+                extra={"report_kind": "external-playwright-smoke-result"},
             )
             print(json.dumps(summary, ensure_ascii=False, indent=2))
             return 0
@@ -332,9 +345,14 @@ def main() -> int:
         "retry_policy": {"max_attempts": 2, "configured_attempts": config.retries},
         "attempts": all_attempts,
     }
-    config.diagnostics_json.write_text(
-        json.dumps(summary, ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
+    write_json_artifact(
+        config.diagnostics_json,
+        summary,
+        source_entrypoint="scripts/ci/external_playwright_smoke.sh",
+        verification_scope="tests:external-playwright-smoke",
+        source_run_id=os.environ.get("EXTERNAL_SMOKE_RUN_ID", "external-playwright-smoke"),
+        freshness_window_hours=24,
+        extra={"report_kind": "external-playwright-smoke-result"},
     )
     print(json.dumps(summary, ensure_ascii=False, indent=2))
     return 1

@@ -23,7 +23,7 @@
 ### 3.1 模块命令
 
 ```bash
-./scripts/dev_worker.sh
+./bin/dev-worker
 
 PYTHONPATH="$PWD:$PWD/apps/worker" \
 DATABASE_URL='sqlite+pysqlite:///:memory:' \
@@ -56,5 +56,5 @@ uv run pytest apps/worker/tests -q
 
 ## 6. Hooks 对齐
 
-- pre-commit：`./scripts/quality_gate.sh --mode pre-commit`（含 `scripts/governance/ci_or_local_gate_doc_drift.sh --scope staged`）。
-- pre-push：`./scripts/quality_gate.sh --mode pre-push --heartbeat-seconds 20`（含 `scripts/governance/ci_or_local_gate_doc_drift.sh --scope push`）。
+- pre-commit：`./bin/quality-gate --mode pre-commit`（含 `scripts/governance/ci_or_local_gate_doc_drift.sh --scope staged`）。
+- pre-push：`./bin/quality-gate --mode pre-push --heartbeat-seconds 20`（含 `scripts/governance/ci_or_local_gate_doc_drift.sh --scope push`）。

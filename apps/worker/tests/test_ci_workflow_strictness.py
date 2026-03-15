@@ -585,7 +585,7 @@ def test_ci_specific_rules_accepts_stricter_quality_gate_mutation_thresholds() -
     timeout-minutes: 5
     steps:
       - run: |
-          ./scripts/strict_ci_entry.sh --mode pre-push \
+          ./bin/strict-ci --mode pre-push \
             --ci-dedupe 1 \
             --skip-mutation 1 \
             --mutation-min-score 0.70 \
@@ -619,7 +619,7 @@ def test_ci_specific_rules_accepts_stricter_quality_gate_mutation_thresholds() -
     services:
       postgres:
     steps:
-      - run: ./scripts/strict_ci_entry.sh --mode live-smoke
+      - run: ./bin/strict-ci --mode live-smoke
       - run: echo 'GEMINI_API_KEY'
       - run: echo 'RESEND_API_KEY'
       - run: echo 'YOUTUBE_API_KEY'
@@ -652,7 +652,7 @@ def test_ci_specific_rules_rejects_weaker_quality_gate_mutation_thresholds() -> 
     timeout-minutes: 5
     steps:
       - run: |
-          ./scripts/strict_ci_entry.sh --mode pre-push \
+          ./bin/strict-ci --mode pre-push \
             --ci-dedupe 1 \
             --skip-mutation 1 \
             --mutation-min-score 0.61 \
@@ -686,7 +686,7 @@ def test_ci_specific_rules_rejects_weaker_quality_gate_mutation_thresholds() -> 
     services:
       postgres:
     steps:
-      - run: ./scripts/strict_ci_entry.sh --mode live-smoke
+      - run: ./bin/strict-ci --mode live-smoke
       - run: echo 'GEMINI_API_KEY'
       - run: echo 'RESEND_API_KEY'
       - run: echo 'YOUTUBE_API_KEY'
@@ -710,7 +710,7 @@ def test_ci_specific_rules_rejects_weaker_quality_gate_mutation_thresholds() -> 
 def test_python_tests_job_calls_repo_script_inside_strict_ci_entry() -> None:
     workflow = (_repo_root() / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
 
-    assert "./scripts/strict_ci_entry.sh --mode python-tests" in workflow
+    assert "./bin/strict-ci --mode python-tests" in workflow
 
 
 def test_python_tests_pipeline_smoke_syncs_dependencies_before_pytest() -> None:
@@ -751,7 +751,7 @@ def test_bootstrap_strict_runtime_uses_run_scoped_hash_file() -> None:
 def test_api_real_smoke_job_calls_repo_script_inside_strict_ci_entry() -> None:
     workflow = (_repo_root() / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
 
-    assert "./scripts/strict_ci_entry.sh --mode api-real-smoke" in workflow
+    assert "./bin/strict-ci --mode api-real-smoke" in workflow
     assert 'VD_API_KEY: "ci-smoke-write-token"' in workflow
     assert 'WEB_ACTION_SESSION_TOKEN: "ci-smoke-write-token"' in workflow
 
@@ -763,7 +763,7 @@ def test_web_e2e_job_calls_repo_script_inside_strict_ci_entry() -> None:
     script = (_repo_root() / "scripts" / "ci" / "web_e2e.sh").read_text(encoding="utf-8")
     strict_entry = (_repo_root() / "scripts" / "ci" / "strict_entry.sh").read_text(encoding="utf-8")
 
-    assert "./scripts/strict_ci_entry.sh --mode web-e2e" in web_e2e_block
+    assert "./bin/strict-ci --mode web-e2e" in web_e2e_block
     assert "./scripts/ci/web_e2e.sh" in strict_entry
     assert 'DATABASE_URL="${DATABASE_URL:-}"' in script
     assert 'db_url="postgresql+psycopg://' not in script
@@ -787,7 +787,7 @@ def test_web_e2e_job_calls_repo_script_inside_strict_ci_entry() -> None:
 def test_quality_gate_and_live_smoke_jobs_use_strict_ci_entry_and_contract_container() -> None:
     workflow = (_repo_root() / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
 
-    assert "./scripts/strict_ci_entry.sh \\" in workflow
+    assert "./bin/strict-ci \\" in workflow
     assert "--mode pre-push" in workflow
     assert "--mode live-smoke" in workflow
     assert "image: ${{ needs.ci-contract.outputs.standard_image_ref }}" in workflow

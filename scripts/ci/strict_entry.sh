@@ -15,7 +15,7 @@ DEBUG_BUILD="0"
 
 usage() {
   cat <<'EOF'
-Usage: ./scripts/strict_ci_entry.sh --mode <pre-push|python-tests|api-real-smoke|pr-llm-real-smoke|web-test-build|web-e2e|live-smoke> [args...]
+Usage: ./bin/strict-ci --mode <pre-push|python-tests|api-real-smoke|pr-llm-real-smoke|web-test-build|web-e2e|live-smoke> [args...]
 
 Options:
   --mode <name>     Strict entry mode.

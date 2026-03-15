@@ -8,7 +8,7 @@ from pathlib import Path
 
 sys.dont_write_bytecode = True
 
-from common import repo_root
+from common import repo_root, write_runtime_metadata
 
 OPENAPI_PATH_RE = re.compile(r"^  (/[^:]+):\s*$", re.MULTILINE)
 OPENAPI_METHOD_RE = re.compile(r"^    (get|post|put|delete|patch):\s*$", re.MULTILINE)
@@ -129,6 +129,14 @@ def main() -> int:
         "status": "fail" if errors else "pass",
     }
     report_path.write_text(json.dumps(report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    write_runtime_metadata(
+        report_path,
+        source_entrypoint="scripts/governance/check_contract_surfaces.py",
+        verification_scope="contract-surfaces",
+        source_run_id="governance-contract-surface-report",
+        freshness_window_hours=24,
+        extra={"report_kind": "contract-surface-report"},
+    )
 
     if errors:
         print("[contract-surfaces] FAIL")

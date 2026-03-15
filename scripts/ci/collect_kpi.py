@@ -7,11 +7,18 @@ import io
 import json
 import os
 import re
+import sys
 import urllib.request
 import xml.etree.ElementTree as ET
 import zipfile
 from pathlib import Path
 from typing import Any
+
+ROOT = Path(__file__).resolve().parents[2]
+if str(ROOT / "scripts" / "governance") not in sys.path:
+    sys.path.insert(0, str(ROOT / "scripts" / "governance"))
+
+from common import write_json_artifact, write_text_artifact
 
 
 def _expand_globs(patterns: list[str]) -> list[Path]:
@@ -514,10 +521,24 @@ def main() -> int:
 
     json_out = Path(args.json_out)
     md_out = Path(args.md_out)
-    json_out.parent.mkdir(parents=True, exist_ok=True)
-    md_out.parent.mkdir(parents=True, exist_ok=True)
-    json_out.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    md_out.write_text(_render_markdown(payload), encoding="utf-8")
+    write_json_artifact(
+        json_out,
+        payload,
+        source_entrypoint="scripts/ci/collect_kpi.py",
+        verification_scope="ci-kpi-report",
+        source_run_id="ci-collect-kpi",
+        freshness_window_hours=24,
+        extra={"report_kind": "ci-kpi-json"},
+    )
+    write_text_artifact(
+        md_out,
+        _render_markdown(payload),
+        source_entrypoint="scripts/ci/collect_kpi.py",
+        verification_scope="ci-kpi-report",
+        source_run_id="ci-collect-kpi",
+        freshness_window_hours=24,
+        extra={"report_kind": "ci-kpi-markdown"},
+    )
 
     print(f"[collect-ci-kpi] json={json_out}")
     print(f"[collect-ci-kpi] markdown={md_out}")

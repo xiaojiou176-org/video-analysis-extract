@@ -96,7 +96,7 @@ log() { vd_log info full_stack "$*"; }
 
 usage() {
   cat <<'EOF'
-Usage: ./scripts/full_stack.sh [--profile <name>] [--api-port <port>] [--web-port <port>] [--api-health-url <url>] [up|down|restart|status|logs]
+Usage: ./bin/full-stack [--profile <name>] [--api-port <port>] [--web-port <port>] [--api-health-url <url>] [up|down|restart|status|logs]
 
 Starts/stops local app processes:
 - API (dev_api.sh)
@@ -104,8 +104,8 @@ Starts/stops local app processes:
 - Web (next dev)
 
 Notes:
-- `scripts/dev_mcp.sh` is an interactive stdio entrypoint, not a background daemon managed by this script.
-- Run `./scripts/dev_mcp.sh` manually in a dedicated terminal when you need local MCP debugging.
+- `bin/dev-mcp` is an interactive stdio entrypoint, not a background daemon managed by this script.
+- Run `./bin/dev-mcp` manually in a dedicated terminal when you need local MCP debugging.
 EOF
 }
 
@@ -666,7 +666,7 @@ run_up() {
   refresh_runtime_route_snapshot
 
   log "full stack is ready (api=${API_HEALTH_URL}, web=http://127.0.0.1:${WEB_PORT})"
-  log "mcp is interactive-only; run ./scripts/dev_mcp.sh manually when needed"
+  log "mcp is interactive-only; run ./bin/dev-mcp manually when needed"
   return 0
 }
 
@@ -709,7 +709,7 @@ case "$cmd" in
     status_one api
     status_one worker
     status_one web
-    echo "mcp: interactive-only (run ./scripts/dev_mcp.sh manually when needed)"
+    echo "mcp: interactive-only (run ./bin/dev-mcp manually when needed)"
     ;;
   logs)
     tail -n 120 "$LOG_DIR"/*.log 2>/dev/null || true

@@ -74,14 +74,14 @@ pick_free_port() {
 
 usage() {
   cat <<'EOF'
-Usage: ./scripts/bootstrap_full_stack.sh [--profile local|gce] [--api-port <port>] [--web-port <port>] [--install-deps 0|1] [--with-core-services 0|1] [--with-reader-stack 0|1] [--reader-env-file <path>]
+Usage: ./bin/bootstrap-full-stack [--profile local|gce] [--api-port <port>] [--web-port <port>] [--install-deps 0|1] [--with-core-services 0|1] [--with-reader-stack 0|1] [--reader-env-file <path>]
 
 Goal:
   Clone repo and reach runnable state for 80%+ functionality.
 
 Examples:
-  ./scripts/bootstrap_full_stack.sh
-  ./scripts/bootstrap_full_stack.sh --profile gce --with-reader-stack 1 --reader-env-file env/profiles/reader.env
+  ./bin/bootstrap-full-stack
+  ./bin/bootstrap-full-stack --profile gce --with-reader-stack 1 --reader-env-file env/profiles/reader.env
 EOF
 }
 
@@ -259,7 +259,7 @@ write_runtime_resolved_env "$ROOT_DIR" "$SCRIPT_NAME" \
 cat <<EOF
 [$SCRIPT_NAME] Bootstrap complete.
 [$SCRIPT_NAME] Next:
-[$SCRIPT_NAME]   1) ./scripts/full_stack.sh up
+[$SCRIPT_NAME]   1) ./bin/full-stack up
 [$SCRIPT_NAME]   2) ./scripts/ci/smoke_full_stack.sh
 [$SCRIPT_NAME] Optional reader stack docs:
 [$SCRIPT_NAME]   docs/deploy/miniflux-nextflux-gce.md

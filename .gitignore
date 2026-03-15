@@ -45,6 +45,7 @@ env/profiles/*.local.env
 .vscode/
 .codex/
 .claude/
+.cursor/
 .opencode/
 .cursorrules
 Folo/

@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=./scripts/runtime/entrypoint.sh
+source "$ROOT_DIR/scripts/runtime/entrypoint.sh"
+vd_entrypoint_bootstrap governance prune-runtime "$@"
+exec "$ROOT_DIR/scripts/runtime/run_runtime_cache_maintenance.sh" "$@"

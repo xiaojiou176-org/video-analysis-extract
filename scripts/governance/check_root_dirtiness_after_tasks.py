@@ -15,6 +15,15 @@ def _snapshot() -> list[str]:
     return [path.name for path in top_level_entries()]
 
 
+def _tolerated_local_private_entries() -> set[str]:
+    payload = load_governance_json("root-allowlist.json")
+    return {
+        str(item["path"])
+        for item in payload.get("local_private_root_tolerations", [])
+        if isinstance(item, dict) and item.get("path")
+    }
+
+
 def _hygiene_violations() -> list[str]:
     payload = load_governance_json("runtime-outputs.json")
     violations: list[str] = []
@@ -51,7 +60,8 @@ def main() -> int:
     saved = json.loads(args.compare_snapshot.read_text(encoding="utf-8"))
     before = set(saved)
     after = set(_snapshot())
-    new_entries = sorted(after - before)
+    tolerated_entries = _tolerated_local_private_entries()
+    new_entries = sorted((after - before) - tolerated_entries)
     hygiene_violations = _hygiene_violations()
     if new_entries:
         print("[root-dirtiness] FAIL")

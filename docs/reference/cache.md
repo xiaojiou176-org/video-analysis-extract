@@ -96,13 +96,13 @@
 执行一次清理：
 
 ```bash
-./scripts/dev_worker.sh --command start-cleanup-workflow --run-once --older-than-hours 24
+./bin/dev-worker --command start-cleanup-workflow --run-once --older-than-hours 24
 ```
 
 执行周期清理（每 6 小时）：
 
 ```bash
-./scripts/dev_worker.sh --command start-cleanup-workflow --interval-hours 6 --older-than-hours 24
+./bin/dev-worker --command start-cleanup-workflow --interval-hours 6 --older-than-hours 24
 ```
 
 通过常驻 ops 启动脚本接入 cleanup（推荐）：
@@ -127,6 +127,26 @@
   - `--cache-max-size-mb`
 - 修改缓存签名算法、路径或保留策略后，必须同步更新 `docs/state-machine.md`。
 - 调度模式必须二选一：使用 `start_ops_workflows.sh` 常驻 workflow 时，不要再用 cron 重复触发 cleanup。
+
+## Runtime Cache Metadata / Freshness
+
+`.runtime-cache/reports/**` 与 `.runtime-cache/evidence/**` 现在必须有 sidecar metadata，至少声明：
+
+- `created_at`
+- `source_entrypoint`
+- `source_run_id`
+- `source_commit`
+- `verification_scope`
+- `freshness_window_hours`
+
+维护入口：
+
+```bash
+python3 scripts/runtime/prune_runtime_cache.py --assert-clean
+bash scripts/runtime/run_runtime_cache_maintenance.sh --normalize-only
+python3 scripts/governance/check_runtime_cache_retention.py
+python3 scripts/governance/check_runtime_cache_freshness.py
+```
 
 ## Doc-Drift Enforcement
 
@@ -163,7 +183,7 @@
   - 日志：`.runtime-cache/logs/tests/`
   - JUnit/diagnostics：`.runtime-cache/reports/tests/`
   - 浏览器证据：`.runtime-cache/evidence/tests/`
-- 终局治理分舱固定为：`.runtime-cache/run/`、`.runtime-cache/logs/`、`.runtime-cache/reports/`、`.runtime-cache/evidence/`、`.runtime-cache/temp/`。
+- 终局治理分舱固定为：`.runtime-cache/run/`、`.runtime-cache/logs/`、`.runtime-cache/reports/`、`.runtime-cache/evidence/`、`.runtime-cache/tmp/`；当前仍保留 `.runtime-cache/temp/` 作为受治理迁移桥。
 
 
 <!-- doc-sync: api/worker reliability + auth guard update (2026-03-03) -->

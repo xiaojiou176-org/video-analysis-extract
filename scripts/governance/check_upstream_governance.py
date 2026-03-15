@@ -6,7 +6,7 @@ import sys
 
 sys.dont_write_bytecode = True
 
-from common import load_governance_json, repo_root
+from common import load_governance_json, repo_root, write_runtime_metadata
 
 
 REQUIRED_FIELDS = {
@@ -26,13 +26,26 @@ REQUIRED_FIELDS = {
     "license",
     "security_posture",
     "risk_class",
+    "support_tier",
+    "freshness_required_hours",
+    "latest_verification_status",
+    "latest_verification_age_hours",
+    "contract_kind",
+    "stability_class",
+    "degradation_mode",
+    "blame_surface",
+    "owner_rotation",
 }
 KNOWN_KINDS = {"api", "image", "binary", "schema", "vendor", "fork", "patch"}
 KNOWN_RISK_CLASSES = {"low", "medium", "high", "critical"}
+KNOWN_SUPPORT_TIERS = {"tier-1", "tier-2", "tier-3"}
 KNOWN_INTEGRATION_SURFACES = {"public_api", "public_cli", "public_schema", "public_image", "public_binary"}
 KNOWN_PRIVATE_COUPLING_RISKS = {"none", "localized", "structural"}
 KNOWN_VERIFICATION_STATUSES = {"declared", "verified", "pending", "waived"}
 KNOWN_BLOCKING_LEVELS = {"blocker", "important", "enhancement"}
+KNOWN_CONTRACT_KINDS = {"public-api-contract", "digest-pinned-image", "public-binary-contract", "vendor-contract"}
+KNOWN_STABILITY_CLASSES = {"managed", "community-supported", "community-platform"}
+KNOWN_BLAME_SURFACES = {"api-boundary", "runtime-image-boundary", "binary-boundary", "vendor-boundary"}
 KNOWN_HOW_INTRODUCED = {
     "api",
     "image",
@@ -48,6 +61,7 @@ def main() -> int:
     root = repo_root()
     upstreams = load_governance_json("active-upstreams.json")
     templates = load_governance_json("upstream-templates.json")
+    registry = load_governance_json("upstream-registry.json")
     matrix = load_governance_json("upstream-compat-matrix.json")
     strict_ci_contract = json.loads(
         (root / "infra" / "config" / "strict_ci_contract.json").read_text(encoding="utf-8")
@@ -56,6 +70,8 @@ def main() -> int:
     errors: list[str] = []
     entries = upstreams.get("entries", [])
     template_entries = templates.get("entries", [])
+    registry_active = {str(item) for item in registry.get("active", [])}
+    registry_template = {str(item) for item in registry.get("template", [])}
     seen: set[str] = set()
     image_sources = set()
     for entry in entries:
@@ -75,6 +91,9 @@ def main() -> int:
         risk_class = str(entry["risk_class"])
         if risk_class not in KNOWN_RISK_CLASSES:
             errors.append(f"upstream entry {name} uses unsupported risk_class `{risk_class}`")
+        support_tier = str(entry["support_tier"])
+        if support_tier not in KNOWN_SUPPORT_TIERS:
+            errors.append(f"upstream entry {name} uses unsupported support_tier `{support_tier}`")
         integration_surface = str(entry["integration_surface"])
         if integration_surface not in KNOWN_INTEGRATION_SURFACES:
             errors.append(f"upstream entry {name} uses unsupported integration_surface `{integration_surface}`")
@@ -84,6 +103,32 @@ def main() -> int:
         private_coupling_risk = str(entry["private_coupling_risk"])
         if private_coupling_risk not in KNOWN_PRIVATE_COUPLING_RISKS:
             errors.append(f"upstream entry {name} uses unsupported private_coupling_risk `{private_coupling_risk}`")
+        contract_kind = str(entry["contract_kind"])
+        if contract_kind not in KNOWN_CONTRACT_KINDS:
+            errors.append(f"upstream entry {name} uses unsupported contract_kind `{contract_kind}`")
+        stability_class = str(entry["stability_class"])
+        if stability_class not in KNOWN_STABILITY_CLASSES:
+            errors.append(f"upstream entry {name} uses unsupported stability_class `{stability_class}`")
+        blame_surface = str(entry["blame_surface"])
+        if blame_surface not in KNOWN_BLAME_SURFACES:
+            errors.append(f"upstream entry {name} uses unsupported blame_surface `{blame_surface}`")
+        freshness_required_hours = entry["freshness_required_hours"]
+        if not isinstance(freshness_required_hours, int) or freshness_required_hours <= 0:
+            errors.append(f"upstream entry {name} must declare positive freshness_required_hours")
+        latest_verification_status = str(entry["latest_verification_status"])
+        if latest_verification_status not in KNOWN_VERIFICATION_STATUSES:
+            errors.append(f"upstream entry {name} uses unsupported latest_verification_status `{latest_verification_status}`")
+        latest_verification_age_hours = entry["latest_verification_age_hours"]
+        if not isinstance(latest_verification_age_hours, int) or latest_verification_age_hours < 0:
+            errors.append(f"upstream entry {name} must declare non-negative latest_verification_age_hours")
+        if latest_verification_status == "verified" and latest_verification_age_hours > freshness_required_hours:
+            errors.append(
+                f"upstream entry {name} claims verified but latest_verification_age_hours exceeds freshness_required_hours"
+            )
+        if not str(entry["degradation_mode"]).strip():
+            errors.append(f"upstream entry {name} must declare non-empty degradation_mode")
+        if not str(entry["owner_rotation"]).strip():
+            errors.append(f"upstream entry {name} must declare non-empty owner_rotation")
         upgrade_owner = str(entry["upgrade_owner"]).strip()
         if not upgrade_owner:
             errors.append(f"upstream entry {name} must declare non-empty upgrade_owner")
@@ -106,6 +151,8 @@ def main() -> int:
             lock_files = list((root / "vendor").rglob("UPSTREAM.lock")) if (root / "vendor").exists() else []
             if not lock_files:
                 errors.append(f"active upstream `{name}` requires live vendor/fork/patch evidence under vendor/")
+        if name not in registry_active:
+            errors.append(f"active upstream `{name}` missing from config/governance/upstream-registry.json active set")
 
     for entry in template_entries:
         missing = sorted(REQUIRED_FIELDS - set(entry))
@@ -114,6 +161,12 @@ def main() -> int:
                 f"template upstream entry {entry.get('name', '<unknown>')} missing fields: {', '.join(missing)}"
             )
             continue
+        name = str(entry["name"])
+        if name not in registry_template:
+            errors.append(f"template upstream `{name}` missing from config/governance/upstream-registry.json template set")
+
+    for name in sorted(registry_active - seen):
+        errors.append(f"upstream registry active name missing from active-upstreams.json: {name}")
 
     for image in strict_ci_contract.get("service_images", {}).values():
         if "@sha256:" not in image:
@@ -142,6 +195,8 @@ def main() -> int:
             "verification_artifacts",
             "evidence_artifact",
             "failure_signature",
+            "freshness_window_hours",
+            "verification_scope",
         ):
             if field not in item:
                 errors.append(
@@ -160,6 +215,11 @@ def main() -> int:
         if str(item.get("blocking_level", "")) not in KNOWN_BLOCKING_LEVELS:
             errors.append(
                 f"compatibility matrix entry {item.get('name', '<unknown>')} uses unsupported blocking_level"
+            )
+        freshness_window_hours = item.get("freshness_window_hours")
+        if not isinstance(freshness_window_hours, int) or freshness_window_hours <= 0:
+            errors.append(
+                f"compatibility matrix entry {item.get('name', '<unknown>')} must declare positive freshness_window_hours"
             )
         artifacts = item.get("verification_artifacts", [])
         if not isinstance(artifacts, list) or not artifacts:
@@ -192,6 +252,14 @@ def main() -> int:
         "status": "fail" if errors else "pass",
     }
     report_path.write_text(json.dumps(report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    write_runtime_metadata(
+        report_path,
+        source_entrypoint="scripts/governance/check_upstream_governance.py",
+        verification_scope="upstream-governance",
+        source_run_id="governance-upstream-compat-report",
+        freshness_window_hours=24,
+        extra={"report_kind": "upstream-compat-report"},
+    )
 
     if errors:
         print("[upstream-governance] FAIL")

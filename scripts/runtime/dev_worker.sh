@@ -17,7 +17,7 @@ SHOW_HINTS=1
 
 usage() {
   cat <<'EOF'
-Usage: ./scripts/dev_worker.sh [options] [-- <command args...>]
+Usage: ./bin/dev-worker [options] [-- <command args...>]
 
 Options:
   --worker-dir <path>  Worker project directory (default: <repo>/apps/worker)

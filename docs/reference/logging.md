@@ -20,7 +20,7 @@
 - 关键路径（鉴权、第三方 API 调用、异常处理）必须输出结构化日志，否则不得合并。
 - 关键日志字段至少包含：`trace_id`、`user`、`error`（异常路径还需 stack，使用 `logger.exception(...)`）。
 - 禁止空洞日志文案（如 `Something went wrong`、`unexpected error`、`error occurred`、`unknown error`）。
-- 质量门禁包含空洞日志检查：`./scripts/quality_gate.sh --mode pre-commit`。
+- 质量门禁包含空洞日志检查：`./bin/quality-gate --mode pre-commit`。
 - 质量门禁包含结构化日志关键路径检查：`python3 scripts/governance/check_structured_logs.py`（由 `quality_gate.sh` 与 CI `preflight` 执行）。
 
 ## Log Directory Initialization
@@ -42,9 +42,9 @@ touch .runtime-cache/logs/app/daily_digest.log \
 
 脚本入口参数（Batch C）：
 
-- `./scripts/dev_api.sh --app ... --reload|--no-reload`
-- `./scripts/dev_worker.sh --worker-dir ... --entry ... --command ... --show-hints|--no-show-hints`
-- `./scripts/dev_mcp.sh --entry ... --mcp-dir ...`
+- `./bin/dev-api --app ... --reload|--no-reload`
+- `./bin/dev-worker --worker-dir ... --entry ... --command ... --show-hints|--no-show-hints`
+- `./bin/dev-mcp --entry ... --mcp-dir ...`
 
 启动约束补充：
 
@@ -83,9 +83,9 @@ API 异常详情（`apps/api/app/security.py`）使用 `sanitize_exception_detai
 查看实时日志：
 
 ```bash
-./scripts/dev_api.sh
-./scripts/dev_worker.sh
-./scripts/dev_mcp.sh
+./bin/dev-api
+./bin/dev-worker
+./bin/dev-mcp
 ```
 
 查看计划任务日志：
@@ -121,16 +121,21 @@ rg -n "thought_signatures|thought_signature_digest|thought_metadata|llm_meta" .r
 
 ## Rotation and Retention
 
-建议使用系统轮转器（`logrotate` 或 `newsyslog`），避免日志无限增长。
+日志与证据保留不再只靠系统级约定，仓库级维护入口如下：
 
-建议参数：
+```bash
+python3 scripts/runtime/prune_logs_and_evidence.py --assert-clean
+python3 scripts/governance/check_log_retention.py
+python3 scripts/runtime/build_evidence_index.py --rebuild-all
+python3 scripts/governance/check_no_unindexed_evidence.py
+```
 
-- 轮转周期：`daily`
-- 单文件大小：`50M`（触发提前轮转）
-- 保留策略：
-  - `.runtime-cache/logs/governance/workflows.log`：保留 `30` 天（运维审计）
-  - `.runtime-cache/logs/app/daily_digest.log`、`.runtime-cache/logs/app/failure_alerts.log`：保留 `14` 天
-- 压缩：开启（`compress`）
+当前统一要求：
+
+- 结构化日志必须包含：`run_id`、`trace_id`、`request_id`、`repo_commit`、`entrypoint`、`env_profile`
+- `tests` 通道额外必须带 `test_run_id`
+- `governance` 通道额外必须带 `gate_run_id`
+- `reports` / `evidence` artifact 必须带 sidecar metadata，避免历史 artifact 冒充 current verification
 
 互斥策略（必须）：
 

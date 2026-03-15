@@ -673,7 +673,7 @@ def _check_ci_post_container_rules(blocks: dict[str, str], failures: list[str]) 
             failures.append(
                 "ci.yml: quality-gate-pre-push: should not narrow execution with job-level if"
             )
-        if "./scripts/strict_ci_entry.sh" not in qg_block or "--mode pre-push" not in qg_block:
+        if "./bin/strict-ci" not in qg_block or "--mode pre-push" not in qg_block:
             failures.append("ci.yml: quality-gate-pre-push: missing pre-push quality gate command")
         if not re.search(r"--ci-dedupe\s+1\b", qg_block):
             failures.append(
@@ -776,7 +776,7 @@ def _check_ci_post_container_rules(blocks: dict[str, str], failures: list[str]) 
     if live_smoke:
         required_live_smoke_markers = {
             "services:\n      postgres:": "postgres service",
-            "./scripts/strict_ci_entry.sh --mode live-smoke": "strict ci entry live-smoke command",
+            "./bin/strict-ci --mode live-smoke": "strict ci entry live-smoke command",
             "GEMINI_API_KEY": "gemini secret wiring",
             "RESEND_API_KEY": "resend secret wiring",
             "YOUTUBE_API_KEY": "youtube secret wiring",

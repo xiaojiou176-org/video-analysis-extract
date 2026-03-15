@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "active": [
+    "gemini-api",
+    "resend-api",
+    "rsshub",
+    "youtube-platform",
+    "bilibili-platform",
+    "miniflux-service",
+    "nextflux-service",
+    "strict-ci-standard-image",
+    "pgvector-pg16-image",
+    "redis-core-image",
+    "temporal-auto-setup-image",
+    "miniflux-image",
+    "postgres-miniflux-image",
+    "nextflux-image",
+    "temporal-cli",
+    "gitleaks-cli",
+    "yt-dlp-binary",
+    "ffmpeg-binary",
+    "bbdown-binary"
+  ],
+  "template": [
+    "yt-dlp-vendor-template"
+  ],
+  "retired": []
+}

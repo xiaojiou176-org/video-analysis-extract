@@ -18,10 +18,10 @@
 执行入口只认：
 
 ```bash
-./scripts/governance_gate.sh --mode pre-commit
-./scripts/governance_gate.sh --mode pre-push
-./scripts/governance_gate.sh --mode ci
-./scripts/governance_gate.sh --mode audit
+./bin/governance-audit --mode pre-commit
+./bin/governance-audit --mode pre-push
+./bin/governance-audit --mode ci
+./bin/governance-audit --mode audit
 ```
 
 说明文档不得再手写一套并行规则。若文档与上述事实源冲突，以结构化事实源为准。

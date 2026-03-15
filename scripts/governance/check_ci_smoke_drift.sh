@@ -10,7 +10,7 @@ workflow_file=".github/workflows/ci.yml"
 
 required_patterns=(
   "pr-llm-real-smoke:"
-  "./scripts/strict_ci_entry.sh --mode pr-llm-real-smoke"
+  "./bin/strict-ci --mode pr-llm-real-smoke"
   "ci-failure-diagnostics-pr-llm-real-smoke"
   "external-playwright-smoke:"
   "scripts/ci/external_playwright_smoke.sh"
@@ -19,7 +19,7 @@ required_patterns=(
   "--timeout-ms \"\${{ vars.EXTERNAL_SMOKE_TIMEOUT_MS || '45000' }}\""
   "--retries \"\${{ vars.EXTERNAL_SMOKE_RETRIES || '2' }}\""
   "live-smoke:"
-  "./scripts/strict_ci_entry.sh --mode live-smoke"
+  "./bin/strict-ci --mode live-smoke"
   "GEMINI_API_KEY"
   "RESEND_API_KEY"
   "YOUTUBE_API_KEY"

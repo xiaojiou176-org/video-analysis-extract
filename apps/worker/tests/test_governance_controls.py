@@ -27,7 +27,8 @@ def test_governance_control_plane_files_exist_and_are_populated() -> None:
         path = config_dir / name
         assert path.is_file(), f"missing governance config: {name}"
         payload = json.loads(path.read_text(encoding="utf-8"))
-        assert payload.get("version") == 1
+        version = payload.get("version")
+        assert isinstance(version, int) and version >= 1
 
     runtime_outputs = json.loads((config_dir / "runtime-outputs.json").read_text(encoding="utf-8"))
     assert set(runtime_outputs["subdirectories"]) == {
@@ -35,6 +36,7 @@ def test_governance_control_plane_files_exist_and_are_populated() -> None:
         "logs",
         "reports",
         "evidence",
+        "tmp",
         "temp",
     }
 
@@ -83,7 +85,9 @@ def test_governance_gate_script_wires_all_terminal_checks() -> None:
 
     assert "--mode pre-commit|pre-push|ci|audit" in script
     assert "python3 scripts/governance/check_root_allowlist.py" in script
+    assert "python3 scripts/governance/check_public_entrypoint_manifests.py" in script
     assert "python3 scripts/governance/check_runtime_outputs.py" in script
+    assert "python3 scripts/governance/check_runtime_artifact_writer_coverage.py" in script
     assert "python3 scripts/governance/check_governance_language.py" in script
     assert "python3 scripts/governance/check_dependency_boundaries.py" in script
     assert "python3 scripts/governance/check_logging_contract.py" in script
@@ -98,7 +102,7 @@ def test_vendor_governance_workflow_uses_governance_gate_inventory_check() -> No
     assert "config/governance/active-upstreams.json" in workflow
     assert "config/governance/upstream-templates.json" in workflow
     assert "config/governance/upstream-compat-matrix.json" in workflow
-    assert "bash scripts/governance_gate.sh --mode ci" in workflow
+    assert "./bin/governance-audit --mode ci" in workflow
 
 
 def test_monthly_governance_workflow_exists() -> None:
@@ -107,7 +111,7 @@ def test_monthly_governance_workflow_exists() -> None:
 
     assert workflow.is_file()
     assert 'cron: "0 10 1 * *"' in content
-    assert "bash scripts/governance_gate.sh --mode audit" in content
+    assert "./bin/governance-audit --mode audit" in content
     assert "check_root_dirtiness_after_tasks.py --write-snapshot" in content
     assert "check_root_dirtiness_after_tasks.py --compare-snapshot .runtime-cache/reports/governance/root-before.json" in content
 

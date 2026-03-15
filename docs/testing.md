@@ -17,7 +17,7 @@
 - 测试配置采用 `core + profile overlay`：
   - core：`.env`
   - overlay：`env/profiles/reader.env`（reader profile 模板，仅 reader 相关 smoke）
-  - 严格验收：统一通过 `scripts/strict_ci_entry.sh` 进入仓库标准镜像，不再把宿主机路径当作门禁真相源
+  - 严格验收：统一通过 `bin/strict-ci` 进入仓库标准镜像，不再把宿主机路径当作门禁真相源
 - 密钥只允许来自 `.env` 或进程环境注入（CI secrets / 当前 shell export）。
 - 禁止把 shell 登录配置作为测试密钥来源。
 - 默认最小变量集沿用 `ENVIRONMENT.md` 的 Shared Core；涉及真实 provider 链路时，再追加对应 secrets。
@@ -120,7 +120,7 @@ scripts/ci/e2e_live_smoke.sh \
 - D2 mutation 硬门禁阈值 `0.64`（并新增结构质量约束）：
 
 ```bash
-./scripts/strict_ci_entry.sh --mode pre-push --strict-full-run 1 --ci-dedupe 0
+./bin/strict-ci --mode pre-push --strict-full-run 1 --ci-dedupe 0
 ```
 
 说明：上面是本地 pre-push 口径；远端 `.github/workflows/ci.yml` 的 `quality-gate-pre-push` 为避免重复重型检查，使用 `--ci-dedupe 1 --skip-mutation 1`，mutation 由独立 job 执行。
@@ -148,7 +148,7 @@ python3 scripts/governance/check_web_coverage_threshold.py \
 - `scripts/ci/api_real_smoke_local.sh` 默认使用 `127.0.0.1:18080`；若默认端口已被占用且未显式传 `--api-port`，脚本会自动回退到下一个可用端口并记录诊断日志。
 - `scripts/ci/api_real_smoke_local.sh` 会在 cleanup workflow closure probe 前临时拉起一个本地 worker，并在脚本退出时自动回收，因此不再要求调用方先手动启动 worker。
 - `scripts/ci/api_real_smoke_local.sh` 现在包含本机 IPv4 loopback preflight；若主机先天无法建立 `127.0.0.1` 自连接，会直接输出 `failure_kind=host_loopback_ipv4_exhausted` 并 fail-fast，这属于环境级阻塞，不应误判为 API/worker 业务回归。
-- 当执行 `./scripts/quality_gate.sh --mode pre-push --strict-full-run 1 ...` 时，必须额外跑本地真实 Postgres smoke。
+- 当执行 `./bin/quality-gate --mode pre-push --strict-full-run 1 ...` 时，必须额外跑本地真实 Postgres smoke。
 - `strict-full-run=1` 会强制关闭 `--ci-dedupe` 且禁止 `--skip-mutation`，确保本地执行真实全量门禁。
 - `scripts/ci/smoke_full_stack.sh` 负责本地联调与 live smoke 相关检查，不是 `api-real-smoke` 的替代品。
 - `UI Audit` 结果现会落盘到 `UI_AUDIT_RUN_STORE_DIR`（默认 `.runtime-cache/evidence/tests/ui-audit-runs/`），避免 API 重启后审查记录丢失。
@@ -266,22 +266,22 @@ export API_INTEGRATION_SMOKE_STRICT='1'
 
 - 这条命令会基于当前 `DATABASE_URL` 指向的 Postgres 实例创建隔离 smoke 数据库，补跑 `infra/migrations/*.sql`、真实启动本地 API，并执行 `apps/api/tests/test_api_integration_smoke.py`。这条命令本身不是 CI 等价入口，CI 等价入口是标准镜像内的 `strict_ci_entry`.
 - 默认 sqlite 总回归里的 integration smoke `xfail` 只表示“当前是快速回归口径”，不表示真实 Postgres 路径坏掉。
-- 标准严格验收唯一入口：`./scripts/strict_ci_entry.sh --mode pre-push --strict-full-run 1 --ci-dedupe 0`。
+- 标准严格验收唯一入口：`./bin/strict-ci --mode pre-push --strict-full-run 1 --ci-dedupe 0`。
 
 ## Full-stack 本地自测（稳定性）
 
 ```bash
-./scripts/full_stack.sh up
-./scripts/full_stack.sh status
-./scripts/full_stack.sh down
-./scripts/full_stack.sh status
+./bin/full-stack up
+./bin/full-stack status
+./bin/full-stack down
+./bin/full-stack status
 ```
 
 说明：
 
 - `up` 会等待 API health 与 Web 端口就绪，失败时输出 `.runtime-cache/logs/components/full-stack/*.log` 关键片段，便于快速定位。
-- 后台 `up` 场景调用 `./scripts/dev_api.sh --no-reload`，避免 `status` 因 reload 父子进程变化误判 `stopped`。
-- stronger Temporal readiness 已接入 `./scripts/full_stack.sh up`：在启动 API/Web/Worker 之前，先校验 worker 必需环境，再对 `TEMPORAL_TARGET_HOST` 执行 `host:port` 解析与 TCP 探测；失败会以 `stage=worker_preflight_temporal`、`conclusion=temporal_not_ready` fail-fast，不再等到 worker 启动后才暴露。
+- 后台 `up` 场景调用 `./bin/dev-api --no-reload`，避免 `status` 因 reload 父子进程变化误判 `stopped`。
+- stronger Temporal readiness 已接入 `./bin/full-stack up`：在启动 API/Web/Worker 之前，先校验 worker 必需环境，再对 `TEMPORAL_TARGET_HOST` 执行 `host:port` 解析与 TCP 探测；失败会以 `stage=worker_preflight_temporal`、`conclusion=temporal_not_ready` fail-fast，不再等到 worker 启动后才暴露。
 
 ## 触发差异（PR vs main/release vs nightly）
 
@@ -308,7 +308,7 @@ python3 scripts/governance/check_test_assertions.py
 ### 0.1) 一键质量门禁（推荐）
 
 ```bash
-./scripts/strict_ci_entry.sh --mode pre-push --strict-full-run 1 --ci-dedupe 0
+./bin/strict-ci --mode pre-push --strict-full-run 1 --ci-dedupe 0
 ```
 
 ### 0.1.A) 本地后端验收分层（必须区分）
@@ -322,10 +322,10 @@ python3 scripts/governance/check_test_assertions.py
 标准严格验收命令（无歧义口径）：
 
 ```bash
-./scripts/full_stack.sh up
+./bin/full-stack up
 ./scripts/ci/api_real_smoke_local.sh
 ./scripts/ci/smoke_full_stack.sh
-./scripts/quality_gate.sh --mode pre-push --strict-full-run 1 --profile ci --profile live-smoke --ci-dedupe 0
+./bin/quality-gate --mode pre-push --strict-full-run 1 --profile ci --profile live-smoke --ci-dedupe 0
 ```
 
 ### 0.1.1) 一键最终门禁集成验收（profile -> pre-commit -> pre-push）

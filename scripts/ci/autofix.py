@@ -7,10 +7,17 @@ import glob
 import hashlib
 import json
 import re
+import sys
 import xml.etree.ElementTree as ET
 from collections import defaultdict
 from pathlib import Path
 from typing import Any
+
+ROOT = Path(__file__).resolve().parents[2]
+if str(ROOT / "scripts" / "governance") not in sys.path:
+    sys.path.insert(0, str(ROOT / "scripts" / "governance"))
+
+from common import write_json_artifact
 
 TOKEN_RE = re.compile(r"\b\d+\b")
 HEX_RE = re.compile(r"\b[0-9a-f]{7,}\b", re.IGNORECASE)
@@ -329,8 +336,15 @@ def main() -> int:
     }
 
     output_path = Path(args.output)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+    write_json_artifact(
+        output_path,
+        report,
+        source_entrypoint="scripts/ci/autofix.py",
+        verification_scope="ci-autofix-report",
+        source_run_id="ci-autofix-dry-run",
+        freshness_window_hours=24,
+        extra={"report_kind": "ci-autofix-dry-run"},
+    )
     print(f"[ci-autofix] dry-run report written: {output_path}")
     print(
         "[ci-autofix] summary:"

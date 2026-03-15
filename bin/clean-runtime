@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+RUNTIME_ROOT="$ROOT_DIR/.runtime-cache"
+# shellcheck source=./scripts/runtime/entrypoint.sh
+source "$ROOT_DIR/scripts/runtime/entrypoint.sh"
+vd_entrypoint_bootstrap governance clean-runtime "$@"
+
+usage() {
+  cat <<'EOF'
+Usage: ./bin/clean-runtime --yes
+
+Deletes the repo-side runtime cache root so the next run can rebuild it from
+official entrypoints. This is intentionally destructive and requires --yes.
+EOF
+}
+
+if [[ "${1:-}" != "--yes" ]]; then
+  usage >&2
+  exit 2
+fi
+
+python3 - <<'PY' "$RUNTIME_ROOT"
+from pathlib import Path
+import shutil
+import sys
+
+root = Path(sys.argv[1])
+if root.exists():
+    shutil.rmtree(root)
+root.mkdir(parents=True, exist_ok=True)
+print(f"[clean-runtime] reset {root}")
+PY

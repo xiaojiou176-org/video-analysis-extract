@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+import os
 import re
+import subprocess
 import threading
 import time
 import uuid
@@ -48,6 +50,17 @@ _REQUEST_DURATION: dict[tuple[str, str], dict[str, float]] = defaultdict(
 )
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 _APP_LOG_PATH = _REPO_ROOT / ".runtime-cache" / "logs" / "app" / "api-http.jsonl"
+_REPO_COMMIT = (
+    subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=_REPO_ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    or "unknown"
+)
+_ENV_PROFILE = os.getenv("ENV_PROFILE", "unknown")
 
 
 def _escape_metric_label(value: str) -> str:
@@ -94,6 +107,9 @@ def _append_app_request_log(
         "event": "http_request",
         "severity": "info",
         "source_kind": "app",
+        "repo_commit": _REPO_COMMIT,
+        "entrypoint": "apps.api.app.main:request_observability_middleware",
+        "env_profile": _ENV_PROFILE,
         "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "method": method,
         "route": route_label,

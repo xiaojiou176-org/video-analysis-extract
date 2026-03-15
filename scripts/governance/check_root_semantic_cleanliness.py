@@ -20,8 +20,12 @@ FORBIDDEN_SEGMENTS = {
     "legacy-dump",
 }
 ALLOWED_DOTFILES = {
+    ".agents",
     ".devcontainer",
     ".env",
+    ".codex",
+    ".claude",
+    ".cursor",
     ".env.example",
     ".git",
     ".githooks",
@@ -35,6 +39,7 @@ ALLOWED_DOTFILES = {
     ".secrets.baseline",
     ".stylelintignore",
     ".stylelintrc.json",
+    ".vscode",
 }
 ALLOWED_ROOT_FILES = {
     "AGENTS.md",
@@ -52,7 +57,7 @@ def _normalized_tokens(path: str) -> list[str]:
 
 def main() -> int:
     payload = load_governance_json("root-allowlist.json")
-    entries = payload.get("entries", [])
+    entries = payload.get("tracked_root_allowlist", []) + payload.get("local_private_root_tolerations", [])
     errors: list[str] = []
 
     for item in entries:

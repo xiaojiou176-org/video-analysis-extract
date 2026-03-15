@@ -1,0 +1,98 @@
+{
+  "version": 1,
+  "modules": [
+    {
+      "path": "apps/api",
+      "owner": "platform",
+      "responsibility": "FastAPI control plane, HTTP contracts, and service-layer orchestration.",
+      "required_docs": [
+        "AGENTS.md",
+        "CLAUDE.md",
+        "README.md"
+      ],
+      "allowed_internal_prefixes": [
+        "apps.api.app.",
+        "packages."
+      ]
+    },
+    {
+      "path": "apps/worker",
+      "owner": "platform",
+      "responsibility": "Temporal workflows, pipeline execution, and cleanup/reporting workers.",
+      "required_docs": [
+        "AGENTS.md",
+        "CLAUDE.md",
+        "README.md"
+      ],
+      "allowed_internal_prefixes": [
+        "apps.worker.worker.",
+        "packages."
+      ]
+    },
+    {
+      "path": "apps/mcp",
+      "owner": "platform",
+      "responsibility": "MCP façade and tool normalization over public API contracts.",
+      "required_docs": [
+        "AGENTS.md",
+        "CLAUDE.md",
+        "README.md"
+      ],
+      "allowed_internal_prefixes": [
+        "apps.mcp.",
+        "packages."
+      ]
+    },
+    {
+      "path": "apps/web",
+      "owner": "platform",
+      "responsibility": "Next.js management console and browser-facing runtime.",
+      "required_docs": [
+        "AGENTS.md",
+        "CLAUDE.md",
+        "README.md"
+      ],
+      "allowed_internal_prefixes": [
+        "@/app/",
+        "@/components/",
+        "@/lib/",
+        "./",
+        "../"
+      ]
+    },
+    {
+      "path": "packages/shared-contracts",
+      "owner": "platform",
+      "responsibility": "Shared OpenAPI and JSON schema contracts only; no runtime side effects allowed.",
+      "required_docs": [
+        "AGENTS.md",
+        "CLAUDE.md",
+        "README.md"
+      ],
+      "allowed_internal_prefixes": [
+        "packages."
+      ]
+    },
+    {
+      "path": "scripts/governance",
+      "owner": "platform",
+      "responsibility": "Repository governance control-plane scripts and gate entrypoints.",
+      "required_docs": [],
+      "allowed_internal_prefixes": []
+    },
+    {
+      "path": "scripts/runtime",
+      "owner": "platform",
+      "responsibility": "Runtime logging, retention, and ops maintenance entrypoints.",
+      "required_docs": [],
+      "allowed_internal_prefixes": []
+    },
+    {
+      "path": "scripts/ci",
+      "owner": "platform",
+      "responsibility": "CI/local smoke and strict validation entrypoints.",
+      "required_docs": [],
+      "allowed_internal_prefixes": []
+    }
+  ]
+}

@@ -25,6 +25,7 @@ def _emit_jsonl_sample(
     channel: str,
     source_kind: str,
     event: str,
+    env_profile: str,
 ) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     subprocess.run(
@@ -47,6 +48,14 @@ def _emit_jsonl_sample(
             channel,
             "--source-kind",
             source_kind,
+            "--test-run-id",
+            run_id if channel == "tests" else "",
+            "--gate-run-id",
+            run_id if channel == "governance" else "",
+            "--entrypoint",
+            f"scripts/governance/generate_logging_samples.py:{channel}",
+            "--env-profile",
+            env_profile,
             "--event",
             event,
             "--severity",
@@ -62,6 +71,7 @@ def _emit_jsonl_sample(
 def main() -> int:
     root = repo_root()
     sample_run_id = "logging-contract-sample-run"
+    env_profile = "governance-sample"
     targets = {
         "governance": (
             root / ".runtime-cache" / "logs" / "governance" / "governance-gate.jsonl",
@@ -111,6 +121,7 @@ def main() -> int:
             channel=channel,
             source_kind=source_kind,
             event=event,
+            env_profile=env_profile,
         )
     return 0
 

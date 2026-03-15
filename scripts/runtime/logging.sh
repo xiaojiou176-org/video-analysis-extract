@@ -16,6 +16,15 @@ vd_log_init() {
   vd_log_channel="$channel"
   vd_log_component="$component"
   vd_log_run_id="${vd_log_run_id:-$(vd_uuid)}"
+  vd_log_repo_commit="${vd_log_repo_commit:-$(git -C "$ROOT_DIR" rev-parse HEAD 2>/dev/null || printf unknown)}"
+  vd_log_entrypoint="${vd_log_entrypoint:-$component}"
+  vd_log_env_profile="${vd_log_env_profile:-${ENV_PROFILE:-unknown}}"
+  if [[ "${channel}" == "tests" && -z "${vd_test_run_id:-}" ]]; then
+    vd_test_run_id="$vd_log_run_id"
+  fi
+  if [[ "${channel}" == "governance" && -z "${vd_gate_run_id:-}" ]]; then
+    vd_gate_run_id="$vd_log_run_id"
+  fi
   if [[ -n "$path" ]]; then
     vd_log_path="$path"
   else
@@ -42,11 +51,16 @@ vd_log_json_only() {
     --path "${vd_log_path:?}" \
     --run-id "${vd_log_run_id:?}" \
     --trace-id "${vd_trace_id:-}" \
-    --request-id "${vd_request_id:-}" \
+    --request-id "${vd_request_id:-${vd_log_run_id:-}}" \
     --service "${vd_log_service:-${vd_log_component:?}}" \
     --component "${vd_log_component:?}" \
     --channel "${vd_log_channel:?}" \
     --source-kind "$source_kind" \
+    --test-run-id "${vd_test_run_id:-}" \
+    --gate-run-id "${vd_gate_run_id:-}" \
+    --entrypoint "${vd_log_entrypoint:-${vd_log_component:?}}" \
+    --env-profile "${vd_log_env_profile:-unknown}" \
+    --repo-commit "${vd_log_repo_commit:-unknown}" \
     --event "$event" \
     --severity "$severity" \
     --message "$message" >/dev/null 2>&1 || true

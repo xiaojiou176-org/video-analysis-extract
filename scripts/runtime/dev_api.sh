@@ -24,7 +24,7 @@ ENABLE_RELOAD=1
 
 usage() {
   cat <<'EOF'
-Usage: ./scripts/dev_api.sh [--app <module:app>] [--host <host>] [--port <port>] [--reload|--no-reload]
+Usage: ./bin/dev-api [--app <module:app>] [--host <host>] [--port <port>] [--reload|--no-reload]
 
 Options:
   --app <module:app>  Uvicorn ASGI app target (default: apps.api.app.main:app)

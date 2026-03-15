@@ -10,7 +10,7 @@ from typing import Any
 
 sys.dont_write_bytecode = True
 
-from common import load_governance_json, repo_root
+from common import load_governance_json, repo_root, write_runtime_metadata
 
 _HARDCUT_REQUIRED_PATTERNS = {
     "yt-dlp": "yt-dlp-binary",
@@ -132,6 +132,14 @@ def main() -> int:
         "status": "fail" if errors else "pass",
     }
     report_path.write_text(json.dumps(report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    write_runtime_metadata(
+        report_path,
+        source_entrypoint="scripts/governance/check_unregistered_upstream_usage.py",
+        verification_scope="upstream-usage",
+        source_run_id="governance-upstream-usage-report",
+        freshness_window_hours=24,
+        extra={"report_kind": "upstream-usage-report"},
+    )
 
     if errors:
         print("[unregistered-upstream-usage] FAIL")

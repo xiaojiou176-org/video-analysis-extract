@@ -6,7 +6,7 @@ ROOT_DIR="$(cd "$HOOK_DIR/.." && pwd)"
 cd "$ROOT_DIR"
 
 echo "[pre-push] quality gate (mode=pre-push)"
-"$ROOT_DIR/scripts/strict_ci_entry.sh" \
+"$ROOT_DIR/bin/strict-ci" \
   --mode pre-push \
   --heartbeat-seconds 20 \
   --ci-dedupe 0

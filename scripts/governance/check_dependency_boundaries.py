@@ -91,6 +91,8 @@ def main() -> int:
         for path in scope.rglob("*"):
             if not path.is_file():
                 continue
+            if path.suffix in {".md", ".txt"}:
+                continue
             try:
                 content = path.read_text(encoding="utf-8")
             except UnicodeDecodeError:

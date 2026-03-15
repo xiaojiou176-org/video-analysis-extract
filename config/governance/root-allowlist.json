@@ -1,19 +1,19 @@
 {
-  "version": 1,
-  "entries": [
+  "version": 2,
+  "tracked_root_allowlist": [
+    {
+      "path": ".agents",
+      "kind": "governance",
+      "reason": "In-repo execution plans and long-running agent control boards.",
+      "owner": "platform",
+      "mutable": false
+    },
     {
       "path": ".devcontainer",
       "kind": "iac",
       "reason": "Standard development environment contract.",
       "owner": "platform",
       "mutable": false
-    },
-    {
-      "path": ".env",
-      "kind": "runtime-contract",
-      "reason": "Core local environment overlay file.",
-      "owner": "platform",
-      "mutable": true
     },
     {
       "path": ".env.example",
@@ -117,6 +117,13 @@
       "path": "apps",
       "kind": "responsibility-layer",
       "reason": "Runtime service and application entrypoints.",
+      "owner": "platform",
+      "mutable": false
+    },
+    {
+      "path": "bin",
+      "kind": "governance",
+      "reason": "Stable public repository entrypoints wrapping internal script implementations.",
       "owner": "platform",
       "mutable": false
     },
@@ -231,6 +238,43 @@
       "reason": "Locked Python dependency graph.",
       "owner": "platform",
       "mutable": false
+    }
+  ],
+  "local_private_root_tolerations": [
+    {
+      "path": ".env",
+      "kind": "local-private",
+      "reason": "Local runtime environment overlay file is allowed at repo root but must stay untracked.",
+      "owner": "local-user",
+      "must_be_untracked": true
+    },
+    {
+      "path": ".vscode",
+      "kind": "local-private",
+      "reason": "Local editor workspace settings are allowed at repo root but must stay untracked.",
+      "owner": "local-user",
+      "must_be_untracked": true
+    },
+    {
+      "path": ".codex",
+      "kind": "local-private",
+      "reason": "Local Codex workspace state is allowed at repo root but must stay untracked.",
+      "owner": "local-user",
+      "must_be_untracked": true
+    },
+    {
+      "path": ".claude",
+      "kind": "local-private",
+      "reason": "Local Claude workspace state is allowed at repo root but must stay untracked.",
+      "owner": "local-user",
+      "must_be_untracked": true
+    },
+    {
+      "path": ".cursor",
+      "kind": "local-private",
+      "reason": "Local Cursor workspace state is allowed at repo root but must stay untracked.",
+      "owner": "local-user",
+      "must_be_untracked": true
     }
   ]
 }

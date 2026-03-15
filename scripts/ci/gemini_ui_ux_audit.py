@@ -16,6 +16,12 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+ROOT = Path(__file__).resolve().parents[2]
+if str(ROOT / "scripts" / "governance") not in sys.path:
+    sys.path.insert(0, str(ROOT / "scripts" / "governance"))
+
+from common import write_json_artifact
+
 MODEL_ENV_VAR = "GEMINI_UI_UX_AUDIT_MODEL"
 FALLBACK_MODELS_ENV_VAR = "GEMINI_UI_UX_AUDIT_FALLBACK_MODELS"
 THINKING_LEVEL_ENV_VAR = "GEMINI_UI_UX_AUDIT_THINKING_LEVEL"
@@ -552,8 +558,15 @@ def _resolve_report_path(repo_root: Path) -> Path:
 
 
 def _write_report(path: Path, payload: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    write_json_artifact(
+        path,
+        payload,
+        source_entrypoint="scripts/ci/gemini_ui_ux_audit.py",
+        verification_scope="ui-audit-report",
+        source_run_id="ci-gemini-ui-ux-audit",
+        freshness_window_hours=24,
+        extra={"report_kind": "ui-audit-report"},
+    )
 
 
 def _summarize_issues(issues: list[dict[str, Any]]) -> tuple[dict[str, int], dict[str, int]]:

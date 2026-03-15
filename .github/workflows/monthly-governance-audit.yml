@@ -29,7 +29,7 @@ jobs:
         run: python3 scripts/governance/check_root_dirtiness_after_tasks.py --write-snapshot .runtime-cache/reports/governance/root-before.json
 
       - name: Run governance audit
-        run: bash scripts/governance_gate.sh --mode audit
+        run: ./bin/governance-audit --mode audit
 
       - name: Capture root snapshot after audit
         run: python3 scripts/governance/check_root_dirtiness_after_tasks.py --write-snapshot .runtime-cache/reports/governance/root-after.json
@@ -58,5 +58,7 @@ jobs:
             .runtime-cache/reports/governance/root-before.json
             .runtime-cache/reports/governance/root-after.json
             .runtime-cache/reports/governance/upstream-compat-report.json
+            .runtime-cache/reports/governance/runtime-cache-maintenance.json
+            .runtime-cache/reports/governance/runtime-cache-freshness.json
             .runtime-cache/reports/governance/observation-history.jsonl
           if-no-files-found: warn

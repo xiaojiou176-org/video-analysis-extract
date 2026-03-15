@@ -384,11 +384,17 @@ PY
 fi
 
 run_teardown_phase
-BODY="$body" STATUS="$status" DIAGNOSTICS_JSON="$DIAGNOSTICS_JSON" API_BASE_URL="$API_BASE_URL" KEY_SOURCE="$KEY_SOURCE" HEARTBEAT_SECONDS="$HEARTBEAT_SECONDS" AUTH_MODE="$AUTH_MODE" STARTED_AT_UTC="$STARTED_AT_UTC" MAX_RETRIES="$MAX_RETRIES" REQUEST_IDEMPOTENCY_KEY="$REQUEST_IDEMPOTENCY_KEY" TEARDOWN_TRACE="$TEARDOWN_TRACE" python3 - <<'PY'
+BODY="$body" STATUS="$status" DIAGNOSTICS_JSON="$DIAGNOSTICS_JSON" API_BASE_URL="$API_BASE_URL" KEY_SOURCE="$KEY_SOURCE" HEARTBEAT_SECONDS="$HEARTBEAT_SECONDS" AUTH_MODE="$AUTH_MODE" STARTED_AT_UTC="$STARTED_AT_UTC" MAX_RETRIES="$MAX_RETRIES" REQUEST_IDEMPOTENCY_KEY="$REQUEST_IDEMPOTENCY_KEY" TEARDOWN_TRACE="$TEARDOWN_TRACE" ROOT_DIR="$ROOT_DIR" RUN_ID="${vd_log_run_id:-smoke-llm-real-local}" python3 - <<'PY'
 import json
 import os
 import sys
 from pathlib import Path
+
+root = Path(os.environ["ROOT_DIR"])
+if str(root / "scripts" / "governance") not in sys.path:
+    sys.path.insert(0, str(root / "scripts" / "governance"))
+
+from common import write_json_artifact
 
 status_code = os.environ["STATUS"]
 api_base_url = os.environ["API_BASE_URL"]
@@ -442,7 +448,15 @@ def finalize_and_exit(code: int, reason: str) -> None:
             result["failure_kind"] = "network_or_environment_timeout"
         else:
             result["failure_kind"] = "code_logic_error"
-    diag_path.write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    write_json_artifact(
+        diag_path,
+        result,
+        source_entrypoint="scripts/ci/smoke_llm_real_local.sh",
+        verification_scope="tests:pr-llm-real-smoke",
+        source_run_id=os.environ.get("RUN_ID", "smoke-llm-real-local"),
+        freshness_window_hours=24,
+        extra={"report_kind": "pr-llm-real-smoke-result"},
+    )
     if code != 0:
         print(reason, file=sys.stderr)
     raise SystemExit(code)

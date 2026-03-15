@@ -358,6 +358,13 @@ write_quality_gate_summary() {
 import json
 import sys
 from pathlib import Path
+import sys
+
+root = Path.cwd()
+if str(root / "scripts" / "governance") not in sys.path:
+    sys.path.insert(0, str(root / "scripts" / "governance"))
+
+from common import write_json_artifact, write_text_artifact
 
 (
     tsv_path,
@@ -409,7 +416,15 @@ payload = {
     "gates": rows,
 }
 
-Path(json_path).write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+write_json_artifact(
+    Path(json_path),
+    payload,
+    source_entrypoint="scripts/governance/quality_gate.sh",
+    verification_scope="quality-gate-summary",
+    source_run_id="governance-quality-gate-summary",
+    freshness_window_hours=24,
+    extra={"report_kind": "quality-gate-summary-json"},
+)
 
 lines = [
     "# Quality Gate Summary",
@@ -425,7 +440,15 @@ lines = [
 for row in rows:
     log_path = row["log_path"] or ""
     lines.append(f"| `{row['phase']}` | `{row['name']}` | `{row['status']}` | `{log_path}` |")
-Path(md_path).write_text("\n".join(lines) + "\n", encoding="utf-8")
+write_text_artifact(
+    Path(md_path),
+    "\n".join(lines) + "\n",
+    source_entrypoint="scripts/governance/quality_gate.sh",
+    verification_scope="quality-gate-summary",
+    source_run_id="governance-quality-gate-summary",
+    freshness_window_hours=24,
+    extra={"report_kind": "quality-gate-summary-markdown"},
+)
 PY
 }
 

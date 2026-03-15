@@ -163,9 +163,9 @@ sqlite3 "$SQLITE_PATH" < infra/sql/sqlite_state_init.sql
 分别在 3 个终端运行：
 
 ```bash
-./scripts/dev_api.sh
-./scripts/dev_worker.sh
-./scripts/dev_mcp.sh
+./bin/dev-api
+./bin/dev-worker
+./bin/dev-mcp
 ```
 
 补充说明：
@@ -223,7 +223,7 @@ python3 scripts/release/verify_db_rollback_readiness.py \
 ### 清理 workflow（媒体与缓存）
 
 ```bash
-./scripts/dev_worker.sh --command start-cleanup-workflow --run-once --older-than-hours 24
+./bin/dev-worker --command start-cleanup-workflow --run-once --older-than-hours 24
 ```
 
 缓存策略细节见 `docs/reference/cache.md`。
@@ -312,8 +312,8 @@ bash -n scripts/runtime/start_ops_workflows.sh
 ## 一键脚本（Clone 后 80%+ 快速可用）
 
 ```bash
-./scripts/bootstrap_full_stack.sh
-./scripts/full_stack.sh up
+./bin/bootstrap-full-stack
+./bin/full-stack up
 ./scripts/ci/smoke_full_stack.sh
 ```
 
@@ -340,7 +340,7 @@ bash -n scripts/runtime/start_ops_workflows.sh
 
 `full_stack.sh` 运行约束（稳定性修复）：
 
-- `up` 后台拉起 API 时会调用 `./scripts/dev_api.sh --no-reload`，避免 `uvicorn --reload` 父子进程漂移导致 `status`/`down` 误判。
+- `up` 后台拉起 API 时会调用 `./bin/dev-api --no-reload`，避免 `uvicorn --reload` 父子进程漂移导致 `status`/`down` 误判。
 - `status` 会在 PID 元数据失真时按进程特征探测并自愈 PID 文件。
 
 Live smoke 执行约束（2026-02 更新）：
@@ -369,18 +369,18 @@ Live smoke 执行约束（2026-02 更新）：
 推荐命令：
 
 ```bash
-./scripts/quality_gate.sh --mode pre-push --profile ci --profile live-smoke --ci-dedupe 0
+./bin/quality-gate --mode pre-push --profile ci --profile live-smoke --ci-dedupe 0
 ./scripts/ci/api_real_smoke_local.sh
-./scripts/quality_gate.sh --mode pre-push --strict-full-run 1 --profile ci --profile live-smoke --ci-dedupe 0
+./bin/quality-gate --mode pre-push --strict-full-run 1 --profile ci --profile live-smoke --ci-dedupe 0
 ```
 
 标准严格验收命令（固定顺序）：
 
 ```bash
-./scripts/full_stack.sh up
+./bin/full-stack up
 ./scripts/ci/api_real_smoke_local.sh
 ./scripts/ci/smoke_full_stack.sh
-./scripts/quality_gate.sh --mode pre-push --strict-full-run 1 --profile ci --profile live-smoke --ci-dedupe 0
+./bin/quality-gate --mode pre-push --strict-full-run 1 --profile ci --profile live-smoke --ci-dedupe 0
 ```
 
 如果 `api_real_smoke_local.sh` 在最开始就失败并输出 `host_loopback_ipv4_exhausted`：
@@ -405,7 +405,7 @@ PY
 
 ## 常见故障
 
-- `API health check failed`：确认 `./scripts/dev_api.sh` 已运行，且 `VD_API_BASE_URL` 可访问。
+- `API health check failed`：确认 `./bin/dev-api` 已运行，且 `VD_API_BASE_URL` 可访问。
 - `RESEND_API_KEY is not configured` / `RESEND_FROM_EMAIL is not configured`：`NOTIFICATION_ENABLED=true` 时需补齐 `.env`（或在当前 shell 中显式导出）。
 - 404 报表路由：`run_daily_digest.sh` / `run_failure_alerts.sh` 会按脚本内 fallback 流程回退发送。
 

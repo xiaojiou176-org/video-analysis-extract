@@ -17,7 +17,16 @@
       "evidence_artifact": ".runtime-cache/reports/governance/upstream-compat-report.json",
       "license": "open-source",
       "security_posture": "template-only",
-      "risk_class": "low"
+      "risk_class": "low",
+      "support_tier": "tier-3",
+      "freshness_required_hours": 336,
+      "latest_verification_status": "declared",
+      "latest_verification_age_hours": 0,
+      "contract_kind": "vendor-contract",
+      "stability_class": "community-supported",
+      "degradation_mode": "not-applicable until the template becomes an active vendor surface",
+      "blame_surface": "vendor-boundary",
+      "owner_rotation": "platform-weekly"
     }
   ]
 }
