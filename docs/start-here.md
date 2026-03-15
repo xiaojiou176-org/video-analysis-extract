@@ -43,6 +43,7 @@
 - 文档高漂移事实已开始收口到 `docs/generated/*.md`；入口文档只保留 onboarding 必需信息。
 - self-hosted CI 只接受 **trusted internal PR**；若 PR 来自 fork，GitHub Actions 会在边界门禁直接阻断。
 - 严格验收仍以 `./bin/strict-ci --mode pre-push --strict-full-run 1 --ci-dedupe 0` 为唯一权威入口。
+- 契约主层已迁到 `contracts/`，长期跟踪 artifact 已迁到 `artifacts/`。
 <!-- docs:generated governance-snapshot end -->
 
 ## 环境文件准备（必做）

@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+from typing import Any
+
 import httpx
+
 from integrations.providers import resend as resend_provider
 
 RESEND_API_URL = resend_provider.RESEND_API_URL

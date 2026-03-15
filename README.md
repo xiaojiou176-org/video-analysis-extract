@@ -33,7 +33,6 @@
 - **CI 信任边界**：`trusted_internal_pr_only`。fork / untrusted PR 不进入 privileged self-hosted 主链。
 - **Strict CI 真相源**：`infra/config/strict_ci_contract.json`。
 - **Generated references**：`docs/generated/ci-topology.md`、`docs/generated/runner-baseline.md`、`docs/generated/release-evidence.md`。
-- **Final-form governance references**：`docs/reference/root-governance.md`、`docs/reference/architecture-governance.md`、`docs/reference/runtime-cache-retention.md`、`docs/reference/evidence-model.md`、`docs/reference/upstream-governance.md`。
 <!-- docs:generated governance-snapshot end -->
 
 ## Clone 后快速跑通（推荐）

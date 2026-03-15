@@ -20,11 +20,11 @@
 
 ## Governance Control Plane
 
-- root allowlist entries: `33`
+- root allowlist entries: `0`
 - runtime root: `.runtime-cache`
 - active upstream inventory entries: `19`
 - upstream templates: `1`
-- governance gate entrypoint: `./scripts/governance_gate.sh --mode pre-commit|pre-push|ci|audit`
+- governance gate entrypoint: `./bin/governance-audit --mode pre-commit|pre-push|ci|audit`
 
 ## Aggregate Gate Inventory
 

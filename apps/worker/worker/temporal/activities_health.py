@@ -5,12 +5,12 @@ from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
+from sqlalchemy import text
+
 from integrations.providers import gemini as gemini_provider
 from integrations.providers import resend as resend_provider
 from integrations.providers import rsshub as rsshub_provider
 from integrations.providers import youtube_data_api as youtube_provider
-from sqlalchemy import text
-
 from worker.config import Settings
 from worker.state.postgres_store import PostgresBusinessStore
 from worker.temporal.activities_delivery import _classify_delivery_error

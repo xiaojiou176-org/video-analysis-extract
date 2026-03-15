@@ -4,8 +4,9 @@ set -euo pipefail
 vd_entrypoint_bootstrap() {
   local channel="$1"
   local entrypoint_name="$2"
+  local explicit_log_path="${3:-}"
   local argv_json="[]"
-  shift 2
+  shift 3
 
   export PYTHONDONTWRITEBYTECODE="${PYTHONDONTWRITEBYTECODE:-1}"
   argv_json="$(
@@ -19,7 +20,7 @@ PY
   # shellcheck source=./scripts/runtime/logging.sh
   source "$ROOT_DIR/scripts/runtime/logging.sh"
   vd_log_entrypoint="$entrypoint_name"
-  vd_log_init "$channel" "$entrypoint_name"
+  vd_log_init "$channel" "$entrypoint_name" "$explicit_log_path"
   vd_log info entrypoint_bootstrap "bootstrap entrypoint=${entrypoint_name} channel=${channel}"
 
   export vd_log_channel

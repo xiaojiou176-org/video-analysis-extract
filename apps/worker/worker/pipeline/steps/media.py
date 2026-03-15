@@ -7,10 +7,8 @@ from typing import Any
 from integrations.binaries.media_commands import (
     bbdown_commands,
     build_download_provider_chain,
-    normalize_bilibili_downloader,
     yt_dlp_download_command,
 )
-from worker.config import Settings
 from worker.pipeline.types import CommandResult, PipelineContext, StepExecution, StepStatus
 
 

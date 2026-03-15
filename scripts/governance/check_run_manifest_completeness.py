@@ -53,7 +53,11 @@ def main() -> int:
             if not str(payload.get(field) or "").strip():
                 errors.append(f"{rel_path(manifest_path)}: missing required manifest field `{field}`")
         log_path_raw = str(payload.get("log_path") or "").strip()
-        log_path = Path(log_path_raw) if log_path_raw else None
+        if log_path_raw:
+            candidate = Path(log_path_raw)
+            log_path = candidate if candidate.is_absolute() else ROOT / candidate
+        else:
+            log_path = None
         if log_path is None or not log_path.is_file():
             errors.append(f"{rel_path(manifest_path)}: log_path missing or file absent")
             continue

@@ -10,6 +10,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from integrations.providers import resend as resend_provider
+
 from ..config import settings
 from ..models import NotificationConfig, NotificationDelivery
 

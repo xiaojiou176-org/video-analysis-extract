@@ -17,6 +17,17 @@ if str(ROOT / "scripts" / "governance") not in sys.path:
 from common import write_json_artifact
 
 
+def _normalize_log_path(raw_path: str) -> str:
+    cleaned = raw_path.strip()
+    if not cleaned:
+        return ""
+    path = Path(cleaned)
+    try:
+        return path.resolve().relative_to(ROOT).as_posix()
+    except ValueError:
+        return cleaned
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Write or refresh a run manifest for a stable public entrypoint.")
     parser.add_argument("--run-id", required=True)
@@ -40,7 +51,7 @@ def main() -> int:
         "created_at": datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
         "repo_commit": os.getenv("vd_log_repo_commit", "unknown"),
         "env_profile": os.getenv("vd_log_env_profile", os.getenv("ENV_PROFILE", "unknown")),
-        "log_path": os.getenv("vd_log_path", ""),
+        "log_path": _normalize_log_path(os.getenv("vd_log_path", "")),
         "test_run_id": os.getenv("vd_test_run_id", ""),
         "gate_run_id": os.getenv("vd_gate_run_id", ""),
     }
