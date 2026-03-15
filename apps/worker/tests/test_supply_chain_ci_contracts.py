@@ -71,6 +71,15 @@ def test_release_manifest_capture_uses_relative_artifact_paths_and_current_run_s
     assert ".relative_to(root).as_posix()" in script
 
 
+def test_rollback_readiness_script_uses_artifacts_release_root() -> None:
+    script = (_repo_root() / "scripts" / "release" / "verify_db_rollback_readiness.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert 'repo_root / "artifacts" / "releases"' in script
+    assert 'repo_root / "reports" / "releases"' not in script
+
+
 def test_sample_release_manifest_is_marked_as_historical_example_with_relative_paths() -> None:
     manifest = json.loads(
         (_repo_root() / "artifacts" / "releases" / "v0.1.0" / "manifest.json").read_text(encoding="utf-8")

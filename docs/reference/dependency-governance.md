@@ -124,6 +124,7 @@ npm --prefix "$WEB_RUNTIME_WEB_DIR" run build
   - API 必含 `ingest/jobs/subscriptions/videos` 的 `service + router`
   - 总目标数不得低于 `16`
 - `also_copy` 必须同时包含被测代码与对应测试目录，确保 mutmut 在隔离沙箱内可复现实测路径：
+  - `integrations/`（当核心路径已迁入 integration layer 时，mutation 沙箱必须同步带上外部转接层）
   - `apps/worker/worker` + `apps/worker/tests`
   - `apps/api/app` + `apps/api/tests`
 - 测试选择清单（`pytest_add_cli_args_test_selection`）必须与突变范围同步演进：

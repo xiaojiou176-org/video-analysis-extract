@@ -219,7 +219,7 @@ def _render_governance_dashboard(nav: dict, manifest: dict, boundary: dict) -> s
     upstreams = _load_json(REPO_ROOT / "config" / "governance" / "active-upstreams.json")
     templates = _load_json(REPO_ROOT / "config" / "governance" / "upstream-templates.json")
     compat = _load_json(REPO_ROOT / "config" / "governance" / "upstream-compat-matrix.json")
-    kpi_path = REPO_ROOT / "reports" / "release-readiness" / "ci-kpi-summary.json"
+    kpi_path = REPO_ROOT / "artifacts" / "release-readiness" / "ci-kpi-summary.json"
     kpi_status = "missing"
     kpi_summary = "ci-kpi summary not generated yet"
     if kpi_path.exists():

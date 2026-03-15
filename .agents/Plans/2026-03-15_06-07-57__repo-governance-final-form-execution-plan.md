@@ -4,14 +4,14 @@
 
 - Plan Title: Repo Governance Final Form Execution Plan
 - Created At: 2026-03-15 06:07:57 America/Los_Angeles
-- Last Updated: 2026-03-15 09:16:00 America/Los_Angeles
+- Last Updated: 2026-03-15 15:03:28 America/Los_Angeles
 - Repo Name: 视频分析提取
 - Repo Path: /Users/yuyifeng/Documents/VS Code/1_Personal_Project/[其他项目]Useful_Tools/📺视频分析提取
 - Repo Archetype: hybrid-repo
 - Final Goal: Push the repository to final-form governance for architecture, cache, logging, root cleanliness, and upstream integration.
-- Current Status: Blocked
-- Current Phase: Phase I - Closure Integrity + External Runtime Blocker Triage
-- Current Workstream: WS-09 Validation And Closure
+- Current Status: In Progress
+- Current Phase: Phase K - Post-Revalidation Forward Work
+- Current Workstream: WS-07 Integration Boundary Refactor
 
 ## Objective
 
@@ -50,7 +50,7 @@ This file is the single execution truth source for the current governance refact
 | WS-06 Contracts And Generated Surface Split | Completed | P1 | Codex | Hard-cut source and generated contract surfaces out of `packages/shared-contracts` into `contracts/` and rewired active references | Keep watching for stale bridge references, but active migration is finished | Verified |
 | WS-07 Integration Boundary Refactor | In Progress | P1 | Codex | Introduced `integrations/`, completed the media-binary slice, and extracted the Resend provider slice into `integrations/providers` | Continue with the next upstream family after validating the provider slice and choosing the next narrow extraction target | Partially Verified |
 | WS-08 Docs And Governance Surface Repoint | Partially Completed | P2 | Codex | Repointed active top-level and module docs to `bin/*`; historical/generated surfaces intentionally left untouched in this batch | Finish render-driven and historical-surface cleanup when the contract and integration moves start | Partially Verified |
-| WS-09 Validation And Closure | In Progress | P0 | Codex | Repaired upstream compatibility freshness semantics, restored governance audit, and re-proved git closure on `main` | Resolve standard-env Docker timeout so strict-ci can produce fresh blocker-chain artifacts again | Partially Verified |
+| WS-09 Validation And Closure | Completed | P0 | Codex | Repointed the last stale release/docs defaults away from root `reports/`, revalidated targeted governance surfaces, and re-proved `strict-ci` end-to-end on the current dirty workspace | Carry the fresh strict-ci pass forward as the new validation baseline while resuming deeper WS-07/WS-04 structural work | Verified |
 
 ## Task Checklist
 
@@ -223,6 +223,10 @@ This file is the single execution truth source for the current governance refact
 | 2026-03-15 07:43:00 | Scope manifest completeness to fresh current-run manifests and exclude evidence-index self-reference | The first completeness pass was catching stale/current mixed manifests and the index file trying to reference itself | Force historical manifests to satisfy a current-run gate | Makes WS-05 validate the thing it is actually supposed to validate: that new public entrypoints produce a coherent current-run case file |
 | 2026-03-15 07:52:00 | Extract Resend as the second integration slice by moving the real provider logic into `integrations/providers/resend.py` while keeping service/activity wrappers stable | Resend is a narrow, test-rich provider family with clear boundaries and low migration ambiguity | Jump directly to a larger provider family like Gemini or a multi-service reader slice | Expands WS-07 from binary-only to provider API extraction without breaking existing API or worker call sites |
 | 2026-03-15 09:08:00 | Make upstream compatibility freshness enforce only rows that currently claim `verification_status=verified`, and downgrade blocker chains without fresh runtime receipts to `pending` | The matrix must be honest: a row cannot claim “freshly verified” when the required runtime artifacts are absent from the live workspace | Leave the gate requiring artifacts for every row, or keep missing-artifact blocker rows marked `verified` | Restores contract truth between matrix status and artifact evidence instead of letting the gate or the data lie |
+| 2026-03-15 09:30:40 | Treat the old Docker timeout as resolved and carry forward the new strict-ci first failure instead of leaving closure blocked on stale infrastructure evidence | Fresh probes now show `docker version`, `docker info`, and `docker ps` all respond; the real blocker moved forward to mutation sandbox drift after the `integrations/` move | Keep calling Docker the blocker after new evidence exists | Keeps the closure log honest and turns the next step into a repo-side fix instead of an infrastructure shrug |
+| 2026-03-15 09:39:30 | Remove the empty legacy root `reports/` subtree immediately instead of tolerating it until a later cleanup pass | Once `artifacts/` is the long-lived home, leaving an empty `reports/` hallway behind only creates fake root-governance failures and blocks strict-ci for the wrong reason | Leave the empty legacy directory until a final sweep | Keeps closure focused on the next real failure instead of a stale migration shell |
+| 2026-03-15 09:47:20 | Fix the mutmut sandbox at its true wiring point instead of only patching pyproject metadata | The strict-ci failure came from `scripts/ci/run_mutmut.sh` not linking the new `integrations/` top-level directory into the mutation workspace; `also_copy` alone was not enough | Re-run strict-ci repeatedly without fixing the shell-level sandbox bootstrap | Aligns the mutation sandbox with the new root architecture so mutmut sees the same module tree as normal execution |
+| 2026-03-15 09:54:40 | Record the live strict-ci rerun as the current closure checkpoint instead of waiting to update the control board until the rerun ends | The source of truth should show that fresh standard-env validation is actively in progress, not pretend the repo is still waiting to rerun | Leave the control board on the old “pending rerun” wording until the process finishes | Keeps the repo-side state machine synchronized with the actual active validation run |
 
 ## Validation Log
 
@@ -247,7 +251,13 @@ This file is the single execution truth source for the current governance refact
 | Resend provider slice batch | Completed | `PYTHONDONTWRITEBYTECODE=1 UV_PROJECT_ENVIRONMENT=.runtime-cache/temp/pytest-governance-env uv run pytest apps/api/tests/test_notifications_service.py apps/api/tests/test_notifications_service_extra_coverage.py apps/worker/tests/test_temporal_helpers_coverage.py apps/worker/tests/test_governance_controls.py -q` + governance audit | PASS (39 passed) | Resend outbound provider logic now lives in `integrations/providers/resend.py` while API/worker layers keep thin compatibility wrappers |
 | Honest upstream compat freshness semantics | Completed | `PYTHONDONTWRITEBYTECODE=1 UV_PROJECT_ENVIRONMENT=.runtime-cache/temp/pytest-governance-env uv run pytest apps/worker/tests/test_governance_controls.py -q` + `python3 scripts/governance/check_upstream_compat_freshness.py` + `./bin/governance-audit --mode audit` | PASS | The matrix now only claims `verified` when fresh runtime artifacts exist; non-fresh blocker chains are explicitly `pending` instead of lying |
 | Git closure snapshot | Completed | `git status --short --branch` + `git branch -vv` + `git worktree list` + `git ls-remote --heads origin` + `gh pr list --state open --limit 50` + `git rev-parse HEAD && git rev-parse origin/main` | PASS | Live workspace re-check shows one local branch (`main`), one worktree, no open PRs, and local `main` aligned with `origin/main` before the new closure commit |
-| Standard-env runtime probe | Blocked | `python3 - <<'PY' ... subprocess.run(['docker','version'], timeout=15) ... PY` | FAIL (`DOCKER_VERSION_TIMEOUT`) | Closure is now blocked by external Docker responsiveness, not by repo-side governance truth surfaces |
+| Docker responsiveness probe | Completed | `docker version --format '{{json .}}'` + `docker info --format '{{json .}}'` + `docker ps --format '{{json .}}'` | PASS | Docker is responsive again; the old infrastructure blocker is no longer current |
+| Strict-ci first-failure refresh | Completed | `./bin/strict-ci --debug-build --mode pre-push --strict-full-run 1 --ci-dedupe 0` | FAIL in mutation gate | The first current repo-side failure is now concrete: mutmut sandbox missing `integrations` after the integration-layer move |
+| Mutation sandbox follow-up fix | Completed | `python3 scripts/governance/check_mutation_scope.py && python3 scripts/governance/check_mutation_test_selection.py` + targeted governance pytest | PASS | `pyproject.toml` now copies `integrations/` into mutmut sandboxes, and governance checks accept the change |
+| Root reports residue cleanup | Completed | inspect `reports/` + remove empty legacy subtree + rerun `python3 scripts/governance/check_root_allowlist.py --strict-local-private && ./bin/governance-audit --mode pre-push` | PASS | The old root-level `reports/` shell no longer blocks governance closure |
+| Mutation sandbox root-link fix | Completed | `bash -n scripts/ci/run_mutmut.sh` + manual sandbox bootstrap smoke + targeted governance pytest | PASS | The mutation workspace now really links `integrations/` at the top level instead of only declaring it in config |
+| Legacy release/docs path cleanup | Completed | targeted pytest + `python3 scripts/governance/render_docs_governance.py --check` + isolated `verify_db_rollback_readiness.py` smoke | PASS | `verify_db_rollback_readiness.py` now writes release drill state under `artifacts/releases/`, and docs governance reads `artifacts/release-readiness/ci-kpi-summary.json` instead of reviving root `reports/` |
+| Strict-ci rerun after mutation/root fixes | Completed | `./bin/strict-ci --debug-build --mode pre-push --strict-full-run 1 --ci-dedupe 0` | PASS | Fresh standard-env debug-build evidence now passes through short checks, long tests, mutation, api-real-smoke-local, and final root dirtiness on the current workspace |
 
 ## Risk / Blocker Log
 
@@ -268,7 +278,11 @@ This file is the single execution truth source for the current governance refact
 | 2026-03-15 07:19:20 | Mitigated | `integrations/` extraction was still a broad multi-surface migration across app logic, runtime scripts, CI scripts, and upstream governance surfaces | High risk of partial glue-layer duplication if forced too quickly | Mitigated by narrowing the first slice to media-binary command construction | Continue slicing the remaining upstream families incrementally instead of forcing a repo-wide glue rewrite in one jump |
 | 2026-03-15 07:34:30 | Risk | WS-07 is now real, but only the media-binary family has moved; provider APIs, reader services, and runtime images are still distributed across worker/app/runtime/CI surfaces | The integration layer is no longer hypothetical, but it is not yet complete enough for a U4 verdict | Further slices can continue safely now that the pattern is proven | Extract the next upstream family with the same narrow-slice discipline |
 | 2026-03-15 07:55:40 | Risk | WS-07 now has both a binary slice and a provider API slice, but reader services, provider health probes, and runtime image glue are still distributed across the old layers | The integration layer direction is now proven, but the remaining surfaces are still large enough to create duplication if rushed | Continue with narrow provider/reader slices | Choose the next family based on boundary clarity and test coverage, not on raw dependency count |
-| 2026-03-15 09:12:00 | Blocker | `./bin/strict-ci --debug-build --mode pre-push --strict-full-run 1 --ci-dedupe 0` cannot currently be re-proved because Docker itself times out even on `docker version` | Release-qualifying standard-env evidence cannot be regenerated in this turn, so blocker-chain runtime receipts remain pending | Repo-side governance checks, env contract, git closure verification, and plan synchronization can continue | Docker daemon / Desktop responsiveness must recover before strict-ci can mint fresh quality-gate and upstream-chain artifacts |
+| 2026-03-15 09:12:00 | Resolved | `./bin/strict-ci --debug-build --mode pre-push --strict-full-run 1 --ci-dedupe 0` was previously blocked by Docker timing out even on `docker version` | Release-qualifying standard-env evidence could not be regenerated | Resolved with fresh Docker probes and a live strict-ci rerun reaching the mutation gate | Docker is responsive again; closure is no longer blocked by stale infrastructure timeout evidence |
+| 2026-03-15 09:30:40 | Risk | The latest strict-ci rerun had not yet been repeated after the actual mutmut shell-wiring fix, so the mutation-gate repair was not proven end-to-end in standard-env strict-ci | Closure was closer, but not yet fully re-proved | Repo-side governance work and mutation config checks could continue | A fresh rerun has now started on the updated mutation sandbox wiring; keep watching for its real outcome |
+| 2026-03-15 09:39:30 | Resolved | A stale empty `reports/` subtree at root was still tripping terminal governance even though long-lived artifacts had already moved to `artifacts/` | strict-ci and governance pre-push were blocked by a migration shell, not a live governance defect | Resolved in closure follow-up | Root hallway no longer contains the legacy `reports/` shell |
+| 2026-03-15 09:39:30 | Resolved | The fresh strict-ci rerun was still in progress, so closure could not yet claim final standard-env pass or name the next true first failure after long-tests | Final closure evidence was still being minted | Other read-only inspection or control-board maintenance could continue | Resolved once the rerun completed end-to-end on the updated workspace |
+| 2026-03-15 15:03:28 | Resolved | Two stale release/docs defaults still pointed at root `reports/`, which could silently re-create a now-illegal top-level hallway even after the empty shell was removed | Root cleanliness could regress from future release-readiness or docs-governance execution paths | Targeted governance tests and root/governance checks could continue while the defaults were corrected | `verify_db_rollback_readiness.py` and `render_docs_governance.py` now point at `artifacts/`, root `reports/` is gone again, and fresh strict-ci passes end-to-end |
 
 ## Files Changed Log
 
@@ -288,14 +302,18 @@ This file is the single execution truth source for the current governance refact
 | 2026-03-15 07:47:40 | Added `scripts/governance/check_run_manifest_completeness.py`; wired it into governance audit, docs, and governance tests; adjusted entrypoint bootstrap to emit a first log event so fresh manifests point at real log files |
 | 2026-03-15 07:55:40 | Added `integrations/providers/resend.py`; rewired API notification service and worker email activity helpers into thin wrappers over the integration module; updated dependency policy to allow API access to `integrations.` |
 | 2026-03-15 09:16:00 | Updated `scripts/governance/check_upstream_compat_freshness.py`, `config/governance/upstream-compat-matrix.json`, and `docs/reference/upstream-compatibility-policy.md` so only rows that really have fresh runtime receipts claim `verified`; revalidated governance audit and captured the external Docker timeout blocker |
+| 2026-03-15 09:30:40 | Captured fresh Docker responsiveness evidence; reproduced strict-ci far enough to replace the stale Docker blocker with a concrete mutation-sandbox failure; updated mutmut `also_copy` to include `integrations/` and documented the change in dependency governance and governance tests |
+| 2026-03-15 09:39:30 | Removed the stale root `reports/` migration shell after confirming `artifacts/` already holds long-lived files; reran governance pre-push successfully; started a fresh strict-ci rerun that is now beyond short-checks |
+| 2026-03-15 09:54:40 | Patched `scripts/ci/run_mutmut.sh` so the mutation workspace symlinks `integrations/`; lightly verified the wiring with sandbox inspection and governance pytest; launched a fresh strict-ci rerun on the updated shell wiring |
+| 2026-03-15 09:47:20 | Patched `scripts/ci/run_mutmut.sh` so the mutation workspace symlinks `integrations/`; lightly verified the fix with sandbox inspection, mutation governance guards, and targeted governance pytest |
+| 2026-03-15 15:03:28 | Repointed stale release/docs defaults from root `reports/` to `artifacts/` in `verify_db_rollback_readiness.py` and `render_docs_governance.py`; added regression assertions; removed the empty legacy `reports/` shell again; revalidated targeted governance tests, docs governance, root/governance gates, and fresh end-to-end strict-ci |
 
 ## Next Actions
 
-1. Restore Docker responsiveness and rerun `./bin/strict-ci --debug-build --mode pre-push --strict-full-run 1 --ci-dedupe 0` so the blocker-chain runtime artifacts can move from `pending` back to fresh `verified`.
-2. Continue WS-07 with the next narrow extraction slice, prioritizing one reader/provider-health family rather than a repo-wide glue rewrite.
-3. Finish the remaining WS-04 helper coverage on deeper release/runtime writers.
-4. Add an explicit `upstreams` log channel once the next integration slice lands.
-5. Keep this file current before any later structural batch starts.
+1. Continue WS-07 with the next narrow extraction slice, prioritizing one reader/provider-health family rather than a repo-wide glue rewrite.
+2. Finish the remaining WS-04 helper coverage on deeper release/runtime writers.
+3. Add an explicit `upstreams` log channel usage plan once the next integration slice lands.
+4. Keep this file current before any later structural batch starts.
 
 ## Final Completion Summary
 
@@ -375,4 +393,11 @@ Batch 8 closure-integrity progress completed and verified:
 - Re-validated governance audit, env contract, and governance pytest from the live clean baseline.
 - Reconfirmed git closure before the new closure commit: one branch, one worktree, no open PRs, and `main` aligned with `origin/main`.
 
-This batch intentionally does **not** claim full release-grade closure. The remaining blocker is external runtime infrastructure: Docker is timing out even on `docker version`, so fresh strict-ci standard-env evidence cannot be minted in this turn. Repo-side governance truth is restored; standard-env runtime proof is the unresolved final blocker.
+Batch 9 validation closure completed and verified:
+
+- Repointed the last stale release/docs defaults that could recreate root `reports/` back to the governed `artifacts/` tree.
+- Added regression assertions so release rollback readiness and docs-governance rendering both fail closed if they drift back to root `reports/`.
+- Removed the reappeared empty `reports/` shell and revalidated root/governance gates immediately after cleanup.
+- Re-proved the current dirty workspace with a fresh `./bin/strict-ci --debug-build --mode pre-push --strict-full-run 1 --ci-dedupe 0` pass, including mutation, api-real-smoke-local, and final root dirtiness.
+
+This batch still does **not** declare the entire Final Form program finished. WS-04 still has deeper runtime writer coverage work, WS-07 still has more upstream families to extract into `integrations/`, and WS-08 still has historical/generated doc surfaces to finish cleaning up. What is now closed is the current validation frontier: the present workspace once again has a fresh end-to-end strict-ci pass instead of a lingering closure question mark.

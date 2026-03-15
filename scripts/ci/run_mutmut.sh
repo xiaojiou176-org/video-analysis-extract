@@ -19,6 +19,7 @@ TOP_LEVEL_ITEMS=(
   docs
   env
   infra
+  integrations
   packages
   scripts
   templates

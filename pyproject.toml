@@ -128,6 +128,7 @@ paths_to_mutate = [
   "apps/api/app/routers/videos.py",
 ]
 also_copy = [
+  "integrations",
   "apps/worker/worker",
   "apps/api/app",
   "apps/worker/tests",

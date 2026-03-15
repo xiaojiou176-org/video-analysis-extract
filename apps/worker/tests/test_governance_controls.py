@@ -80,6 +80,9 @@ def test_governance_control_plane_files_exist_and_are_populated() -> None:
         assert "verification_status" in row
         assert "verification_artifacts" in row
 
+    pyproject_text = (root / "pyproject.toml").read_text(encoding="utf-8")
+    assert '"integrations"' in pyproject_text
+
 
 def test_governance_gate_script_wires_all_terminal_checks() -> None:
     script = (_repo_root() / "scripts" / "governance" / "gate.sh").read_text(encoding="utf-8")

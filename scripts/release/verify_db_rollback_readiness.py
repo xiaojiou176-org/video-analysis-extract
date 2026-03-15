@@ -160,7 +160,7 @@ def main() -> int:
 
     latest_tag = _latest_tag(repo_root)
     release_tag = args.release_tag.strip() or latest_tag or "unversioned"
-    release_dir = repo_root / "reports" / "releases" / release_tag / "rollback"
+    release_dir = repo_root / "artifacts" / "releases" / release_tag / "rollback"
     release_dir.mkdir(parents=True, exist_ok=True)
 
     drill_path = release_dir / "drill.json"
