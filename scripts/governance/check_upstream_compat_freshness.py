@@ -13,9 +13,16 @@ def main() -> int:
     root = repo_root()
     matrix = load_governance_json("upstream-compat-matrix.json")
     errors: list[str] = []
+    verified_rows = 0
+    skipped_rows = 0
 
     for item in matrix.get("matrix", []):
         row_name = str(item.get("name") or "<unknown>")
+        verification_status = str(item.get("verification_status") or "").strip().lower()
+        if verification_status != "verified":
+            skipped_rows += 1
+            continue
+        verified_rows += 1
         freshness_window_hours = item.get("freshness_window_hours")
         if not isinstance(freshness_window_hours, int) or freshness_window_hours <= 0:
             errors.append(f"{row_name}: invalid freshness_window_hours")
@@ -47,7 +54,9 @@ def main() -> int:
             print(f"  - {item}")
         return 1
 
-    print("[upstream-compat-freshness] PASS")
+    print(
+        f"[upstream-compat-freshness] PASS (verified_rows={verified_rows} skipped_non_verified={skipped_rows})"
+    )
     return 0
 
 

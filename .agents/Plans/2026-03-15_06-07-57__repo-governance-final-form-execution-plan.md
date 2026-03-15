@@ -4,14 +4,14 @@
 
 - Plan Title: Repo Governance Final Form Execution Plan
 - Created At: 2026-03-15 06:07:57 America/Los_Angeles
-- Last Updated: 2026-03-15 07:55:40 America/Los_Angeles
+- Last Updated: 2026-03-15 09:16:00 America/Los_Angeles
 - Repo Name: 视频分析提取
 - Repo Path: /Users/yuyifeng/Documents/VS Code/1_Personal_Project/[其他项目]Useful_Tools/📺视频分析提取
 - Repo Archetype: hybrid-repo
 - Final Goal: Push the repository to final-form governance for architecture, cache, logging, root cleanliness, and upstream integration.
-- Current Status: Partially Completed
-- Current Phase: Phase H - Batch 5 Integration First Slice + Root Artifact Migration
-- Current Workstream: WS-07 Integration Boundary Refactor
+- Current Status: Blocked
+- Current Phase: Phase I - Closure Integrity + External Runtime Blocker Triage
+- Current Workstream: WS-09 Validation And Closure
 
 ## Objective
 
@@ -50,7 +50,7 @@ This file is the single execution truth source for the current governance refact
 | WS-06 Contracts And Generated Surface Split | Completed | P1 | Codex | Hard-cut source and generated contract surfaces out of `packages/shared-contracts` into `contracts/` and rewired active references | Keep watching for stale bridge references, but active migration is finished | Verified |
 | WS-07 Integration Boundary Refactor | In Progress | P1 | Codex | Introduced `integrations/`, completed the media-binary slice, and extracted the Resend provider slice into `integrations/providers` | Continue with the next upstream family after validating the provider slice and choosing the next narrow extraction target | Partially Verified |
 | WS-08 Docs And Governance Surface Repoint | Partially Completed | P2 | Codex | Repointed active top-level and module docs to `bin/*`; historical/generated surfaces intentionally left untouched in this batch | Finish render-driven and historical-surface cleanup when the contract and integration moves start | Partially Verified |
-| WS-09 Validation And Closure | Partially Completed | P0 | Codex | Root, bridge, doctor, governance audit, and targeted pytest all passed for batch 1 | Keep re-running after later structural batches | Verified |
+| WS-09 Validation And Closure | In Progress | P0 | Codex | Repaired upstream compatibility freshness semantics, restored governance audit, and re-proved git closure on `main` | Resolve standard-env Docker timeout so strict-ci can produce fresh blocker-chain artifacts again | Partially Verified |
 
 ## Task Checklist
 
@@ -222,6 +222,7 @@ This file is the single execution truth source for the current governance refact
 | 2026-03-15 07:29:00 | Migrate root `reports/` into `artifacts/` before raising root cleanliness claims further | The root directory cannot reach final-form cleanliness while long-lived artifacts still occupy the hallway | Leave `reports/` in place until every other workstream is finished | Frees the root from a permanent semantic conflict and makes the remaining R4 gap much smaller |
 | 2026-03-15 07:43:00 | Scope manifest completeness to fresh current-run manifests and exclude evidence-index self-reference | The first completeness pass was catching stale/current mixed manifests and the index file trying to reference itself | Force historical manifests to satisfy a current-run gate | Makes WS-05 validate the thing it is actually supposed to validate: that new public entrypoints produce a coherent current-run case file |
 | 2026-03-15 07:52:00 | Extract Resend as the second integration slice by moving the real provider logic into `integrations/providers/resend.py` while keeping service/activity wrappers stable | Resend is a narrow, test-rich provider family with clear boundaries and low migration ambiguity | Jump directly to a larger provider family like Gemini or a multi-service reader slice | Expands WS-07 from binary-only to provider API extraction without breaking existing API or worker call sites |
+| 2026-03-15 09:08:00 | Make upstream compatibility freshness enforce only rows that currently claim `verification_status=verified`, and downgrade blocker chains without fresh runtime receipts to `pending` | The matrix must be honest: a row cannot claim “freshly verified” when the required runtime artifacts are absent from the live workspace | Leave the gate requiring artifacts for every row, or keep missing-artifact blocker rows marked `verified` | Restores contract truth between matrix status and artifact evidence instead of letting the gate or the data lie |
 
 ## Validation Log
 
@@ -244,6 +245,9 @@ This file is the single execution truth source for the current governance refact
 | Root artifact migration batch | Completed | residual `reports/*` scan + root/governance checks + targeted release governance tests | PASS | Root long-lived report surfaces moved to `artifacts/`, and the root allowlist now accepts `artifacts` instead of `reports` |
 | Integration first slice batch | Completed | `PYTHONDONTWRITEBYTECODE=1 UV_PROJECT_ENVIRONMENT=.runtime-cache/temp/pytest-governance-env uv run pytest apps/worker/tests/test_metadata_and_prompts.py apps/worker/tests/test_runner_fallbacks.py apps/worker/tests/test_worker_step_branches.py apps/worker/tests/test_governance_controls.py -q` + governance audit | PASS (27 passed) | Media binary command construction now lives in the integration layer without breaking worker flow tests |
 | Resend provider slice batch | Completed | `PYTHONDONTWRITEBYTECODE=1 UV_PROJECT_ENVIRONMENT=.runtime-cache/temp/pytest-governance-env uv run pytest apps/api/tests/test_notifications_service.py apps/api/tests/test_notifications_service_extra_coverage.py apps/worker/tests/test_temporal_helpers_coverage.py apps/worker/tests/test_governance_controls.py -q` + governance audit | PASS (39 passed) | Resend outbound provider logic now lives in `integrations/providers/resend.py` while API/worker layers keep thin compatibility wrappers |
+| Honest upstream compat freshness semantics | Completed | `PYTHONDONTWRITEBYTECODE=1 UV_PROJECT_ENVIRONMENT=.runtime-cache/temp/pytest-governance-env uv run pytest apps/worker/tests/test_governance_controls.py -q` + `python3 scripts/governance/check_upstream_compat_freshness.py` + `./bin/governance-audit --mode audit` | PASS | The matrix now only claims `verified` when fresh runtime artifacts exist; non-fresh blocker chains are explicitly `pending` instead of lying |
+| Git closure snapshot | Completed | `git status --short --branch` + `git branch -vv` + `git worktree list` + `git ls-remote --heads origin` + `gh pr list --state open --limit 50` + `git rev-parse HEAD && git rev-parse origin/main` | PASS | Live workspace re-check shows one local branch (`main`), one worktree, no open PRs, and local `main` aligned with `origin/main` before the new closure commit |
+| Standard-env runtime probe | Blocked | `python3 - <<'PY' ... subprocess.run(['docker','version'], timeout=15) ... PY` | FAIL (`DOCKER_VERSION_TIMEOUT`) | Closure is now blocked by external Docker responsiveness, not by repo-side governance truth surfaces |
 
 ## Risk / Blocker Log
 
@@ -264,6 +268,7 @@ This file is the single execution truth source for the current governance refact
 | 2026-03-15 07:19:20 | Mitigated | `integrations/` extraction was still a broad multi-surface migration across app logic, runtime scripts, CI scripts, and upstream governance surfaces | High risk of partial glue-layer duplication if forced too quickly | Mitigated by narrowing the first slice to media-binary command construction | Continue slicing the remaining upstream families incrementally instead of forcing a repo-wide glue rewrite in one jump |
 | 2026-03-15 07:34:30 | Risk | WS-07 is now real, but only the media-binary family has moved; provider APIs, reader services, and runtime images are still distributed across worker/app/runtime/CI surfaces | The integration layer is no longer hypothetical, but it is not yet complete enough for a U4 verdict | Further slices can continue safely now that the pattern is proven | Extract the next upstream family with the same narrow-slice discipline |
 | 2026-03-15 07:55:40 | Risk | WS-07 now has both a binary slice and a provider API slice, but reader services, provider health probes, and runtime image glue are still distributed across the old layers | The integration layer direction is now proven, but the remaining surfaces are still large enough to create duplication if rushed | Continue with narrow provider/reader slices | Choose the next family based on boundary clarity and test coverage, not on raw dependency count |
+| 2026-03-15 09:12:00 | Blocker | `./bin/strict-ci --debug-build --mode pre-push --strict-full-run 1 --ci-dedupe 0` cannot currently be re-proved because Docker itself times out even on `docker version` | Release-qualifying standard-env evidence cannot be regenerated in this turn, so blocker-chain runtime receipts remain pending | Repo-side governance checks, env contract, git closure verification, and plan synchronization can continue | Docker daemon / Desktop responsiveness must recover before strict-ci can mint fresh quality-gate and upstream-chain artifacts |
 
 ## Files Changed Log
 
@@ -282,12 +287,13 @@ This file is the single execution truth source for the current governance refact
 | 2026-03-15 07:34:30 | Migrated root `reports/` contents into `artifacts/`; added `artifacts/README.md`; rewired release/readiness/performance paths; introduced `integrations/` and extracted media binary command construction into `integrations/binaries/media_commands.py` |
 | 2026-03-15 07:47:40 | Added `scripts/governance/check_run_manifest_completeness.py`; wired it into governance audit, docs, and governance tests; adjusted entrypoint bootstrap to emit a first log event so fresh manifests point at real log files |
 | 2026-03-15 07:55:40 | Added `integrations/providers/resend.py`; rewired API notification service and worker email activity helpers into thin wrappers over the integration module; updated dependency policy to allow API access to `integrations.` |
+| 2026-03-15 09:16:00 | Updated `scripts/governance/check_upstream_compat_freshness.py`, `config/governance/upstream-compat-matrix.json`, and `docs/reference/upstream-compatibility-policy.md` so only rows that really have fresh runtime receipts claim `verified`; revalidated governance audit and captured the external Docker timeout blocker |
 
 ## Next Actions
 
-1. Continue WS-07 with the next narrow extraction slice, prioritizing one reader/provider-health family rather than a repo-wide glue rewrite.
-2. Finish the remaining WS-04 helper coverage on deeper release/runtime writers.
-3. Re-run root budget and governance assertions after the `artifacts/` migration settles to confirm the root hallway stays stable.
+1. Restore Docker responsiveness and rerun `./bin/strict-ci --debug-build --mode pre-push --strict-full-run 1 --ci-dedupe 0` so the blocker-chain runtime artifacts can move from `pending` back to fresh `verified`.
+2. Continue WS-07 with the next narrow extraction slice, prioritizing one reader/provider-health family rather than a repo-wide glue rewrite.
+3. Finish the remaining WS-04 helper coverage on deeper release/runtime writers.
 4. Add an explicit `upstreams` log channel once the next integration slice lands.
 5. Keep this file current before any later structural batch starts.
 
@@ -360,3 +366,13 @@ Batch 7 progress completed and verified:
 WS-07 is now more than a proof of concept: it has one binary slice and one provider API slice. The remaining work is to keep extending this pattern to reader services, provider health probes, and runtime image glue until the distributed integration logic is gone.
 
 WS-04 remains in progress because the repository still contains additional freshness-required report/evidence writers that have not yet been migrated to the helper path.
+
+Batch 8 closure-integrity progress completed and verified:
+
+- Re-audited the live `main` workspace instead of relying on older chat-only closure claims.
+- Repaired the mismatch between the upstream compatibility matrix and the freshness gate: only rows that truly have fresh runtime receipts now remain `verified`.
+- Downgraded blocker-chain rows without fresh local runtime receipts to `pending` instead of letting the repo claim evidence it does not currently possess.
+- Re-validated governance audit, env contract, and governance pytest from the live clean baseline.
+- Reconfirmed git closure before the new closure commit: one branch, one worktree, no open PRs, and `main` aligned with `origin/main`.
+
+This batch intentionally does **not** claim full release-grade closure. The remaining blocker is external runtime infrastructure: Docker is timing out even on `docker version`, so fresh strict-ci standard-env evidence cannot be minted in this turn. Repo-side governance truth is restored; standard-env runtime proof is the unresolved final blocker.

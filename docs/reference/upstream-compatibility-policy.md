@@ -13,6 +13,13 @@
 - `verification_scope`
 - `verification_artifacts`
 
+## 状态语义
+
+- `verified`：这条组合在 freshness window 内真的有验收工件，等同于“这批货刚验过，票据就在档案柜里”。
+- `pending`：组合仍被支持，但当前工作区没有新鲜验收工件，不能冒充“刚验过”。
+- `declared`：只有设计/登记，没有进入当前主链验证面。
+- `waived`：明确豁免，必须由文档或决策记录解释原因。
+
 ## Freshness Policy
 
 - blocker 链路：推荐 `<= 72h`
@@ -21,6 +28,6 @@
 
 ## 硬规则
 
-- current verification 只能基于 freshness window 内的 artifact。
+- `verified` 状态只能基于 freshness window 内的 artifact；非 `verified` 行不计入当前兼容性通过证明。
 - artifact metadata 必须能追溯到 `source_run_id` 与 `source_commit`。
 - 兼容矩阵的失败归因必须落到统一 failure class 枚举。
