@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import sys
 from datetime import UTC, datetime
@@ -21,15 +22,21 @@ def main() -> int:
     parser.add_argument("--run-id", required=True)
     parser.add_argument("--entrypoint", required=True)
     parser.add_argument("--channel", required=True)
-    parser.add_argument("--argv", nargs="*", default=[])
+    parser.add_argument("--argv-json", default="[]")
     args = parser.parse_args()
+    try:
+        argv = json.loads(args.argv_json)
+    except json.JSONDecodeError as exc:
+        raise SystemExit(f"invalid --argv-json payload: {exc}") from exc
+    if not isinstance(argv, list) or any(not isinstance(item, str) for item in argv):
+        raise SystemExit("--argv-json must decode to list[str]")
 
     payload = {
         "version": 1,
         "run_id": args.run_id,
         "entrypoint": args.entrypoint,
         "channel": args.channel,
-        "argv": list(args.argv),
+        "argv": argv,
         "created_at": datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
         "repo_commit": os.getenv("vd_log_repo_commit", "unknown"),
         "env_profile": os.getenv("vd_log_env_profile", os.getenv("ENV_PROFILE", "unknown")),

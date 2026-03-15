@@ -4,9 +4,17 @@ set -euo pipefail
 vd_entrypoint_bootstrap() {
   local channel="$1"
   local entrypoint_name="$2"
+  local argv_json="[]"
   shift 2
 
   export PYTHONDONTWRITEBYTECODE="${PYTHONDONTWRITEBYTECODE:-1}"
+  argv_json="$(
+    python3 - <<'PY' "$@"
+import json
+import sys
+print(json.dumps(sys.argv[1:], ensure_ascii=False))
+PY
+  )"
 
   # shellcheck source=./scripts/runtime/logging.sh
   source "$ROOT_DIR/scripts/runtime/logging.sh"
@@ -27,5 +35,5 @@ vd_entrypoint_bootstrap() {
     --run-id "$vd_log_run_id" \
     --entrypoint "$entrypoint_name" \
     --channel "$channel" \
-    --argv "$@"
+    --argv-json "$argv_json"
 }
