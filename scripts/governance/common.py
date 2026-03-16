@@ -93,7 +93,10 @@ def read_runtime_metadata(path: Path) -> dict[str, Any] | None:
     metadata_path = runtime_metadata_path(path)
     if not metadata_path.is_file():
         return None
-    return json.loads(metadata_path.read_text(encoding="utf-8"))
+    try:
+        return json.loads(metadata_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return None
 
 
 def write_runtime_metadata(

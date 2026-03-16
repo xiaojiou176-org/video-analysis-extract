@@ -21,6 +21,10 @@ HELPER_MARKERS = (
     "ensure_runtime_metadata(",
 )
 WRITE_TEXT_RE = re.compile(r"\.write_text\(")
+WRITE_TARGET_RE = re.compile(r"(?P<var>[A-Za-z_][A-Za-z0-9_]*)\.write_text\(")
+RUNTIME_ASSIGN_RE = re.compile(
+    r"^(?P<var>[A-Za-z_][A-Za-z0-9_]*)\s*=\s*.*(?:\.runtime-cache/reports/|\.runtime-cache/evidence/)"
+)
 
 
 def _candidate_files() -> list[Path]:
@@ -40,6 +44,18 @@ def main() -> int:
         if not WRITE_TEXT_RE.search(text):
             continue
         if any(marker in text for marker in HELPER_MARKERS):
+            continue
+        runtime_write_vars: set[str] = set()
+        for line in text.splitlines():
+            match = RUNTIME_ASSIGN_RE.search(line)
+            if match:
+                runtime_write_vars.add(match.group("var"))
+        if not runtime_write_vars:
+            continue
+        if not any(
+            (match := WRITE_TARGET_RE.search(line)) and match.group("var") in runtime_write_vars
+            for line in text.splitlines()
+        ):
             continue
         offenders.append(rel_path(path))
 

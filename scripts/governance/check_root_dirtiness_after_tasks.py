@@ -37,6 +37,19 @@ def _hygiene_violations() -> list[str]:
     return sorted(dict.fromkeys(violations))
 
 
+def _runtime_root_unknown_children() -> list[str]:
+    payload = load_governance_json("runtime-outputs.json")
+    runtime_root = repo_root() / str(payload["runtime_root"])
+    allowed_subdirs = set(payload.get("subdirectories", {}).keys())
+    if not runtime_root.exists():
+        return []
+    return sorted(
+        str(Path(".runtime-cache") / child.name)
+        for child in runtime_root.iterdir()
+        if child.name not in allowed_subdirs
+    )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Capture or compare root-level top directory state.")
     parser.add_argument("--write-snapshot", type=Path, help="Write the current root snapshot JSON to this path.")
@@ -63,6 +76,7 @@ def main() -> int:
     tolerated_entries = _tolerated_local_private_entries()
     new_entries = sorted((after - before) - tolerated_entries)
     hygiene_violations = _hygiene_violations()
+    runtime_root_unknown_children = _runtime_root_unknown_children()
     if new_entries:
         print("[root-dirtiness] FAIL")
         print("  - new top-level entries after task: " + ", ".join(new_entries))
@@ -70,6 +84,13 @@ def main() -> int:
     if hygiene_violations:
         print("[root-dirtiness] FAIL")
         print("  - forbidden hygiene residue present: " + ", ".join(hygiene_violations))
+        return 1
+    if runtime_root_unknown_children:
+        print("[root-dirtiness] FAIL")
+        print(
+            "  - runtime root contains undeclared direct children: "
+            + ", ".join(runtime_root_unknown_children)
+        )
         return 1
     print("[root-dirtiness] PASS")
     return 0

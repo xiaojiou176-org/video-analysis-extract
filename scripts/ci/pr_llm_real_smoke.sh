@@ -16,8 +16,12 @@ log() {
 mkdir -p .runtime-cache/logs/tests .runtime-cache/reports/tests
 uv sync --frozen --extra dev --extra e2e
 
+SMOKE_WRITE_TOKEN="${VD_API_KEY:-video-digestor-local-dev-token}"
+export VD_API_KEY="${VD_API_KEY:-$SMOKE_WRITE_TOKEN}"
+export WEB_ACTION_SESSION_TOKEN="${WEB_ACTION_SESSION_TOKEN:-$SMOKE_WRITE_TOKEN}"
+
 log "starting pr llm real smoke"
-uv run --with uvicorn uvicorn apps.api.app.main:app --host 127.0.0.1 --port 18081 > .runtime-cache/logs/tests/pr-llm-real-smoke.log 2>&1 &
+./scripts/runtime/dev_api.sh --host 127.0.0.1 --port 18081 --no-reload > .runtime-cache/logs/tests/pr-llm-real-smoke.log 2>&1 &
 api_pid="$!"
 trap 'kill "${api_pid}" >/dev/null 2>&1 || true' EXIT
 

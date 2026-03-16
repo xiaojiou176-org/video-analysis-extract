@@ -25,9 +25,7 @@
 ```bash
 ./bin/dev-worker
 
-PYTHONPATH="$PWD:$PWD/apps/worker" \
-DATABASE_URL='sqlite+pysqlite:///:memory:' \
-uv run pytest apps/worker/tests -q
+./bin/python-tests
 ```
 
 ### 3.2 强制规则

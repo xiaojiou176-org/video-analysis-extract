@@ -7,6 +7,7 @@ Generated from the release evidence workflow and manifest capture script.
 ## Canonical Rules
 
 - current run evidence is the only canonical source for release verdicts
+- current-run KPI and readiness summaries live under `.runtime-cache/reports/release-readiness/`
 - historical examples under `artifacts/releases/*` are documentation examples, not release verdict proof
 - manifest paths must be repo-relative, not host-absolute
 

@@ -78,6 +78,7 @@ python3 scripts/governance/check_generated_vs_handwritten_contract_surfaces.py
 python3 scripts/governance/check_upstream_governance.py
 python3 scripts/governance/check_unregistered_upstream_usage.py
 python3 scripts/governance/check_upstream_compat_freshness.py
+python3 scripts/governance/check_upstream_same_run_cohesion.py
 python3 scripts/governance/check_active_upstream_evidence_fresh.py
 python3 scripts/governance/check_upstream_failure_classification.py
 python3 scripts/governance/check_vendor_registry_integrity.py

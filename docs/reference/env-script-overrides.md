@@ -96,19 +96,19 @@ export VD_API_KEY='local-dev-token'
 
 ## Script Entrypoints
 
-### `scripts/dev_api.sh`
+### `./bin/dev-api`
 
 - `--app` (default: `apps.api.app.main:app`)
 - `--reload` / `--no-reload`
 
-### `scripts/dev_worker.sh`
+### `./bin/dev-worker`
 
 - `--worker-dir`
 - `--entry`
 - `--command`
 - `--show-hints` / `--no-show-hints`
 
-### `scripts/dev_mcp.sh`
+### `./bin/dev-mcp`
 
 - `--entry`
 - `--mcp-dir`
@@ -171,7 +171,7 @@ workflow 管理参数：
 
 ## Full-Stack Helpers
 
-### `scripts/bootstrap_full_stack.sh`
+### `./bin/bootstrap-full-stack`
 
 - `--profile`
 - `--api-port`
@@ -183,11 +183,11 @@ workflow 管理参数：
 
 说明：
 
-- `bootstrap_full_stack.sh` 不再持久化改写 `.env`（仅在 `.env` 缺失时复制 `.env.example`）。
+- `./bin/bootstrap-full-stack` 不再持久化改写 `.env`（仅在 `.env` 缺失时复制 `.env.example`）。
 - 端口冲突与运行时路由决策会写入 `.runtime-cache/run/full-stack/resolved.env`。
 - 本地路由真相源是 `API_PORT/WEB_PORT`；`VD_API_BASE_URL` 与 `NEXT_PUBLIC_API_BASE_URL` 为派生地址。
 
-### `scripts/full_stack.sh`
+### `./bin/full-stack`
 
 - `--profile`
 - `--api-port`
@@ -196,7 +196,7 @@ workflow 管理参数：
 
 说明：
 
-- `full_stack.sh` 读取 `API_PORT/WEB_PORT` 作为本地路由真相源。
+- `./bin/full-stack` 读取 `API_PORT/WEB_PORT` 作为本地路由真相源。
 - `VD_API_BASE_URL` 与 `NEXT_PUBLIC_API_BASE_URL` 默认由路由真相源派生，必要时可通过 CLI 显式覆盖。
 
 ### `bin/smoke-full-stack`

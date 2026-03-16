@@ -80,6 +80,17 @@ def test_rollback_readiness_script_uses_artifacts_release_root() -> None:
     assert 'repo_root / "reports" / "releases"' not in script
 
 
+def test_release_prechecks_use_canonical_current_run_report_lane() -> None:
+    script = (_repo_root() / "scripts" / "release" / "generate_release_prechecks.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert '".runtime-cache" / "reports" / "release-readiness" / "db-rollback-readiness.json"' in script
+    assert 'default=".runtime-cache/reports/release-readiness/prechecks.json"' in script
+    assert '".runtime-cache" / "temp" / "release-readiness"' not in script
+    assert "write_json_artifact(" in script
+
+
 def test_sample_release_manifest_is_marked_as_historical_example_with_relative_paths() -> None:
     manifest = json.loads(
         (_repo_root() / "artifacts" / "releases" / "v0.1.0" / "manifest.json").read_text(encoding="utf-8")

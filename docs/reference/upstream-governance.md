@@ -27,7 +27,14 @@
 python3 scripts/governance/check_upstream_governance.py
 python3 scripts/governance/check_unregistered_upstream_usage.py
 python3 scripts/governance/check_upstream_compat_freshness.py
+python3 scripts/governance/check_upstream_same_run_cohesion.py
 python3 scripts/governance/check_active_upstream_evidence_fresh.py
 python3 scripts/governance/check_upstream_failure_classification.py
 python3 scripts/governance/check_vendor_registry_integrity.py
 ```
+
+补充口径：
+
+- blocker 级兼容链现在不仅要“有新鲜 artifact”，还要能证明这些 artifact 属于同一轮验证批次。
+- 你可以把它理解成“同一批货的验收票据必须来自同一次点货”，不能拿上午一张、下午一张、上周一张拼成“好像都验过了”。
+- 这条规则由 `check_upstream_same_run_cohesion.py` 执行；非 `verified` 的 blocker row 可以暂时保持 `pending`，但一旦要升为 `verified`，就必须满足同轮次证据束要求。

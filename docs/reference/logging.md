@@ -4,7 +4,7 @@
 
 本仓库日志策略覆盖：
 
-- 开发启动脚本：`scripts/dev_api.sh`、`scripts/dev_worker.sh`、`scripts/dev_mcp.sh`
+- 开发启动入口：`./bin/dev-api`、`./bin/dev-worker`、`./bin/dev-mcp`
 - 通知脚本：`bin/run-daily-digest`、`bin/run-failure-alerts`
 - 服务运行日志（Uvicorn/Worker/MCP）
 
@@ -48,10 +48,10 @@ touch .runtime-cache/logs/app/daily_digest.log \
 
 启动约束补充：
 
-- `scripts/dev_api.sh` 在检测到 `uv` 时通过 `uv run python -m uvicorn ...` 启动 API，不依赖 `uvicorn` console entry；日志排障时若看到 `Failed to spawn: uvicorn`，优先检查是否绕开了该脚本入口。
+- `./bin/dev-api` 会委托内部启动脚本在检测到 `uv` 时通过 `uv run python -m uvicorn ...` 启动 API，不依赖 `uvicorn` console entry；日志排障时若看到 `Failed to spawn: uvicorn`，优先检查是否绕开了该公共入口。
 - `./bin/full-stack` 与 `./bin/api-real-smoke-local` 会把 API 启动日志落到 `.runtime-cache/logs/components/full-stack/api.log` 与 `.runtime-cache/logs/tests/api-real-smoke-local.log`；本地严格验收时优先检查这两个文件。
 - `ci_pr_llm_real_smoke.sh`、`ci_live_smoke.sh`、`ci_web_e2e.sh` 的测试日志统一进入 `.runtime-cache/logs/tests/`，对应 JUnit/diagnostics 进入 `.runtime-cache/reports/tests/`，浏览器证据进入 `.runtime-cache/evidence/tests/`。
-- `scripts/full_stack.sh` 还会把运行时路由决议写到 `.runtime-cache/run/full-stack/resolved.env`；排查“明明起在 18001，前端还在打 9000”这类问题时，应把它和 `.runtime-cache/logs/components/full-stack/*.log` 一起看。
+- `./bin/full-stack` 还会把运行时路由决议写到 `.runtime-cache/run/full-stack/resolved.env`；排查“明明起在 18001，前端还在打 9000”这类问题时，应把它和 `.runtime-cache/logs/components/full-stack/*.log` 一起看。
 - `./bin/api-real-smoke-local` 会刻意让 pytest 子进程保持“未配置写 token”的 integration harness 语义，同时允许 `bin/dev-api` 为真实 HTTP smoke 进程注入本地 token；排查 401/403 时要区分“测试进程环境”和“API 进程环境”。
 
 ## Sensitive Data Rules

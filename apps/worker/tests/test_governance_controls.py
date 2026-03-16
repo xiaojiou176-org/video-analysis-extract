@@ -100,6 +100,7 @@ def test_governance_gate_script_wires_all_terminal_checks() -> None:
     assert "python3 scripts/governance/check_logging_contract.py" in script
     assert "python3 scripts/governance/check_run_manifest_completeness.py" in script
     assert "python3 scripts/governance/check_upstream_governance.py" in script
+    assert "python3 scripts/governance/check_upstream_same_run_cohesion.py" in script
 
 
 def test_vendor_governance_workflow_uses_governance_gate_inventory_check() -> None:
@@ -113,6 +114,53 @@ def test_vendor_governance_workflow_uses_governance_gate_inventory_check() -> No
     assert "./bin/governance-audit --mode ci" in workflow
 
 
+def test_upstream_verify_entrypoint_includes_same_run_cohesion_guard() -> None:
+    script = (_repo_root() / "bin" / "upstream-verify").read_text(encoding="utf-8")
+
+    assert "python3 scripts/governance/check_upstream_same_run_cohesion.py" in script
+
+
+def test_python_tests_public_entrypoint_uses_managed_uv_environment() -> None:
+    entrypoint = (_repo_root() / "bin" / "python-tests").read_text(encoding="utf-8")
+    script = (_repo_root() / "scripts" / "ci" / "python_tests.sh").read_text(encoding="utf-8")
+    public_entrypoints = (
+        _repo_root() / "config" / "governance" / "public-entrypoints.json"
+    ).read_text(encoding="utf-8")
+
+    assert 'vd_entrypoint_bootstrap tests python-tests "" "$@"' in entrypoint
+    assert 'exec "$ROOT_DIR/scripts/ci/python_tests.sh" "$@"' in entrypoint
+    assert 'source "$ROOT_DIR/scripts/lib/standard_env.sh"' in script
+    assert 'ensure_external_uv_project_environment "$ROOT_DIR"' in script
+    assert '"bin/python-tests"' in public_entrypoints
+
+
+def test_public_entrypoint_manifest_checker_loads_registry_for_python_tests() -> None:
+    script = (_repo_root() / "scripts" / "governance" / "check_public_entrypoint_manifests.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert 'load_governance_json("public-entrypoints.json")' in script
+    assert "required_public_entrypoints" in script
+
+
+def test_pr_llm_real_smoke_uses_managed_write_token_and_dev_api_entrypoint() -> None:
+    script = (_repo_root() / "scripts" / "ci" / "pr_llm_real_smoke.sh").read_text(encoding="utf-8")
+
+    assert 'SMOKE_WRITE_TOKEN="${VD_API_KEY:-video-digestor-local-dev-token}"' in script
+    assert 'export VD_API_KEY="${VD_API_KEY:-$SMOKE_WRITE_TOKEN}"' in script
+    assert 'export WEB_ACTION_SESSION_TOKEN="${WEB_ACTION_SESSION_TOKEN:-$SMOKE_WRITE_TOKEN}"' in script
+    assert "./scripts/runtime/dev_api.sh --host 127.0.0.1 --port 18081 --no-reload" in script
+
+
+def test_runtime_artifact_writer_coverage_tracks_runtime_target_variables() -> None:
+    script = (
+        _repo_root() / "scripts" / "governance" / "check_runtime_artifact_writer_coverage.py"
+    ).read_text(encoding="utf-8")
+
+    assert "RUNTIME_ASSIGN_RE" in script
+    assert "WRITE_TARGET_RE" in script
+
+
 def test_monthly_governance_workflow_exists() -> None:
     workflow = (_repo_root() / ".github" / "workflows" / "monthly-governance-audit.yml")
     content = workflow.read_text(encoding="utf-8")
@@ -122,6 +170,26 @@ def test_monthly_governance_workflow_exists() -> None:
     assert "./bin/governance-audit --mode audit" in content
     assert "check_root_dirtiness_after_tasks.py --write-snapshot" in content
     assert "check_root_dirtiness_after_tasks.py --compare-snapshot .runtime-cache/reports/governance/root-before.json" in content
+
+
+def test_root_dirtiness_guard_also_protects_runtime_root_closure() -> None:
+    script = (_repo_root() / "scripts" / "governance" / "check_root_dirtiness_after_tasks.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert "_runtime_root_unknown_children" in script
+    assert "runtime root contains undeclared direct children" in script
+
+
+def test_runtime_cache_maintenance_is_hardened_for_tmp_semantics_and_races() -> None:
+    script = (_repo_root() / "scripts" / "runtime" / "prune_runtime_cache.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert "def _default_created_at" in script
+    assert "def _runtime_age_hours" in script
+    assert 'if name == "tmp":' in script
+    assert "except FileNotFoundError" in script
 
 
 def test_runtime_and_logging_contracts_reference_runtime_cache_root() -> None:

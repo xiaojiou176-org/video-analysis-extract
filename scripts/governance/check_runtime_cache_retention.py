@@ -21,6 +21,8 @@ def main() -> int:
         "reports",
         "--subdir",
         "evidence",
+        "--subdir",
+        "tmp",
     ]
     return subprocess.run(cmd, cwd=ROOT, check=False).returncode
 

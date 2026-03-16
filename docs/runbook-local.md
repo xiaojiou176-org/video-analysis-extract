@@ -170,7 +170,7 @@ sqlite3 "$SQLITE_PATH" < infra/sql/sqlite_state_init.sql
 
 补充说明：
 
-- `scripts/dev_api.sh` 若检测到 `uv`，会使用 `uv run python -m uvicorn ...`；这是为了避免 self-hosted runner 或最小化环境中缺少 `uvicorn` console entry 时 API 无法拉起。
+- `./bin/dev-api` 会委托内部启动脚本在检测到 `uv` 时使用 `uv run python -m uvicorn ...`；这是为了避免 self-hosted runner 或最小化环境中缺少 `uvicorn` console entry 时 API 无法拉起。
 
 ### 6) 最小验收
 
@@ -194,8 +194,8 @@ curl -sS http://127.0.0.1:9000/api/v1/jobs/<job_id>
 ```bash
 python3 scripts/release/generate_release_prechecks.py
 python3 scripts/release/build_readiness_report.py \
-  --kpi-json artifacts/release-readiness/ci-kpi-summary.json \
-  --check-json .runtime-cache/tmp/release-readiness/prechecks.json
+  --kpi-json .runtime-cache/reports/release-readiness/ci-kpi-summary.json \
+  --check-json .runtime-cache/reports/release-readiness/prechecks.json
 
 scripts/release/capture_release_manifest.sh <release-tag>
 
@@ -319,15 +319,15 @@ bash -n scripts/runtime/start_ops_workflows.sh
 
 脚本说明：
 
-- `bootstrap_full_stack.sh`：依赖安装、环境校验、数据库迁移、可选 reader stack。
-- `bootstrap_full_stack.sh` 除首次 `.env` 不存在时复制模板外，不再持久化改写 `.env`；端口冲突和运行时路由决策会写入 `.runtime-cache/run/full-stack/resolved.env`，仅对当前运行生效。
-- `full_stack.sh`：统一起停 API/Worker/Web；`up` 会等待 API health(`GET /healthz`) 与 Web 端口就绪，失败时输出关键服务日志片段。
-- `scripts/dev_mcp.sh`：交互式 stdio MCP 入口，不由 `full_stack.sh` 作为后台守护进程管理。
-- `full_stack.sh` 启动 Web 时会显式注入 `NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:${API_PORT}`，避免开发日志继续回落到 `127.0.0.1:9000`。
+- `./bin/bootstrap-full-stack`：依赖安装、环境校验、数据库迁移、可选 reader stack。
+- `./bin/bootstrap-full-stack` 除首次 `.env` 不存在时复制模板外，不再持久化改写 `.env`；端口冲突和运行时路由决策会写入 `.runtime-cache/run/full-stack/resolved.env`，仅对当前运行生效。
+- `./bin/full-stack`：统一起停 API/Worker/Web；`up` 会等待 API health(`GET /healthz`) 与 Web 端口就绪，失败时输出关键服务日志片段。
+- `./bin/dev-mcp`：交互式 stdio MCP 入口，不由 `./bin/full-stack` 作为后台守护进程管理。
+- `./bin/full-stack` 启动 Web 时会显式注入 `NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:${API_PORT}`，避免开发日志继续回落到 `127.0.0.1:9000`。
 - 本地路由真相源是 `API_PORT/WEB_PORT`；`VD_API_BASE_URL` 与 `NEXT_PUBLIC_API_BASE_URL` 为派生地址。
-- `full_stack.sh` 的启动顺序是“API health -> Web -> Worker”；Worker 启动前会先做 stronger Temporal readiness：先校验 worker 必需环境，再对 `TEMPORAL_TARGET_HOST`（默认 `localhost:7233`）做 `host:port` 解析与 TCP 探测；不可达时直接以 `stage=worker_preflight_temporal` / `conclusion=temporal_not_ready` fail-fast，不会先把 API/Web 拉起来。
-- `smoke_full_stack.sh`：执行端到端 smoke（含 feed/web 检查，可选 reader 检查）。
-- `smoke_full_stack.sh` 不是 `api-real-smoke` 替代；后端真实 Postgres integration smoke 需单独执行 `./bin/api-real-smoke-local`。
+- `./bin/full-stack` 的启动顺序是“API health -> Web -> Worker”；Worker 启动前会先做 stronger Temporal readiness：先校验 worker 必需环境，再对 `TEMPORAL_TARGET_HOST`（默认 `localhost:7233`）做 `host:port` 解析与 TCP 探测；不可达时直接以 `stage=worker_preflight_temporal` / `conclusion=temporal_not_ready` fail-fast，不会先把 API/Web 拉起来。
+- `./bin/smoke-full-stack`：执行端到端 smoke（含 feed/web 检查，可选 reader 检查）。
+- `./bin/smoke-full-stack` 不是 `api-real-smoke` 替代；后端真实 Postgres integration smoke 需单独执行 `./bin/api-real-smoke-local`。
 - `./bin/api-real-smoke-local` 默认监听 `127.0.0.1:18080`；若该默认端口被其他本地服务占用且未显式传 `--api-port`，脚本会自动选择下一个空闲端口。
 - `./bin/api-real-smoke-local` 会在 cleanup workflow closure probe 前临时启动 worker；脚本退出时会一并清理 API/worker 与隔离数据库。
 - `./bin/api-real-smoke-local` 现在会先检测本机 IPv4 loopback 是否健康；如果一开始就报 `failure_kind=host_loopback_ipv4_exhausted`，优先处理主机环境（减少本地 MCP/Codex bridge 长连接、换更干净 runner），而不是继续追 API/Temporal 业务日志。

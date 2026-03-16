@@ -51,7 +51,7 @@
 - `live-smoke`：仅 `main` / `release` / nightly 强制执行，且不得 `skip` / `skipped`；PR 由 `pr-llm-real-smoke` 承担真实 LLM 烟测。
 - `aggregate-gate`：汇总主链路结果；`api-real-smoke` / `web-e2e` 不允许 `skipped`，`live-smoke` 由 `ci-final-gate` 按触发源做强制校验。
 - `ci-final-gate`：最终门禁；`main` / `release` / nightly 要求 `live-smoke=success`，PR 允许 `live-smoke=skipped`。
-- `ci-kpi`：在 `ci-final-gate` 之后汇总 junit/coverage/mutation/artifact bytes/topology duplication，并输出 `artifacts/release-readiness/ci-kpi-summary.{json,md}` artifact。
+- `ci-kpi`：在 `ci-final-gate` 之后汇总 junit/coverage/mutation/artifact bytes/topology duplication，并输出 `.runtime-cache/reports/release-readiness/ci-kpi-summary.{json,md}` 当前运行报告。
 - `build-ci-standard-image.yml` 会产出 strict CI 镜像 SBOM，并对镜像与 SBOM 做 attestation。
 - `release-evidence-attest.yml` 会把 release manifest/checksums/rollback 证据打包成可 attestation 的 bundle。
 - self-hosted CI 信任边界：当前仓库默认只支持 **trusted internal PR** 进入 privileged runner 主链；fork / untrusted PR 属于拒绝口径，不在支持矩阵内。
@@ -209,7 +209,7 @@ Live 诊断与执行策略（本地/CI 一致）：
 - 失败分类：诊断 JSON 必须携带 `failure_kind`，取值为 `code_logic_error` 或 `network_or_environment_timeout`。
 - Full-stack / smoke 口径（硬切后）：
   - `./bin/smoke-full-stack` 统一 fail-fast，不再接受 offline fallback。
-  - `scripts/bootstrap_full_stack.sh` 在 core/reader 启动失败、数据库迁移失败时直接退出，不再回退到临时数据库或降级 reader 检查。
+  - `./bin/bootstrap-full-stack` 在 core/reader 启动失败、数据库迁移失败时直接退出，不再回退到临时数据库或降级 reader 检查。
   - `smoke_full_stack.sh` 是本地联调 smoke，不是 `api-real-smoke` 的替代品。
 - 长任务可观测：live 脚本输出 heartbeat 与 phase 进度日志（`phase=short_tests` / `phase=long_tests`）。
 - 顺序规则：先 short tests 再 long tests，再执行 `phase=teardown`（仅做安全清理，不做破坏性操作）。
@@ -220,7 +220,7 @@ Live 诊断与执行策略（本地/CI 一致）：
 1. 复现 `external-playwright-smoke`：
 
 ```bash
-uv sync --frozen --extra dev --extra e2e
+./bin/python-tests
 uv run --with playwright python -m playwright install --with-deps chromium
 uv run --with playwright ./bin/external-playwright-smoke \
   --url "https://example.com" \
@@ -464,7 +464,7 @@ echo "feat(api): add ingest health guard" > /tmp/commit-msg-ok.txt
   - `uv run --with ruff ruff check apps scripts`
   - `npm --prefix apps/web run test:coverage`
   - `python3 scripts/governance/check_web_coverage_threshold.py --summary-path .runtime-cache/reports/web-coverage/coverage-summary.json --global-threshold 95 --core-threshold 95 --metric lines --metric functions --metric branches`
-  - `uv run pytest ... --cov-fail-under=95`
+  - `./bin/python-tests`（内部会执行带覆盖率与 junit 输出的受控 pytest 口径）
   - `python skip guard`（junit `tests>0` 且 `skipped=0`）
   - `uv run coverage report ... --fail-under=95`（worker core / api core）
   - `python3 scripts/governance/check_contract_surfaces.py`

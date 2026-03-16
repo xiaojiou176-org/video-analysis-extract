@@ -1845,8 +1845,8 @@ jobs:
             --repo "${{ github.repository }}" \
             --run-id "${{ github.run_id }}" \
             --run-attempt "${{ github.run_attempt }}" \
-            --json-out artifacts/release-readiness/ci-kpi-summary.json \
-            --md-out artifacts/release-readiness/ci-kpi-summary.md
+            --json-out .runtime-cache/reports/release-readiness/ci-kpi-summary.json \
+            --md-out .runtime-cache/reports/release-readiness/ci-kpi-summary.md
 
       - name: Upload CI KPI summary
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -1854,14 +1854,14 @@ jobs:
           name: ci-kpi-summary-${{ github.run_id }}-${{ github.run_attempt }}
           if-no-files-found: error
           path: |
-            artifacts/release-readiness/ci-kpi-summary.json
-            artifacts/release-readiness/ci-kpi-summary.md
+            .runtime-cache/reports/release-readiness/ci-kpi-summary.json
+            .runtime-cache/reports/release-readiness/ci-kpi-summary.md
 
       - name: Write KPI summary
         if: always()
         run: |
-          if [[ -f artifacts/release-readiness/ci-kpi-summary.md ]]; then
-            cat artifacts/release-readiness/ci-kpi-summary.md >> "$GITHUB_STEP_SUMMARY"
+          if [[ -f .runtime-cache/reports/release-readiness/ci-kpi-summary.md ]]; then
+            cat .runtime-cache/reports/release-readiness/ci-kpi-summary.md >> "$GITHUB_STEP_SUMMARY"
           else
             {
               echo "## CI KPI Summary"

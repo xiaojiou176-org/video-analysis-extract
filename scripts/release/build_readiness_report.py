@@ -227,7 +227,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--kpi-json",
-        default="artifacts/release-readiness/ci-kpi-summary.json",
+        default=".runtime-cache/reports/release-readiness/ci-kpi-summary.json",
         help="KPI json from collect_ci_kpi.py",
     )
     parser.add_argument(
@@ -256,12 +256,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--mutation-yellow", type=float, default=60.0)
     parser.add_argument(
         "--json-out",
-        default="artifacts/release-readiness/release-readiness.json",
+        default=".runtime-cache/reports/release-readiness/release-readiness.json",
         help="Output JSON report path.",
     )
     parser.add_argument(
         "--md-out",
-        default="artifacts/release-readiness/release-readiness.md",
+        default=".runtime-cache/reports/release-readiness/release-readiness.md",
         help="Output Markdown report path.",
     )
     parser.add_argument(

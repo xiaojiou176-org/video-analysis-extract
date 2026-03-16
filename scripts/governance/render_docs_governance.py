@@ -102,6 +102,8 @@ def _render_ci_topology(manifest: dict, boundary: dict) -> str:
         "",
         f"- root allowlist entries: `{len(root_allowlist.get('entries', []))}`",
         f"- runtime root: `{runtime_outputs.get('runtime_root', '.runtime-cache')}`",
+        "- current-run CI KPI summary: `.runtime-cache/reports/release-readiness/ci-kpi-summary.json`",
+        "- current-run readiness reports: `.runtime-cache/reports/release-readiness/`",
         f"- active upstream inventory entries: `{len(upstreams.get('entries', []))}`",
         f"- upstream templates: `{len(templates.get('entries', []))}`",
         "- governance gate entrypoint: `./bin/governance-audit --mode pre-commit|pre-push|ci|audit`",
@@ -206,6 +208,7 @@ def _render_runner_baseline() -> str:
             "## Governance Hygiene Hooks",
             "",
             f"- runtime output root enforced by governance: `{runtime_outputs.get('runtime_root', '.runtime-cache')}`",
+            "- current-run release/readiness reports are emitted under `.runtime-cache/reports/release-readiness/`",
             "- long-lived tracked artifacts now live under `artifacts/`, not the repository root hallway",
             "- root cleanliness is re-checked by `check_root_dirtiness_after_tasks.py` during monthly governance audit",
         ]
@@ -219,7 +222,7 @@ def _render_governance_dashboard(nav: dict, manifest: dict, boundary: dict) -> s
     upstreams = _load_json(REPO_ROOT / "config" / "governance" / "active-upstreams.json")
     templates = _load_json(REPO_ROOT / "config" / "governance" / "upstream-templates.json")
     compat = _load_json(REPO_ROOT / "config" / "governance" / "upstream-compat-matrix.json")
-    kpi_path = REPO_ROOT / "artifacts" / "release-readiness" / "ci-kpi-summary.json"
+    kpi_path = REPO_ROOT / ".runtime-cache" / "reports" / "release-readiness" / "ci-kpi-summary.json"
     kpi_status = "missing"
     kpi_summary = "ci-kpi summary not generated yet"
     if kpi_path.exists():
@@ -283,6 +286,7 @@ def _render_release_evidence() -> str:
         "## Canonical Rules",
         "",
         "- current run evidence is the only canonical source for release verdicts",
+        "- current-run KPI and readiness summaries live under `.runtime-cache/reports/release-readiness/`",
         "- historical examples under `artifacts/releases/*` are documentation examples, not release verdict proof",
         "- manifest paths must be repo-relative, not host-absolute",
         "",

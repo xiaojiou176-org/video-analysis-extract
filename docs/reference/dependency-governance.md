@@ -69,7 +69,7 @@
 1. 修改 `pyproject.toml`
 2. 生成新锁：`uv lock`
 3. 安装验证：`uv sync --frozen --extra dev --extra e2e`
-4. 回归测试：`uv run pytest apps/worker/tests apps/api/tests apps/mcp/tests -q`
+4. 回归测试：`./bin/python-tests`
 
 ### Web 依赖升级
 

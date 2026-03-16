@@ -38,6 +38,7 @@ Generated from `infra/config/self_hosted_runner_baseline.json`.
 ## Governance Hygiene Hooks
 
 - runtime output root enforced by governance: `.runtime-cache`
+- current-run release/readiness reports are emitted under `.runtime-cache/reports/release-readiness/`
 - long-lived tracked artifacts now live under `artifacts/`, not the repository root hallway
 - root cleanliness is re-checked by `check_root_dirtiness_after_tasks.py` during monthly governance audit
 - monthly governance audit reuses self-hosted pre-checkout normalization before checkout

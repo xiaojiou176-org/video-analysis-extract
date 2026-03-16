@@ -22,6 +22,8 @@
 
 - root allowlist entries: `0`
 - runtime root: `.runtime-cache`
+- current-run CI KPI summary: `.runtime-cache/reports/release-readiness/ci-kpi-summary.json`
+- current-run readiness reports: `.runtime-cache/reports/release-readiness/`
 - active upstream inventory entries: `19`
 - upstream templates: `1`
 - governance gate entrypoint: `./bin/governance-audit --mode pre-commit|pre-push|ci|audit`

@@ -189,16 +189,16 @@ curl -sS -X POST http://127.0.0.1:9000/api/v1/ingest/poll -H 'Content-Type: appl
 
 默认行为：
 
-- `bootstrap_full_stack.sh` 会拉起 core services + Miniflux + Nextflux。
-- `bootstrap_full_stack.sh` 除首次 `.env` 不存在时复制模板外，不再持久化改写 `.env`；端口冲突与运行时路由决策会写入 `.runtime-cache/run/full-stack/resolved.env`，仅对当前运行生效。
+- `./bin/bootstrap-full-stack` 会拉起 core services + Miniflux + Nextflux。
+- `./bin/bootstrap-full-stack` 除首次 `.env` 不存在时复制模板外，不再持久化改写 `.env`；端口冲突与运行时路由决策会写入 `.runtime-cache/run/full-stack/resolved.env`，仅对当前运行生效。
 - `core-services.compose.yml` 现在使用 digest-pinned service 镜像（Postgres/Redis/Temporal），并优先接受 strict contract 导出的 `STRICT_CI_SERVICE_IMAGE_*` 值；端口与 Postgres `DB/User` 仍收口为固定默认（`6379` / `7233` / `video_analysis` / `postgres`）。
 - `miniflux-nextflux.compose.yml` 的 Miniflux 端口与 `DB/User/DB_NAME` 已收口为固定默认（`8080` / `miniflux` / `miniflux`）。
 - 本地路由真相源是 `API_PORT/WEB_PORT`；`VD_API_BASE_URL` 与 `NEXT_PUBLIC_API_BASE_URL` 属于派生目标地址。
-- `full_stack.sh up` 会按 `API health -> Web -> Worker` 顺序启动；Worker 启动前会先做 Temporal preflight（`TEMPORAL_TARGET_HOST`，默认 `localhost:7233`），不通时直接 fail-fast。
+- `./bin/full-stack up` 会按 `API health -> Web -> Worker` 顺序启动；Worker 启动前会先做 Temporal preflight（`TEMPORAL_TARGET_HOST`，默认 `localhost:7233`），不通时直接 fail-fast。
 - `bin/dev-mcp` 为交互式 stdio 入口，不作为 `full_stack.sh` 的后台守护进程管理；需要 MCP 本地调试时单独开一个终端运行。
 - `bin/dev-api` 在检测到 `uv` 时会调用 `uv run python -m uvicorn ...`，避免某些 self-hosted/隔离环境缺少 `uvicorn` console entry 时启动失败。
-- `smoke_full_stack.sh` 会执行本地联调烟测并覆盖 reader 栈检查；core/reader 任一异常都会直接 fail-fast，不再保留 offline fallback 降级路径。
-- `smoke_full_stack.sh` 不是 `api-real-smoke` 替代；后端真实 Postgres integration smoke 必须单独执行 `./bin/api-real-smoke-local`。
+- `./bin/smoke-full-stack` 会执行本地联调烟测并覆盖 reader 栈检查；core/reader 任一异常都会直接 fail-fast，不再保留 offline fallback 降级路径。
+- `./bin/smoke-full-stack` 不是 `api-real-smoke` 替代；后端真实 Postgres integration smoke 必须单独执行 `./bin/api-real-smoke-local`。
 - `./bin/api-real-smoke-local` 现在会先做本机 IPv4 loopback 预检；若命中 `failure_kind=host_loopback_ipv4_exhausted`（常见于当前机器本地 127.0.0.1 临时端口池被大量 MCP/Codex 连接占满），脚本会直接 fail-fast，而不是继续启动 API/worker/Temporal 后才深处报错。
 - 本地脚本排障时优先看 `.runtime-cache/logs/components/full-stack/*.log`、`.runtime-cache/run/full-stack/resolved.env` 与 `.runtime-cache/logs/tests/api-real-smoke-local.log`，这样能先区分“端口/路由漂移”还是“业务失败”。
 - `pr-llm-real-smoke`、`live-smoke`、`web-e2e` 的日志统一看 `.runtime-cache/logs/tests/`；对应 diagnostics/JUnit 看 `.runtime-cache/reports/tests/`。

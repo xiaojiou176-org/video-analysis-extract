@@ -31,3 +31,5 @@
 - `verified` 状态只能基于 freshness window 内的 artifact；非 `verified` 行不计入当前兼容性通过证明。
 - artifact metadata 必须能追溯到 `source_run_id` 与 `source_commit`。
 - 兼容矩阵的失败归因必须落到统一 failure class 枚举。
+- blocker 行若要升级到 `verified`，其 row-specific artifact 必须和 `last_verified_run_id` 形成同轮次证据束。
+- `upstream-compat-report.json` 这类共享治理汇总页可以作为辅助索引，但不能单独充当 blocker 行的 same-run 闭环证明。

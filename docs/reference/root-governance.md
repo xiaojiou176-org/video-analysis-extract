@@ -37,6 +37,11 @@ python3 scripts/governance/check_root_dirtiness_after_tasks.py --compare-snapsho
 python3 scripts/governance/check_public_entrypoint_references.py
 ```
 
+补充口径：
+
+- `check_root_dirtiness_after_tasks.py` 现在不只检查“根目录门厅”有没有新增垃圾，还会同步检查 `.runtime-cache/` 这个仓库级运行时出口是否长出未登记的直系子目录。
+- 换句话说，根目录洁净的最终裁决已经升级为“门厅干净 + 运行时总杂物间入口也没有偷偷长歪”。
+
 ## 硬规则
 
 - 禁止新增未登记顶级项。

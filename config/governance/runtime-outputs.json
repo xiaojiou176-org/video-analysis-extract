@@ -73,10 +73,10 @@
       "classification": "scratch",
       "ttl_days": 2,
       "max_total_size_mb": 1024,
-      "max_file_count": 30000,
+      "max_file_count": 80000,
       "rebuild_entrypoint": "scripts/runtime/run_runtime_cache_maintenance.sh --normalize-only --subdir tmp",
       "freshness_required": false,
-      "description": "Final-form scratch root for short-lived temporary files, isolated workdirs, repo-side execution state, and quarantined local private state."
+      "description": "Final-form scratch root for short-lived temporary files, isolated workdirs, repo-side execution state, repo-side web runtime workspace, and quarantined local private state."
     }
   }
 }

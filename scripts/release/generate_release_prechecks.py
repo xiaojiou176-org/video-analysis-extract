@@ -10,6 +10,14 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+sys.dont_write_bytecode = True
+
+ROOT = Path(__file__).resolve().parents[2]
+if str(ROOT / "scripts" / "governance") not in sys.path:
+    sys.path.insert(0, str(ROOT / "scripts" / "governance"))
+
+from common import write_json_artifact
+
 REQUIRED_CWV_METRICS = ("lcp_ms_p75", "inp_ms_p75", "cls_p75")
 RELEASE_REPORTS_DIR = Path("artifacts") / "releases"
 
@@ -194,9 +202,9 @@ def _has_slo_thresholds(path: Path) -> bool:
 
 
 def _build_observability_checks(repo_root: Path) -> list[dict[str, object]]:
-    temp_dir = repo_root / ".runtime-cache" / "temp" / "release-readiness"
-    temp_dir.mkdir(parents=True, exist_ok=True)
-    sqlite_path = temp_dir / "release-prechecks-observability.sqlite3"
+    scratch_dir = repo_root / ".runtime-cache" / "tmp" / "release-readiness"
+    scratch_dir.mkdir(parents=True, exist_ok=True)
+    sqlite_path = scratch_dir / "release-prechecks-observability.sqlite3"
 
     os.environ.setdefault("DATABASE_URL", "sqlite+pysqlite:///:memory:")
     os.environ.setdefault("TEMPORAL_TARGET_HOST", "127.0.0.1:7233")
@@ -378,7 +386,7 @@ def _build_observability_checks(repo_root: Path) -> list[dict[str, object]]:
 
 
 def _run_db_rollback_readiness(repo_root: Path, release_tag: str | None) -> dict[str, object]:
-    output = repo_root / ".runtime-cache" / "temp" / "release-readiness" / "db-rollback-readiness.json"
+    output = repo_root / ".runtime-cache" / "reports" / "release-readiness" / "db-rollback-readiness.json"
     cmd = [
         "python3",
         str(repo_root / "scripts" / "release" / "verify_db_rollback_readiness.py"),
@@ -399,7 +407,7 @@ def main() -> int:
     parser.add_argument("--repo-root", default=".")
     parser.add_argument(
         "--output",
-        default=".runtime-cache/tmp/release-readiness/prechecks.json",
+        default=".runtime-cache/reports/release-readiness/prechecks.json",
     )
     parser.add_argument(
         "--skip-observability-checks",
@@ -532,7 +540,7 @@ def main() -> int:
             "value": missing_policy_count,
             "evidence": (
                 "missing_policy="
-                f"{missing_policy_count}; report=.runtime-cache/tmp/release-readiness/db-rollback-readiness.json"
+                f"{missing_policy_count}; report=.runtime-cache/reports/release-readiness/db-rollback-readiness.json"
             ),
         },
         {
@@ -563,8 +571,15 @@ def main() -> int:
         "checks": checks,
     }
 
-    output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    write_json_artifact(
+        output,
+        payload,
+        source_entrypoint="scripts/release/generate_release_prechecks.py",
+        verification_scope="release-prechecks",
+        source_run_id="release-prechecks",
+        freshness_window_hours=24,
+        extra={"report_kind": "release-prechecks"},
+    )
     print(output)
     return 0
 

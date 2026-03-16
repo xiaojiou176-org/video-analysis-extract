@@ -7,15 +7,11 @@ from pathlib import Path
 sys.dont_write_bytecode = True
 
 ROOT = Path(__file__).resolve().parents[2]
-ENTRYPOINTS = {
-    "bin/bootstrap-full-stack",
-    "bin/dev-api",
-    "bin/dev-mcp",
-    "bin/dev-worker",
-    "bin/full-stack",
-    "bin/governance-audit",
-    "bin/quality-gate",
-    "bin/strict-ci",
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from common import load_governance_json
+
+MANAGED_BUT_NOT_PUBLIC = {
     "bin/upstream-verify",
     "bin/doctor",
     "bin/prune-runtime",
@@ -29,8 +25,10 @@ REQUIRED_SNIPPETS = (
 
 
 def main() -> int:
+    config = load_governance_json("public-entrypoints.json")
+    entrypoints = set(config.get("required_public_entrypoints", [])) | MANAGED_BUT_NOT_PUBLIC
     errors: list[str] = []
-    for rel in sorted(ENTRYPOINTS):
+    for rel in sorted(entrypoints):
         path = ROOT / rel
         if not path.is_file():
             errors.append(f"missing public entrypoint: {rel}")
@@ -46,7 +44,7 @@ def main() -> int:
             print(f"  - {item}")
         return 1
 
-    print(f"[public-entrypoint-manifests] PASS ({len(ENTRYPOINTS)} entrypoints checked)")
+    print(f"[public-entrypoint-manifests] PASS ({len(entrypoints)} entrypoints checked)")
     return 0
 
 

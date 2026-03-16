@@ -268,7 +268,7 @@ sqlite3 "$SQLITE_PATH" < infra/sql/sqlite_state_init.sql
 
 补充说明：
 
-- `scripts/dev_api.sh` 在检测到 `uv` 时会使用 `uv run python -m uvicorn ...`，而不是依赖 `uvicorn` console entry；这样在 self-hosted runner 和最小化 Python 环境里更稳定。
+- `./bin/dev-api` 会委托内部启动脚本在检测到 `uv` 时使用 `uv run python -m uvicorn ...`，而不是依赖 `uvicorn` console entry；这样在 self-hosted runner 和最小化 Python 环境里更稳定。
 
 ### 6) 最小验收
 
@@ -295,9 +295,7 @@ python3 scripts/governance/check_test_assertions.py
 
 ./bin/install-git-hooks
 
-PYTHONPATH="$PWD:$PWD/apps/worker" \
-DATABASE_URL='sqlite+pysqlite:///:memory:' \
-uv run pytest apps/worker/tests apps/api/tests apps/mcp/tests -q
+./bin/python-tests
 
 uv run --with playwright python -m playwright install chromium
 uv run --with pytest --with playwright pytest apps/web/tests/e2e -q
@@ -336,7 +334,7 @@ uv run --with pytest --with playwright pytest \
 默认执行链路（当前仓库真相）：
 
 - `.githooks/pre-commit`、`.githooks/pre-push`、`.githooks/commit-msg` 是 Git 生命周期入口。
-- 以上 hook 通过 `scripts/quality_gate.sh` 与 `commitlint` 执行强制门禁。
+- 以上 hook 通过 `./bin/quality-gate`、`./bin/strict-ci` 与 `commitlint` 执行强制门禁。
 - `.pre-commit-config.yaml` 定义的是可复用检查集合，默认不由 `.githooks` 直接调用。
 
 首次初始化（推荐）：
@@ -521,10 +519,10 @@ python3 scripts/release/generate_release_prechecks.py
 
 # 2) 合并到发布 readiness 报告
 python3 scripts/release/build_readiness_report.py \
-  --kpi-json artifacts/release-readiness/ci-kpi-summary.json \
-  --check-json .runtime-cache/tmp/release-readiness/prechecks.json \
-  --json-out artifacts/release-readiness/release-readiness.json \
-  --md-out artifacts/release-readiness/release-readiness.md
+  --kpi-json .runtime-cache/reports/release-readiness/ci-kpi-summary.json \
+  --check-json .runtime-cache/reports/release-readiness/prechecks.json \
+  --json-out .runtime-cache/reports/release-readiness/release-readiness.json \
+  --md-out .runtime-cache/reports/release-readiness/release-readiness.md
 
 # 3) 生成 N-1 回滚制品清单（发版前执行）
 scripts/release/capture_release_manifest.sh <release-tag>

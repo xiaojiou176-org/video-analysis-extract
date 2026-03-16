@@ -76,10 +76,10 @@ def test_generated_governance_dashboard_and_required_checks_exist() -> None:
         assert "generated: docs governance control plane" in text
 
 
-def test_render_docs_governance_uses_artifacts_release_readiness_inputs() -> None:
+def test_render_docs_governance_uses_runtime_release_readiness_inputs() -> None:
     script = (_repo_root() / "scripts" / "governance" / "render_docs_governance.py").read_text(
         encoding="utf-8"
     )
 
-    assert 'REPO_ROOT / "artifacts" / "release-readiness" / "ci-kpi-summary.json"' in script
-    assert 'REPO_ROOT / "reports" / "release-readiness" / "ci-kpi-summary.json"' not in script
+    assert 'REPO_ROOT / ".runtime-cache" / "reports" / "release-readiness" / "ci-kpi-summary.json"' in script
+    assert 'REPO_ROOT / "artifacts" / "release-readiness" / "ci-kpi-summary.json"' not in script

@@ -4,9 +4,13 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 
+# shellcheck source=./scripts/lib/standard_env.sh
+source "$ROOT_DIR/scripts/lib/standard_env.sh"
+
 mkdir -p .runtime-cache .runtime-cache/reports/python .runtime-cache/logs/tests
 find .runtime-cache/reports/python -maxdepth 1 -type f -name '.coverage*' -delete 2>/dev/null || true
 export PYTHONDONTWRITEBYTECODE="${PYTHONDONTWRITEBYTECODE:-1}"
+ensure_external_uv_project_environment "$ROOT_DIR"
 uv sync --frozen --extra dev --extra e2e
 set -o pipefail
 (

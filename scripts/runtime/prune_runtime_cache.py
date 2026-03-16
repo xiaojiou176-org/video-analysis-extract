@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import shutil
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
@@ -13,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT / "scripts" / "governance") not in sys.path:
     sys.path.insert(0, str(ROOT / "scripts" / "governance"))
 
-from common import artifact_age_hours, ensure_runtime_metadata, load_governance_json, rel_path, runtime_metadata_path, write_runtime_metadata
+from common import artifact_age_hours, ensure_runtime_metadata, load_governance_json, parse_iso8601, rel_path, runtime_metadata_path, write_runtime_metadata
 
 
 def _iter_runtime_files(path: Path) -> list[Path]:
@@ -49,6 +50,21 @@ def _infer_source_run_id(path: Path) -> str:
     return f"legacy-{path.stem}"
 
 
+def _default_created_at(name: str, path: Path) -> str:
+    if name == "tmp":
+        return datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    return datetime.fromtimestamp(path.stat().st_mtime, UTC).replace(microsecond=0).isoformat().replace(
+        "+00:00", "Z"
+    )
+
+
+def _runtime_age_hours(name: str, path: Path, metadata: dict[str, object]) -> float:
+    if name == "tmp" and isinstance(metadata.get("created_at"), str):
+        created_at = parse_iso8601(str(metadata["created_at"]))
+        return max(0.0, (datetime.now(UTC) - created_at).total_seconds() / 3600.0)
+    return artifact_age_hours(path, metadata)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Normalize, audit, and optionally prune repo-side runtime cache artifacts.")
     parser.add_argument("--apply", action="store_true", help="Delete files that exceed ttl_days.")
@@ -63,6 +79,24 @@ def main() -> int:
     selected = set(args.subdirs or config.get("subdirectories", {}).keys())
     report: dict[str, object] = {"version": 1, "subdirectories": {}, "status": "pass"}
     errors: list[str] = []
+    allowed_subdirs = set(config.get("subdirectories", {}).keys())
+    unknown_direct_children: list[str] = []
+
+    if runtime_root.exists():
+        for child in sorted(runtime_root.iterdir()):
+            if child.name in allowed_subdirs:
+                continue
+            unknown_direct_children.append(rel_path(child))
+
+    if args.apply and not args.normalize_only:
+        for rel in unknown_direct_children:
+            target = ROOT / rel
+            if target.is_dir():
+                shutil.rmtree(target)
+            elif target.exists():
+                target.unlink()
+        if unknown_direct_children:
+            unknown_direct_children = []
 
     for name, subconfig in config.get("subdirectories", {}).items():
         if name not in selected:
@@ -76,20 +110,27 @@ def main() -> int:
         stale: list[str] = []
 
         for item in files:
+            try:
+                created_at_value = _default_created_at(name, item)
+            except FileNotFoundError:
+                continue
             inferred_run_id = _infer_source_run_id(item)
-            metadata = ensure_runtime_metadata(
-                item,
-                source_entrypoint="scripts/runtime/prune_runtime_cache.py",
-                verification_scope=f"runtime:{name}",
-                source_run_id=inferred_run_id,
-                freshness_window_hours=ttl_hours if bool(subconfig["freshness_required"]) else None,
-                created_at=datetime.fromtimestamp(item.stat().st_mtime, UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
-                extra={
-                    "classification": subconfig["classification"],
-                    "runtime_subdir": name,
-                    "owner": subconfig["owner"],
-                },
-            )
+            try:
+                metadata = ensure_runtime_metadata(
+                    item,
+                    source_entrypoint="scripts/runtime/prune_runtime_cache.py",
+                    verification_scope=f"runtime:{name}",
+                    source_run_id=inferred_run_id,
+                    freshness_window_hours=ttl_hours if bool(subconfig["freshness_required"]) else None,
+                    created_at=created_at_value,
+                    extra={
+                        "classification": subconfig["classification"],
+                        "runtime_subdir": name,
+                        "owner": subconfig["owner"],
+                    },
+                )
+            except FileNotFoundError:
+                continue
             if not str(metadata.get("source_run_id") or "").strip() and inferred_run_id:
                 metadata = {
                     **metadata,
@@ -102,7 +143,7 @@ def main() -> int:
                     source_run_id=inferred_run_id,
                     source_commit=str(metadata.get("source_commit") or ""),
                     freshness_window_hours=metadata.get("freshness_window_hours"),
-                    created_at=str(metadata.get("created_at") or datetime.fromtimestamp(item.stat().st_mtime, UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")),
+                    created_at=str(metadata.get("created_at") or created_at_value),
                     extra={
                         key: value
                         for key, value in metadata.items()
@@ -125,15 +166,18 @@ def main() -> int:
                     verification_scope=f"runtime:{name}",
                     source_run_id=inferred_run_id,
                     freshness_window_hours=ttl_hours if bool(subconfig["freshness_required"]) else None,
-                    created_at=datetime.fromtimestamp(item.stat().st_mtime, UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+                    created_at=created_at_value,
                     extra={
                         "classification": subconfig["classification"],
                         "runtime_subdir": name,
                         "owner": subconfig["owner"],
                     },
                 )
-            size_bytes += item.stat().st_size
-            age_hours = artifact_age_hours(item, metadata)
+            try:
+                size_bytes += item.stat().st_size
+                age_hours = _runtime_age_hours(name, item, metadata)
+            except FileNotFoundError:
+                continue
             if ttl_hours > 0 and age_hours > ttl_hours:
                 expired.append(rel_path(item))
             freshness_window_hours = metadata.get("freshness_window_hours")
@@ -173,6 +217,13 @@ def main() -> int:
             "max_file_count": max_file_count,
             "classification": subconfig["classification"],
         }
+
+    report["unknown_direct_children"] = unknown_direct_children
+    if args.assert_clean and unknown_direct_children:
+        errors.append(
+            "runtime root contains undeclared direct children: "
+            + ", ".join(unknown_direct_children[:10])
+        )
 
     if errors:
         report["status"] = "fail"
