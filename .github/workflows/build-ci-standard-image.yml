@@ -27,6 +27,11 @@ jobs:
         with:
           clean: true
 
+      - name: Install hosted runner prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ripgrep
+
       - name: Enforce runner disk budget
         run: |
           bash scripts/governance/runner_workspace_maintenance.sh --workspace "$GITHUB_WORKSPACE" --include-runner-diag 1
