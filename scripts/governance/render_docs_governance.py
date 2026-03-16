@@ -100,13 +100,22 @@ def _render_ci_topology(manifest: dict, boundary: dict) -> str:
         "",
         "## Governance Control Plane",
         "",
-        f"- root allowlist entries: `{len(root_allowlist.get('entries', []))}`",
+        f"- root allowlist entries: `{len(root_allowlist.get('tracked_root_allowlist', []))}`",
+        f"- local-private root tolerations: `{len(root_allowlist.get('local_private_root_tolerations', []))}`",
         f"- runtime root: `{runtime_outputs.get('runtime_root', '.runtime-cache')}`",
         "- current-run CI KPI summary: `.runtime-cache/reports/release-readiness/ci-kpi-summary.json`",
         "- current-run readiness reports: `.runtime-cache/reports/release-readiness/`",
         f"- active upstream inventory entries: `{len(upstreams.get('entries', []))}`",
         f"- upstream templates: `{len(templates.get('entries', []))}`",
         "- governance gate entrypoint: `./bin/governance-audit --mode pre-commit|pre-push|ci|audit`",
+        "",
+        "## Aggregate Gate Inventory",
+        "",
+        "## Completion Lanes",
+        "",
+        "- repo-side canonical path: `./bin/repo-side-strict-ci --mode pre-push --strict-full-run 1 --ci-dedupe 0`",
+        "- external lane path: `./bin/strict-ci --mode pre-push --strict-full-run 1 --ci-dedupe 0`",
+        "- source of truth: `docs/reference/done-model.md`",
         "",
         "## Aggregate Gate Inventory",
         "",
@@ -211,6 +220,8 @@ def _render_runner_baseline() -> str:
             "- current-run release/readiness reports are emitted under `.runtime-cache/reports/release-readiness/`",
             "- long-lived tracked artifacts now live under `artifacts/`, not the repository root hallway",
             "- root cleanliness is re-checked by `check_root_dirtiness_after_tasks.py` during monthly governance audit",
+            "- repo-side / external completion split is documented in `docs/reference/done-model.md`",
+            "- repo-side strict canonical path is `./bin/repo-side-strict-ci --mode pre-push --strict-full-run 1 --ci-dedupe 0`",
         ]
     )
     if "Normalize self-hosted workspace (pre-checkout)" in monthly_audit_text:
@@ -265,6 +276,7 @@ def _render_governance_dashboard(nav: dict, manifest: dict, boundary: dict) -> s
             "- `docs/generated/required-checks.md`",
             "- `docs/generated/runner-baseline.md`",
             "- `docs/generated/release-evidence.md`",
+            "- `docs/reference/done-model.md`",
         ]
     )
     return "\n".join(outputs).rstrip() + "\n"
@@ -285,6 +297,8 @@ def _render_release_evidence() -> str:
         "",
         "## Canonical Rules",
         "",
+        "- repo-side closure and external closure must be reported separately; see `docs/reference/done-model.md`",
+        "- external lane live status is tracked in `docs/reference/external-lane-status.md`",
         "- current run evidence is the only canonical source for release verdicts",
         "- current-run KPI and readiness summaries live under `.runtime-cache/reports/release-readiness/`",
         "- historical examples under `artifacts/releases/*` are documentation examples, not release verdict proof",
@@ -334,6 +348,7 @@ def _fragment_lines(boundary: dict) -> dict[str, str]:
                 f"- **Docs control plane**：`config/docs/*.json` 现在是文档治理真相源；reference 由 `docs/generated/*.md` 承担。",
                 f"- **CI 信任边界**：`{trust['mode']}`。fork / untrusted PR 不进入 privileged self-hosted 主链。",
                 "- **Strict CI 真相源**：`infra/config/strict_ci_contract.json`。",
+                "- **Repo-side done model**：`docs/reference/done-model.md`。",
                 "- **Generated references**：`docs/generated/ci-topology.md`、`docs/generated/runner-baseline.md`、`docs/generated/release-evidence.md`。",
             ]
         )
@@ -344,7 +359,8 @@ def _fragment_lines(boundary: dict) -> dict[str, str]:
                 "",
                 "- 文档高漂移事实已开始收口到 `docs/generated/*.md`；入口文档只保留 onboarding 必需信息。",
                 f"- self-hosted CI 只接受 **trusted internal PR**；若 PR 来自 fork，GitHub Actions 会在边界门禁直接阻断。",
-                "- 严格验收仍以 `./bin/strict-ci --mode pre-push --strict-full-run 1 --ci-dedupe 0` 为唯一权威入口。",
+                "- repo-side 严格验收入口：`./bin/repo-side-strict-ci --mode pre-push --strict-full-run 1 --ci-dedupe 0`。",
+                "- external lane 入口：`./bin/strict-ci --mode pre-push --strict-full-run 1 --ci-dedupe 0`。",
                 "- 契约主层已迁到 `contracts/`，长期跟踪 artifact 已迁到 `artifacts/`。",
             ]
         )
@@ -357,6 +373,7 @@ def _fragment_lines(boundary: dict) -> dict[str, str]:
                 "- runner baseline 参考页：`docs/generated/runner-baseline.md`。",
                 "- CI 主链与 aggregate gate 清单：`docs/generated/ci-topology.md`。",
                 "- release evidence 结构与 canonical 规则：`docs/generated/release-evidence.md`。",
+                "- repo-side / external 双层完成模型：`docs/reference/done-model.md`。",
             ]
         )
         + "\n",
@@ -367,6 +384,7 @@ def _fragment_lines(boundary: dict) -> dict[str, str]:
                 "- `docs/testing.md` 现在以**策略解释**为主；高漂移 job inventory 已移到 `docs/generated/ci-topology.md`。",
                 "- PR 信任模型：仅同仓 trusted internal PR 允许进入 self-hosted 主链。",
                 "- docs gate 现在同时要求：`config/docs/*.json` control plane 一致、render output 新鲜、manual boundary 不越界。",
+                "- repo-side strict canonical path：`./bin/repo-side-strict-ci --mode pre-push --strict-full-run 1 --ci-dedupe 0`。",
             ]
         )
         + "\n",

@@ -6,6 +6,8 @@ Generated from the release evidence workflow and manifest capture script.
 
 ## Canonical Rules
 
+- repo-side closure and external closure must be reported separately; see `docs/reference/done-model.md`
+- external lane live status is tracked in `docs/reference/external-lane-status.md`
 - current run evidence is the only canonical source for release verdicts
 - current-run KPI and readiness summaries live under `.runtime-cache/reports/release-readiness/`
 - historical examples under `artifacts/releases/*` are documentation examples, not release verdict proof

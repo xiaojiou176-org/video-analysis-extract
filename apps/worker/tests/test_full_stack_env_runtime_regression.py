@@ -140,6 +140,20 @@ def test_api_base_resolution_is_unified_across_scripts() -> None:
     assert '--api-base-url "$API_BASE"' in smoke_full_stack
 
 
+def test_http_api_helper_and_notification_scripts_use_local_write_token_headers() -> None:
+    root = _repo_root()
+    http_api = (root / "scripts" / "lib" / "http_api.sh").read_text(encoding="utf-8")
+    daily_digest = (root / "scripts" / "runtime" / "run_daily_digest.sh").read_text(encoding="utf-8")
+    failure_alerts = (root / "scripts" / "runtime" / "run_failure_alerts.sh").read_text(encoding="utf-8")
+
+    assert 'X-API-Key: ${VD_API_KEY}' in http_api
+    assert 'X-Web-Session: ${WEB_ACTION_SESSION_TOKEN}' in http_api
+    assert 'export VD_API_KEY="video-digestor-local-dev-token"' in daily_digest
+    assert 'export WEB_ACTION_SESSION_TOKEN="$VD_API_KEY"' in daily_digest
+    assert 'export VD_API_KEY="video-digestor-local-dev-token"' in failure_alerts
+    assert 'export WEB_ACTION_SESSION_TOKEN="$VD_API_KEY"' in failure_alerts
+
+
 def test_smoke_full_stack_defaults_are_strict_for_local_validation() -> None:
     root = _repo_root()
     smoke_full_stack = (root / "scripts" / "ci" / "smoke_full_stack.sh").read_text(encoding="utf-8")

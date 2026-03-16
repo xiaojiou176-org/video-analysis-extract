@@ -9,6 +9,13 @@ source "$ROOT_DIR/scripts/lib/load_env.sh"
 source "$ROOT_DIR/scripts/lib/http_api.sh"
 load_repo_env "$ROOT_DIR" "$SCRIPT_NAME"
 
+if [[ -z "${VD_API_KEY:-}" && -z "${CI:-}" && -z "${GITHUB_ACTIONS:-}" ]]; then
+  export VD_API_KEY="video-digestor-local-dev-token"
+fi
+if [[ -z "${WEB_ACTION_SESSION_TOKEN:-}" && -n "${VD_API_KEY:-}" ]]; then
+  export WEB_ACTION_SESSION_TOKEN="$VD_API_KEY"
+fi
+
 API_BASE_URL_OVERRIDE=""
 digest_date="$(date -u +%F)"
 digest_channel="email"

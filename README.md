@@ -7,6 +7,25 @@
 - `apps/mcp`：FastMCP 工具层，转发 API 能力
 - `apps/web`：Next.js 管理台
 
+## Public Status
+
+本仓库当前采用 **source-first public repo** 形态，而不是“镜像优先产品发布”。
+
+- 对外默认定位：**强工程型 applied AI mini-system / owner-level candidate**
+- 公开维护模式：**limited-maintenance**
+- repo-side 完成标准：见 `docs/reference/done-model.md`
+- external lane 状态：见 `docs/reference/external-lane-status.md`
+- public readiness 总览：见 `docs/reference/public-repo-readiness.md`
+- 项目定位与目标用户：见 `docs/reference/project-positioning.md`
+- AI formal eval 最小系统：见 `docs/reference/ai-evaluation.md`
+
+默认对外验收命令：
+
+```bash
+./bin/governance-audit --mode audit
+./bin/repo-side-strict-ci --mode pre-push --strict-full-run 1 --ci-dedupe 0
+```
+
 ## 项目目的
 
 - 将视频内容处理为可操作的结构化信息：拉取、解析、摘要、检索、分发。
@@ -32,6 +51,7 @@
 - **Docs control plane**：`config/docs/*.json` 现在是文档治理真相源；reference 由 `docs/generated/*.md` 承担。
 - **CI 信任边界**：`trusted_internal_pr_only`。fork / untrusted PR 不进入 privileged self-hosted 主链。
 - **Strict CI 真相源**：`infra/config/strict_ci_contract.json`。
+- **Repo-side done model**：`docs/reference/done-model.md`。
 - **Generated references**：`docs/generated/ci-topology.md`、`docs/generated/runner-baseline.md`、`docs/generated/release-evidence.md`。
 <!-- docs:generated governance-snapshot end -->
 
@@ -78,6 +98,13 @@
 ./bin/smoke-full-stack
 ./bin/quality-gate --mode pre-push --strict-full-run 1 --profile ci --profile live-smoke --ci-dedupe 0
 ```
+
+Repo-side / external 双层完成信号：
+
+- repo-side canonical path：`./bin/repo-side-strict-ci --mode pre-push --strict-full-run 1 --ci-dedupe 0`
+- external lane path：`./bin/strict-ci --mode pre-push --strict-full-run 1 --ci-dedupe 0`
+- 解释文档：`docs/reference/done-model.md`
+- external lane 状态页：`docs/reference/external-lane-status.md`
 
 治理控制面入口：
 
@@ -129,6 +156,7 @@ devcontainer up --workspace-folder .
 - 风险 1：DevContainer 依赖宿主 Docker（通过 `/var/run/docker.sock`），若宿主未启动 Docker，容器内 compose 无法拉起。
 - 风险 1.1：严格验收入口 `bin/strict-ci` 同样依赖宿主 Docker 与可拉取的标准镜像；若 Docker daemon 未启动，或当前环境无法获取 contract 中声明的 digest 镜像，脚本会直接 fail-fast，不再回退到旧本地镜像。
 - 风险 1.2：本地执行正式 pinned-image strict 链时，必须具备 GHCR 拉取身份；仓库脚本会优先读取 `GHCR_USERNAME/GHCR_TOKEN`，否则复用 `gh auth` 当前登录态。两者都不存在时会直接 fail-fast。
+- 风险 1.4：external lane 还依赖 GitHub Actions workflow 状态与 package 权限；若 `build-ci-standard-image.yml` 被禁用，或当前 GitHub token 缺少 `read:packages/write:packages` 能力，external image path 会被平台阻断，而不是被 repo-side gate 解决。
 - 风险 1.3：DevContainer 现在固定把 workspace 挂到 `/workspace` 并复用 strict contract 的缓存路径；若仍依赖旧 `/workspaces/...` 路径的本地脚本，需要同步修正。
 - `--debug-build` 仅用于本地诊断标准环境问题，不属于 release/pre-push completion evidence。
 - 风险 2：live smoke 依赖真实外部 API Key（如 `GEMINI_API_KEY`），标准环境只保证执行一致性，不保证外部资源可用。

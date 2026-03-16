@@ -3,6 +3,7 @@ name = "video-analysis-phase3"
 version = "0.1.0"
 description = "Phase3 local-first video analysis stack (API + Worker + MCP)"
 readme = "README.md"
+license = { file = "LICENSE" }
 requires-python = ">=3.11,<3.13"
 dependencies = [
   "fastapi>=0.116.0,<1",

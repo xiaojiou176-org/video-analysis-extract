@@ -72,7 +72,7 @@ def main() -> int:
                 continue
             errors.append(f"runtime root contains undeclared direct child: .runtime-cache/{child.name}")
     for entry in find_forbidden_runtime_entries(nested_forbidden):
-        errors.append(f"forbidden nested runtime output present: {entry}")
+        errors.append(f"forbidden source-tree runtime output present: {entry}")
 
     for path in _tracked_files(root):
         if not path.is_file():

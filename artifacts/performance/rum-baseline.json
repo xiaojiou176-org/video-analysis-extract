@@ -4,12 +4,12 @@
   "source": "rum_observations",
   "generated_at": "2026-03-03T08:27:21.430507+00:00",
   "window_days": 28,
-  "sample_source": "prod_web_vitals_export",
+  "sample_source": "sanitized_web_vitals_aggregate",
   "metrics": {
     "lcp_ms_p75": 1995.0,
     "inp_ms_p75": 138.0,
     "cls_p75": 0.05,
     "sample_size": 16
   },
-  "notes": "Generated from raw RUM observations; do not hand-edit metrics."
+  "notes": "Generated from sanitized aggregate observations for public/source-first documentation; do not hand-edit metrics."
 }

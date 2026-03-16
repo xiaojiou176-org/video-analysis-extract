@@ -7,6 +7,15 @@
 - Worker 端 9-step pipeline（metadata/下载/字幕/评论/抽帧/LLM/embedding/产物写入）。
 - MCP 薄封装暴露订阅、拉取、处理、产物读取。
 
+## Why This Is A Hybrid Repo
+
+这个仓库不是“一个后端服务 + 一个前端页面”的普通组合，而是典型的 hybrid-repo：
+
+- 内部复杂度高：API / Worker / MCP / Web 四层都有明确责任
+- 外部复杂度高：provider、binary、image、reader stack、release evidence 都会影响最终可信度
+
+所以这里的重点不只是“目录整齐”，而是**控制面、运行时出口、上游兼容和完成信号**能不能被分层治理。
+
 ## Components
 
 - `apps/api`: FastAPI 控制面（`/api/v1/*`）。
@@ -49,6 +58,13 @@
 
 - 本地直接运行（brew + python venv/uv）。
 - 不依赖容器路径，文件引用均为绝对路径。
+
+## Trade-offs And Non-goals
+
+- 选择本地优先，是为了让失败治理、证据和 operator 诊断可追溯，而不是追求最轻量 onboarding。
+- 同时保留 API / MCP / Web，是为了分别服务服务契约、agent/tooling、人工管理台，不是为了堆栈炫技。
+- 当前公开目标是源码优先，不追求“镜像优先即可交付”的 SaaS 终局。
+- 当前 formal eval 的目标是可判定进退，不追求学术 benchmark 大而全。
 
 ## MCP Mapping
 

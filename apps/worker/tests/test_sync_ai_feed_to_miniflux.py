@@ -57,6 +57,14 @@ def test_import_entries_treats_duplicate_entry_as_idempotent(monkeypatch) -> Non
     assert len(calls) == 2
 
 
+def test_sync_ai_feed_to_miniflux_inserts_repo_root_into_sys_path() -> None:
+    module_path = Path(__file__).resolve().parents[3] / "scripts" / "runtime" / "sync_ai_feed_to_miniflux.py"
+    script = module_path.read_text(encoding="utf-8")
+
+    assert "ROOT = Path(__file__).resolve().parents[2]" in script
+    assert "sys.path.insert(0, str(ROOT))" in script
+
+
 def test_is_duplicate_entry_error_matches_known_miniflux_signatures() -> None:
     module = _load_module()
 

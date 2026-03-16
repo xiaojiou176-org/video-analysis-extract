@@ -25,10 +25,15 @@
 - 日志治理：`docs/reference/logging.md`
 - 缓存治理：`docs/reference/cache.md`
 - 依赖治理：`docs/reference/dependency-governance.md`
+- repo-side / external done model：`docs/reference/done-model.md`
+- public repo readiness：`docs/reference/public-repo-readiness.md`
+- public artifact exposure：`docs/reference/public-artifact-exposure.md`
+- AI evaluation：`docs/reference/ai-evaluation.md`
 
 ## Explanation
 
 - 架构：`docs/architecture.md`
+- 项目定位：`docs/reference/project-positioning.md`
 
 ## Maintenance Rule
 

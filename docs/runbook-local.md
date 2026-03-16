@@ -2,6 +2,12 @@
 
 本文是本仓库本地运行的权威步骤文档。标准镜像路径是 CI 等价验收真相源，宿主机路径仅作为故障应急。
 
+边界提醒：
+
+- public/source-first onboarding 先看 `README.md` 与 `docs/start-here.md`
+- 本文更偏 operator runbook 与本地排障，不应直接当成公共入门页
+- repo-side / external 双层完成模型见 `docs/reference/done-model.md`
+
 ## 标准环境约束（AI/自动化必须）
 
 - AI 执行 lint/test/live smoke 必须在标准环境完成：`.devcontainer/devcontainer.json`。
@@ -31,6 +37,7 @@ devcontainer up --workspace-folder .
 - runner baseline 参考页：`docs/generated/runner-baseline.md`。
 - CI 主链与 aggregate gate 清单：`docs/generated/ci-topology.md`。
 - release evidence 结构与 canonical 规则：`docs/generated/release-evidence.md`。
+- repo-side / external 双层完成模型：`docs/reference/done-model.md`。
 <!-- docs:generated governance-snapshot end -->
 
 ## 环境分层与优先级（Core/Profile Overlay）

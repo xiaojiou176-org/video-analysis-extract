@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security report
+    url: https://github.com/xiaojiou176-org/video-analysis-extract/security
+    about: Use the private security workflow in SECURITY.md instead of a public issue for sensitive reports.

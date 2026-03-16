@@ -33,3 +33,4 @@ This page is generated from the docs control plane and CI contracts.
 - `docs/generated/required-checks.md`
 - `docs/generated/runner-baseline.md`
 - `docs/generated/release-evidence.md`
+- `docs/reference/done-model.md`

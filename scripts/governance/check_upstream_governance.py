@@ -43,6 +43,7 @@ KNOWN_INTEGRATION_SURFACES = {"public_api", "public_cli", "public_schema", "publ
 KNOWN_PRIVATE_COUPLING_RISKS = {"none", "localized", "structural"}
 KNOWN_VERIFICATION_STATUSES = {"declared", "verified", "pending", "waived"}
 KNOWN_BLOCKING_LEVELS = {"blocker", "important", "enhancement"}
+KNOWN_VERIFICATION_LANES = {"repo-side", "external", "provider"}
 KNOWN_CONTRACT_KINDS = {"public-api-contract", "digest-pinned-image", "public-binary-contract", "vendor-contract"}
 KNOWN_STABILITY_CLASSES = {"managed", "community-supported", "community-platform"}
 KNOWN_BLAME_SURFACES = {"api-boundary", "runtime-image-boundary", "binary-boundary", "vendor-boundary"}
@@ -190,6 +191,7 @@ def main() -> int:
             "blocking_level",
             "verification_entrypoint",
             "verification_status",
+            "verification_lane",
             "last_verified_at",
             "last_verified_run_id",
             "verification_artifacts",
@@ -211,6 +213,10 @@ def main() -> int:
         if str(item.get("verification_status", "")) not in KNOWN_VERIFICATION_STATUSES:
             errors.append(
                 f"compatibility matrix entry {item.get('name', '<unknown>')} uses unsupported verification_status"
+            )
+        if str(item.get("verification_lane", "")) not in KNOWN_VERIFICATION_LANES:
+            errors.append(
+                f"compatibility matrix entry {item.get('name', '<unknown>')} uses unsupported verification_lane"
             )
         if str(item.get("blocking_level", "")) not in KNOWN_BLOCKING_LEVELS:
             errors.append(
@@ -242,6 +248,7 @@ def main() -> int:
                 "name": item.get("name"),
                 "supported": item.get("supported"),
                 "verification_status": item.get("verification_status"),
+                "verification_lane": item.get("verification_lane"),
                 "verification_entrypoint": item.get("verification_entrypoint"),
                 "verification_artifacts": item.get("verification_artifacts"),
                 "last_verified_at": item.get("last_verified_at"),

@@ -115,6 +115,20 @@ def main() -> int:
             except FileNotFoundError:
                 continue
             inferred_run_id = _infer_source_run_id(item)
+            if name == "tmp":
+                metadata = {
+                    "created_at": created_at_value,
+                    "source_run_id": inferred_run_id,
+                    "freshness_window_hours": None,
+                }
+                try:
+                    size_bytes += item.stat().st_size
+                    age_hours = _runtime_age_hours(name, item, metadata)
+                except FileNotFoundError:
+                    continue
+                if ttl_hours > 0 and age_hours > ttl_hours:
+                    expired.append(rel_path(item))
+                continue
             try:
                 metadata = ensure_runtime_metadata(
                     item,

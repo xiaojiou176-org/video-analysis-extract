@@ -20,6 +20,7 @@
 - `pin`、`digest`、历史 `verified` 不能直接等同于“当前仍兼容”。
 - blocker 级上游超 freshness window 必须失败。
 - future vendor/fork/patch 一旦现役，必须同步创建 `UPSTREAM.lock`、`README.md`、`PATCHES.md`。
+- `verification_lane=repo-side|external|provider` 必须显式声明；不要再把本地闭环和外部平台闭环混写成一个 done signal。
 
 ## 门禁
 
@@ -38,3 +39,4 @@ python3 scripts/governance/check_vendor_registry_integrity.py
 - blocker 级兼容链现在不仅要“有新鲜 artifact”，还要能证明这些 artifact 属于同一轮验证批次。
 - 你可以把它理解成“同一批货的验收票据必须来自同一次点货”，不能拿上午一张、下午一张、上周一张拼成“好像都验过了”。
 - 这条规则由 `check_upstream_same_run_cohesion.py` 执行；非 `verified` 的 blocker row 可以暂时保持 `pending`，但一旦要升为 `verified`，就必须满足同轮次证据束要求。
+- repo-side canonical path 优先追求 `verification_lane=repo-side` 的 required rows；provider/public distribution rows 进入 external lane，由 `docs/reference/done-model.md` 统一解释。

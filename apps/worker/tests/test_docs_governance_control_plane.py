@@ -58,6 +58,24 @@ def test_docs_governance_blocking_check_passes_for_repo_snapshot() -> None:
     assert result.returncode == 0, result.stdout + result.stderr
 
 
+def test_generated_docs_reference_done_model_and_semantic_counts() -> None:
+    root = _repo_root()
+    ci_topology = (root / "docs/generated/ci-topology.md").read_text(encoding="utf-8")
+    release_evidence = (root / "docs/generated/release-evidence.md").read_text(encoding="utf-8")
+    dashboard = (root / "docs/generated/governance-dashboard.md").read_text(encoding="utf-8")
+    root_allowlist = json.loads(
+        (root / "config/governance/root-allowlist.json").read_text(encoding="utf-8")
+    )
+    compat = json.loads(
+        (root / "config/governance/upstream-compat-matrix.json").read_text(encoding="utf-8")
+    )
+
+    assert f"- root allowlist entries: `{len(root_allowlist['tracked_root_allowlist'])}`" in ci_topology
+    assert "docs/reference/done-model.md" in release_evidence
+    assert f"- compatibility matrix rows tracked: `{len(compat['matrix'])}`" in release_evidence
+    assert "docs/reference/done-model.md" in dashboard
+
+
 def test_doc_drift_script_uses_control_plane_contract() -> None:
     script = (_repo_root() / "scripts/governance/ci_or_local_gate_doc_drift.sh").read_text(encoding="utf-8")
 

@@ -89,6 +89,7 @@ def test_governance_gate_script_wires_all_terminal_checks() -> None:
     script = (_repo_root() / "scripts" / "governance" / "gate.sh").read_text(encoding="utf-8")
 
     assert "--mode pre-commit|pre-push|ci|audit" in script
+    assert "python3 scripts/runtime/clean_source_runtime_residue.py --apply" in script
     assert "python3 scripts/governance/check_root_allowlist.py" in script
     assert "python3 scripts/governance/check_public_entrypoint_manifests.py" in script
     assert "python3 scripts/governance/check_public_entrypoint_references.py" in script
@@ -99,6 +100,7 @@ def test_governance_gate_script_wires_all_terminal_checks() -> None:
     assert "python3 scripts/governance/check_dependency_boundaries.py" in script
     assert "python3 scripts/governance/check_logging_contract.py" in script
     assert "python3 scripts/governance/check_run_manifest_completeness.py" in script
+    assert "python3 scripts/governance/check_eval_assets.py" in script
     assert "python3 scripts/governance/check_upstream_governance.py" in script
     assert "python3 scripts/governance/check_upstream_same_run_cohesion.py" in script
 
@@ -121,7 +123,9 @@ def test_upstream_verify_entrypoint_includes_same_run_cohesion_guard() -> None:
 
 
 def test_python_tests_public_entrypoint_uses_managed_uv_environment() -> None:
-    entrypoint = (_repo_root() / "bin" / "python-tests").read_text(encoding="utf-8")
+    root = _repo_root()
+    entrypoint = (root / "bin" / "python-tests").read_text(encoding="utf-8")
+    repo_side_entrypoint = (root / "bin" / "repo-side-strict-ci").read_text(encoding="utf-8")
     script = (_repo_root() / "scripts" / "ci" / "python_tests.sh").read_text(encoding="utf-8")
     public_entrypoints = (
         _repo_root() / "config" / "governance" / "public-entrypoints.json"
@@ -131,7 +135,10 @@ def test_python_tests_public_entrypoint_uses_managed_uv_environment() -> None:
     assert 'exec "$ROOT_DIR/scripts/ci/python_tests.sh" "$@"' in entrypoint
     assert 'source "$ROOT_DIR/scripts/lib/standard_env.sh"' in script
     assert 'ensure_external_uv_project_environment "$ROOT_DIR"' in script
+    assert "clean_source_runtime_residue.py --apply" in script
     assert '"bin/python-tests"' in public_entrypoints
+    assert '"bin/repo-side-strict-ci"' in public_entrypoints
+    assert 'exec "$ROOT_DIR/bin/strict-ci" --debug-build "$@"' in repo_side_entrypoint
 
 
 def test_public_entrypoint_manifest_checker_loads_registry_for_python_tests() -> None:
@@ -189,6 +196,7 @@ def test_runtime_cache_maintenance_is_hardened_for_tmp_semantics_and_races() -> 
     assert "def _default_created_at" in script
     assert "def _runtime_age_hours" in script
     assert 'if name == "tmp":' in script
+    assert '"freshness_window_hours": None' in script
     assert "except FileNotFoundError" in script
 
 

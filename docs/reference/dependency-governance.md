@@ -49,6 +49,7 @@
   - `python3 scripts/governance/check_no_unindexed_evidence.py`
   - `python3 scripts/governance/check_contract_surfaces.py`
   - `python3 scripts/governance/check_generated_vs_handwritten_contract_surfaces.py`
+  - `python3 scripts/governance/check_eval_assets.py`
   - `python3 scripts/governance/check_upstream_governance.py`
   - `python3 scripts/governance/check_unregistered_upstream_usage.py`
   - `python3 scripts/governance/check_upstream_compat_freshness.py`
@@ -93,7 +94,7 @@ npm --prefix "$WEB_RUNTIME_WEB_DIR" run build
 
 ```bash
 ./bin/api-real-smoke-local
-./bin/quality-gate --mode pre-push --strict-full-run 1 --profile ci --profile live-smoke --ci-dedupe 0
+./bin/repo-side-strict-ci --mode pre-push --strict-full-run 1 --ci-dedupe 0
 ```
 
 ## Constraints

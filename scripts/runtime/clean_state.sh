@@ -18,4 +18,6 @@ rm -rf \
   apps/web/coverage \
   apps/web/.vitest-coverage
 
+python3 scripts/runtime/clean_source_runtime_residue.py --apply >/dev/null 2>&1 || true
+
 echo "[clean-runtime-state] cleaned runtime caches and transient reports"

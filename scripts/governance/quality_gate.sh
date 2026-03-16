@@ -763,6 +763,9 @@ run_contract_diff_local_gate() {
 run_docs_governance_gate() {
   python3 scripts/governance/check_docs_governance.py
   echo "[quality-gate] docs governance control-plane gate passed"
+
+  python3 scripts/governance/check_eval_assets.py
+  echo "[quality-gate] eval asset gate passed"
 }
 
 run_ci_smoke_drift_advisory() {

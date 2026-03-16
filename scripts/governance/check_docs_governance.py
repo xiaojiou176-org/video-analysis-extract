@@ -83,9 +83,41 @@ def _check_render_freshness() -> list[str]:
     return lines or ["docs governance render freshness failed"]
 
 
+def _check_generated_doc_semantics() -> list[str]:
+    failures: list[str] = []
+    runtime_outputs = _load_json(REPO_ROOT / "config" / "governance" / "runtime-outputs.json")
+    root_allowlist = _load_json(REPO_ROOT / "config" / "governance" / "root-allowlist.json")
+    compat = _load_json(REPO_ROOT / "config" / "governance" / "upstream-compat-matrix.json")
+
+    ci_topology = (REPO_ROOT / "docs" / "generated" / "ci-topology.md").read_text(encoding="utf-8")
+    expected_root_line = f"- root allowlist entries: `{len(root_allowlist.get('tracked_root_allowlist', []))}`"
+    if expected_root_line not in ci_topology:
+        failures.append("docs/generated/ci-topology.md: root allowlist count drifted from control plane")
+    expected_runtime_root = f"- runtime root: `{runtime_outputs.get('runtime_root', '.runtime-cache')}`"
+    if expected_runtime_root not in ci_topology:
+        failures.append("docs/generated/ci-topology.md: runtime root drifted from control plane")
+
+    release_reference = (REPO_ROOT / "docs" / "generated" / "release-evidence.md").read_text(
+        encoding="utf-8"
+    )
+    expected_rows_line = f"- compatibility matrix rows tracked: `{len(compat.get('matrix', []))}`"
+    if expected_rows_line not in release_reference:
+        failures.append("docs/generated/release-evidence.md: compatibility row count drifted from control plane")
+    if "docs/reference/done-model.md" not in release_reference:
+        failures.append("docs/generated/release-evidence.md: missing done-model reference")
+
+    governance_dashboard = (
+        REPO_ROOT / "docs" / "generated" / "governance-dashboard.md"
+    ).read_text(encoding="utf-8")
+    if "docs/reference/done-model.md" not in governance_dashboard:
+        failures.append("docs/generated/governance-dashboard.md: missing done-model reference")
+    return failures
+
+
 def main() -> int:
     failures = _check_control_plane()
     failures.extend(_check_render_freshness())
+    failures.extend(_check_generated_doc_semantics())
     if failures:
         print("docs governance check failed:")
         for item in failures:

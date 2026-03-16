@@ -2,7 +2,7 @@
   "name": "video-analysis-rum-observations",
   "version": "1.0.0",
   "window_days": 28,
-  "sample_source": "prod_web_vitals_export",
+  "sample_source": "sanitized_web_vitals_aggregate",
   "collected_at": "2026-03-03T00:00:00Z",
   "samples": [
     { "lcp_ms": 1702, "inp_ms": 118, "cls": 0.03 },

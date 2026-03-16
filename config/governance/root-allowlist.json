@@ -142,6 +142,13 @@
       "mutable": false
     },
     {
+      "path": "CONTRIBUTING.md",
+      "kind": "docs",
+      "reason": "Public contribution boundary and limited-maintenance contribution contract.",
+      "owner": "platform",
+      "mutable": false
+    },
+    {
       "path": "CLAUDE.md",
       "kind": "governance",
       "reason": "Companion AI operating contract.",
@@ -184,6 +191,13 @@
       "mutable": false
     },
     {
+      "path": "evals",
+      "kind": "contract",
+      "reason": "Minimal formal evaluation assets and baseline policy.",
+      "owner": "platform",
+      "mutable": false
+    },
+    {
       "path": "infra",
       "kind": "responsibility-layer",
       "reason": "Infrastructure configuration, compose files, and migrations.",
@@ -194,6 +208,13 @@
       "path": "integrations",
       "kind": "responsibility-layer",
       "reason": "Explicit adapters for external APIs, binaries, and runtime integration surfaces.",
+      "owner": "platform",
+      "mutable": false
+    },
+    {
+      "path": "LICENSE",
+      "kind": "docs",
+      "reason": "Source-first public repository license grant.",
       "owner": "platform",
       "mutable": false
     },
@@ -212,6 +233,13 @@
       "mutable": false
     },
     {
+      "path": "SECURITY.md",
+      "kind": "docs",
+      "reason": "Public security reporting boundary and response policy.",
+      "owner": "platform",
+      "mutable": false
+    },
+    {
       "path": "artifacts",
       "kind": "responsibility-layer",
       "reason": "Long-lived release evidence, performance baselines, and governance snapshots retained outside runtime output roots.",
@@ -222,6 +250,13 @@
       "path": "scripts",
       "kind": "responsibility-layer",
       "reason": "Repository execution entrypoints grouped by governance, runtime, CI, vendor, release, and deploy responsibilities.",
+      "owner": "platform",
+      "mutable": false
+    },
+    {
+      "path": "SUPPORT.md",
+      "kind": "docs",
+      "reason": "Public support boundary for the limited-maintenance source-first repository.",
       "owner": "platform",
       "mutable": false
     },

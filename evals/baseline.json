@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "scope": "repo-side formal eval minimum",
+  "rubric_version": 1,
+  "minimum_pass_rate": 0.8,
+  "dimensions": {
+    "factuality": 0.9,
+    "coverage": 0.8,
+    "citation_hygiene": 0.9,
+    "failure_honesty": 0.9
+  },
+  "regression_policy": {
+    "block_on_dimension_drop": true,
+    "block_on_pass_rate_drop": true,
+    "notes": "Repo-side gate verifies eval assets and baseline policy. Live/provider-heavy evaluation stays in the external lane."
+  }
+}

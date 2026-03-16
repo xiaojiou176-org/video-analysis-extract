@@ -1,14 +1,19 @@
 {
   "version": 1,
-  "max_public_top_level_files": 18,
+  "max_public_top_level_files": 22,
   "max_public_top_level_directories": 17,
-  "max_root_docs": 5,
+  "max_root_docs": 9,
   "max_local_private_tolerations_present": 5,
   "root_doc_allowlist": [
     "AGENTS.md",
     "CHANGELOG.md",
     "CLAUDE.md",
+    "CONTRIBUTING.md",
     "ENVIRONMENT.md",
+    "LICENSE",
     "README.md"
+    ,
+    "SECURITY.md",
+    "SUPPORT.md"
   ]
 }

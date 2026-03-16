@@ -33,8 +33,12 @@ ALLOWED_ROOT_FILES = {
     "AGENTS.md",
     "CHANGELOG.md",
     "CLAUDE.md",
+    "CONTRIBUTING.md",
     "ENVIRONMENT.md",
+    "LICENSE",
     "README.md",
+    "SECURITY.md",
+    "SUPPORT.md",
 }
 
 

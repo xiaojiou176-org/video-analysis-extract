@@ -10,6 +10,7 @@ source "$ROOT_DIR/scripts/lib/standard_env.sh"
 mkdir -p .runtime-cache .runtime-cache/reports/python .runtime-cache/logs/tests
 find .runtime-cache/reports/python -maxdepth 1 -type f -name '.coverage*' -delete 2>/dev/null || true
 export PYTHONDONTWRITEBYTECODE="${PYTHONDONTWRITEBYTECODE:-1}"
+python3 scripts/runtime/clean_source_runtime_residue.py --apply
 ensure_external_uv_project_environment "$ROOT_DIR"
 uv sync --frozen --extra dev --extra e2e
 set -o pipefail
@@ -33,6 +34,7 @@ while kill -0 "${test_pid}" >/dev/null 2>&1; do
 done
 
 wait "${test_pid}"
+python3 scripts/runtime/clean_source_runtime_residue.py --apply
 
 set -o pipefail
 PYTHONDONTWRITEBYTECODE=1 uv run coverage report \

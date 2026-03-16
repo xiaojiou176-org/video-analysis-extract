@@ -1,0 +1,2 @@
+{"case_id":"video-outline-001","prompt":"为一段技术视频生成结构化大纲，并标出最关键的三个主题。","expected_signals":["outline_is_structured","key_topics_present","no_invented_sources"]}
+{"case_id":"digest-citation-001","prompt":"根据给定的视频处理结果输出摘要，并保留可追溯证据语义。","expected_signals":["summary_is_grounded","citation_hygiene_ok","failure_boundary_explicit"]}

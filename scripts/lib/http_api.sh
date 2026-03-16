@@ -48,6 +48,17 @@ apply_http_api_base_url() {
   export HTTP_API_BASE_URL_OVERRIDE="$VD_API_BASE_URL"
 }
 
+http_api_auth_args() {
+  local -a args=()
+  if [[ -n "${VD_API_KEY:-}" ]]; then
+    args+=(-H "X-API-Key: ${VD_API_KEY}")
+  fi
+  if [[ -n "${WEB_ACTION_SESSION_TOKEN:-}" ]]; then
+    args+=(-H "X-Web-Session: ${WEB_ACTION_SESSION_TOKEN}")
+  fi
+  printf '%s\0' "${args[@]}"
+}
+
 safe_body_preview() {
   BODY="${1:-}" python3 - <<'PY'
 import os
@@ -80,9 +91,15 @@ api_get() {
 
   local base_url status
   base_url="$(resolve_http_api_base_url "${HTTP_API_BASE_URL_OVERRIDE:-${VD_API_BASE_URL:-}}" "${ROOT_DIR:-}")"
+  local -a auth_args=()
+  local auth_part
+  while IFS= read -r -d '' auth_part; do
+    auth_args+=("$auth_part")
+  done < <(http_api_auth_args)
   if ! status="$(
     curl -sS -o "$tmp_body" -w '%{http_code}' \
       -H 'Accept: application/json' \
+      "${auth_args[@]}" \
       "${base_url}${path}"
   )"; then
     rm -f "$tmp_body"
@@ -102,10 +119,16 @@ api_post() {
 
   local base_url status
   base_url="$(resolve_http_api_base_url "${HTTP_API_BASE_URL_OVERRIDE:-${VD_API_BASE_URL:-}}" "${ROOT_DIR:-}")"
+  local -a auth_args=()
+  local auth_part
+  while IFS= read -r -d '' auth_part; do
+    auth_args+=("$auth_part")
+  done < <(http_api_auth_args)
   if ! status="$(
     curl -sS -o "$tmp_body" -w '%{http_code}' \
       -H 'Accept: application/json' \
       -H 'Content-Type: application/json' \
+      "${auth_args[@]}" \
       -X POST "${base_url}${path}" \
       --data "$payload"
   )"; then

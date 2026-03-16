@@ -91,6 +91,7 @@ def main() -> int:
                 "name": row_name,
                 "blocking_level": blocking_level,
                 "verification_status": verification_status,
+                "verification_lane": str(item.get("verification_lane") or ""),
                 "last_verified_run_id": last_verified_run_id,
                 "verification_artifacts": verification_artifacts,
                 "row_specific_artifacts": row_specific_artifacts,

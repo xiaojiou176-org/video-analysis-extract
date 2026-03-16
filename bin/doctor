@@ -8,6 +8,7 @@ vd_entrypoint_bootstrap governance doctor "" "$@"
 cd "$ROOT_DIR"
 export PYTHONDONTWRITEBYTECODE=1
 
+python3 scripts/runtime/clean_source_runtime_residue.py --apply
 python3 scripts/governance/check_root_allowlist.py --strict-local-private
 python3 scripts/governance/check_root_layout_budget.py
 python3 scripts/governance/check_root_zero_unknowns.py
@@ -18,3 +19,4 @@ python3 scripts/governance/check_log_correlation_completeness.py
 python3 scripts/governance/check_dependency_boundaries.py
 python3 scripts/governance/check_upstream_governance.py
 python3 scripts/governance/check_unregistered_upstream_usage.py
+python3 scripts/governance/check_eval_assets.py

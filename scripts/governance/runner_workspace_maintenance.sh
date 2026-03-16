@@ -63,7 +63,13 @@ for target in matches:
     if not target.exists():
         continue
     print(f"[runner_workspace_maintenance] removing stale path: {target}", file=sys.stderr)
-    shutil.rmtree(target, ignore_errors=True)
+    if target.is_dir():
+        shutil.rmtree(target, ignore_errors=True)
+    else:
+        try:
+            target.unlink()
+        except FileNotFoundError:
+            continue
     if target.exists():
         raise SystemExit(f"failed to remove stale path: {target}")
 PY

@@ -12,6 +12,22 @@
 所有新增测试都包含至少一个真实行为断言（字段或状态码），不使用安慰剂断言。
 测试分层口径：API tests 主责路由字段契约，Web E2E 主责关键用户旅程与端到端成功信号，MCP tests 主责工具动作路由与标准化语义（避免逐字段重复 API 契约）。
 
+## Completion Lanes
+
+测试与门禁现在统一分成两层：
+
+- **repo-side lane**：仓库内可复现、可验证、可本地闭环的权威完成口径
+- **external lane**：GHCR、provider/live proof、public distribution 等需要外部平台共同证明的口径
+
+对应命令：
+
+```bash
+./bin/repo-side-strict-ci --mode pre-push --strict-full-run 1 --ci-dedupe 0
+./bin/strict-ci --mode pre-push --strict-full-run 1 --ci-dedupe 0
+```
+
+解释文档：`docs/reference/done-model.md`
+
 ## 环境分层与密钥注入口径
 
 - 测试配置采用 `core + profile overlay`：
@@ -28,6 +44,7 @@
 - `docs/testing.md` 现在以**策略解释**为主；高漂移 job inventory 已移到 `docs/generated/ci-topology.md`。
 - PR 信任模型：仅同仓 trusted internal PR 允许进入 self-hosted 主链。
 - docs gate 现在同时要求：`config/docs/*.json` control plane 一致、render output 新鲜、manual boundary 不越界。
+- repo-side strict canonical path：`./bin/repo-side-strict-ci --mode pre-push --strict-full-run 1 --ci-dedupe 0`。
 <!-- docs:generated governance-snapshot end -->
 
 ## CI Topology (GitHub Actions)

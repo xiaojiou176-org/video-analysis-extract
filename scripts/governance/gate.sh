@@ -49,6 +49,7 @@ fi
 cd "$ROOT_DIR"
 
 vd_log info start "mode=$MODE"
+python3 scripts/runtime/clean_source_runtime_residue.py --apply
 python3 scripts/governance/check_root_allowlist.py --strict-local-private
 python3 scripts/governance/check_root_semantic_cleanliness.py
 python3 scripts/governance/check_root_layout_budget.py
@@ -75,6 +76,7 @@ python3 scripts/governance/check_no_unindexed_evidence.py
 python3 scripts/governance/check_run_manifest_completeness.py
 python3 scripts/governance/check_contract_surfaces.py
 python3 scripts/governance/check_generated_vs_handwritten_contract_surfaces.py
+python3 scripts/governance/check_eval_assets.py
 python3 scripts/governance/check_upstream_governance.py
 python3 scripts/governance/check_unregistered_upstream_usage.py
 python3 scripts/governance/check_upstream_compat_freshness.py

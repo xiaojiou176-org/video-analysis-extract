@@ -4,7 +4,7 @@ from __future__ import annotations
 import argparse
 import json
 import subprocess
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -170,7 +170,7 @@ def main() -> int:
 
     gate_status = "pass" if missing_policy == 0 and with_blocker == 0 and invalid_down_sql == 0 else "fail"
     payload = {
-        "generated_at": datetime.now(UTC).isoformat(),
+        "generated_at": datetime.now(timezone.utc).isoformat(),
         "release_tag": release_tag,
         "latest_tag": latest_tag,
         "summary": {

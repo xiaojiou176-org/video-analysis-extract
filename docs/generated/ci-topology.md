@@ -20,13 +20,22 @@
 
 ## Governance Control Plane
 
-- root allowlist entries: `0`
+- root allowlist entries: `38`
+- local-private root tolerations: `5`
 - runtime root: `.runtime-cache`
 - current-run CI KPI summary: `.runtime-cache/reports/release-readiness/ci-kpi-summary.json`
 - current-run readiness reports: `.runtime-cache/reports/release-readiness/`
 - active upstream inventory entries: `19`
 - upstream templates: `1`
 - governance gate entrypoint: `./bin/governance-audit --mode pre-commit|pre-push|ci|audit`
+
+## Aggregate Gate Inventory
+
+## Completion Lanes
+
+- repo-side canonical path: `./bin/repo-side-strict-ci --mode pre-push --strict-full-run 1 --ci-dedupe 0`
+- external lane path: `./bin/strict-ci --mode pre-push --strict-full-run 1 --ci-dedupe 0`
+- source of truth: `docs/reference/done-model.md`
 
 ## Aggregate Gate Inventory
 

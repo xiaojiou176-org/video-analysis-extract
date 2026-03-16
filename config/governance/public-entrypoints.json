@@ -33,6 +33,7 @@
     "bin/full-stack",
     "bin/quality-gate",
     "bin/python-tests",
+    "bin/repo-side-strict-ci",
     "bin/smoke-full-stack",
     "bin/strict-ci",
     "bin/governance-audit"

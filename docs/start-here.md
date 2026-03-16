@@ -42,7 +42,8 @@
 
 - 文档高漂移事实已开始收口到 `docs/generated/*.md`；入口文档只保留 onboarding 必需信息。
 - self-hosted CI 只接受 **trusted internal PR**；若 PR 来自 fork，GitHub Actions 会在边界门禁直接阻断。
-- 严格验收仍以 `./bin/strict-ci --mode pre-push --strict-full-run 1 --ci-dedupe 0` 为唯一权威入口。
+- repo-side 严格验收入口：`./bin/repo-side-strict-ci --mode pre-push --strict-full-run 1 --ci-dedupe 0`。
+- external lane 入口：`./bin/strict-ci --mode pre-push --strict-full-run 1 --ci-dedupe 0`。
 - 契约主层已迁到 `contracts/`，长期跟踪 artifact 已迁到 `artifacts/`。
 <!-- docs:generated governance-snapshot end -->
 
@@ -58,6 +59,15 @@ python3 scripts/governance/check_env_contract.py --strict
 - `.env.example` 现在只保留最小可启动键和少量高频覆盖键，默认足够完成一次本地启动。
 - 标准初始化路径是 `.env.example -> .env`；`./bin/init-env-example` 仅作为辅助模板生成工具，不是默认入口。
 - 脚本参数全集见 `docs/reference/env-script-overrides.md`（按需覆盖，不必全量写入 `.env`）。
+
+## Public / Internal Boundary
+
+- public/source-first 入口：`README.md`、`docs/start-here.md`
+- deeper operator runbook：`docs/runbook-local.md`
+- repo-side / external 双层完成模型：`docs/reference/done-model.md`
+- public readiness 边界：`docs/reference/public-repo-readiness.md`
+
+如果你只是第一次接触这个仓库，先停在 public/source-first 入口，不要一上来把 `docs/runbook-local.md` 当成公共 onboarding 文档。
 
 ## 一键验证（最短路径）
 
@@ -215,6 +225,12 @@ curl -sS -X POST http://127.0.0.1:9000/api/v1/ingest/poll -H 'Content-Type: appl
 
 ```bash
 ./bin/strict-ci --mode pre-push --strict-full-run 1 --ci-dedupe 0
+```
+
+源码优先公开口径下的 repo-side 权威入口：
+
+```bash
+./bin/repo-side-strict-ci --mode pre-push --strict-full-run 1 --ci-dedupe 0
 ```
 
 门禁口径补充：总覆盖率硬门禁 `>=95%`，Web `lines/functions/branches` 必须同时满足 `global >=95%` 且 `core >=95%`；`strict-full-run=1` 还会强制执行 mutation `score>=0.64 / effective_ratio>=0.27 / no_tests_ratio<=0.72`，并禁止 `ci-dedupe` 与 `skip-mutation`。本地 smoke 与 strict 验收统一采用 fail-fast，不再保留 offline fallback。

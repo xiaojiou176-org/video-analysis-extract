@@ -61,6 +61,19 @@ def test_release_evidence_attestation_workflow_exists() -> None:
     assert "actions/attest-build-provenance@b3e506e8c389afc651c5bacf2b8f2a1ea0557215" in workflow
     assert "release-evidence-" in workflow
     assert "runner_workspace_maintenance.sh" in workflow
+    assert "actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065" in workflow
+    assert 'python-version: "3.12"' in workflow
+
+
+def test_external_lane_status_reference_exists() -> None:
+    text = (_repo_root() / "docs" / "reference" / "external-lane-status.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert "GHCR standard image" in text
+    assert "Release evidence attestation" in text
+    assert "rsshub-youtube-ingest-chain" in text
+    assert "resend-digest-delivery-chain" in text
 
 
 def test_release_manifest_capture_uses_relative_artifact_paths_and_current_run_scope() -> None:
@@ -78,6 +91,17 @@ def test_rollback_readiness_script_uses_artifacts_release_root() -> None:
 
     assert 'repo_root / "artifacts" / "releases"' in script
     assert 'repo_root / "reports" / "releases"' not in script
+    assert "timezone.utc" in script
+    assert "from datetime import datetime, timezone" in script
+
+
+def test_runner_workspace_maintenance_handles_file_and_directory_cleanup() -> None:
+    script = (_repo_root() / "scripts" / "governance" / "runner_workspace_maintenance.sh").read_text(
+        encoding="utf-8"
+    )
+
+    assert "if target.is_dir():" in script
+    assert "target.unlink()" in script
 
 
 def test_release_prechecks_use_canonical_current_run_report_lane() -> None:
