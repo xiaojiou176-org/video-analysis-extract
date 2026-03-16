@@ -50,6 +50,7 @@ cleanup_glob() {
   local pattern="$1"
   "$STABLE_PYTHON" - <<'PY' "$pattern"
 from glob import glob
+import stat
 from pathlib import Path
 import shutil
 import sys
@@ -59,14 +60,35 @@ matches = [Path(item) for item in glob(pattern)]
 if not matches and Path(pattern).exists():
     matches = [Path(pattern)]
 
+
+def ensure_user_writable(path: Path) -> None:
+    try:
+        current_mode = path.stat().st_mode
+    except FileNotFoundError:
+        return
+    writable_mode = current_mode | stat.S_IWUSR
+    if writable_mode != current_mode:
+        path.chmod(writable_mode)
+
+
+def handle_remove_error(_func, path, _exc_info) -> None:
+    target_path = Path(path)
+    ensure_user_writable(target_path)
+    if target_path.is_dir():
+        shutil.rmtree(target_path, ignore_errors=False, onerror=handle_remove_error)
+    else:
+        target_path.unlink()
+
 for target in matches:
     if not target.exists():
         continue
     print(f"[runner_workspace_maintenance] removing stale path: {target}", file=sys.stderr)
     if target.is_dir():
-        shutil.rmtree(target, ignore_errors=True)
+        ensure_user_writable(target)
+        shutil.rmtree(target, ignore_errors=False, onerror=handle_remove_error)
     else:
         try:
+            ensure_user_writable(target)
             target.unlink()
         except FileNotFoundError:
             continue

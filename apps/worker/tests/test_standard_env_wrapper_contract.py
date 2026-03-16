@@ -245,6 +245,9 @@ def test_devcontainer_dockerfile_pins_nodesource_node_22_for_standard_env() -> N
 
     assert "STRICT_CI_NODE_MAJOR=22" in dockerfile
     assert "https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key" in dockerfile
+    assert "--http1.1 --retry 5 --retry-all-errors --retry-delay 2 -fL" in dockerfile
+    assert 'key_tmp="$(mktemp)"' in dockerfile
+    assert 'gpg --dearmor --batch --yes -o /etc/apt/keyrings/nodesource.gpg "${key_tmp}"' in dockerfile
     assert "https://deb.nodesource.com/node_${STRICT_CI_NODE_MAJOR}.x nodistro main" in dockerfile
     assert dockerfile.index("https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key") < dockerfile.index("apt-get install -y --no-install-recommends \\\n    nodejs")
     assert "nodejs" in dockerfile

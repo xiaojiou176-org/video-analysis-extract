@@ -15,8 +15,13 @@ RUN rm -f /etc/apt/sources.list.d/yarn.list \
   && apt-get update \
   && apt-get install -y --no-install-recommends curl ca-certificates git gnupg jq ripgrep tar \
   && install -d -m 0755 /etc/apt/keyrings \
-  && curl -fsSL "https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key" \
-    | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg \
+  && key_tmp="$(mktemp)" \
+  && curl --http1.1 --retry 5 --retry-all-errors --retry-delay 2 -fL \
+    "https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key" \
+    -o "${key_tmp}" \
+  && test -s "${key_tmp}" \
+  && gpg --dearmor --batch --yes -o /etc/apt/keyrings/nodesource.gpg "${key_tmp}" \
+  && rm -f "${key_tmp}" \
   && echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_${STRICT_CI_NODE_MAJOR}.x nodistro main" \
     > /etc/apt/sources.list.d/nodesource.list \
   && apt-get update \

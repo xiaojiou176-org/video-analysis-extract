@@ -112,6 +112,8 @@ def test_runner_workspace_maintenance_handles_file_and_directory_cleanup() -> No
     )
 
     assert "if target.is_dir():" in script
+    assert "stat.S_IWUSR" in script
+    assert "onerror=handle_remove_error" in script
     assert "target.unlink()" in script
 
 
@@ -145,6 +147,12 @@ def test_pre_checkout_helper_exists_for_self_hosted_hygiene_reuse() -> None:
     assert "runner_workspace_maintenance.sh" in helper
     assert "--include-runner-diag" in helper
     assert "detected root-owned residue" in helper
+
+
+def test_prepare_web_runtime_helper_is_executable_for_wrapper_exec() -> None:
+    helper = _repo_root() / "scripts" / "ci" / "prepare_web_runtime.sh"
+
+    assert helper.stat().st_mode & 0o111
 
 
 def test_devcontainer_and_reader_stack_follow_strict_contract() -> None:

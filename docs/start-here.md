@@ -152,8 +152,10 @@ DevContainer 启动拓扑补充（2026-03）：
 - `.devcontainer/post-create.sh` 已移除 `curl|sh` 安装模式，改为 `python3 -m pip install --user --upgrade "uv>=0.10,<1.0"`；当前会直接校验 strict contract 里的 Chromium 是否可启动，失败时直接报 drift，不再 `playwright install ... || true`。
 - 并发 Web E2E 场景可通过 `WEB_E2E_NEXT_DIST_DIR` 隔离 Next.js `distDir`，避免 `.next/dev/lock` 冲突（默认常规开发无需设置）。
 - `infra/config/strict_ci_contract.json` 现在是标准镜像真相源；`bin/strict-ci` / `./bin/run-in-standard-env` 只接受 digest-pinned 标准镜像，拉取失败会直接终止，不再静默回退到旧本地镜像。
+- 标准镜像构建链会对 NodeSource signing key 使用显式重试，并先落临时 key 文件再 `gpg --dearmor`；这是为了降低 ARM64/QEMU buildx 路径里“HTTP/2 中断导致空 key 响应”的瞬时失败率。
 - 关键 correctness gates（`preflight-heavy`、`db-migration-smoke`、`dependency-vuln-scan`、`web-e2e-perceived`、后端/前端 lint hosted/fallback）已经跟 `python-tests` / `api-real-smoke` / `web-e2e` 一样迁入标准镜像执行，因此宿主 Docker 可用性现在是 CI 等价本地验收的前提。
 - self-hosted runner 基线合同已独立成 `infra/config/self_hosted_runner_baseline.json`；主 `ci.yml` 不再预热/拉起 runner，runner 健康检查改由 `runner-health.yml` 负责。
+- self-hosted runner 进入 `build-ci-standard-image.yml` 前会先用 `scripts/governance/runner_workspace_maintenance.sh` 清理 `.runtime-cache`、`mutants/` 与 `/tmp/video-digestor-*` 的目录/单文件残留，避免镜像工作流在 runner hygiene 阶段就被陈旧 `.db` / `.db-shm` / `.db-wal` 文件卡住。
 - DevContainer 现在固定挂载到 `/workspace`，并通过 `post-create.sh` 校验 `uv` / `node` / cache 路径是否与 strict contract 一致。
 - Web 依赖树统一进入 `.runtime-cache/tmp/web-runtime/workspace/apps/web`，不再把 `apps/web/node_modules` 作为仓库源码树中的合法长期状态。
 - CI/release 生成式参考页：
@@ -188,6 +190,8 @@ sqlite3 "$SQLITE_PATH" < infra/sql/sqlite_state_init.sql
 curl -sS http://127.0.0.1:9000/healthz
 curl -sS -X POST http://127.0.0.1:9000/api/v1/ingest/poll -H 'Content-Type: application/json' -d '{"max_new_videos": 20}'
 ```
+
+补充：`./bin/prepare-web-runtime` 是 wrapper，真正执行的是 `scripts/ci/prepare_web_runtime.sh`。如果入口报 `Permission denied`，先检查目标 helper 是否仍保留执行位。
 
 ## 一键路径（推荐）
 
