@@ -75,7 +75,7 @@ def main() -> int:
     else:
         for index, line in enumerate(sample_lines, 1):
             payload = json.loads(line)
-            for field in ("case_id", "prompt", "expected_signals"):
+            for field in ("case_id", "prompt", "expected_signals", "fixture_response"):
                 if field not in payload:
                     failures.append(f"golden-set.sample.jsonl line {index} missing field: {field}")
 

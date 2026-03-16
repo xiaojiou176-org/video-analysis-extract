@@ -17,8 +17,6 @@ from common import rel_path, write_json_artifact
 ALLOWED_ROOTS = {
     ROOT / ".runtime-cache",
     ROOT / ".git",
-    ROOT / ".venv",
-    ROOT / "venv",
 }
 DIR_MARKERS = {"__pycache__", ".pytest_cache", ".ruff_cache"}
 FILE_SUFFIXES = {".pyc", ".pyo"}

@@ -2,34 +2,42 @@
 
 本页专门回答一个问题：**仓库内部已经绿了以后，外部世界到底认不认账。**
 
-## Current External Lanes
+## Current Snapshot Source
 
-| Lane | Target | Current State | Current Blocker Type |
-| --- | --- | --- | --- |
-| GHCR standard image | `ghcr.io/xiaojiou176-org/video-analysis-extract-ci-standard` | blocked | workflow runtime compatibility |
-| Release evidence attestation | `release-evidence-attest.yml` current-run bundle | blocked | artifact quota / platform billing |
-| RSSHub provider chain | `rsshub-youtube-ingest-chain` | verified | provider smoke passed |
-| Resend provider chain | `resend-digest-delivery-chain` | verified | current account's testing-recipient boundary passed |
+当前 external lane 的**状态表本身**不再手写。请直接看：
+
+- `docs/generated/external-lane-snapshot.md`
+- `.runtime-cache/reports/governance/remote-platform-truth.json`
+- `.runtime-cache/reports/governance/standard-image-publish-readiness.json`
+- `.runtime-cache/reports/release/release-evidence-attest-readiness.json`
 
 ## Verification Rules
 
 - repo-side green 不等于 external lane green
 - external lane 只在 fresh artifact + runtime metadata + same-run proof 同时满足时才算 `verified`
 - 平台权限问题必须写成平台 blocker，不能伪装成仓库 bug
+- 远端仓库当前是否公开、是否具备 branch protection 平台能力，也属于 external truth，不得由本地 docs 单方面宣布
+- actor-sensitive remote truth 必须从 `remote-platform-truth.json` 读取，不能把一次 probe 的账号上下文偷换成永久事实
 
-## Fresh Evidence Snapshot
+## Reading Rule
 
-- `build-ci-standard-image.yml` 已从 disabled 恢复到 active；当前最新 push run 已越过 runner hygiene，新的最早失败点收敛到 `Build and push strict CI standard image`，远端日志显示 self-hosted runner 在进入镜像构建脚本前并没有准备好可用的 Docker Buildx 上下文（报 `unknown flag: --file`）。当前仓库工作流已显式补上 `docker/setup-buildx-action`，等待下一次远端运行验证失败点是否继续后移。
-- `release-evidence-attest.yml` 可触发，但最新失败点已从 runner Python 兼容问题漂移到 GitHub artifact storage quota：`Failed to CreateArtifact: Artifact storage quota has been hit`。这属于平台配额/计费面，不再是仓库脚本里的 `datetime.UTC` 兼容问题。
-- `rsshub-youtube-ingest-chain` 已在本地 full stack + reader stack 下 fresh 通过，证据主件是 `.runtime-cache/logs/tests/smoke-full-stack.jsonl`（run id `77c0ba15cbeb41ca849b4297d41d881b`）。
-- `resend-digest-delivery-chain` 已在当前 provider 账号允许的 testing-recipient 边界内 fresh 发送成功，证据主件是 `.runtime-cache/logs/tests/compat-resend-daily-sent.log`（run id `cb66852c15274544b9ec0dae829d1296`）。
-- 所以当前 external lane 剩余 blocker 已收敛到两条：**GHCR build/publish** 与 **release evidence attestation**。前者现在主要是 workflow/runtime preparation，后者主要是平台 artifact quota / billing，而不是 provider 链本身。
+- 解释层只负责说明“为什么 blocked / verified”
+- current state 只允许从 generated snapshot 或 runtime report 引用
+- 如果 remote probe、GHCR readiness、release evidence readiness 与解释文档冲突，以 runtime report 为准
 
 ## Canonical Commands
+
+Remote platform truth:
+
+```bash
+./bin/remote-platform-probe --repo xiaojiou176-org/video-analysis-extract
+python3 scripts/governance/check_remote_required_checks.py
+```
 
 GHCR / external image:
 
 ```bash
+./scripts/ci/check_standard_image_publish_readiness.sh
 ./bin/strict-ci --mode pre-push --strict-full-run 1 --ci-dedupe 0
 gh workflow run build-ci-standard-image.yml --ref main
 ```
@@ -37,6 +45,7 @@ gh workflow run build-ci-standard-image.yml --ref main
 Release evidence:
 
 ```bash
+python3 scripts/release/check_release_evidence_attest_readiness.py --release-tag <tag>
 gh workflow run release-evidence-attest.yml --ref main -f release_tag=v0.1.0
 gh attestation verify <bundle> --repo xiaojiou176-org/video-analysis-extract
 ```

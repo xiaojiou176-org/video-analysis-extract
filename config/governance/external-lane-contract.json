@@ -1,0 +1,47 @@
+{
+  "version": 1,
+  "lanes": [
+    {
+      "name": "remote-platform-integrity",
+      "canonical_artifact": ".runtime-cache/reports/governance/remote-platform-truth.json",
+      "verification_scope": "remote-platform-truth",
+      "allowed_statuses": [
+        "pass",
+        "blocked"
+      ],
+      "blocked_types": [
+        "repo-readability",
+        "branch-protection-platform-boundary",
+        "required-check-integrity-mismatch"
+      ]
+    },
+    {
+      "name": "ghcr-standard-image",
+      "canonical_artifact": ".runtime-cache/reports/governance/standard-image-publish-readiness.json",
+      "verification_scope": "standard-image-publish-readiness",
+      "allowed_statuses": [
+        "ready",
+        "blocked"
+      ],
+      "blocked_types": [
+        "buildx-runtime-preparation-failure",
+        "registry-auth-failure",
+        "package-ownership-or-write-package-failure"
+      ]
+    },
+    {
+      "name": "release-evidence-attestation",
+      "canonical_artifact": ".runtime-cache/reports/release/release-evidence-attest-readiness.json",
+      "verification_scope": "release-evidence-attest-readiness",
+      "allowed_statuses": [
+        "ready",
+        "blocked"
+      ],
+      "blocked_types": [
+        "repo-evidence-missing",
+        "artifact-quota-or-billing-failure",
+        "attestation-failure"
+      ]
+    }
+  ]
+}

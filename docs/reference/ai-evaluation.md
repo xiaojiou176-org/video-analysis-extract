@@ -8,6 +8,8 @@
 - rubric：`evals/rubric.md`
 - baseline：`evals/baseline.json`
 - asset guard：`python3 scripts/governance/check_eval_assets.py`
+- deterministic regression：`python3 scripts/evals/run_regression.py`
+- regression gate：`python3 scripts/governance/check_eval_regression.py`
 
 ## Eval Goal
 
@@ -17,17 +19,26 @@
 2. 能解释为什么不过
 3. 能把质量、引用卫生、失败诚实度纳入同一套 rubric
 
+## Repo-side Deterministic Regression
+
+repo-side 现在不只检查“考卷在不在”，还要检查“评分器能不能把固定样卷跑出结果”。
+
+- `run_regression.py` 会对 golden set 里的 `fixture_response` 做 deterministic 评分
+- 输出写入 `.runtime-cache/reports/evals/<run_id>.json`
+- `check_eval_regression.py` 会检查最新 regression report 是否存在、是否带 metadata、是否满足 baseline
+
 ## Regression Gate
 
-repo-side 最小门禁：
+repo-side 最小门禁现在分两层：
 
 - baseline 文件存在且字段完整
 - golden set 至少有可复用样例
 - rubric 明确维度与通过规则
 - regression policy 明确 block 条件
+- deterministic regression report fresh 存在，且 pass_rate / 维度分数不低于 baseline
 
 ## Cost / Quality / Latency Triangle
 
 - 质量优先： factuality、coverage、citation hygiene、failure honesty
-- 成本受控：先用小样本 golden set 做 regression，而不是每次都跑重型 live eval
-- 延迟受控：repo-side 只强制资产与 policy，真实 live/provider 评估进入 external lane
+- 成本受控：先用小样本 golden set + fixture responses 做 deterministic regression，而不是每次都跑重型 live eval
+- 延迟受控：repo-side 强制 deterministic regression；真实 provider/live eval 继续放在 external lane

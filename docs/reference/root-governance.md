@@ -16,6 +16,7 @@
 
 - `.agents/Plans/`：仓库内执行计划与施工控制板，属于受治理的公共制度入口。
 - `bin/`：稳定公开命令入口。人类、Hook、CI、文档只应引用 `bin/*`，不应再把 `scripts/*` 当作长期公共接口。
+- 根目录 `.venv` / `venv` 不属于合法根目录资产；受治理的 Python 环境必须通过受控入口写入 `.runtime-cache/tmp/` 或仓库外受控路径。
 
 ## 本地私有容忍项
 
@@ -35,6 +36,7 @@ python3 scripts/governance/check_root_layout_budget.py
 python3 scripts/governance/check_root_zero_unknowns.py
 python3 scripts/governance/check_root_dirtiness_after_tasks.py --compare-snapshot <snapshot>
 python3 scripts/governance/check_public_entrypoint_references.py
+python3 scripts/governance/check_root_policy_alignment.py
 ```
 
 补充口径：

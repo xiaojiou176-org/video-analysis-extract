@@ -44,6 +44,7 @@
 - self-hosted CI 只接受 **trusted internal PR**；若 PR 来自 fork，GitHub Actions 会在边界门禁直接阻断。
 - repo-side 严格验收入口：`./bin/repo-side-strict-ci --mode pre-push --strict-full-run 1 --ci-dedupe 0`。
 - external lane 入口：`./bin/strict-ci --mode pre-push --strict-full-run 1 --ci-dedupe 0`。
+- external lane current snapshot：`docs/generated/external-lane-snapshot.md`。
 - 契约主层已迁到 `contracts/`，长期跟踪 artifact 已迁到 `artifacts/`。
 <!-- docs:generated governance-snapshot end -->
 
@@ -62,12 +63,13 @@ python3 scripts/governance/check_env_contract.py --strict
 
 ## Public / Internal Boundary
 
-- public/source-first 入口：`README.md`、`docs/start-here.md`
+- public-ready/source-first 入口：`README.md`、`docs/start-here.md`
 - deeper operator runbook：`docs/runbook-local.md`
 - repo-side / external 双层完成模型：`docs/reference/done-model.md`
 - public readiness 边界：`docs/reference/public-repo-readiness.md`
+- 当前文档口径是 **public source-first repo + dual completion lanes**，不是 adoption-grade 开源分发包，也不是 hosted product 发布页。
 
-如果你只是第一次接触这个仓库，先停在 public/source-first 入口，不要一上来把 `docs/runbook-local.md` 当成公共 onboarding 文档。
+如果你只是第一次接触这个仓库，先停在 public-ready/source-first 入口，不要一上来把 `docs/runbook-local.md` 当成公共 onboarding 文档。
 
 ## 一键验证（最短路径）
 
@@ -167,7 +169,7 @@ DevContainer 启动拓扑补充（2026-03）：
 ## 6 步启动（Host Fallback，仅排障时使用）
 
 ```bash
-uv sync --frozen --extra dev --extra e2e
+UV_PROJECT_ENVIRONMENT="$PWD/.runtime-cache/tmp/uv-project-env" uv sync --frozen --extra dev --extra e2e
 ./bin/prepare-web-runtime
 
 brew services start postgresql@16

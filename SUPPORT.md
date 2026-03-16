@@ -32,3 +32,6 @@ Open an issue when:
 - a public artifact or sample appears unsafe or mislabeled.
 
 Use the security process in `SECURITY.md` instead of public issues for sensitive reports.
+Private security route:
+
+- `https://github.com/xiaojiou176-org/video-analysis-extract/security`

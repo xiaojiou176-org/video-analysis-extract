@@ -24,13 +24,15 @@ REQUIRED_METADATA_FIELDS = (
 
 def main() -> int:
     config = load_governance_json("runtime-outputs.json")
+    evidence_contract = load_governance_json("evidence-contract.json")
     runtime_root = ROOT / str(config["runtime_root"])
+    required_metadata_fields = tuple(str(item) for item in evidence_contract.get("required_metadata_fields", []))
     errors: list[str] = []
 
-    for name, subconfig in config.get("subdirectories", {}).items():
-        if not bool(subconfig.get("freshness_required")):
+    for bucket_config in evidence_contract.get("buckets", {}).values():
+        if not bool(bucket_config.get("freshness_required")):
             continue
-        base = runtime_root / name
+        base = ROOT / str(bucket_config.get("path") or runtime_root)
         if not base.exists():
             continue
 
@@ -39,7 +41,7 @@ def main() -> int:
             if metadata is None:
                 errors.append(f"{artifact}: missing runtime metadata sidecar")
                 continue
-            for field in REQUIRED_METADATA_FIELDS:
+            for field in required_metadata_fields:
                 value = metadata.get(field)
                 if value is None or (isinstance(value, str) and not value.strip()):
                     errors.append(f"{artifact}: metadata field `{field}` is missing or blank")

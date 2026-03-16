@@ -31,10 +31,12 @@ Generated from the release evidence workflow and manifest capture script.
 
 - provenance action: `actions/attest-build-provenance`
 - bundle source: `scripts/release/capture_release_manifest.sh`
+- readiness preflight: `scripts/release/check_release_evidence_attest_readiness.py`
 - GHCR standard-image publish lane primes Docker Buildx before invoking the multi-arch image build script
 
 ## Adjacent Governance Evidence
 
 - upstream inventory entries tracked: `19`
 - compatibility matrix rows tracked: `7`
+- external lane current snapshot: `docs/generated/external-lane-snapshot.md`
 - monthly governance audit snapshots are complementary hygiene evidence, not release verdict proof

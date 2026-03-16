@@ -11,14 +11,14 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT / "scripts" / "governance") not in sys.path:
     sys.path.insert(0, str(ROOT / "scripts" / "governance"))
 
-from common import read_runtime_metadata, rel_path
+from common import load_governance_json, read_runtime_metadata, rel_path
 
 
 def _runtime_artifacts_for_run(run_id: str) -> list[Path]:
     artifacts: list[Path] = []
-    runtime_root = ROOT / ".runtime-cache"
-    for bucket in ("logs", "reports", "evidence"):
-        base = runtime_root / bucket
+    contract = load_governance_json("evidence-contract.json")
+    for bucket_config in contract.get("buckets", {}).values():
+        base = ROOT / str(bucket_config.get("path") or "")
         if not base.exists():
             continue
         for item in base.rglob("*"):
@@ -35,7 +35,10 @@ def _runtime_artifacts_for_run(run_id: str) -> list[Path]:
 
 
 def main() -> int:
-    manifest_root = ROOT / ".runtime-cache" / "run" / "manifests"
+    contract = load_governance_json("evidence-contract.json")
+    manifest_root = ROOT / str(contract.get("manifest_root") or ".runtime-cache/run/manifests")
+    required_manifest_fields = [str(item) for item in contract.get("required_manifest_fields", [])]
+    index_root = ROOT / str(contract.get("evidence_index", {}).get("root") or ".runtime-cache/reports/evidence-index")
     errors: list[str] = []
     if not manifest_root.exists():
         print("[run-manifest-completeness] PASS (no manifests)")
@@ -49,7 +52,7 @@ def main() -> int:
         if not run_id:
             errors.append(f"{rel_path(manifest_path)}: missing run_id")
             continue
-        for field in ("entrypoint", "channel", "created_at", "repo_commit", "env_profile", "log_path"):
+        for field in required_manifest_fields:
             if not str(payload.get(field) or "").strip():
                 errors.append(f"{rel_path(manifest_path)}: missing required manifest field `{field}`")
         log_path_raw = str(payload.get("log_path") or "").strip()
@@ -72,7 +75,7 @@ def main() -> int:
             errors.append(f"{rel_path(manifest_path)}: no runtime artifacts found for run_id={run_id}")
             continue
 
-        index_path = ROOT / ".runtime-cache" / "reports" / "evidence-index" / f"{run_id}.json"
+        index_path = index_root / f"{run_id}.json"
         if not index_path.is_file():
             errors.append(f"{rel_path(manifest_path)}: missing evidence index for run_id={run_id}")
             continue

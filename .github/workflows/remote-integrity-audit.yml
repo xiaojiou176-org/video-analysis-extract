@@ -1,0 +1,36 @@
+name: remote-integrity-audit
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  remote-integrity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          clean: true
+
+      - name: Probe remote platform truth
+        run: ./bin/remote-platform-probe --repo "${{ github.repository }}"
+
+      - name: Validate required checks integrity
+        run: python3 scripts/governance/check_remote_required_checks.py
+
+      - name: Upload remote integrity artifacts
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: remote-integrity-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: error
+          path: |
+            .runtime-cache/reports/governance/remote-platform-truth.json
+            .runtime-cache/reports/governance/remote-required-checks.json

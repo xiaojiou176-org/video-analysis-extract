@@ -13,14 +13,14 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT / "scripts" / "governance") not in sys.path:
     sys.path.insert(0, str(ROOT / "scripts" / "governance"))
 
-from common import read_runtime_metadata, rel_path, runtime_metadata_path, write_runtime_metadata
+from common import load_governance_json, read_runtime_metadata, rel_path, write_runtime_metadata
 
 
 def _candidate_artifacts() -> list[Path]:
-    runtime_root = ROOT / ".runtime-cache"
+    contract = load_governance_json("evidence-contract.json")
     candidates: list[Path] = []
-    for subdir in ("logs", "reports", "evidence"):
-        base = runtime_root / subdir
+    for subconfig in contract.get("buckets", {}).values():
+        base = ROOT / str(subconfig.get("path") or "")
         if not base.exists():
             continue
         candidates.extend(
@@ -49,7 +49,8 @@ def main() -> int:
         top = artifact.relative_to(ROOT / ".runtime-cache").parts[0]
         grouped[run_id][top].append(rel_path(artifact))
 
-    index_root = ROOT / ".runtime-cache" / "reports" / "evidence-index"
+    contract = load_governance_json("evidence-contract.json")
+    index_root = ROOT / str(contract.get("evidence_index", {}).get("root") or ".runtime-cache/reports/evidence-index")
     index_root.mkdir(parents=True, exist_ok=True)
     for run_id, categories in grouped.items():
         payload = {

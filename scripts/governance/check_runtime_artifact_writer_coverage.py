@@ -7,13 +7,9 @@ from pathlib import Path
 
 sys.dont_write_bytecode = True
 
-from common import rel_path, repo_root
+from common import load_governance_json, rel_path, repo_root
 
 ROOT = repo_root()
-TARGET_PATTERNS = (
-    ".runtime-cache/reports/",
-    ".runtime-cache/evidence/",
-)
 HELPER_MARKERS = (
     "write_json_artifact(",
     "write_text_artifact(",
@@ -36,10 +32,16 @@ def _candidate_files() -> list[Path]:
 
 
 def main() -> int:
+    contract = load_governance_json("evidence-contract.json")
+    target_patterns = tuple(
+        f"{str(config.get('path')).rstrip('/')}/"
+        for name, config in contract.get("buckets", {}).items()
+        if name in {"reports", "evidence"} and str(config.get("path") or "").strip()
+    )
     offenders: list[str] = []
     for path in _candidate_files():
         text = path.read_text(encoding="utf-8")
-        if not any(pattern in text for pattern in TARGET_PATTERNS):
+        if not any(pattern in text for pattern in target_patterns):
             continue
         if not WRITE_TEXT_RE.search(text):
             continue

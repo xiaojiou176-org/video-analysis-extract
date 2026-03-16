@@ -63,6 +63,18 @@
           "config/governance/upstream-templates.json",
           "config/governance/upstream-compat-matrix.json"
         ]
+      },
+      {
+        "id": "external_lane_snapshot_reference",
+        "path": "docs/generated/external-lane-snapshot.md",
+        "kind": "render_only",
+        "sources": [
+          "config/governance/external-lane-contract.json",
+          "config/governance/upstream-compat-matrix.json",
+          ".runtime-cache/reports/governance/remote-platform-truth.json",
+          ".runtime-cache/reports/governance/standard-image-publish-readiness.json",
+          ".runtime-cache/reports/release/release-evidence-attest-readiness.json"
+        ]
       }
   ],
   "fragments": [

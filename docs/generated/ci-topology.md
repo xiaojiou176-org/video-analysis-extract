@@ -20,7 +20,7 @@
 
 ## Governance Control Plane
 
-- root allowlist entries: `38`
+- root allowlist entries: `39`
 - local-private root tolerations: `5`
 - runtime root: `.runtime-cache`
 - current-run CI KPI summary: `.runtime-cache/reports/release-readiness/ci-kpi-summary.json`
@@ -79,3 +79,4 @@
 - `docs/generated/required-checks.md`
 - `docs/generated/runner-baseline.md`
 - `docs/generated/release-evidence.md`
+- `docs/generated/external-lane-snapshot.md`

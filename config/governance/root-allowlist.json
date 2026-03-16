@@ -149,6 +149,13 @@
       "mutable": false
     },
     {
+      "path": "CODE_OF_CONDUCT.md",
+      "kind": "docs",
+      "reason": "Public interaction baseline for limited-maintenance collaboration.",
+      "owner": "platform",
+      "mutable": false
+    },
+    {
       "path": "CLAUDE.md",
       "kind": "governance",
       "reason": "Companion AI operating contract.",

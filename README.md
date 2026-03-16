@@ -9,12 +9,13 @@
 
 ## Public Status
 
-本仓库当前采用 **source-first public repo** 形态，而不是“镜像优先产品发布”。
+本仓库当前采用 **public source-first + limited-maintenance engineering repo** 形态，而不是“镜像优先产品发布”或“高信心可直接采用的开源产品”。
 
 - 对外默认定位：**强工程型 applied AI mini-system / owner-level candidate**
+- 当前公开口径：**远端仓库当前已公开，repo-side 与 external lane 继续分层验收**；是否能被高信心采用，仍取决于 external lane 的 current-run 证据，而不是仓库公开本身。
 - 公开维护模式：**limited-maintenance**
 - repo-side 完成标准：见 `docs/reference/done-model.md`
-- external lane 状态：见 `docs/reference/external-lane-status.md`
+- external lane 状态说明：见 `docs/reference/external-lane-status.md` 与 `docs/generated/external-lane-snapshot.md`；解释层与 current snapshot 已拆开。
 - public readiness 总览：见 `docs/reference/public-repo-readiness.md`
 - 项目定位与目标用户：见 `docs/reference/project-positioning.md`
 - AI formal eval 最小系统：见 `docs/reference/ai-evaluation.md`
@@ -52,7 +53,7 @@
 - **CI 信任边界**：`trusted_internal_pr_only`。fork / untrusted PR 不进入 privileged self-hosted 主链。
 - **Strict CI 真相源**：`infra/config/strict_ci_contract.json`。
 - **Repo-side done model**：`docs/reference/done-model.md`。
-- **Generated references**：`docs/generated/ci-topology.md`、`docs/generated/runner-baseline.md`、`docs/generated/release-evidence.md`。
+- **Generated references**：`docs/generated/ci-topology.md`、`docs/generated/runner-baseline.md`、`docs/generated/release-evidence.md`、`docs/generated/external-lane-snapshot.md`。
 <!-- docs:generated governance-snapshot end -->
 
 ## Clone 后快速跑通（推荐）
@@ -245,7 +246,7 @@ Article pipeline（`videos.content_type='article'`）：
 前置：Python 3.11+、`uv`、PostgreSQL 16、Temporal dev server、(可选) Redis。
 
 ```bash
-uv sync --frozen --extra dev --extra e2e
+UV_PROJECT_ENVIRONMENT="$PWD/.runtime-cache/tmp/uv-project-env" uv sync --frozen --extra dev --extra e2e
 ./bin/prepare-web-runtime
 ```
 

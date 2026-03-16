@@ -33,6 +33,7 @@ ALLOWED_ROOT_FILES = {
     "AGENTS.md",
     "CHANGELOG.md",
     "CLAUDE.md",
+    "CODE_OF_CONDUCT.md",
     "CONTRIBUTING.md",
     "ENVIRONMENT.md",
     "LICENSE",

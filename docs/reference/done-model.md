@@ -14,6 +14,7 @@
 | Strict path | `./bin/repo-side-strict-ci --mode pre-push --strict-full-run 1 --ci-dedupe 0` 可作为本地权威验收 |
 | Compat | `upstream-compat-matrix` 中 repo-side required rows 达到期望状态 |
 | Public/source-first onboarding | 源码优先入口可解释、可执行、可区分 public docs 与 internal runbook |
+| Public governance pack | `README.md`、`SECURITY.md`、`SUPPORT.md`、`.github/CODEOWNERS`、`docs/reference/public-repo-readiness.md` 与 `docs/reference/public-artifact-exposure.md` 不含 placeholder routing，且 public-safe surface 与 tracked 文件一致 |
 
 ## Layer B: External Done
 

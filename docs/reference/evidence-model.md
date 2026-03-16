@@ -6,6 +6,12 @@
 - `.runtime-cache/reports/**`
 - `.runtime-cache/evidence/**`
 
+## Contract Truth Sources
+
+- `config/governance/evidence-contract.json`
+- `config/governance/runtime-outputs.json`
+- `config/governance/root-runtime-policy.json`
+
 ## Evidence Index
 
 每个 `run_id` 都应生成：
@@ -28,6 +34,8 @@
 - `verification_scope`
 - `created_at`
 
+这些字段现在不再只靠文档约定，而是由 `config/governance/evidence-contract.json` 统一声明。
+
 ## 门禁
 
 ```bash
@@ -38,6 +46,7 @@ python3 scripts/governance/check_runtime_metadata_completeness.py
 python3 scripts/runtime/build_evidence_index.py --rebuild-all
 python3 scripts/governance/check_no_unindexed_evidence.py
 python3 scripts/governance/check_log_correlation_completeness.py
+python3 scripts/governance/check_evidence_contract.py
 ```
 
 `check_public_entrypoint_manifests.py` 像“前台值班表检查器”，它不看历史脏数据，而是直接检查 `bin/*` 这些正式入口是否都在运行前写下 run manifest。先把正式入口做成会登记“案号台账”的入口，后面新的 logs/reports/evidence 才会自然带着 manifest 收口。
@@ -50,3 +59,4 @@ python3 scripts/governance/check_log_correlation_completeness.py
 
 - 任何一轮 strict/smoke/live-smoke/governance run 都能通过 `run_id` 找到整案证据。
 - 历史 artifact 不能伪装成当前证明。
+- 失败路径也必须能写出同一套 run manifest、metadata 与 evidence index，不能只让 success path 看起来整齐。

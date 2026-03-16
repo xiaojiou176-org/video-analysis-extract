@@ -28,6 +28,7 @@
         "docs/generated/required-checks.md",
         "docs/generated/runner-baseline.md",
         "docs/generated/release-evidence.md",
+        "docs/generated/external-lane-snapshot.md",
         "docs/reference/done-model.md",
         "docs/reference/external-lane-status.md",
         "docs/reference/public-repo-readiness.md",

@@ -2,7 +2,7 @@
 
 ## Supported Model
 
-This repository is published as a **source-first, limited-maintenance** project.
+This repository is maintained with a **source-first public-ready, limited-maintenance** governance pack.
 Security fixes are considered for the current default branch and for release-tag
 evidence that still maps to the current contract surfaces.
 
@@ -16,10 +16,16 @@ Unsupported reports include:
 
 Please do **not** open a public GitHub issue for a suspected vulnerability.
 
-Use one of these private paths instead:
+Use this private path instead:
 
-1. GitHub private vulnerability reporting, if it is enabled for this repository.
-2. The maintainer email alias in `.github/CODEOWNERS`: `codex-test@example.com`.
+1. GitHub Security Advisories / private vulnerability reporting:
+   `https://github.com/xiaojiou176-org/video-analysis-extract/security`
+
+This repository does not offer email-based private vulnerability intake.
+Do not send sensitive details to public issues or placeholder email aliases.
+If the repository security page does not currently expose a private submission UI,
+open a minimal public issue that asks maintainers to enable private reporting,
+but do not include exploit details, secrets, routes, or reproduction payloads.
 
 Include:
 

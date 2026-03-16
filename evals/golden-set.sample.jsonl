@@ -1,2 +1,2 @@
-{"case_id":"video-outline-001","prompt":"为一段技术视频生成结构化大纲，并标出最关键的三个主题。","expected_signals":["outline_is_structured","key_topics_present","no_invented_sources"]}
-{"case_id":"digest-citation-001","prompt":"根据给定的视频处理结果输出摘要，并保留可追溯证据语义。","expected_signals":["summary_is_grounded","citation_hygiene_ok","failure_boundary_explicit"]}
+{"case_id":"video-outline-001","prompt":"为一段技术视频生成结构化大纲，并标出最关键的三个主题。","expected_signals":["outline_is_structured","key_topics_present","no_invented_sources"],"fixture_response":"1. 主题一：模型输入与输出边界\n2. 主题二：证据收口与日志关联\n3. 主题三：失败路径如何老实暴露\n\n主题：输入边界、证据闭环、失败诚实度"}
+{"case_id":"digest-citation-001","prompt":"根据给定的视频处理结果输出摘要，并保留可追溯证据语义。","expected_signals":["summary_is_grounded","citation_hygiene_ok","failure_boundary_explicit"],"fixture_response":"根据当前处理结果，这段视频的核心结论是需要把证据、摘要与运行日志保持可追溯关联。证据说明：结论来自当前处理结果与可追溯引用，而不是外推。若缺少额外证据，无法确认更强结论，这里明确保留边界。"}

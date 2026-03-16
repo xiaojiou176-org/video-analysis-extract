@@ -43,12 +43,12 @@ env/profiles/*.local.env
 .DS_Store
 .idea/
 .vscode/
+.agents/Conversations/
+!.agents/
+!.agents/Plans/
+!.agents/Plans/**
 .codex/
 .claude/
 .cursor/
 .opencode/
 .cursorrules
-Folo/
-
-# Personal local notes
-我和ChatGPT的对话.md

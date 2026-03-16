@@ -1,0 +1,57 @@
+{
+  "version": 1,
+  "runtime_root": ".runtime-cache",
+  "manifest_root": ".runtime-cache/run/manifests",
+  "public_entrypoints_source": "config/governance/public-entrypoints.json",
+  "buckets": {
+    "logs": {
+      "path": ".runtime-cache/logs",
+      "freshness_required": false
+    },
+    "reports": {
+      "path": ".runtime-cache/reports",
+      "freshness_required": true
+    },
+    "evidence": {
+      "path": ".runtime-cache/evidence",
+      "freshness_required": true
+    }
+  },
+  "required_metadata_fields": [
+    "created_at",
+    "source_entrypoint",
+    "source_run_id",
+    "source_commit",
+    "verification_scope",
+    "freshness_window_hours"
+  ],
+  "required_manifest_fields": [
+    "run_id",
+    "entrypoint",
+    "channel",
+    "created_at",
+    "repo_commit",
+    "env_profile",
+    "log_path"
+  ],
+  "evidence_index": {
+    "root": ".runtime-cache/reports/evidence-index",
+    "filename_template": "{run_id}.json",
+    "required_fields": [
+      "version",
+      "run_id",
+      "logs",
+      "reports",
+      "evidence"
+    ]
+  },
+  "freshness_scopes": [
+    "run-manifest",
+    "evidence-index",
+    "remote-platform-truth",
+    "remote-required-checks",
+    "standard-image-publish-readiness",
+    "release-evidence-attest-readiness",
+    "eval-regression"
+  ]
+}

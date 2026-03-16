@@ -13,6 +13,7 @@ from common import load_governance_json
 
 MANAGED_BUT_NOT_PUBLIC = {
     "bin/upstream-verify",
+    "bin/remote-platform-probe",
     "bin/doctor",
     "bin/prune-runtime",
     "bin/clean-runtime",

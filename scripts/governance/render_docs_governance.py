@@ -24,6 +24,12 @@ def _load_json(path: Path) -> dict:
     return payload
 
 
+def _maybe_load_json(path: Path) -> dict | None:
+    if not path.is_file():
+        return None
+    return _load_json(path)
+
+
 def _load_configs() -> tuple[dict, dict, dict, dict]:
     nav = _load_json(CONFIG_DIR / "nav-registry.json")
     manifest = _load_json(CONFIG_DIR / "render-manifest.json")
@@ -221,10 +227,12 @@ def _render_runner_baseline() -> str:
             "- current-run release/readiness reports are emitted under `.runtime-cache/reports/release-readiness/`",
             "- long-lived tracked artifacts now live under `artifacts/`, not the repository root hallway",
             "- root cleanliness is re-checked by `check_root_dirtiness_after_tasks.py` during monthly governance audit",
-            "- repo-side / external completion split is documented in `docs/reference/done-model.md`",
-            "- repo-side strict canonical path is `./bin/repo-side-strict-ci --mode pre-push --strict-full-run 1 --ci-dedupe 0`",
-            "- image-publish workflows now prime Docker Buildx explicitly before multi-arch standard-image builds",
-        ]
+        "- repo-side / external completion split is documented in `docs/reference/done-model.md`",
+        "- repo-side strict canonical path is `./bin/repo-side-strict-ci --mode pre-push --strict-full-run 1 --ci-dedupe 0`",
+        "- image-publish workflows now prime Docker Buildx explicitly before multi-arch standard-image builds",
+        "- remote integrity now has a dedicated workflow: `remote-integrity-audit.yml`",
+        "- standard image publish lane now runs a repo-owned readiness preflight before build/push",
+    ]
     )
     if "Normalize self-hosted workspace (pre-checkout)" in monthly_audit_text:
         outputs.append("- monthly governance audit reuses self-hosted pre-checkout normalization before checkout")
@@ -328,16 +336,82 @@ def _render_release_evidence() -> str:
             "",
             "- provenance action: `actions/attest-build-provenance`",
             "- bundle source: `scripts/release/capture_release_manifest.sh`",
+            "- readiness preflight: `scripts/release/check_release_evidence_attest_readiness.py`",
             "- GHCR standard-image publish lane primes Docker Buildx before invoking the multi-arch image build script",
             "",
             "## Adjacent Governance Evidence",
             "",
             f"- upstream inventory entries tracked: `{len(upstreams.get('entries', []))}`",
             f"- compatibility matrix rows tracked: `{len(compat.get('matrix', []))}`",
+            "- external lane current snapshot: `docs/generated/external-lane-snapshot.md`",
         ]
     )
     if "monthly-governance-audit" in monthly_audit_text:
         outputs.append("- monthly governance audit snapshots are complementary hygiene evidence, not release verdict proof")
+    return "\n".join(outputs).rstrip() + "\n"
+
+
+def _render_external_lane_snapshot() -> str:
+    contract = _load_json(REPO_ROOT / "config" / "governance" / "external-lane-contract.json")
+    compat = _load_json(REPO_ROOT / "config" / "governance" / "upstream-compat-matrix.json")
+    remote_report = _maybe_load_json(REPO_ROOT / ".runtime-cache" / "reports" / "governance" / "remote-platform-truth.json")
+    ghcr_report = _maybe_load_json(REPO_ROOT / ".runtime-cache" / "reports" / "governance" / "standard-image-publish-readiness.json")
+    release_report = _maybe_load_json(REPO_ROOT / ".runtime-cache" / "reports" / "release" / "release-evidence-attest-readiness.json")
+
+    compat_rows = {str(row.get("name") or ""): row for row in compat.get("matrix", [])}
+    outputs = [
+        GENERATED_HEADER,
+        "# External Lane Snapshot",
+        "",
+        "This page is machine-rendered from current external-lane contracts and runtime reports.",
+        "",
+        "| Lane | Current State | Blocker / Evidence | Canonical Artifact |",
+        "| --- | --- | --- | --- |",
+    ]
+    remote_state = "missing"
+    remote_note = "probe report missing"
+    if remote_report:
+        remote_state = str(remote_report.get("status") or "unknown")
+        remote_note = str(remote_report.get("blocker_type") or "ok")
+    outputs.append(
+        f"| `remote-platform-integrity` | `{remote_state}` | `{remote_note}` | `{contract['lanes'][0]['canonical_artifact']}` |"
+    )
+
+    ghcr_state = "missing"
+    ghcr_note = "readiness report missing"
+    if ghcr_report:
+        ghcr_state = str(ghcr_report.get("status") or "unknown")
+        ghcr_note = str(ghcr_report.get("blocker_type") or "ok")
+    outputs.append(
+        f"| `ghcr-standard-image` | `{ghcr_state}` | `{ghcr_note}` | `{contract['lanes'][1]['canonical_artifact']}` |"
+    )
+
+    release_state = "missing"
+    release_note = "attest readiness report missing"
+    if release_report:
+        release_state = str(release_report.get("status") or "unknown")
+        release_note = str(release_report.get("blocker_type") or "ok")
+    outputs.append(
+        f"| `release-evidence-attestation` | `{release_state}` | `{release_note}` | `{contract['lanes'][2]['canonical_artifact']}` |"
+    )
+
+    for provider_lane in ("rsshub-youtube-ingest-chain", "resend-digest-delivery-chain", "strict-ci-compose-image-set"):
+        row = compat_rows.get(provider_lane, {})
+        outputs.append(
+            f"| `{provider_lane}` | `{row.get('verification_status', 'missing')}` | `{row.get('verification_lane', 'unknown')}` | `{row.get('evidence_artifact', 'n/a')}` |"
+        )
+
+    outputs.extend(
+        [
+            "",
+            "## Reading Rule",
+            "",
+            "- explanation lives in `docs/reference/external-lane-status.md`",
+            "- current status must come from this generated page or the underlying runtime reports",
+            "- actor-sensitive remote truth is carried by `.runtime-cache/reports/governance/remote-platform-truth.json`",
+            "- `ready` means preflight/evidence inputs are in place; it does not mean the external lane has already closed successfully",
+        ]
+    )
     return "\n".join(outputs).rstrip() + "\n"
 
 
@@ -352,7 +426,7 @@ def _fragment_lines(boundary: dict) -> dict[str, str]:
                 f"- **CI 信任边界**：`{trust['mode']}`。fork / untrusted PR 不进入 privileged self-hosted 主链。",
                 "- **Strict CI 真相源**：`infra/config/strict_ci_contract.json`。",
                 "- **Repo-side done model**：`docs/reference/done-model.md`。",
-                "- **Generated references**：`docs/generated/ci-topology.md`、`docs/generated/runner-baseline.md`、`docs/generated/release-evidence.md`。",
+                "- **Generated references**：`docs/generated/ci-topology.md`、`docs/generated/runner-baseline.md`、`docs/generated/release-evidence.md`、`docs/generated/external-lane-snapshot.md`。",
             ]
         )
         + "\n",
@@ -364,6 +438,7 @@ def _fragment_lines(boundary: dict) -> dict[str, str]:
                 f"- self-hosted CI 只接受 **trusted internal PR**；若 PR 来自 fork，GitHub Actions 会在边界门禁直接阻断。",
                 "- repo-side 严格验收入口：`./bin/repo-side-strict-ci --mode pre-push --strict-full-run 1 --ci-dedupe 0`。",
                 "- external lane 入口：`./bin/strict-ci --mode pre-push --strict-full-run 1 --ci-dedupe 0`。",
+                "- external lane current snapshot：`docs/generated/external-lane-snapshot.md`。",
                 "- 契约主层已迁到 `contracts/`，长期跟踪 artifact 已迁到 `artifacts/`。",
             ]
         )
@@ -376,6 +451,7 @@ def _fragment_lines(boundary: dict) -> dict[str, str]:
                 "- runner baseline 参考页：`docs/generated/runner-baseline.md`。",
                 "- CI 主链与 aggregate gate 清单：`docs/generated/ci-topology.md`。",
                 "- release evidence 结构与 canonical 规则：`docs/generated/release-evidence.md`。",
+                "- external lane current snapshot：`docs/generated/external-lane-snapshot.md`。",
                 "- repo-side / external 双层完成模型：`docs/reference/done-model.md`。",
             ]
         )
@@ -388,6 +464,7 @@ def _fragment_lines(boundary: dict) -> dict[str, str]:
                 "- PR 信任模型：仅同仓 trusted internal PR 允许进入 self-hosted 主链。",
                 "- docs gate 现在同时要求：`config/docs/*.json` control plane 一致、render output 新鲜、manual boundary 不越界。",
                 "- repo-side strict canonical path：`./bin/repo-side-strict-ci --mode pre-push --strict-full-run 1 --ci-dedupe 0`。",
+                "- external lane 只允许通过 generated snapshot 或 runtime reports 宣称 current state。",
             ]
         )
         + "\n",
@@ -433,6 +510,7 @@ def main() -> int:
         REPO_ROOT / "docs" / "generated" / "required-checks.md": _render_required_checks(),
         REPO_ROOT / "docs" / "generated" / "runner-baseline.md": _render_runner_baseline(),
         REPO_ROOT / "docs" / "generated" / "release-evidence.md": _render_release_evidence(),
+        REPO_ROOT / "docs" / "generated" / "external-lane-snapshot.md": _render_external_lane_snapshot(),
     }
 
     fragments = _fragment_lines(boundary)

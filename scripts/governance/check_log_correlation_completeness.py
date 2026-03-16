@@ -15,6 +15,7 @@ from common import load_governance_json
 
 
 def main() -> int:
+    evidence_contract = load_governance_json("evidence-contract.json")
     config = load_governance_json("logging-contract.json")
     minimum_fields = [str(field) for field in config.get("minimum_common_fields", [])]
     per_channel = {
@@ -22,6 +23,9 @@ def main() -> int:
         for channel, fields in config.get("channel_required_fields", {}).items()
     }
     errors: list[str] = []
+    expected_log_root = str(evidence_contract.get("buckets", {}).get("logs", {}).get("path") or ".runtime-cache/logs")
+    if not str(config.get("channels", {}).get("app") or "").startswith(expected_log_root):
+        errors.append("logging contract channels drift from evidence-contract logs bucket")
 
     for channel, rel_path in config.get("sample_targets", {}).items():
         path = ROOT / str(rel_path)

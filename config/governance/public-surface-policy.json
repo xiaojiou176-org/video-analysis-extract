@@ -1,0 +1,46 @@
+{
+  "version": 1,
+  "forbidden_tracked_globs": [
+    "artifacts/performance/rsshub/*.tsv"
+  ],
+  "required_public_samples": [
+    "artifacts/performance/rsshub/public_probe_summary.sample.tsv"
+  ],
+  "contact_policy": {
+    "SECURITY.md": {
+      "must_contain": [
+        "https://github.com/xiaojiou176-org/video-analysis-extract/security",
+        "This repository does not offer email-based private vulnerability intake."
+      ],
+      "must_not_contain": [
+        "codex-test@example.com",
+        "if it is enabled for this repository"
+      ]
+    },
+    ".github/CODEOWNERS": {
+      "must_contain": [
+        "@xiaojiou176-org"
+      ],
+      "must_not_contain": [
+        "example.com",
+        "codex-test"
+      ]
+    },
+    "SUPPORT.md": {
+      "must_contain": [
+        "https://github.com/xiaojiou176-org/video-analysis-extract/security"
+      ],
+      "must_not_contain": [
+        "codex-test@example.com"
+      ]
+    },
+    ".github/ISSUE_TEMPLATE/config.yml": {
+      "must_contain": [
+        "https://github.com/xiaojiou176-org/video-analysis-extract/security"
+      ],
+      "must_not_contain": [
+        "codex-test@example.com"
+      ]
+    }
+  }
+}

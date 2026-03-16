@@ -37,6 +37,7 @@ devcontainer up --workspace-folder .
 - runner baseline 参考页：`docs/generated/runner-baseline.md`。
 - CI 主链与 aggregate gate 清单：`docs/generated/ci-topology.md`。
 - release evidence 结构与 canonical 规则：`docs/generated/release-evidence.md`。
+- external lane current snapshot：`docs/generated/external-lane-snapshot.md`。
 - repo-side / external 双层完成模型：`docs/reference/done-model.md`。
 <!-- docs:generated governance-snapshot end -->
 
@@ -77,7 +78,7 @@ brew install postgresql@16 redis temporal
 安装依赖：
 
 ```bash
-uv sync --frozen --extra dev --extra e2e
+UV_PROJECT_ENVIRONMENT="$PWD/.runtime-cache/tmp/uv-project-env" uv sync --frozen --extra dev --extra e2e
 ./bin/prepare-web-runtime
 ```
 

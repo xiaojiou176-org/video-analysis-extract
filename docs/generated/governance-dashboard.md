@@ -7,7 +7,7 @@ This page is generated from the docs control plane and CI contracts.
 ## Control Plane Summary
 
 - nav sections: `5`
-- render-only docs: `5`
+- render-only docs: `6`
 - fragment injections: `4`
 - trust boundary: `trusted_internal_pr_only`
 
@@ -18,6 +18,7 @@ This page is generated from the docs control plane and CI contracts.
 - `docs/generated/required-checks.md`
 - `docs/generated/runner-baseline.md`
 - `docs/generated/release-evidence.md`
+- `docs/generated/external-lane-snapshot.md`
 
 ## KPI Snapshot
 

@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "runtime_root": ".runtime-cache",
+  "managed_python_env_var": "UV_PROJECT_ENVIRONMENT",
+  "managed_python_env_description": "Python environments must live outside the repo root or under .runtime-cache/tmp workdirs.",
+  "forbidden_root_virtualenvs": [
+    ".venv",
+    "venv"
+  ],
+  "allowed_root_runtime_outputs": [
+    ".runtime-cache"
+  ],
+  "runtime_subdirectories": [
+    "run",
+    "logs",
+    "reports",
+    "evidence",
+    "tmp"
+  ],
+  "public_entrypoints_source": "config/governance/public-entrypoints.json",
+  "root_allowlist_source": "config/governance/root-allowlist.json",
+  "runtime_outputs_source": "config/governance/runtime-outputs.json"
+}

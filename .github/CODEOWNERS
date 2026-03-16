@@ -1,4 +1,4 @@
 # Limited-maintenance source-first ownership.
-# Replace this maintainer alias if repository ownership changes.
+# Owner routing must stay real and non-placeholder.
 
-* codex-test@example.com
+* @xiaojiou176-org
