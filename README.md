@@ -127,6 +127,7 @@ Repo-side / external 双层完成信号：
 - Docker Compose（基础设施真相源）：`infra/compose/core-services.compose.yml`（核心服务镜像已收口为 digest-pinned service images，可直接对齐 strict contract）、`infra/compose/miniflux-nextflux.compose.yml`
 - DevContainer（AI/自动化标准执行环境）：`.devcontainer/devcontainer.json`。当前已移除浮动 devcontainer feature 依赖，`post-create.sh` 会直接校验 strict contract 的 `uv/node/chromium` 是否可用，不再用 best-effort 浏览器安装掩盖漂移。
 - 严格 CI 标准镜像真相源：`infra/config/strict_ci_contract.json`。`bin/strict-ci` / `./bin/run-in-standard-env` 现在只接受 digest-pinned 标准镜像，不再允许静默回退到旧的本地 tag 镜像。
+- `build-ci-standard-image.yml` 现在会先显式准备 Docker Buildx，再调用 `scripts/ci/build_standard_image.sh` 做多架构标准镜像构建，避免 self-hosted runner 在构建入口阶段把 `docker buildx build` 当成未准备好的环境能力。
 - 标准镜像构建链会对 NodeSource signing key 使用显式重试，并先写入临时 key 文件再 `gpg --dearmor`，避免 ARM64/QEMU buildx 路径把瞬时空响应直接喂给 `gpg`。
 - 标准镜像供应链增强：`build-ci-standard-image.yml` 现在会产出镜像 SBOM artifact，并对镜像本体与 SBOM 做 GitHub attestation。
 - self-hosted runner 预清理会同时处理 `/tmp/video-digestor-*` 下的目录与单文件 stale residue，并在删除前补用户写权限，避免 `build-ci-standard-image.yml` 在 runner hygiene 阶段被陈旧 `.db/.db-shm/.db-wal` 文件卡死。

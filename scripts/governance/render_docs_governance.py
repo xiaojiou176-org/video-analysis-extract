@@ -108,6 +108,7 @@ def _render_ci_topology(manifest: dict, boundary: dict) -> str:
         f"- active upstream inventory entries: `{len(upstreams.get('entries', []))}`",
         f"- upstream templates: `{len(templates.get('entries', []))}`",
         "- governance gate entrypoint: `./bin/governance-audit --mode pre-commit|pre-push|ci|audit`",
+        "- GHCR image publish workflow primes Docker Buildx on self-hosted runners before calling `scripts/ci/build_standard_image.sh`",
         "",
         "## Aggregate Gate Inventory",
         "",
@@ -222,6 +223,7 @@ def _render_runner_baseline() -> str:
             "- root cleanliness is re-checked by `check_root_dirtiness_after_tasks.py` during monthly governance audit",
             "- repo-side / external completion split is documented in `docs/reference/done-model.md`",
             "- repo-side strict canonical path is `./bin/repo-side-strict-ci --mode pre-push --strict-full-run 1 --ci-dedupe 0`",
+            "- image-publish workflows now prime Docker Buildx explicitly before multi-arch standard-image builds",
         ]
     )
     if "Normalize self-hosted workspace (pre-checkout)" in monthly_audit_text:
@@ -326,6 +328,7 @@ def _render_release_evidence() -> str:
             "",
             "- provenance action: `actions/attest-build-provenance`",
             "- bundle source: `scripts/release/capture_release_manifest.sh`",
+            "- GHCR standard-image publish lane primes Docker Buildx before invoking the multi-arch image build script",
             "",
             "## Adjacent Governance Evidence",
             "",

@@ -86,6 +86,11 @@ def test_build_standard_image_script_uses_explicit_buildx_invocation() -> None:
     assert "docker build \\" in script
     assert "common_args=(" in script
 
+    workflow = (_repo_root() / ".github" / "workflows" / "build-ci-standard-image.yml").read_text(
+        encoding="utf-8"
+    )
+    assert "docker/setup-buildx-action@" in workflow
+
 
 def test_release_manifest_capture_uses_relative_artifact_paths_and_current_run_scope() -> None:
     script = (_repo_root() / "scripts" / "release" / "capture_release_manifest.sh").read_text(encoding="utf-8")

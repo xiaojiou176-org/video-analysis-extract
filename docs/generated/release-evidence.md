@@ -31,6 +31,7 @@ Generated from the release evidence workflow and manifest capture script.
 
 - provenance action: `actions/attest-build-provenance`
 - bundle source: `scripts/release/capture_release_manifest.sh`
+- GHCR standard-image publish lane primes Docker Buildx before invoking the multi-arch image build script
 
 ## Adjacent Governance Evidence
 

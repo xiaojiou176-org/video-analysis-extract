@@ -70,6 +70,7 @@
 - `ci-final-gate`：最终门禁；`main` / `release` / nightly 要求 `live-smoke=success`，PR 允许 `live-smoke=skipped`。
 - `ci-kpi`：在 `ci-final-gate` 之后汇总 junit/coverage/mutation/artifact bytes/topology duplication，并输出 `.runtime-cache/reports/release-readiness/ci-kpi-summary.{json,md}` 当前运行报告。
 - `build-ci-standard-image.yml` 会产出 strict CI 镜像 SBOM，并对镜像与 SBOM 做 attestation。
+- `build-ci-standard-image.yml` 现在会在 self-hosted runner 上先显式准备 Docker Buildx，再调用 `scripts/ci/build_standard_image.sh` 执行多架构标准镜像构建；如果这条链在入口就失败，优先按 buildx/runtime-setup 问题排障，而不是直接归类为 GHCR 权限问题。
 - `release-evidence-attest.yml` 会把 release manifest/checksums/rollback 证据打包成可 attestation 的 bundle。
 - self-hosted CI 信任边界：当前仓库默认只支持 **trusted internal PR** 进入 privileged runner 主链；fork / untrusted PR 属于拒绝口径，不在支持矩阵内。
 

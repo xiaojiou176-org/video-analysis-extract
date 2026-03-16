@@ -43,4 +43,5 @@ Generated from `infra/config/self_hosted_runner_baseline.json`.
 - root cleanliness is re-checked by `check_root_dirtiness_after_tasks.py` during monthly governance audit
 - repo-side / external completion split is documented in `docs/reference/done-model.md`
 - repo-side strict canonical path is `./bin/repo-side-strict-ci --mode pre-push --strict-full-run 1 --ci-dedupe 0`
+- image-publish workflows now prime Docker Buildx explicitly before multi-arch standard-image builds
 - monthly governance audit reuses self-hosted pre-checkout normalization before checkout

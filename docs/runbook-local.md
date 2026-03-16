@@ -83,6 +83,7 @@ uv sync --frozen --extra dev --extra e2e
 
 说明：`./bin/prepare-web-runtime` 只是稳定入口层，真正执行的是 `scripts/ci/prepare_web_runtime.sh`。这个 helper 必须保持可执行位；如果 wrapper 报 `Permission denied`，那是入口契约损坏，不是 Web runtime 内容本身坏掉。
 
+- `build-ci-standard-image.yml` 现在会先显式准备 Docker Buildx，再调用 `scripts/ci/build_standard_image.sh` 做多架构标准镜像构建；如果镜像工作流仍在构建入口阶段立刻失败，先检查 runner 的 buildx 准备步骤是否成功，而不是先怀疑 GHCR 权限。
 - 标准镜像构建链依赖 `.devcontainer/Dockerfile`；当前约定会对 NodeSource signing key 做显式重试，并先写入临时 key 文件再 `gpg --dearmor`，这样 ARM64/QEMU buildx 路径遇到短暂 HTTP/2 抖动时，不会把空响应直接当成有效 key。
 - self-hosted runner 在进入 `build-ci-standard-image.yml` 之前，会用 `scripts/governance/runner_workspace_maintenance.sh` 统一清理 `.runtime-cache`、`mutants/` 和 `/tmp/video-digestor-*` 下的目录/单文件 stale residue；如果 workflow 再次在 runner hygiene 阶段失败，先看是否出现新的不可写残留，而不是先怀疑 GHCR 权限。
 
