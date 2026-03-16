@@ -355,10 +355,16 @@ def _render_external_lane_snapshot() -> str:
     contract = _load_json(REPO_ROOT / "config" / "governance" / "external-lane-contract.json")
     compat = _load_json(REPO_ROOT / "config" / "governance" / "upstream-compat-matrix.json")
     remote_report = _maybe_load_json(REPO_ROOT / ".runtime-cache" / "reports" / "governance" / "remote-platform-truth.json")
+    workflow_report = _maybe_load_json(REPO_ROOT / ".runtime-cache" / "reports" / "governance" / "external-lane-workflows.json")
     ghcr_report = _maybe_load_json(REPO_ROOT / ".runtime-cache" / "reports" / "governance" / "standard-image-publish-readiness.json")
     release_report = _maybe_load_json(REPO_ROOT / ".runtime-cache" / "reports" / "release" / "release-evidence-attest-readiness.json")
 
     compat_rows = {str(row.get("name") or ""): row for row in compat.get("matrix", [])}
+    workflow_rows = {
+        str(item.get("name") or ""): item
+        for item in (workflow_report or {}).get("lanes", [])
+        if isinstance(item, dict)
+    }
     outputs = [
         GENERATED_HEADER,
         "# External Lane Snapshot",
@@ -382,6 +388,9 @@ def _render_external_lane_snapshot() -> str:
     if ghcr_report:
         ghcr_state = str(ghcr_report.get("status") or "unknown")
         ghcr_note = str(ghcr_report.get("blocker_type") or "ok")
+    if workflow_rows.get("ghcr-standard-image"):
+        ghcr_state = str(workflow_rows["ghcr-standard-image"].get("state") or ghcr_state)
+        ghcr_note = str(workflow_rows["ghcr-standard-image"].get("note") or ghcr_note)
     outputs.append(
         f"| `ghcr-standard-image` | `{ghcr_state}` | `{ghcr_note}` | `{contract['lanes'][1]['canonical_artifact']}` |"
     )
@@ -391,6 +400,9 @@ def _render_external_lane_snapshot() -> str:
     if release_report:
         release_state = str(release_report.get("status") or "unknown")
         release_note = str(release_report.get("blocker_type") or "ok")
+    if workflow_rows.get("release-evidence-attestation"):
+        release_state = str(workflow_rows["release-evidence-attestation"].get("state") or release_state)
+        release_note = str(workflow_rows["release-evidence-attestation"].get("note") or release_note)
     outputs.append(
         f"| `release-evidence-attestation` | `{release_state}` | `{release_note}` | `{contract['lanes'][2]['canonical_artifact']}` |"
     )

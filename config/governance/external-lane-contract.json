@@ -18,9 +18,13 @@
     {
       "name": "ghcr-standard-image",
       "canonical_artifact": ".runtime-cache/reports/governance/standard-image-publish-readiness.json",
+      "remote_workflow_artifact": ".runtime-cache/reports/governance/external-lane-workflows.json",
       "verification_scope": "standard-image-publish-readiness",
       "allowed_statuses": [
         "ready",
+        "queued",
+        "in_progress",
+        "verified",
         "blocked"
       ],
       "blocked_types": [
@@ -32,9 +36,13 @@
     {
       "name": "release-evidence-attestation",
       "canonical_artifact": ".runtime-cache/reports/release/release-evidence-attest-readiness.json",
+      "remote_workflow_artifact": ".runtime-cache/reports/governance/external-lane-workflows.json",
       "verification_scope": "release-evidence-attest-readiness",
       "allowed_statuses": [
         "ready",
+        "queued",
+        "in_progress",
+        "verified",
         "blocked"
       ],
       "blocked_types": [

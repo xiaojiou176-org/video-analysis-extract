@@ -30,6 +30,9 @@ def main() -> int:
             artifact = str(lane.get("canonical_artifact") or "")
             if artifact and not artifact.startswith(".runtime-cache/"):
                 errors.append(f"lane `{lane.get('name', '<unknown>')}` canonical_artifact must live under .runtime-cache/")
+            remote_artifact = str(lane.get("remote_workflow_artifact") or "")
+            if remote_artifact and not remote_artifact.startswith(".runtime-cache/"):
+                errors.append(f"lane `{lane.get('name', '<unknown>')}` remote_workflow_artifact must live under .runtime-cache/")
 
     if errors:
         print("[external-lane-contract] FAIL")

@@ -4,7 +4,7 @@
 
 - Plan Title: Repo Four-Track Final Form Hard-Cut Plan
 - Created At: 2026-03-16 05:10:16 America/Los_Angeles
-- Last Updated: 2026-03-16 10:24:00 America/Los_Angeles
+- Last Updated: 2026-03-16 14:52:00 America/Los_Angeles
 - Repo Name: 视频分析提取
 - Repo Path: `/Users/yuyifeng/Documents/VS Code/1_Personal_Project/[其他项目]Useful_Tools/📺视频分析提取`
 - Source Of Truth: this file
@@ -59,6 +59,9 @@ Turn the repo from a high-maturity but illusion-prone hybrid system into a harde
 - Remote workflows have been actively triggered and are currently queued:
   - `build-ci-standard-image`: run `23148243794`
   - `release-evidence-attest`: run `23148243918`
+- Remote-integrity is now fully closed remotely: `remote-integrity-audit` run `23149825238` succeeded after adding hosted-safe auth assumptions.
+- Release evidence is now fully closed remotely on the latest head: `release-evidence-attest` run `23149850937` succeeded end-to-end, including upload and provenance attestation.
+- GHCR standard image lane has moved from queued/runner blockage into active remote execution: `build-ci-standard-image` run `23149825266` is in progress and has already cleared checkout, hosted prerequisite install, runner budget, GHCR login, preflight, and buildx setup.
 
 ### Execution Rule
 
@@ -178,12 +181,12 @@ Only actions that change real capability status count as progress. Documentation
 ## Next Actions
 
 1. Re-run `./bin/repo-side-strict-ci --mode pre-push --strict-full-run 1 --ci-dedupe 0` after the local Docker/buildx EOF blocker is cleared.
-2. Inspect GitHub Actions runs `23148243794` and `23148243918` after they leave `queued`, and record the first honest remote blocker or success evidence.
-3. Keep this file as the source of truth for the now-public remote truth, the closed remote integrity lane, the `ready` GHCR/release local preflight state, and the still-open remote workflow closure.
+2. Inspect GHCR run `23149825266` after it leaves `in_progress`, and record the first honest blocker or success evidence.
+3. Keep this file as the source of truth for the now-public remote truth, the closed remote-integrity and release-evidence lanes, and the still-open GHCR image lane.
 
 ## Final Completion Summary
 
 - Status: `In Progress`
 - Completed: first hard-cut wave for public surface, contact routing, root/runtime policy, governance-pack admission, docs truth-surface re-sync, fresh repo-side strict PASS, remote/platform probe entrypoint, remote repository visibility flip to `PUBLIC`, required-check branch protection on `main`, contract-first evidence model scaffolding, deterministic eval regression lane scaffolding, and workflow preflights for GHCR/release lanes
-- Remaining: GHCR standard-image remote run result, release evidence attestation remote run result, and a fresh deepest-lane repo-side strict PASS on the current snapshot
-- Completion boundary: remote visibility/platform blockage is gone; the current blockers are queued remote workflows plus one local Docker/buildx EOF on the deepest repo-side strict lane
+- Remaining: GHCR standard-image remote run result and a fresh deepest-lane repo-side strict PASS on the current snapshot
+- Completion boundary: remote visibility/platform blockage is gone; release evidence and remote-integrity are now remotely green, while the remaining blockers are one still-running GHCR image lane and one local Docker/buildx EOF on the deepest repo-side strict lane

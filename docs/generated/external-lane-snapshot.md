@@ -7,8 +7,8 @@ This page is machine-rendered from current external-lane contracts and runtime r
 | Lane | Current State | Blocker / Evidence | Canonical Artifact |
 | --- | --- | --- | --- |
 | `remote-platform-integrity` | `pass` | `ok` | `.runtime-cache/reports/governance/remote-platform-truth.json` |
-| `ghcr-standard-image` | `ready` | `ok` | `.runtime-cache/reports/governance/standard-image-publish-readiness.json` |
-| `release-evidence-attestation` | `ready` | `ok` | `.runtime-cache/reports/release/release-evidence-attest-readiness.json` |
+| `ghcr-standard-image` | `in_progress` | `remote workflow in progress` | `.runtime-cache/reports/governance/standard-image-publish-readiness.json` |
+| `release-evidence-attestation` | `verified` | `remote workflow completed successfully` | `.runtime-cache/reports/release/release-evidence-attest-readiness.json` |
 | `rsshub-youtube-ingest-chain` | `verified` | `provider` | `.runtime-cache/reports/governance/upstream-compat-report.json` |
 | `resend-digest-delivery-chain` | `verified` | `provider` | `.runtime-cache/reports/governance/upstream-compat-report.json` |
 | `strict-ci-compose-image-set` | `pending` | `external` | `.runtime-cache/reports/governance/upstream-compat-report.json` |
