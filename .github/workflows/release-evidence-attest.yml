@@ -59,7 +59,7 @@ jobs:
         run: |
           release_dir="artifacts/releases/${{ steps.release_tag.outputs.release_tag }}"
           bundle_path=".runtime-cache/reports/release/release-evidence-${{ steps.release_tag.outputs.release_tag }}.tar.gz"
-          mkdir -p .runtime-cache
+          mkdir -p "$(dirname "$bundle_path")"
           tar -czf "$bundle_path" -C "$release_dir" .
           echo "bundle_path=$bundle_path" >> "$GITHUB_ENV"
 

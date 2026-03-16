@@ -79,7 +79,7 @@ build_args=(
   --build-arg "STRICT_CI_TEMPORAL_CLI_SHA256_LINUX_ARM64=$STRICT_CI_TEMPORAL_CLI_SHA256_LINUX_ARM64"
 )
 
-docker_args=(
+common_args=(
   --file "$STRICT_CI_STANDARD_IMAGE_DOCKERFILE"
   --tag "${image_repository}:${image_tag}"
 )
@@ -88,22 +88,34 @@ if [[ "$LOAD_IMAGE" == "1" ]]; then
   PLATFORMS="$(resolve_local_load_platform)"
 fi
 
-if [[ "$PUSH_IMAGE" == "1" ]]; then
-  docker_args=(buildx build "${docker_args[@]}")
-  docker_args+=(--push --platform "$PLATFORMS")
-elif [[ "$LOAD_IMAGE" == "1" ]]; then
-  docker_args=(build "${docker_args[@]}")
-  docker_args+=(--platform "$PLATFORMS")
-else
-  docker_args=(buildx build "${docker_args[@]}")
-  docker_args+=(--platform "$PLATFORMS")
-fi
-
 if [[ -n "$METADATA_FILE" ]]; then
   mkdir -p "$(dirname "$METADATA_FILE")"
-  docker_args+=(--metadata-file "$METADATA_FILE")
 fi
 
-docker_args+=("${build_args[@]}" "$ROOT_DIR")
+metadata_args=()
+if [[ -n "$METADATA_FILE" ]]; then
+  metadata_args=(--metadata-file "$METADATA_FILE")
+fi
 
-docker "${docker_args[@]}"
+if [[ "$PUSH_IMAGE" == "1" ]]; then
+  docker buildx build \
+    "${common_args[@]}" \
+    --platform "$PLATFORMS" \
+    --push \
+    "${metadata_args[@]}" \
+    "${build_args[@]}" \
+    "$ROOT_DIR"
+elif [[ "$LOAD_IMAGE" == "1" ]]; then
+  docker build \
+    "${common_args[@]}" \
+    --platform "$PLATFORMS" \
+    "${build_args[@]}" \
+    "$ROOT_DIR"
+else
+  docker buildx build \
+    "${common_args[@]}" \
+    --platform "$PLATFORMS" \
+    "${metadata_args[@]}" \
+    "${build_args[@]}" \
+    "$ROOT_DIR"
+fi

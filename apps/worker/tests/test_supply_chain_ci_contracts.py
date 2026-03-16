@@ -63,6 +63,7 @@ def test_release_evidence_attestation_workflow_exists() -> None:
     assert "runner_workspace_maintenance.sh" in workflow
     assert "actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065" in workflow
     assert 'python-version: "3.12"' in workflow
+    assert 'mkdir -p "$(dirname "$bundle_path")"' in workflow
 
 
 def test_external_lane_status_reference_exists() -> None:
@@ -74,6 +75,16 @@ def test_external_lane_status_reference_exists() -> None:
     assert "Release evidence attestation" in text
     assert "rsshub-youtube-ingest-chain" in text
     assert "resend-digest-delivery-chain" in text
+
+
+def test_build_standard_image_script_uses_explicit_buildx_invocation() -> None:
+    script = (_repo_root() / "scripts" / "ci" / "build_standard_image.sh").read_text(
+        encoding="utf-8"
+    )
+
+    assert "docker buildx build \\" in script
+    assert "docker build \\" in script
+    assert "common_args=(" in script
 
 
 def test_release_manifest_capture_uses_relative_artifact_paths_and_current_run_scope() -> None:
