@@ -142,7 +142,10 @@
         "README.md",
         "docs/reference/done-model.md",
         "docs/reference/public-repo-readiness.md",
-        "docs/reference/public-artifact-exposure.md"
+        "docs/reference/public-artifact-exposure.md",
+        "docs/reference/public-rights-and-provenance.md",
+        "docs/reference/public-privacy-and-data-boundary.md",
+        "docs/reference/public-brand-boundary.md"
       ]
     },
     {
@@ -157,7 +160,9 @@
       "required_paths": [
         "README.md",
         "docs/reference/project-positioning.md",
-        "docs/reference/ai-evaluation.md"
+        "docs/reference/ai-evaluation.md",
+        "docs/reference/value-proof.md",
+        "docs/reference/newcomer-result-proof.md"
       ]
     }
   ]

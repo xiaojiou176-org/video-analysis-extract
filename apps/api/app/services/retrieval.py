@@ -8,6 +8,7 @@ import re
 from pathlib import Path
 from typing import Any, Literal, cast
 
+from integrations.providers.gemini import build_gemini_client, load_gemini_sdk
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session
@@ -249,8 +250,8 @@ class RetrievalService:
             settings.gemini_embedding_model or "gemini-embedding-001"
         ).strip() or "gemini-embedding-001"
         try:
-            genai = importlib.import_module("google.genai")  # type: ignore[assignment]
-            genai_types = importlib.import_module("google.genai.types")  # type: ignore[assignment]
+            sdk = load_gemini_sdk(import_module=importlib.import_module)
+            genai_types = sdk.genai_types
         except ImportError as exc:
             logger.exception(
                 "retrieval_embedding_dependency_missing",
@@ -263,7 +264,7 @@ class RetrievalService:
             ) from exc
 
         def _embed_content() -> Any:
-            client = genai.Client(api_key=api_key)
+            client = build_gemini_client(api_key=api_key, import_module=importlib.import_module)
             return client.models.embed_content(
                 model=model,
                 contents=[normalized_query],

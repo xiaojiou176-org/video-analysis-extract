@@ -107,6 +107,7 @@ npm --prefix "$WEB_RUNTIME_WEB_DIR" run build
 - 依赖边界以 `config/governance/dependency-boundaries.json` 为真相源；共享 packages 不得反向依赖 `apps/*`。
 - 外部系统 inventory 与兼容矩阵以 `config/governance/active-upstreams.json`、`config/governance/upstream-templates.json`、`config/governance/upstream-compat-matrix.json` 为真相源。
 - 上游分层注册表以 `config/governance/upstream-registry.json` 为真相源；`template` 不计入现役成熟度。
+- 显式桥接面以 `config/governance/bridges.json` 为真相源；任何长期存在的 wrapper / adapter / runtime-to-repo bridge 都不得只活在脚本里。
 - future vendor/fork/patch 一旦现役，必须同步通过 `python3 scripts/governance/check_vendor_registry_integrity.py`。
 - 依赖升级若影响运行命令或环境变量，必须同步更新：
   - `README.md`

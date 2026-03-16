@@ -9,12 +9,12 @@
 | 维度 | Repo-side Done 标准 |
 | --- | --- |
 | Root / source hygiene | 根目录通过 allowlist；repo-owned source roots 没有 `__pycache__` / `*.pyc` / runtime residue |
-| Governance | `./bin/governance-audit --mode audit` fresh 通过 |
+| Governance | `./bin/governance-audit --mode audit` fresh 通过，且 canonical current-proof artifact 的 `source_commit` 与当前 HEAD 对齐 |
 | Docs truth | generated docs 新鲜且关键语义与 control plane 一致 |
 | Strict path | `./bin/repo-side-strict-ci --mode pre-push --strict-full-run 1 --ci-dedupe 0` 可作为本地权威验收 |
 | Compat | `upstream-compat-matrix` 中 repo-side required rows 达到期望状态 |
 | Public/source-first onboarding | 源码优先入口可解释、可执行、可区分 public docs 与 internal runbook |
-| Public governance pack | `README.md`、`SECURITY.md`、`SUPPORT.md`、`.github/CODEOWNERS`、`docs/reference/public-repo-readiness.md` 与 `docs/reference/public-artifact-exposure.md` 不含 placeholder routing，且 public-safe surface 与 tracked 文件一致 |
+| Public governance pack | `README.md`、`SECURITY.md`、`SUPPORT.md`、`.github/CODEOWNERS`、`docs/reference/public-repo-readiness.md` 与 `docs/reference/public-artifact-exposure.md` 不含 placeholder routing，且 public-safe surface、policy allowlist 与 tracked 文件一致 |
 
 ## Layer B: External Done
 
@@ -22,10 +22,15 @@
 
 | 维度 | External Done 标准 |
 | --- | --- |
-| Image distribution | GHCR pinned image 可拉取、可证明 |
+| Image distribution | GHCR pinned image 可拉取、可证明，而且 external lane 只有 `verified` 才能计入 External Done |
 | Public release | Release bundle / attestation / public distribution 文案一致 |
 | Provider verification | provider/live rows 有 fresh same-run proof |
 | Remote platform | 远端 workflow 与平台配置能复现外部闭环 |
+
+补充硬规则：
+
+- remote workflow 就算成功，只要 `headSha` 不是当前 HEAD，也只能算历史证据，不能计入 External Done
+- `ready` / `queued` / `in_progress` 只代表“外层前置条件或执行过程存在”，不代表 external closure
 
 ## Not In Scope For Repo-side Completion
 
@@ -53,3 +58,4 @@ External lane commands:
 External lane state tracking:
 
 - `docs/reference/external-lane-status.md`
+- current-state 文档和 runtime reports 只能消费 current-commit-aligned canonical artifacts；历史 examples 只能当 examples，不能冒充 current verdict

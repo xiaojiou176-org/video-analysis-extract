@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "artifacts": [
+    {
+      "name": "remote-platform-truth",
+      "artifact": ".runtime-cache/reports/governance/remote-platform-truth.json",
+      "required": false,
+      "reason": "generated external-lane state consumes actor-sensitive remote truth"
+    },
+    {
+      "name": "remote-required-checks",
+      "artifact": ".runtime-cache/reports/governance/remote-required-checks.json",
+      "required": false,
+      "reason": "required-check integrity must not be reported from an older local commit snapshot"
+    },
+    {
+      "name": "ghcr-standard-image-readiness",
+      "artifact": ".runtime-cache/reports/governance/standard-image-publish-readiness.json",
+      "required": false,
+      "reason": "GHCR readiness is a current-state claim in external-lane reporting"
+    },
+    {
+      "name": "external-lane-workflows",
+      "artifact": ".runtime-cache/reports/governance/external-lane-workflows.json",
+      "required": false,
+      "reason": "generated external-lane snapshot must not consume stale workflow probes"
+    },
+    {
+      "name": "release-evidence-attestation",
+      "artifact": ".runtime-cache/reports/release/release-evidence-attest-readiness.json",
+      "required": false,
+      "reason": "release evidence readiness is used as current external proof"
+    }
+  ]
+}

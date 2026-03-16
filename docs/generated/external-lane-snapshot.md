@@ -7,8 +7,8 @@ This page is machine-rendered from current external-lane contracts and runtime r
 | Lane | Current State | Blocker / Evidence | Canonical Artifact |
 | --- | --- | --- | --- |
 | `remote-platform-integrity` | `pass` | `ok` | `.runtime-cache/reports/governance/remote-platform-truth.json` |
-| `ghcr-standard-image` | `in_progress` | `remote workflow in progress` | `.runtime-cache/reports/governance/standard-image-publish-readiness.json` |
-| `release-evidence-attestation` | `verified` | `remote workflow completed successfully` | `.runtime-cache/reports/release/release-evidence-attest-readiness.json` |
+| `ghcr-standard-image` | `blocked` | `remote workflow for current HEAD concluded `failure`` | `.runtime-cache/reports/governance/standard-image-publish-readiness.json` |
+| `release-evidence-attestation` | `ready` | `ok; historical remote workflow targets `9ba1c564b1840472a51946db21a10ffd831d1dae`, current HEAD is `07324519dba2feddafef4a36f4340d8ff476258e`` | `.runtime-cache/reports/release/release-evidence-attest-readiness.json` |
 | `rsshub-youtube-ingest-chain` | `verified` | `provider` | `.runtime-cache/reports/governance/upstream-compat-report.json` |
 | `resend-digest-delivery-chain` | `verified` | `provider` | `.runtime-cache/reports/governance/upstream-compat-report.json` |
 | `strict-ci-compose-image-set` | `pending` | `external` | `.runtime-cache/reports/governance/upstream-compat-report.json` |
@@ -17,5 +17,6 @@ This page is machine-rendered from current external-lane contracts and runtime r
 
 - explanation lives in `docs/reference/external-lane-status.md`
 - current status must come from this generated page or the underlying runtime reports
+- current-state runtime reports must be current-commit aligned; stale commit artifacts are historical evidence only
 - actor-sensitive remote truth is carried by `.runtime-cache/reports/governance/remote-platform-truth.json`
 - `ready` means preflight/evidence inputs are in place; it does not mean the external lane has already closed successfully

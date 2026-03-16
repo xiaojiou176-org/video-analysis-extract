@@ -1,7 +1,10 @@
 {
-  "version": 1,
+  "version": 2,
   "forbidden_tracked_globs": [
     "artifacts/performance/rsshub/*.tsv"
+  ],
+  "allowed_tracked_paths": [
+    "artifacts/performance/rsshub/public_probe_summary.sample.tsv"
   ],
   "required_public_samples": [
     "artifacts/performance/rsshub/public_probe_summary.sample.tsv"

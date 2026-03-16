@@ -11,18 +11,26 @@
 - `.runtime-cache/reports/governance/standard-image-publish-readiness.json`
 - `.runtime-cache/reports/release/release-evidence-attest-readiness.json`
 
+这些 current-state artifact 还必须满足一条额外规则：
+
+- runtime metadata 的 `source_commit` 必须和当前 HEAD 对齐；旧 commit 产物只能当历史档案，不能当 current snapshot
+
 ## Verification Rules
 
 - repo-side green 不等于 external lane green
 - external lane 只在 fresh artifact + runtime metadata + same-run proof 同时满足时才算 `verified`
+- 对消费 remote workflow 结果的 lane，`verified` 还必须满足：最新成功 run 的 `headSha == 当前 HEAD`
+- 如果 remote workflow 成功的是旧 commit，那份 run 只能算历史证据，不能升级当前状态
 - 平台权限问题必须写成平台 blocker，不能伪装成仓库 bug
 - 远端仓库当前是否公开、是否具备 branch protection 平台能力，也属于 external truth，不得由本地 docs 单方面宣布
 - actor-sensitive remote truth 必须从 `remote-platform-truth.json` 读取，不能把一次 probe 的账号上下文偷换成永久事实
+- `ready` / `queued` / `in_progress` 只能表示“尚未闭环完成”，不能包装成 external done
 
 ## Reading Rule
 
 - 解释层只负责说明“为什么 blocked / verified”
 - current state 只允许从 generated snapshot 或 runtime report 引用
+- 如果 runtime report 的 `source_commit` 不等于当前 HEAD，这份 report 只能当历史证据，不得当 current state
 - 如果 remote probe、GHCR readiness、release evidence readiness 与解释文档冲突，以 runtime report 为准
 
 ## Canonical Commands

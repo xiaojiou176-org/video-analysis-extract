@@ -146,8 +146,8 @@ def test_http_api_helper_and_notification_scripts_use_local_write_token_headers(
     daily_digest = (root / "scripts" / "runtime" / "run_daily_digest.sh").read_text(encoding="utf-8")
     failure_alerts = (root / "scripts" / "runtime" / "run_failure_alerts.sh").read_text(encoding="utf-8")
 
-    assert 'X-API-Key: ${VD_API_KEY}' in http_api
-    assert 'X-Web-Session: ${WEB_ACTION_SESSION_TOKEN}' in http_api
+    assert "X-API-Key: ${VD_API_KEY}" in http_api
+    assert "X-Web-Session: ${WEB_ACTION_SESSION_TOKEN}" in http_api
     assert 'export VD_API_KEY="video-digestor-local-dev-token"' in daily_digest
     assert 'export WEB_ACTION_SESSION_TOKEN="$VD_API_KEY"' in daily_digest
     assert 'export VD_API_KEY="video-digestor-local-dev-token"' in failure_alerts

@@ -5,6 +5,7 @@ import time
 from collections.abc import Callable
 from typing import Any
 
+from integrations.providers.gemini import build_gemini_client, load_gemini_sdk
 from worker.config import Settings
 from worker.pipeline.policies import normalize_llm_input_mode
 from worker.pipeline.steps.llm_client_helpers import (
@@ -201,8 +202,8 @@ def gemini_generate(
         )
 
     try:
-        from google import genai  # type: ignore
-        from google.genai import types as genai_types  # type: ignore
+        sdk = load_gemini_sdk()
+        genai_types = sdk.genai_types
     except Exception as exc:
         return (
             None,
@@ -217,7 +218,7 @@ def gemini_generate(
         )
 
     try:
-        client = genai.Client(api_key=settings.gemini_api_key)
+        client = build_gemini_client(api_key=settings.gemini_api_key)
     except Exception as exc:
         reason, error_kind, http_status = classify_gemini_exception(exc)
         return (

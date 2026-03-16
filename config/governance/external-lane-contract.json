@@ -19,6 +19,7 @@
       "name": "ghcr-standard-image",
       "canonical_artifact": ".runtime-cache/reports/governance/standard-image-publish-readiness.json",
       "remote_workflow_artifact": ".runtime-cache/reports/governance/external-lane-workflows.json",
+      "verified_requires_current_head": true,
       "verification_scope": "standard-image-publish-readiness",
       "allowed_statuses": [
         "ready",
@@ -37,6 +38,7 @@
       "name": "release-evidence-attestation",
       "canonical_artifact": ".runtime-cache/reports/release/release-evidence-attest-readiness.json",
       "remote_workflow_artifact": ".runtime-cache/reports/governance/external-lane-workflows.json",
+      "verified_requires_current_head": true,
       "verification_scope": "release-evidence-attest-readiness",
       "allowed_statuses": [
         "ready",

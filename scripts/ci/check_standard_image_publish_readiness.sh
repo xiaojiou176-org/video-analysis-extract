@@ -33,15 +33,87 @@ else
   errors+=("docker buildx version failed")
 fi
 
+buildx_ls=""
+if [[ "$status" == "ready" ]]; then
+  buildx_ls_stdout="$(mktemp)"
+  buildx_ls_stderr="$(mktemp)"
+  docker buildx ls >"$buildx_ls_stdout" 2>"$buildx_ls_stderr" &
+  buildx_ls_pid=$!
+  buildx_ls_elapsed=0
+  while kill -0 "$buildx_ls_pid" 2>/dev/null; do
+    if (( buildx_ls_elapsed >= 15 )); then
+      kill "$buildx_ls_pid" 2>/dev/null || true
+      sleep 1
+      if kill -0 "$buildx_ls_pid" 2>/dev/null; then
+        kill -9 "$buildx_ls_pid" 2>/dev/null || true
+      fi
+      wait "$buildx_ls_pid" 2>/dev/null || true
+      status="blocked"
+      blocker_type="buildx-runtime-preparation-failure"
+      errors+=("docker buildx ls timed out after 15s")
+      break
+    fi
+    sleep 1
+    buildx_ls_elapsed=$((buildx_ls_elapsed + 1))
+  done
+  if [[ "$status" == "ready" ]]; then
+    if wait "$buildx_ls_pid"; then
+      buildx_ls="$(cat "$buildx_ls_stdout")"
+      if [[ "$buildx_ls" == *"context deadline exceeded"* || "$buildx_ls" == *"Cannot load builder"* ]]; then
+        status="blocked"
+        blocker_type="buildx-runtime-preparation-failure"
+        errors+=("docker buildx ls reports builder context deadline or daemon reachability failure")
+      fi
+    else
+      status="blocked"
+      blocker_type="buildx-runtime-preparation-failure"
+      if [[ -s "$buildx_ls_stderr" ]]; then
+        errors+=("docker buildx ls failed: $(tr '\n' ' ' < "$buildx_ls_stderr" | sed 's/[[:space:]]\\+/ /g; s/[[:space:]]$//')")
+      else
+        errors+=("docker buildx ls failed")
+      fi
+    fi
+  fi
+  rm -f "$buildx_ls_stdout" "$buildx_ls_stderr"
+fi
+
 buildx_inspect=""
 if [[ "$status" == "ready" ]]; then
-  if buildx_inspect="$(docker buildx inspect 2>/dev/null)"; then
-    :
-  else
-    status="blocked"
-    blocker_type="buildx-runtime-preparation-failure"
-    errors+=("docker buildx inspect failed")
+  inspect_stdout="$(mktemp)"
+  inspect_stderr="$(mktemp)"
+  docker buildx inspect >"$inspect_stdout" 2>"$inspect_stderr" &
+  inspect_pid=$!
+  inspect_elapsed=0
+  while kill -0 "$inspect_pid" 2>/dev/null; do
+    if (( inspect_elapsed >= 15 )); then
+      kill "$inspect_pid" 2>/dev/null || true
+      sleep 1
+      if kill -0 "$inspect_pid" 2>/dev/null; then
+        kill -9 "$inspect_pid" 2>/dev/null || true
+      fi
+      wait "$inspect_pid" 2>/dev/null || true
+      status="blocked"
+      blocker_type="buildx-runtime-preparation-failure"
+      errors+=("docker buildx inspect timed out after 15s")
+      break
+    fi
+    sleep 1
+    inspect_elapsed=$((inspect_elapsed + 1))
+  done
+  if [[ "$status" == "ready" ]]; then
+    if wait "$inspect_pid"; then
+      buildx_inspect="$(cat "$inspect_stdout")"
+    else
+      status="blocked"
+      blocker_type="buildx-runtime-preparation-failure"
+      if [[ -s "$inspect_stderr" ]]; then
+        errors+=("docker buildx inspect failed: $(tr '\n' ' ' < "$inspect_stderr" | sed 's/[[:space:]]\\+/ /g; s/[[:space:]]$//')")
+      else
+        errors+=("docker buildx inspect failed")
+      fi
+    fi
   fi
+  rm -f "$inspect_stdout" "$inspect_stderr"
 fi
 
 expected_repository="$(python3 - <<'PY'
@@ -97,7 +169,7 @@ print(json.dumps(sys.argv[1:], ensure_ascii=False))
 PY
 )"
 
-python3 - <<'PY' "$OUTPUT_PATH" "$status" "$blocker_type" "$repo_slug" "$repo_owner" "$expected_repository" "$token_mode" "$token_scope_ok" "$buildx_version" "$buildx_inspect" "$ERRORS_JSON"
+python3 - <<'PY' "$OUTPUT_PATH" "$status" "$blocker_type" "$repo_slug" "$repo_owner" "$expected_repository" "$token_mode" "$token_scope_ok" "$buildx_version" "$buildx_ls" "$buildx_inspect" "$ERRORS_JSON"
 import json
 import sys
 from pathlib import Path
@@ -117,8 +189,9 @@ payload = {
     "token_mode": sys.argv[7],
     "token_scope_ok": sys.argv[8] == "true",
     "docker_buildx_version": sys.argv[9],
-    "docker_buildx_inspect": sys.argv[10],
-    "errors": json.loads(sys.argv[11]),
+    "docker_buildx_ls": sys.argv[10],
+    "docker_buildx_inspect": sys.argv[11],
+    "errors": json.loads(sys.argv[12]),
 }
 write_json_artifact(
     ROOT / output,

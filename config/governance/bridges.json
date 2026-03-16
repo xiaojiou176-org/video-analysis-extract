@@ -1,4 +1,72 @@
 {
   "version": 1,
-  "bridges": []
+  "bridges": [
+    {
+      "name": "web-runtime-workspace-bridge",
+      "status": "active-bridge",
+      "owner": "platform",
+      "introduced_at": "2026-03-16T17:45:00-07:00",
+      "write_forbidden_after": "2026-03-23T00:00:00-07:00",
+      "remove_after": "2026-06-30T00:00:00-07:00",
+      "source_paths": [
+        "./bin/prepare-web-runtime",
+        "scripts/ci/prepare_web_runtime.sh"
+      ],
+      "target_paths": [
+        ".runtime-cache/tmp/web-runtime/workspace/apps/web",
+        ".runtime-cache/run/web-runtime"
+      ],
+      "notes": "Repo-tracked Web source tree must stay machine-state-free; runtime workspace and readiness state are intentionally bridged into .runtime-cache."
+    },
+    {
+      "name": "ops-cleanup-runtime-bridge",
+      "status": "active-bridge",
+      "owner": "platform",
+      "introduced_at": "2026-03-16T17:45:00-07:00",
+      "write_forbidden_after": "2026-03-23T00:00:00-07:00",
+      "remove_after": "2026-06-30T00:00:00-07:00",
+      "source_paths": [
+        "./bin/start-ops-workflows",
+        "scripts/runtime/start_ops_workflows.sh"
+      ],
+      "target_paths": [
+        ".runtime-cache/tmp",
+        ".runtime-cache/run",
+        ".runtime-cache/logs"
+      ],
+      "notes": "Long-running ops workflows are allowed to clean and recycle only governed runtime roots; repo root cache/.cache is no longer a legal repo-side bridge target."
+    },
+    {
+      "name": "standard-image-readiness-bridge",
+      "status": "active-bridge",
+      "owner": "platform",
+      "introduced_at": "2026-03-16T17:45:00-07:00",
+      "write_forbidden_after": "2026-03-23T00:00:00-07:00",
+      "remove_after": "2026-06-30T00:00:00-07:00",
+      "source_paths": [
+        "./scripts/ci/check_standard_image_publish_readiness.sh",
+        ".github/workflows/build-ci-standard-image.yml"
+      ],
+      "target_paths": [
+        ".runtime-cache/reports/governance/standard-image-publish-readiness.json"
+      ],
+      "notes": "External standard-image status is mediated through a repo-owned readiness artifact; remote image publication must not be summarized without this bridge surface."
+    },
+    {
+      "name": "env-compose-runtime-bridge",
+      "status": "active-bridge",
+      "owner": "platform",
+      "introduced_at": "2026-03-16T17:45:00-07:00",
+      "write_forbidden_after": "2026-03-23T00:00:00-07:00",
+      "remove_after": "2026-06-30T00:00:00-07:00",
+      "source_paths": [
+        "./bin/validate-profile",
+        "scripts/env/compose_env.sh"
+      ],
+      "target_paths": [
+        ".runtime-cache/tmp/.env.local.resolved"
+      ],
+      "notes": "Public/source-first environment preflight is allowed to materialize a resolved env receipt under .runtime-cache/tmp only."
+    }
+  ]
 }

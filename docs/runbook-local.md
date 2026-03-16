@@ -297,7 +297,7 @@ mkdir -p .runtime-cache/logs/app .runtime-cache/logs/governance
 - `--canary-interval-hours` / `--canary-timeout-seconds`：provider 可用性探针频率与超时。
 - `--cleanup-interval-hours` / `--cleanup-older-than-hours`：清理调度与保留窗口。
 - `--cleanup-cache-older-than-hours` / `--cleanup-cache-max-size-mb`：可选 cache 细粒度保留。
-- `--cleanup-workspace-dir` / `--cleanup-cache-dir`：可选目录覆盖。安全限制：仅允许落在 `${REPO_ROOT}/.runtime-cache`、`${REPO_ROOT}/cache`、`${REPO_ROOT}/.cache`、`/tmp/video-digestor*`、`/tmp/video-analysis*` 前缀下，超出白名单会直接失败。
+- `--cleanup-workspace-dir` / `--cleanup-cache-dir`：可选目录覆盖。安全限制：repo 内只允许落在 `${REPO_ROOT}/.runtime-cache`；repo 外 operator 路径只允许 `/tmp/video-digestor*`、`/tmp/video-analysis*` 前缀下，超出白名单会直接失败。
 - `--daily-timezone-offset-minutes`：可选，显式 UTC 偏移分钟。
 - `--show-hints` / `--no-show-hints`：开关脚本启动摘要日志（默认显示）。
 - `--dry-run`：只打印命令不执行（等价 `./bin/start-ops-workflows --dry-run`）。

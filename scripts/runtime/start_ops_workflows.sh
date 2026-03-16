@@ -54,8 +54,6 @@ PY
 
   local -a allowed_prefixes=(
     "$ROOT_DIR/.runtime-cache"
-    "$ROOT_DIR/cache"
-    "$ROOT_DIR/.cache"
     "/tmp/video-digestor"
     "/tmp/video-analysis"
   )

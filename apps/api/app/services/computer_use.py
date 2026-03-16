@@ -6,6 +6,7 @@ import os
 from dataclasses import dataclass, field
 from typing import Any
 
+from integrations.providers.gemini import build_gemini_client, load_gemini_sdk
 from ..config import Settings
 
 _DEFAULT_MODEL_TIMEOUT_SECONDS = 12.0
@@ -43,13 +44,13 @@ class ComputerUseService:
             raise ValueError("gemini_api_key_missing")
 
         try:
-            from google import genai  # type: ignore
-            from google.genai import types as genai_types  # type: ignore
+            sdk = load_gemini_sdk()
+            genai_types = sdk.genai_types
         except Exception as exc:
             raise ValueError(f"gemini_sdk_unavailable:{exc}") from exc
 
         try:
-            client = genai.Client(api_key=self._api_key)
+            client = build_gemini_client(api_key=self._api_key)
             timeout_seconds = self._read_float_env(
                 "COMPUTER_USE_MODEL_TIMEOUT_SECONDS",
                 default=_DEFAULT_MODEL_TIMEOUT_SECONDS,

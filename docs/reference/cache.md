@@ -93,6 +93,9 @@
 
 默认 cache 目录：`<PIPELINE_WORKSPACE_DIR>/../cache`。
 
+这条默认目录说的是 **worker workspace 外侧的 operator-side cache**，不是 repo 根目录里的 `./cache`。
+Repo-side 仍然只有一个合法运行时出口：`.runtime-cache/**`。
+
 执行一次清理：
 
 ```bash
@@ -117,7 +120,7 @@
 
 - `--cleanup-cache-older-than-hours`：按文件年龄清理 cache。
 - `--cleanup-cache-max-size-mb`：清理后按大小阈值继续淘汰最旧文件。
-- `--cleanup-workspace-dir` / `--cleanup-cache-dir`：覆盖默认目录。
+- `--cleanup-workspace-dir` / `--cleanup-cache-dir`：覆盖默认目录，但 repo 内只允许落在 `.runtime-cache/**`；repo 外 operator 路径只允许 `/tmp/video-digestor*`、`/tmp/video-analysis*`。
 
 ## Operational Notes
 

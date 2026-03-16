@@ -56,12 +56,14 @@ python3 scripts/governance/check_root_layout_budget.py
 python3 scripts/governance/check_root_zero_unknowns.py
 python3 scripts/governance/check_bridge_expiry.py
 python3 scripts/governance/check_public_surface_policy.py
+python3 scripts/governance/check_historical_release_examples.py
 python3 scripts/governance/check_public_contact_points.py
 python3 scripts/governance/check_public_entrypoint_manifests.py
 python3 scripts/governance/check_public_entrypoint_references.py
 python3 scripts/governance/check_root_policy_alignment.py
 python3 scripts/governance/check_evidence_contract.py
 python3 scripts/governance/check_external_lane_contract.py
+python3 scripts/governance/check_current_proof_commit_alignment.py
 python3 scripts/governance/check_runtime_outputs.py
 python3 scripts/governance/check_runtime_artifact_writer_coverage.py
 python3 scripts/governance/check_runtime_cache_retention.py
@@ -83,6 +85,8 @@ python3 scripts/governance/check_contract_surfaces.py
 python3 scripts/governance/check_generated_vs_handwritten_contract_surfaces.py
 python3 scripts/governance/check_eval_assets.py
 python3 scripts/governance/check_eval_regression.py
+python3 scripts/governance/render_newcomer_result_proof.py
+python3 scripts/governance/check_newcomer_result_proof.py
 python3 scripts/governance/check_upstream_governance.py
 python3 scripts/governance/check_unregistered_upstream_usage.py
 python3 scripts/governance/check_upstream_compat_freshness.py
@@ -90,5 +94,6 @@ python3 scripts/governance/check_upstream_same_run_cohesion.py
 python3 scripts/governance/check_active_upstream_evidence_fresh.py
 python3 scripts/governance/check_upstream_failure_classification.py
 python3 scripts/governance/check_vendor_registry_integrity.py
+python3 scripts/governance/render_third_party_notices.py --check
 
 vd_log info complete "PASS"

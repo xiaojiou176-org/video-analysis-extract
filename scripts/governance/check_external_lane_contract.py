@@ -33,6 +33,15 @@ def main() -> int:
             remote_artifact = str(lane.get("remote_workflow_artifact") or "")
             if remote_artifact and not remote_artifact.startswith(".runtime-cache/"):
                 errors.append(f"lane `{lane.get('name', '<unknown>')}` remote_workflow_artifact must live under .runtime-cache/")
+            if remote_artifact:
+                if "verified" not in lane.get("allowed_statuses", []):
+                    errors.append(
+                        f"lane `{lane.get('name', '<unknown>')}` must declare `verified` in allowed_statuses when using remote_workflow_artifact"
+                    )
+                if not isinstance(lane.get("verified_requires_current_head"), bool):
+                    errors.append(
+                        f"lane `{lane.get('name', '<unknown>')}` must declare boolean `verified_requires_current_head`"
+                    )
 
     if errors:
         print("[external-lane-contract] FAIL")

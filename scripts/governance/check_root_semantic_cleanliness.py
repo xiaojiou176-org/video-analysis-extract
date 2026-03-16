@@ -40,6 +40,7 @@ ALLOWED_ROOT_FILES = {
     "README.md",
     "SECURITY.md",
     "SUPPORT.md",
+    "THIRD_PARTY_NOTICES.md",
 }
 
 

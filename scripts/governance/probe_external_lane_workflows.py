@@ -46,20 +46,53 @@ def _json_or_none(command: list[str]) -> tuple[Any | None, dict[str, Any] | None
     }
 
 
-def _lane_state(run: dict[str, Any] | None) -> tuple[str, str]:
+def _lane_state(current_head: str, run: dict[str, Any] | None) -> tuple[str, str, bool]:
     if not run:
-        return "missing", "no remote workflow run found"
+        return "missing", "no remote workflow run found", False
     status = str(run.get("status") or "")
     conclusion = str(run.get("conclusion") or "")
+    run_head = str(run.get("headSha") or "")
+    if not run_head and conclusion == "success":
+        return "blocked", "remote workflow completed without headSha; current HEAD cannot be verified", False
+    if run_head and run_head != current_head:
+        if status in {"queued", "pending"}:
+            return (
+                "historical",
+                f"latest queued remote workflow targets old head `{run_head}`; current HEAD `{current_head}` has no queued remote run",
+                False,
+            )
+        if status == "in_progress":
+            return (
+                "historical",
+                f"latest in-progress remote workflow targets old head `{run_head}`; current HEAD `{current_head}` has no active remote run",
+                False,
+            )
+        if conclusion == "success":
+            return (
+                "historical",
+                f"latest successful remote workflow targets old head `{run_head}`; current HEAD `{current_head}` still not externally verified",
+                False,
+            )
+        if conclusion:
+            return (
+                "historical",
+                f"latest completed remote workflow targets old head `{run_head}` with conclusion `{conclusion}`; current HEAD `{current_head}` still unresolved",
+                False,
+            )
+        return (
+            "historical",
+            f"latest remote workflow targets old head `{run_head}`; current HEAD `{current_head}` still unresolved",
+            False,
+        )
     if status in {"queued", "pending"}:
-        return "queued", "remote workflow queued"
+        return "queued", "remote workflow queued for current HEAD", True
     if status == "in_progress":
-        return "in_progress", "remote workflow in progress"
+        return "in_progress", "remote workflow in progress for current HEAD", True
     if conclusion == "success":
-        return "verified", "remote workflow completed successfully"
+        return "verified", "remote workflow completed successfully for current HEAD", True
     if conclusion:
-        return "blocked", f"remote workflow concluded `{conclusion}`"
-    return "blocked", f"unexpected workflow state status={status} conclusion={conclusion}"
+        return "blocked", f"remote workflow for current HEAD concluded `{conclusion}`", True
+    return "blocked", f"unexpected workflow state status={status} conclusion={conclusion}", bool(run_head == current_head)
 
 
 def main() -> int:
@@ -73,6 +106,7 @@ def main() -> int:
     args = parser.parse_args()
 
     repo = args.repo.strip() or _repo_slug()
+    current_head = current_git_commit()
     actor_payload, actor_error = _json_or_none(["gh", "api", "user"])
     actor = str((actor_payload or {}).get("login") or "")
 
@@ -95,7 +129,7 @@ def main() -> int:
             ]
         )
         latest_run = payload[0] if isinstance(payload, list) and payload else None
-        lane_state, note = _lane_state(latest_run)
+        lane_state, note, matches_current_head = _lane_state(current_head, latest_run)
         if lane_state == "blocked":
             overall_status = "blocked"
         lanes.append(
@@ -104,6 +138,7 @@ def main() -> int:
                 "workflow_file": workflow_file,
                 "state": lane_state,
                 "note": note,
+                "latest_run_matches_current_head": matches_current_head,
                 "latest_run": latest_run,
                 "error": error,
             }
@@ -115,7 +150,7 @@ def main() -> int:
         "repo": repo,
         "actor": actor,
         "actor_error": actor_error,
-        "source_commit": current_git_commit(),
+        "source_commit": current_head,
         "lanes": lanes,
     }
     write_json_artifact(

@@ -23,6 +23,12 @@
 - `.github/ISSUE_TEMPLATE/*`
 - `.github/PULL_REQUEST_TEMPLATE.md`
 
+边界解释层固定入口：
+
+- `docs/reference/public-rights-and-provenance.md`
+- `docs/reference/public-privacy-and-data-boundary.md`
+- `docs/reference/public-brand-boundary.md`
+
 ## Public Boundary
 
 public-safe:
@@ -37,6 +43,12 @@ internal or conditional:
 - provider-level secrets and live tokens
 - GHCR/public distribution lane proof
 - any sample that still points at production-like identities or routes
+
+边界补充说明：
+
+- 权利与历史样例边界：`docs/reference/public-rights-and-provenance.md`
+- 数据 / 隐私 / 样本边界：`docs/reference/public-privacy-and-data-boundary.md`
+- 平台 / 品牌 / affiliation 边界：`docs/reference/public-brand-boundary.md`
 
 ## Source-first Quickstart
 

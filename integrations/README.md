@@ -17,3 +17,8 @@
 - 不承载 UI / API / Worker 业务逻辑。
 
 它像“机房里的转接头和配线架”，外部线从这里进，业务层不要自己乱接。
+
+## Bridge Governance
+
+- 如果某个转接面需要长期把 repo 入口、runtime 输出、或外部状态桥接到受治理路径，必须登记到 `config/governance/bridges.json`。
+- `integrations/` 是外部能力接入层；`bridges.json` 负责回答“哪些桥接面仍然活着、写向哪里、何时必须收口或删除”。

@@ -4,6 +4,7 @@ import asyncio
 from collections.abc import Callable
 from typing import Any
 
+from integrations.providers.gemini import build_gemini_client, load_gemini_sdk
 from worker.config import Settings
 from worker.pipeline.types import PipelineContext, StepExecution
 
@@ -147,13 +148,13 @@ def gemini_embed_texts(
         raise RuntimeError("gemini_api_key_missing")
 
     try:
-        from google import genai  # type: ignore
-        from google.genai import types as genai_types  # type: ignore
+        sdk = load_gemini_sdk()
+        genai_types = sdk.genai_types
     except Exception as exc:
         raise RuntimeError(f"embedding_sdk_unavailable:{exc}") from exc
 
     try:
-        client = genai.Client(api_key=settings.gemini_api_key)
+        client = build_gemini_client(api_key=settings.gemini_api_key)
     except Exception as exc:
         raise RuntimeError(f"embedding_client_init_failed:{exc}") from exc
 

@@ -309,7 +309,7 @@ def _render_release_evidence() -> str:
         "",
         "- repo-side closure and external closure must be reported separately; see `docs/reference/done-model.md`",
         "- external lane live status is tracked in `docs/reference/external-lane-status.md`",
-        "- current run evidence is the only canonical source for release verdicts",
+        "- current run evidence is the only canonical source for release verdicts, and its runtime metadata `source_commit` must match the current HEAD",
         "- current-run KPI and readiness summaries live under `.runtime-cache/reports/release-readiness/`",
         "- historical examples under `artifacts/releases/*` are documentation examples, not release verdict proof",
         "- manifest paths must be repo-relative, not host-absolute",
@@ -365,6 +365,31 @@ def _render_external_lane_snapshot() -> str:
         for item in (workflow_report or {}).get("lanes", [])
         if isinstance(item, dict)
     }
+    workflow_current_head = str((workflow_report or {}).get("source_commit") or "").strip()
+
+    def _merge_workflow_state(
+        base_state: str,
+        base_note: str,
+        lane_name: str,
+    ) -> tuple[str, str]:
+        row = workflow_rows.get(lane_name)
+        if not row:
+            return base_state, base_note
+        workflow_note = str(row.get("note") or "").strip()
+        matches_current_head = row.get("latest_run_matches_current_head") is True
+        latest_run = row.get("latest_run") or {}
+        latest_head = str(latest_run.get("headSha") or "").strip()
+        if matches_current_head:
+            return str(row.get("state") or base_state), workflow_note or base_note
+        if workflow_note:
+            if latest_head and workflow_current_head and latest_head != workflow_current_head:
+                return (
+                    base_state,
+                    f"{base_note}; historical remote workflow targets `{latest_head}`, current HEAD is `{workflow_current_head}`",
+                )
+            return base_state, f"{base_note}; {workflow_note}"
+        return base_state, base_note
+
     outputs = [
         GENERATED_HEADER,
         "# External Lane Snapshot",
@@ -388,9 +413,7 @@ def _render_external_lane_snapshot() -> str:
     if ghcr_report:
         ghcr_state = str(ghcr_report.get("status") or "unknown")
         ghcr_note = str(ghcr_report.get("blocker_type") or "ok")
-    if workflow_rows.get("ghcr-standard-image"):
-        ghcr_state = str(workflow_rows["ghcr-standard-image"].get("state") or ghcr_state)
-        ghcr_note = str(workflow_rows["ghcr-standard-image"].get("note") or ghcr_note)
+    ghcr_state, ghcr_note = _merge_workflow_state(ghcr_state, ghcr_note, "ghcr-standard-image")
     outputs.append(
         f"| `ghcr-standard-image` | `{ghcr_state}` | `{ghcr_note}` | `{contract['lanes'][1]['canonical_artifact']}` |"
     )
@@ -400,9 +423,11 @@ def _render_external_lane_snapshot() -> str:
     if release_report:
         release_state = str(release_report.get("status") or "unknown")
         release_note = str(release_report.get("blocker_type") or "ok")
-    if workflow_rows.get("release-evidence-attestation"):
-        release_state = str(workflow_rows["release-evidence-attestation"].get("state") or release_state)
-        release_note = str(workflow_rows["release-evidence-attestation"].get("note") or release_note)
+    release_state, release_note = _merge_workflow_state(
+        release_state,
+        release_note,
+        "release-evidence-attestation",
+    )
     outputs.append(
         f"| `release-evidence-attestation` | `{release_state}` | `{release_note}` | `{contract['lanes'][2]['canonical_artifact']}` |"
     )
@@ -420,6 +445,7 @@ def _render_external_lane_snapshot() -> str:
             "",
             "- explanation lives in `docs/reference/external-lane-status.md`",
             "- current status must come from this generated page or the underlying runtime reports",
+            "- current-state runtime reports must be current-commit aligned; stale commit artifacts are historical evidence only",
             "- actor-sensitive remote truth is carried by `.runtime-cache/reports/governance/remote-platform-truth.json`",
             "- `ready` means preflight/evidence inputs are in place; it does not mean the external lane has already closed successfully",
         ]

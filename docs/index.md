@@ -28,7 +28,12 @@
 - repo-side / external done model：`docs/reference/done-model.md`
 - public repo readiness：`docs/reference/public-repo-readiness.md`
 - public artifact exposure：`docs/reference/public-artifact-exposure.md`
+- public rights / provenance：`docs/reference/public-rights-and-provenance.md`
+- public privacy / data boundary：`docs/reference/public-privacy-and-data-boundary.md`
+- public brand boundary：`docs/reference/public-brand-boundary.md`
 - AI evaluation：`docs/reference/ai-evaluation.md`
+- newcomer/result proof：`docs/reference/newcomer-result-proof.md`
+- 任务级价值证明：`docs/reference/value-proof.md`
 
 ## Explanation
 

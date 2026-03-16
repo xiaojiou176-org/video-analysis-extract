@@ -33,7 +33,12 @@
         "docs/reference/external-lane-status.md",
         "docs/reference/public-repo-readiness.md",
         "docs/reference/public-artifact-exposure.md",
+        "docs/reference/public-rights-and-provenance.md",
+        "docs/reference/public-privacy-and-data-boundary.md",
+        "docs/reference/public-brand-boundary.md",
         "docs/reference/ai-evaluation.md",
+        "docs/reference/newcomer-result-proof.md",
+        "docs/reference/value-proof.md",
         "docs/reference/dependency-governance.md",
         "docs/reference/logging.md",
         "ENVIRONMENT.md"
@@ -45,7 +50,8 @@
       "docs": [
         "docs/architecture.md",
         "docs/testing.md",
-        "docs/reference/project-positioning.md"
+        "docs/reference/project-positioning.md",
+        "docs/reference/cache.md"
       ]
     },
     {

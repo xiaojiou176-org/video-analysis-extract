@@ -11,6 +11,14 @@
 - deterministic regression：`python3 scripts/evals/run_regression.py`
 - regression gate：`python3 scripts/governance/check_eval_regression.py`
 
+## Current Coverage
+
+- 当前 repo-side deterministic golden set 已扩到 **20 个 case**
+- 覆盖两大任务面：
+  - structured outline / topic coverage
+  - grounded digest / citation hygiene / failure honesty
+- 这仍然不是 provider-heavy live eval，也不是学术 benchmark；它的目标是让 repo-side 改动可以被更厚地判定进退
+
 ## Eval Goal
 
 当前不追求学术 benchmark，而追求三件事：

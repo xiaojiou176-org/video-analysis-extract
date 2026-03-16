@@ -17,6 +17,9 @@
 - repo-side 完成标准：见 `docs/reference/done-model.md`
 - external lane 状态说明：见 `docs/reference/external-lane-status.md` 与 `docs/generated/external-lane-snapshot.md`；解释层与 current snapshot 已拆开。
 - public readiness 总览：见 `docs/reference/public-repo-readiness.md`
+- 权利与来源边界：见 `docs/reference/public-rights-and-provenance.md`
+- 数据与隐私边界：见 `docs/reference/public-privacy-and-data-boundary.md`
+- 平台与品牌边界：见 `docs/reference/public-brand-boundary.md`
 - 项目定位与目标用户：见 `docs/reference/project-positioning.md`
 - AI formal eval 最小系统：见 `docs/reference/ai-evaluation.md`
 

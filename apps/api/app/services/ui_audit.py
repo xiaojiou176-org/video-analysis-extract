@@ -15,6 +15,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from integrations.providers.gemini import build_gemini_client, load_gemini_sdk
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session
@@ -324,8 +325,8 @@ class UiAuditService:
             return self._gemini_review_result(status="skipped", reason_code="missing_gemini_api_key")
 
         try:
-            from google import genai  # type: ignore
-            from google.genai import types as genai_types  # type: ignore
+            sdk = load_gemini_sdk()
+            genai_types = sdk.genai_types
         except Exception as exc:
             return self._gemini_review_result(
                 status="failed",
@@ -379,7 +380,7 @@ class UiAuditService:
         )
 
         try:
-            client = genai.Client(api_key=api_key)
+            client = build_gemini_client(api_key=api_key)
             response = self._generate_with_timeout_and_retry(
                 client=client,
                 model=model,

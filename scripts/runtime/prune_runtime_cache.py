@@ -51,8 +51,6 @@ def _infer_source_run_id(path: Path) -> str:
 
 
 def _default_created_at(name: str, path: Path) -> str:
-    if name == "tmp":
-        return datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
     return datetime.fromtimestamp(path.stat().st_mtime, UTC).replace(microsecond=0).isoformat().replace(
         "+00:00", "Z"
     )
