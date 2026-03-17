@@ -4,7 +4,7 @@
 
 - Plan ID: `2026-03-17_04-49-09__repo-ultimate-final-form-master-plan`
 - Created At: `2026-03-17 04:49:09 PDT`
-- Last Updated: `2026-03-17 06:08:00 PDT`
+- Last Updated: `2026-03-17 06:20:00 PDT`
 - Repo: `📺视频分析提取`
 - Repo Path: `/Users/yuyifeng/Documents/VS Code/1_Personal_Project/[其他项目]Useful_Tools/📺视频分析提取`
 - Repo Archetype: `hybrid-repo`
@@ -733,6 +733,7 @@ docs control plane、root/runtime governance、logging contract、upstream gover
 - `current-state-summary`：可读且 head-aligned
 - `newcomer-result-proof`：PASS，且 `repo_side_strict_receipt=pass`
 - external lane：GHCR image workflow 对当前 HEAD 已失败并留下 403 证据，release attestation 对当前 HEAD 已 verified，本地 GHCR readiness 仍 blocked
+- Git closure：当前所有有效脏改动已保全提交并推送到 `origin/main`，本地 `main...origin/main = 0 0`
 - 当前主战场：**无新的 Repo-side blocker；当前已抵达外部平台边界，WS5 继续守护**
 
 ### Task Checklist
@@ -744,6 +745,7 @@ docs control plane、root/runtime governance、logging contract、upstream gover
 - `[x]` 统一 README / start-here / done-model / external-lane-status 的 current truth 语义
 - `[x]` 校准 external/public truth surfaces，确认 Repo 侧已基本诚实，剩余主要是平台阻塞
 - `[x]` 把 representative user-result proof 拉上主链
+- `[x]` 将当前 main 上全部有效脏改动保全为提交并推送到 `origin/main`
 - `[-]` 持续守护 WS5：防止修复过程破坏现有强控制面
 
 ### Next Actions
@@ -767,6 +769,7 @@ docs control plane、root/runtime governance、logging contract、upstream gover
 - 2026-03-17 05:50 PDT：reviewer 指出 Plan 的 [一]/[三] 高层摘要仍残留旧的 WS1/WS2 红灯表述；已按 runtime truth 回写修正，确保高层摘要、总览表与当前状态机一致
 - 2026-03-17 05:58 PDT：WS3 再前推一层：已触发 current HEAD 的 `build-ci-standard-image` 与 `release-evidence-attest` workflows，并将其状态写回 runtime truth；当前 `release-evidence-attestation` 对 current HEAD 已 `verified`，`ghcr-standard-image` 对 current HEAD 已 `in_progress`
 - 2026-03-17 06:08 PDT：WS3 已查到底：current HEAD 的 `build-ci-standard-image` workflow 最终失败在 step 8 `Build and push strict CI standard image`，失败签名为 GHCR blob `HEAD request ... 403 Forbidden`；`release-evidence-attestation` 对 current HEAD 保持 verified。当前剩余项已收敛为平台/权限边界，而不是 Repo 内待改逻辑
+- 2026-03-17 06:20 PDT：已执行 Git 收口保全：当前 main 上全部有效脏改动已提交为 `a507a0f` (`chore(governance): land repo-side closure state`) 并推送到 `origin/main`；本地 `main...origin/main` 为 `0 0`，工作区已清空到只剩本次收口记账提交待落盘
 
 ### Validation Log
 
@@ -795,6 +798,10 @@ docs control plane、root/runtime governance、logging contract、upstream gover
 - `python3 scripts/governance/probe_external_lane_workflows.py` fresh 写回：`ghcr-standard-image=blocked`、`release-evidence-attestation=verified`
 - `python3 scripts/governance/render_current_state_summary.py` fresh 写回：lane 总表已显示 `ghcr-standard-image=blocked`、`release-evidence-attestation=verified`
 - `./bin/governance-audit --mode audit` 在外部 workflow 最终 truth 回写后 fresh PASS
+- `git commit -m "chore(governance): land repo-side closure state"` 生成本地保全提交 `a507a0f`
+- `git push origin main` 成功，将 `origin/main` 从 `362a7e4` 前推到 `a507a0f`
+- `git rev-list --left-right --count main...origin/main` 当前为 `0 0`
+- `git status --short --branch` 在本次记账前为干净 `## main...origin/main`
 
 ### Risk / Blocker Log
 
@@ -811,6 +818,7 @@ docs control plane、root/runtime governance、logging contract、upstream gover
 - `.runtime-cache/reports/governance/current-state-summary.md`
 - `.runtime-cache/reports/governance/standard-image-publish-readiness.json`
 - `.runtime-cache/reports/governance/external-lane-workflows.json`
+- `a507a0f`（`chore(governance): land repo-side closure state`）已将全部有效脏改动保全进 `main`
 - `scripts/governance/render_newcomer_result_proof.py`
 - `scripts/governance/render_current_state_summary.py`
 - `scripts/governance/check_newcomer_result_proof.py`
@@ -824,6 +832,7 @@ docs control plane、root/runtime governance、logging contract、upstream gover
 
 ### Files Planned To Change
 
+- `.agents/Plans/2026-03-17_04-49-09__repo-ultimate-final-form-master-plan.md`（当前收口记账提交）
 - `scripts/ci/check_standard_image_publish_readiness.sh`（仅当平台/权限条件变化后继续）
 - `.github/workflows/build-ci-standard-image.yml`（仅当需要把平台 blocker 转成更强 repo-side readiness 诊断时）
 - `.github/workflows/release-evidence-attest.yml`（仅当 external release verification 有继续推进条件时）
