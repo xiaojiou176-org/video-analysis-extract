@@ -139,7 +139,7 @@ def test_sample_release_manifest_is_marked_as_historical_example_with_relative_p
     )
 
     assert manifest["manifest_version"] == 1
-    assert manifest["evidence_scope"] == "current-run"
+    assert manifest["evidence_scope"] == "historical-example"
     assert manifest["historical_example"] is True
     assert not manifest["artifacts"]["checksums_file"].startswith("/")
 

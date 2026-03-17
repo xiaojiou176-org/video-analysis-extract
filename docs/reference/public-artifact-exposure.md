@@ -19,3 +19,9 @@
 - tracked public tree 中禁止保留原始 provider probe TSV、真实公网路由、真实对象标识。
 - 如果某个样本要进入 tracked public tree，必须同时满足：policy 显式 allowlist、文件真实存在、并且仍属于脱敏或合成证据。
 - tracked `artifacts/releases/**/manifest.json` 若保留在 Git 中，必须显式声明 `historical_example=true` 与 `evidence_scope=historical-example`。
+
+## Current-proof Rule
+
+- tracked docs 不再承载 commit-sensitive current-state payload。
+- `docs/generated/external-lane-snapshot.md` 只能当 pointer / reading rule。
+- 当前 external/public 状态必须从 runtime-owned reports 读取，尤其是 `.runtime-cache/reports/governance/current-state-summary.md` 与底层 runtime artifacts。

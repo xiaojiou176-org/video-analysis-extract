@@ -4,12 +4,20 @@
 
 ## Current Snapshot Source
 
-当前 external lane 的**状态表本身**不再手写。请直接看：
+当前 external lane 的**状态表本身**不再写进 tracked docs。请直接看：
 
-- `docs/generated/external-lane-snapshot.md`
 - `.runtime-cache/reports/governance/remote-platform-truth.json`
 - `.runtime-cache/reports/governance/standard-image-publish-readiness.json`
 - `.runtime-cache/reports/release/release-evidence-attest-readiness.json`
+
+`docs/generated/external-lane-snapshot.md` 现在只保留 pointer / reading rule，不再承载 current verdict payload。
+
+当前 canonical lane 名称仍然是：
+
+- GHCR standard image
+- Release evidence attestation
+- `rsshub-youtube-ingest-chain`
+- `resend-digest-delivery-chain`
 
 这些 current-state artifact 还必须满足一条额外规则：
 
@@ -18,6 +26,7 @@
 ## Verification Rules
 
 - repo-side green 不等于 external lane green
+- `governance-audit PASS` 也不等于 external lane green；它连 repo-side strict current receipt 都不能单独替代
 - external lane 只在 fresh artifact + runtime metadata + same-run proof 同时满足时才算 `verified`
 - 对消费 remote workflow 结果的 lane，`verified` 还必须满足：最新成功 run 的 `headSha == 当前 HEAD`
 - 如果 remote workflow 成功的是旧 commit，那份 run 只能算历史证据，不能升级当前状态
@@ -29,7 +38,8 @@
 ## Reading Rule
 
 - 解释层只负责说明“为什么 blocked / verified”
-- current state 只允许从 generated snapshot 或 runtime report 引用
+- repo-side newcomer / strict receipt 请看 `.runtime-cache/reports/governance/newcomer-result-proof.json`；本页不负责替 repo-side done 兜底
+- current state 只允许从 runtime report 引用；tracked generated docs 只能当 pointer / reading rule
 - 如果 runtime report 的 `source_commit` 不等于当前 HEAD，这份 report 只能当历史证据，不得当 current state
 - 如果 remote probe、GHCR readiness、release evidence readiness 与解释文档冲突，以 runtime report 为准
 
@@ -75,3 +85,4 @@ Provider lanes:
 - 成功到哪一步
 - 哪个 artifact / log / run id 是证据
 - 如果失败，最后一跳卡在平台权限、provider 账户、还是仓库脚本
+- 不得用 repo-side governance 或 newcomer receipt 替 external lane 补票

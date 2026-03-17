@@ -24,7 +24,7 @@
 
 - 上游台账：`config/governance/upstream-registry.json`
 - 上游兼容矩阵：`config/governance/upstream-compat-matrix.json`
-- external lane 状态：`docs/generated/external-lane-snapshot.md`
+- external lane truth entry：`docs/generated/external-lane-snapshot.md`（pointer）+ `.runtime-cache/reports/**`（current verdict）
 - 项目公开姿态：`docs/reference/public-repo-readiness.md`
 
 ## Reporting Rule

@@ -7,7 +7,7 @@
 		"dev": "next dev",
 		"build": "next build",
 		"start": "next start",
-		"lint": "eslint . --ext .ts,.tsx",
+		"lint": "eslint --config ./eslint.config.mjs . --ext .ts,.tsx",
 		"test": "vitest run",
 		"test:coverage": "vitest run --coverage",
 		"test:a11y": "vitest run __tests__/a11y-smoke.test.tsx",

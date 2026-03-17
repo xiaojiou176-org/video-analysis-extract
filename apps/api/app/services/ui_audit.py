@@ -15,10 +15,11 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from integrations.providers.gemini import build_gemini_client, load_gemini_sdk
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session
+
+from integrations.providers.gemini import build_gemini_client, load_gemini_sdk
 
 from ..config import Settings
 
@@ -556,7 +557,10 @@ class UiAuditService:
         for path in root.rglob("*"):
             if len(payload) >= _MAX_SCAN_FILES:
                 break
-            if not path.is_file():
+            try:
+                if not path.is_file():
+                    continue
+            except OSError:
                 continue
             relative = path.relative_to(root).as_posix()
             mime_type, _ = mimetypes.guess_type(path.name)

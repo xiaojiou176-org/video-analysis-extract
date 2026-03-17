@@ -158,7 +158,8 @@ Default model lane:
 - `UI_AUDIT_GEMINI_ENABLED` (API-side Gemini UI audit toggle, default `true`)
 - `UI_AUDIT_ARTIFACT_BASE_ROOT` (UI audit artifact directory whitelist root; only `artifact_root` paths within this base are accepted; defaults to OS temp directory when unset)
 - `UI_AUDIT_RUN_STORE_DIR` (persisted UI audit run snapshot directory, default `.runtime-cache/evidence/tests/ui-audit-runs`)
-- `UV_PROJECT_ENVIRONMENT` (hard-cut Python virtual environment path; recommended local default `$HOME/.cache/video-digestor/project-venv`, replacing workspace-root `.venv`)
+- `UV_PROJECT_ENVIRONMENT` (hard-cut Python virtual environment path; recommended local default `$HOME/.cache/video-digestor/project-venv`, replacing workspace-root `.venv`; do not keep long-lived project venvs under `.runtime-cache/tmp/`)
+- `PYTHONPYCACHEPREFIX` (optional bytecode redirect root; repo-owned entrypoints now default it to `.runtime-cache/tmp/pycache` so Python import side effects do not leak `__pycache__` back into `apps/**`)
 - `VD_MCP_MAX_BASE64_BYTES` (MCP base64 payload size limit, bytes)
 - `WEB_ACTION_SESSION_TOKEN` (optional server-action session secret)
 - CI UI/UX audit report output path is fixed to `.runtime-cache/reports/ui-audit/gemini-ui-ux-audit-report.json` in the strict CI workflow.
@@ -217,6 +218,7 @@ Exception detail sanitization contract:
 - `GHCR_USERNAME`, `GHCR_TOKEN` are optional local-only credentials for pulling the private strict CI standard image from `ghcr.io` during `scripts/strict_ci_entry.sh` runs.
 - `VD_STANDARD_ENV_LOAD_PLATFORM_ARCH`, `API_REAL_SMOKE_DATABASE_URL`, `API_REAL_SMOKE_TEMPORAL_TARGET_HOST`, and `FULL_STACK_TEMPORAL_POLLER_READY_TIMEOUT_SECONDS` are optional script/runtime overrides for strict standard image loading, API real-smoke targeting, and full-stack Temporal readiness waits.
 - `TMPDIR`, `UV_LINK_MODE`, `UV_PROJECT_ENVIRONMENT`, and `PYTHONDONTWRITEBYTECODE` are optional local strict-runtime overrides used by `scripts/ci/bootstrap_strict_ci_runtime.sh`, `scripts/ci/python_tests.sh`, and `scripts/governance/quality_gate.sh` to keep Python verification environments out of the workspace and suppress repo-side `__pycache__` / `*.pyc` residue.
+- 若历史本地运行已经留下 workspace-root `.venv`、源码树 `apps/web/node_modules` 或 `apps/**/__pycache__`，先执行 `./bin/workspace-hygiene --apply` 再继续做 profile validation / bootstrap。
 - `GCP_PROJECT_ID`, `GCP_ZONE` are optional defaults for runner maintenance helpers:
   - `scripts/governance/audit_github_runner_host.sh`
   - `scripts/deploy/apply_github_runner_startup_metadata.sh`

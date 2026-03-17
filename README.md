@@ -15,7 +15,8 @@
 - 当前公开口径：**远端仓库当前已公开，repo-side 与 external lane 继续分层验收**；是否能被高信心采用，仍取决于 external lane 的 current-run 证据，而不是仓库公开本身。
 - 公开维护模式：**limited-maintenance**
 - repo-side 完成标准：见 `docs/reference/done-model.md`
-- external lane 状态说明：见 `docs/reference/external-lane-status.md` 与 `docs/generated/external-lane-snapshot.md`；解释层与 current snapshot 已拆开。
+- repo-side 当前 strict 收据入口：`.runtime-cache/reports/governance/newcomer-result-proof.json`；`governance-audit PASS` 只证明控制面站稳，不单独等于 repo-side done
+- external lane 状态说明：见 `docs/reference/external-lane-status.md`；`docs/generated/external-lane-snapshot.md` 现在只保留 tracked pointer，current verdict 只看 `.runtime-cache/reports/**`。
 - public readiness 总览：见 `docs/reference/public-repo-readiness.md`
 - 权利与来源边界：见 `docs/reference/public-rights-and-provenance.md`
 - 数据与隐私边界：见 `docs/reference/public-privacy-and-data-boundary.md`
@@ -29,6 +30,13 @@
 ./bin/governance-audit --mode audit
 ./bin/repo-side-strict-ci --mode pre-push --strict-full-run 1 --ci-dedupe 0
 ```
+
+阅读规则：
+
+- `./bin/governance-audit --mode audit` 是 repo-side 控制面总闸，不是 repo-side done 的单独收据。
+- `./bin/repo-side-strict-ci --mode pre-push --strict-full-run 1 --ci-dedupe 0` 的 fresh PASS 收据，才是 repo-side 终局验收的关键一票。
+- 若要看当前 HEAD 的 repo-side newcomer / strict receipt，请读 `.runtime-cache/reports/governance/newcomer-result-proof.json`。
+- 若要看 external lane current state，请读 `.runtime-cache/reports/governance/current-state-summary.md` 与底层 runtime reports；`ready` 不等于 `verified`。
 
 ## 项目目的
 
@@ -71,6 +79,7 @@
 
 说明：
 
+- `./bin/bootstrap-full-stack` 现在会先运行 `./bin/workspace-hygiene --apply`，把根目录 `.venv`、源码树 `apps/web/node_modules`、以及 `apps/**/__pycache__` 这类非法运行态先清掉，再继续做依赖安装与环境准备。
 - `bootstrap_full_stack.sh` 默认会拉起 core services（Postgres/Redis/Temporal）和 reader stack（Miniflux/Nextflux）。
 - `bootstrap_full_stack.sh` 除首次 `.env` 不存在时复制模板外，不再持久化改写 `.env`；端口冲突和运行时路由决策会写入 `.runtime-cache/run/full-stack/resolved.env`，仅对当前运行生效。
 - `full_stack.sh` 默认只管理 API/Worker/Web；`bin/dev-mcp` 是交互式 stdio 入口，需要时单独开终端启动。
@@ -169,6 +178,12 @@ devcontainer up --workspace-folder .
 - 风险 2：live smoke 依赖真实外部 API Key（如 `GEMINI_API_KEY`），标准环境只保证执行一致性，不保证外部资源可用。
 - 风险 3：本地裸机与容器路径不得在同一轮验收中混用，否则端口、数据库与缓存残留会破坏 CI 等价性。
 
+若你已经在工作区里留下非法运行态，也可以手动先执行：
+
+```bash
+./bin/workspace-hygiene --apply
+```
+
 ## 处理流程（统一口径）
 
 `ProcessJobWorkflow` 由 3 个阶段组成：
@@ -249,7 +264,7 @@ Article pipeline（`videos.content_type='article'`）：
 前置：Python 3.11+、`uv`、PostgreSQL 16、Temporal dev server、(可选) Redis。
 
 ```bash
-UV_PROJECT_ENVIRONMENT="$PWD/.runtime-cache/tmp/uv-project-env" uv sync --frozen --extra dev --extra e2e
+UV_PROJECT_ENVIRONMENT="$HOME/.cache/video-digestor/project-venv" uv sync --frozen --extra dev --extra e2e
 ./bin/prepare-web-runtime
 ```
 

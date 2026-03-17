@@ -61,16 +61,19 @@ run_inside_standard_env() {
   local command=("$@")
   if [[ "${VD_IN_STANDARD_ENV:-0}" == "1" ]]; then
     vd_log info strict_ci_entry_passthrough "already inside standard env"
-    exec "${command[@]}"
+    "${command[@]}"
+    return $?
   fi
 
   if [[ "$DEBUG_BUILD" == "1" ]]; then
     vd_log info strict_ci_entry_diagnostic_mode "using debug-build diagnostic path"
-    VD_STANDARD_ENV_ALLOW_LOCAL_BUILD="1" exec "$ROOT_DIR/scripts/ci/run_in_standard_env.sh" "${command[@]}"
+    VD_STANDARD_ENV_ALLOW_LOCAL_BUILD="1" "$ROOT_DIR/scripts/ci/run_in_standard_env.sh" "${command[@]}"
+    return $?
   fi
 
   vd_log info strict_ci_entry_release_qualifying "using pinned-image release-qualifying path"
-  exec "$ROOT_DIR/scripts/ci/run_in_standard_env.sh" "${command[@]}"
+  "$ROOT_DIR/scripts/ci/run_in_standard_env.sh" "${command[@]}"
+  return $?
 }
 
 run_with_strict_bootstrap() {
@@ -98,7 +101,7 @@ apply_api_real_smoke_default_temporal_target_host() {
   export TEMPORAL_TARGET_HOST="$resolved_api_real_smoke_temporal_target_host"
 }
 
-case "$MODE" in
+if ! case "$MODE" in
   pre-push)
     run_with_strict_bootstrap \
       "./scripts/quality_gate.sh --mode pre-push --profile ci --profile live-smoke --heartbeat-seconds 20 --mutation-min-score ${STRICT_CI_MUTATION_MIN_SCORE} --mutation-min-effective-ratio ${STRICT_CI_MUTATION_MIN_EFFECTIVE_RATIO} --mutation-max-no-tests-ratio ${STRICT_CI_MUTATION_MAX_NO_TESTS_RATIO} ${FORWARDED_ARGS}"
@@ -128,4 +131,9 @@ case "$MODE" in
     echo "[strict-ci-entry] unsupported mode: $MODE" >&2
     exit 2
     ;;
-esac
+esac; then
+  vd_log error complete "FAIL"
+  exit 1
+fi
+
+vd_log info complete "PASS"

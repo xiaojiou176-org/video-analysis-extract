@@ -90,6 +90,9 @@ npm --prefix "$WEB_RUNTIME_WEB_DIR" run build
 当前本地推荐口径补充：
 
 - Web 覆盖率统一使用 runtime workspace 中的 `npm run test:coverage`，不再把 `apps/web/node_modules` 当作仓库内长期默认依赖面。
+- `scripts/ci/prepare_web_runtime.sh` 的 runtime workspace 缓存键不再只看 `package.json/package-lock.json`；它必须把 `apps/web` 下的 tracked config/source 文件一起计入 hash，避免旧 workspace 继续复用一个缺少 `eslint.config.mjs`、`tsconfig.json` 等关键配置文件的副本。
+- `quality_gate.sh` 中的 frontend lint 必须在 runtime workspace 里 `cd "$WEB_RUNTIME_WEB_DIR" && npm run lint`，不能继续依赖 `npm --prefix ...` 的 cwd 猜测，否则 ESLint v9 会把配置文件查找错位成“仓库根目录没有 eslint.config.*”。
+- `workspace-hygiene` 现在同时负责清理 `.venv`、`.runtime-cache/tmp/uv-project-env`、`apps/web/node_modules` 与 `apps/**/__pycache__` / `*.pyc`，因为这些路径会直接破坏 repo-side strict path 与 terminal governance gate。
 - 若依赖升级影响到本地严格验收链路，还必须验证：
 
 ```bash

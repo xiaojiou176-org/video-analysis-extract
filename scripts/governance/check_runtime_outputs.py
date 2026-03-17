@@ -94,6 +94,7 @@ def main() -> int:
         print("[runtime-outputs] FAIL")
         for item in errors:
             print(f"  - {item}")
+        print("  - remediation: run `./bin/workspace-hygiene --apply` to remove illegal repo-root/source-tree runtime residue")
         return 1
 
     print("[runtime-outputs] PASS")

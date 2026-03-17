@@ -9,6 +9,7 @@
 - 不承诺 hosted service、镜像即官方交付、或每条 external lane 同步闭环
 - 当前 public 目标是 **安全可审阅、边界清楚、repo-side 验证诚实**，不是让陌生人无条件依赖外部分发链直接采用
 - 远端仓库当前已经公开；但这不等于 GHCR、release evidence、provider/live lanes 已全部闭环。
+- 平台能力必须按 probe truth 读，不能只看文档是否存在；例如 private vulnerability reporting 若平台未启用，就不能被文档包装成“当前已可用的私密入口”。
 
 ## Required Public Governance Pack
 

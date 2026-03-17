@@ -226,6 +226,8 @@ def test_render_external_lane_snapshot_demotes_stale_verified_to_historical(monk
     monkeypatch.setattr(module, "REPO_ROOT", tmp_path)
     rendered = module._render_external_lane_snapshot()
 
-    assert "| `ghcr-standard-image` | `historical` |" in rendered
-    assert stale_head in rendered
+    assert "# External Lane Truth Entry" in rendered
+    assert "tracked page is a machine-rendered pointer only" in rendered
+    assert ".runtime-cache/reports/governance/standard-image-publish-readiness.json" in rendered
+    assert "must not carry current verdict payload" in rendered
     assert "| `ghcr-standard-image` | `verified` |" not in rendered

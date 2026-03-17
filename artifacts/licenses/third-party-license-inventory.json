@@ -5,7 +5,7 @@
     "web": "production packages from `apps/web/package-lock.json` with dev=false"
   },
   "summary": {
-    "python_runtime_packages": 73,
+    "python_runtime_packages": 98,
     "python_unknown_licenses": 0,
     "web_runtime_packages": 284,
     "web_unknown_licenses": 0
@@ -141,6 +141,15 @@
       "homepage": "Homepage, https://github.com/adbar/courlan"
     },
     {
+      "name": "coverage",
+      "version": "7.13.4",
+      "license": "Apache-2.0",
+      "license_source": "license-field",
+      "classifiers": [],
+      "summary": "Code coverage measurement for Python",
+      "homepage": "https://github.com/coveragepy/coveragepy"
+    },
+    {
       "name": "cryptography",
       "version": "46.0.5",
       "license": "Apache-2.0 OR BSD-3-Clause",
@@ -170,6 +179,17 @@
       ],
       "summary": "Distro - an OS platform information API",
       "homepage": "https://github.com/python-distro/distro"
+    },
+    {
+      "name": "execnet",
+      "version": "2.1.2",
+      "license": "MIT",
+      "license_source": "license-expression",
+      "classifiers": [
+        "License :: OSI Approved :: MIT License"
+      ],
+      "summary": "execnet: rapid multi-Python deployment",
+      "homepage": "Homepage, https://execnet.readthedocs.io/en/latest/"
     },
     {
       "name": "fastapi",
@@ -208,6 +228,15 @@
       "classifiers": [],
       "summary": "GenAI Python SDK",
       "homepage": "Homepage, https://github.com/googleapis/python-genai"
+    },
+    {
+      "name": "greenlet",
+      "version": "3.3.2",
+      "license": "MIT AND PSF-2.0",
+      "license_source": "license-expression",
+      "classifiers": [],
+      "summary": "Lightweight in-process concurrent programming",
+      "homepage": "Homepage, https://greenlet.readthedocs.io"
     },
     {
       "name": "h11",
@@ -272,6 +301,15 @@
       "homepage": "Changelog, https://github.com/kjd/idna/blob/master/HISTORY.rst"
     },
     {
+      "name": "iniconfig",
+      "version": "2.3.0",
+      "license": "MIT",
+      "license_source": "license-expression",
+      "classifiers": [],
+      "summary": "brain-dead simple config-ini parsing",
+      "homepage": "Homepage, https://github.com/pytest-dev/iniconfig"
+    },
+    {
       "name": "jsonschema",
       "version": "4.26.0",
       "license": "MIT",
@@ -301,6 +339,28 @@
       "homepage": "https://github.com/miso-belica/jusText"
     },
     {
+      "name": "libcst",
+      "version": "1.8.6",
+      "license": "All contributions towards LibCST are MIT licensed.\n\nSome Python files have been derived from the standard library and are therefore\nPSF licensed. Modifications on these files are dual licensed (both MIT and\nPSF). These files are:\n\n- libcst/_parser/base_parser.py\n- libcst/_parser/parso/utils.py\n- libcst/_parser/parso/pgen2/generator.py\n- libcst/_parser/parso/pgen2/grammar_parser.py\n- libcst/_parser/parso/python/py_token.py\n- libcst/_parser/parso/python/tokenize.py\n- libcst/_parser/parso/tests/test_fstring.py\n- libcst/_parser/parso/tests/test_tokenize.py\n- libcst/_parser/parso/tests/test_utils.py\n- native/libcst/src/tokenizer/core/mod.rs\n- native/libcst/src/tokenizer/core/string_types.rs\n\nSome Python files have been taken from dataclasses and are therefore Apache\nlicensed. Modifications on these files are licensed under Apache 2.0 license.\nThese files are:\n\n- libcst/_add_slots.py\n\n-------------------------------------------------------------------------------\n\nMIT License\n\nCopyright (c) Meta Platforms, Inc. and affiliates.\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.\n\n-------------------------------------------------------------------------------\n\nPYTHON SOFTWARE FOUNDATION LICENSE VERSION 2\n\n1. This LICENSE AGREEMENT is between the Python Software Foundation\n(\"PSF\"), and the Individual or Organization (\"Licensee\") accessing and\notherwise using this software (\"Python\") in source or binary form and\nits associated documentation.\n\n2. Subject to the terms and conditions of this License Agreement, PSF hereby\ngrants Licensee a nonexclusive, royalty-free, world-wide license to reproduce,\nanalyze, test, perform and/or display publicly, prepare derivative works,\ndistribute, and otherwise use Python alone or in any derivative version,\nprovided, however, that PSF's License Agreement and PSF's notice of copyright,\ni.e., \"Copyright (c) 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010,\n2011, 2012, 2013, 2014, 2015 Python Software Foundation; All Rights Reserved\"\nare retained in Python alone or in any derivative version prepared by Licensee.\n\n3. In the event Licensee prepares a derivative work that is based on\nor incorporates Python or any part thereof, and wants to make\nthe derivative work available to others as provided herein, then\nLicensee hereby agrees to include in any such work a brief summary of\nthe changes made to Python.\n\n4. PSF is making Python available to Licensee on an \"AS IS\"\nbasis.  PSF MAKES NO REPRESENTATIONS OR WARRANTIES, EXPRESS OR\nIMPLIED.  BY WAY OF EXAMPLE, BUT NOT LIMITATION, PSF MAKES NO AND\nDISCLAIMS ANY REPRESENTATION OR WARRANTY OF MERCHANTABILITY OR FITNESS\nFOR ANY PARTICULAR PURPOSE OR THAT THE USE OF PYTHON WILL NOT\nINFRINGE ANY THIRD PARTY RIGHTS.\n\n5. PSF SHALL NOT BE LIABLE TO LICENSEE OR ANY OTHER USERS OF PYTHON\nFOR ANY INCIDENTAL, SPECIAL, OR CONSEQUENTIAL DAMAGES OR LOSS AS\nA RESULT OF MODIFYING, DISTRIBUTING, OR OTHERWISE USING PYTHON,\nOR ANY DERIVATIVE THEREOF, EVEN IF ADVISED OF THE POSSIBILITY THEREOF.\n\n6. This License Agreement will automatically terminate upon a material\nbreach of its terms and conditions.\n\n7. Nothing in this License Agreement shall be deemed to create any\nrelationship of agency, partnership, or joint venture between PSF and\nLicensee.  This License Agreement does not grant permission to use PSF\ntrademarks or trade name in a trademark sense to endorse or promote\nproducts or services of Licensee, or any third party.\n\n8. By copying, installing or otherwise using Python, Licensee\nagrees to be bound by the terms and conditions of this License\nAgreement.\n\n-------------------------------------------------------------------------------\n\nAPACHE LICENSE, VERSION 2.0\n\nhttp://www.apache.org/licenses/LICENSE-2.0",
+      "license_source": "license-field",
+      "classifiers": [
+        "License :: OSI Approved :: MIT License"
+      ],
+      "summary": "A concrete syntax tree with AST-like properties for Python 3.0 through 3.14 programs.",
+      "homepage": "Documentation, https://libcst.readthedocs.io/en/latest/"
+    },
+    {
+      "name": "linkify-it-py",
+      "version": "2.0.3",
+      "license": "MIT",
+      "license_source": "license-field",
+      "classifiers": [
+        "License :: OSI Approved :: MIT License"
+      ],
+      "summary": "Links recognition library with FULL unicode support.",
+      "homepage": "Homepage, https://github.com/tsutsu3/linkify-it-py"
+    },
+    {
       "name": "lxml",
       "version": "6.0.2",
       "license": "BSD-3-Clause",
@@ -328,6 +388,17 @@
       "homepage": "Homepage, https://Python-Markdown.github.io/"
     },
     {
+      "name": "markdown-it-py",
+      "version": "4.0.0",
+      "license": "MIT License",
+      "license_source": "classifier",
+      "classifiers": [
+        "License :: OSI Approved :: MIT License"
+      ],
+      "summary": "Python port of markdown-it. Markdown parsing, done right!",
+      "homepage": "Documentation, https://markdown-it-py.readthedocs.io"
+    },
+    {
       "name": "mcp",
       "version": "1.26.0",
       "license": "MIT",
@@ -339,6 +410,28 @@
       "homepage": "Homepage, https://modelcontextprotocol.io"
     },
     {
+      "name": "mdit-py-plugins",
+      "version": "0.5.0",
+      "license": "MIT License",
+      "license_source": "classifier",
+      "classifiers": [
+        "License :: OSI Approved :: MIT License"
+      ],
+      "summary": "Collection of plugins for markdown-it-py",
+      "homepage": "Documentation, https://mdit-py-plugins.readthedocs.io"
+    },
+    {
+      "name": "mdurl",
+      "version": "0.1.2",
+      "license": "MIT License",
+      "license_source": "classifier",
+      "classifiers": [
+        "License :: OSI Approved :: MIT License"
+      ],
+      "summary": "Markdown URL utilities",
+      "homepage": "Homepage, https://github.com/executablebooks/mdurl"
+    },
+    {
       "name": "multidict",
       "version": "6.7.1",
       "license": "Apache License 2.0",
@@ -348,12 +441,61 @@
       "homepage": "https://github.com/aio-libs/multidict"
     },
     {
+      "name": "mutmut",
+      "version": "3.5.0",
+      "license": "BSD-3-Clause",
+      "license_source": "license-expression",
+      "classifiers": [],
+      "summary": "mutation testing for Python 3",
+      "homepage": "Changelog, https://github.com/boxed/mutmut/blob/main/HISTORY.rst"
+    },
+    {
       "name": "nexus-rpc",
       "version": "1.3.0",
       "license": "MIT",
       "license_source": "license-expression",
       "classifiers": [],
       "summary": "Nexus Python SDK",
+      "homepage": ""
+    },
+    {
+      "name": "packaging",
+      "version": "26.0",
+      "license": "Apache-2.0 OR BSD-2-Clause",
+      "license_source": "license-expression",
+      "classifiers": [],
+      "summary": "Core utilities for Python packages",
+      "homepage": "Documentation, https://packaging.pypa.io/"
+    },
+    {
+      "name": "platformdirs",
+      "version": "4.9.2",
+      "license": "MIT",
+      "license_source": "license-expression",
+      "classifiers": [
+        "License :: OSI Approved :: MIT License"
+      ],
+      "summary": "A small Python package for determining appropriate platform-specific dirs, e.g. a `user data dir`.",
+      "homepage": "Changelog, https://platformdirs.readthedocs.io/en/latest/changelog.html"
+    },
+    {
+      "name": "playwright",
+      "version": "1.58.0",
+      "license": "Apache-2.0",
+      "license_source": "license-expression",
+      "classifiers": [],
+      "summary": "A high-level API to automate web browsers",
+      "homepage": "homepage, https://github.com/Microsoft/playwright-python"
+    },
+    {
+      "name": "pluggy",
+      "version": "1.6.0",
+      "license": "MIT",
+      "license_source": "license-field",
+      "classifiers": [
+        "License :: OSI Approved :: MIT License"
+      ],
+      "summary": "plugin and hook calling mechanisms for python",
       "homepage": ""
     },
     {
@@ -453,6 +595,28 @@
       "homepage": "https://github.com/pydantic/pydantic-core"
     },
     {
+      "name": "pyee",
+      "version": "13.0.1",
+      "license": "MIT",
+      "license_source": "license-field",
+      "classifiers": [
+        "License :: OSI Approved :: MIT License"
+      ],
+      "summary": "A rough port of Node.js's EventEmitter to Python with a few tricks of its own",
+      "homepage": "Repository, https://github.com/jfhbrook/pyee"
+    },
+    {
+      "name": "Pygments",
+      "version": "2.19.2",
+      "license": "BSD-2-Clause",
+      "license_source": "license-field",
+      "classifiers": [
+        "License :: OSI Approved :: BSD License"
+      ],
+      "summary": "Pygments is a syntax highlighting package written in Python.",
+      "homepage": "Homepage, https://pygments.org"
+    },
+    {
       "name": "PyJWT",
       "version": "2.12.1",
       "license": "MIT",
@@ -460,6 +624,44 @@
       "classifiers": [],
       "summary": "JSON Web Token implementation in Python",
       "homepage": "Homepage, https://github.com/jpadilla/pyjwt"
+    },
+    {
+      "name": "pytest",
+      "version": "8.4.2",
+      "license": "MIT",
+      "license_source": "license-field",
+      "classifiers": [
+        "License :: OSI Approved :: MIT License"
+      ],
+      "summary": "pytest: simple powerful testing with Python",
+      "homepage": "Changelog, https://docs.pytest.org/en/stable/changelog.html"
+    },
+    {
+      "name": "pytest-cov",
+      "version": "6.3.0",
+      "license": "MIT",
+      "license_source": "license-field",
+      "classifiers": [],
+      "summary": "Pytest plugin for measuring coverage.",
+      "homepage": "https://github.com/pytest-dev/pytest-cov"
+    },
+    {
+      "name": "pytest-rerunfailures",
+      "version": "15.1",
+      "license": "MPL-2.0",
+      "license_source": "license-field",
+      "classifiers": [],
+      "summary": "pytest plugin to re-run tests to eliminate flaky failures",
+      "homepage": "Homepage, https://github.com/pytest-dev/pytest-rerunfailures"
+    },
+    {
+      "name": "pytest-xdist",
+      "version": "3.8.0",
+      "license": "MIT",
+      "license_source": "license-expression",
+      "classifiers": [],
+      "summary": "pytest xdist plugin for distributed testing, most importantly across multiple CPUs",
+      "homepage": "Homepage, https://github.com/pytest-dev/pytest-xdist"
     },
     {
       "name": "python-dateutil",
@@ -505,6 +707,17 @@
       "homepage": "http://pythonhosted.org/pytz"
     },
     {
+      "name": "PyYAML",
+      "version": "6.0.3",
+      "license": "MIT",
+      "license_source": "license-field",
+      "classifiers": [
+        "License :: OSI Approved :: MIT License"
+      ],
+      "summary": "YAML parser and emitter for Python",
+      "homepage": "https://pyyaml.org/"
+    },
+    {
       "name": "referencing",
       "version": "0.37.0",
       "license": "MIT",
@@ -534,6 +747,17 @@
       "homepage": "https://requests.readthedocs.io"
     },
     {
+      "name": "rich",
+      "version": "14.3.3",
+      "license": "MIT",
+      "license_source": "license-field",
+      "classifiers": [
+        "License :: OSI Approved :: MIT License"
+      ],
+      "summary": "Render rich text, tables, progress bars, syntax highlighting, markdown and more to the terminal",
+      "homepage": "Documentation, https://rich.readthedocs.io/en/latest/"
+    },
+    {
       "name": "rpds-py",
       "version": "0.30.0",
       "license": "MIT",
@@ -552,6 +776,17 @@
       ],
       "summary": "Pure-Python RSA implementation",
       "homepage": "Homepage, https://stuvel.eu/rsa"
+    },
+    {
+      "name": "setproctitle",
+      "version": "1.3.7",
+      "license": "BSD-3-Clause",
+      "license_source": "license-field",
+      "classifiers": [
+        "License :: OSI Approved :: BSD License"
+      ],
+      "summary": "A Python module to customize the process title",
+      "homepage": "https://github.com/dvarrazzo/py-setproctitle"
     },
     {
       "name": "six",
@@ -626,6 +861,17 @@
       "homepage": "https://github.com/jd/tenacity"
     },
     {
+      "name": "textual",
+      "version": "8.0.0",
+      "license": "MIT",
+      "license_source": "license-field",
+      "classifiers": [
+        "License :: OSI Approved :: MIT License"
+      ],
+      "summary": "Modern Text User Interface framework",
+      "homepage": "Bug Tracker, https://github.com/Textualize/textual/issues"
+    },
+    {
       "name": "tld",
       "version": "0.13.2",
       "license": "MPL-1.1 OR GPL-2.0-only OR LGPL-2.1-or-later",
@@ -691,6 +937,17 @@
       ],
       "summary": "tzinfo object for the local timezone",
       "homepage": "Source code, https://github.com/regebro/tzlocal"
+    },
+    {
+      "name": "uc-micro-py",
+      "version": "1.0.3",
+      "license": "MIT",
+      "license_source": "license-field",
+      "classifiers": [
+        "License :: OSI Approved :: MIT License"
+      ],
+      "summary": "Micro subset of unicode data files for linkify-it-py projects.",
+      "homepage": "Homepage, https://github.com/tsutsu3/uc.micro-py"
     },
     {
       "name": "urllib3",

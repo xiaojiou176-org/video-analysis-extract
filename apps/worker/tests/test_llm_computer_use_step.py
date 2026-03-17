@@ -228,15 +228,15 @@ def test_normalize_action_and_stub_handlers_cover_success_and_error() -> None:
         "error": "computer_use_action_missing",
     }
     assert noop_ok == {
-        "ok": True,
-        "status": "ok",
-        "message": "computer_use_noop_executed",
+        "ok": False,
+        "status": "unsupported",
+        "message": "computer_use_noop_blocked",
         "action": {"name": "tap", "args": {"selector": "#cta"}},
     }
     assert stub_ok == {
-        "ok": True,
-        "status": "ok",
-        "message": "computer_use_browser_stub_executed",
+        "ok": False,
+        "status": "degraded",
+        "message": "computer_use_browser_stub_simulated",
         "action": {"name": "tap", "args": {"selector": "#cta"}},
     }
     assert llm_computer_use._normalize_action({}) == ("", {})
@@ -258,8 +258,9 @@ def test_build_default_handler_uses_browser_stub_and_target_payload() -> None:
 
     result = handler(action="click", selector="#cta")
 
-    assert result["status"] == "ok"
-    assert result["message"] == "computer_use_browser_stub_executed"
+    assert result["status"] == "degraded"
+    assert result["ok"] is False
+    assert result["message"] == "computer_use_browser_stub_simulated"
     assert result["executor"] == "browser_stub"
     assert result["action"] == {"name": "click", "args": {"selector": "#cta"}}
     assert result["target"] == {
@@ -284,7 +285,8 @@ def test_build_default_handler_falls_back_when_playwright_execution_errors(monke
 
     result = handler(action="click", selector="#retry")
 
-    assert result["status"] == "ok"
+    assert result["status"] == "degraded"
+    assert result["ok"] is False
     assert result["executor"] == "playwright"
     assert result["fallback_from"] == "playwright"
     assert result["playwright_error"] == "playwright-boom"
@@ -378,9 +380,10 @@ def test_build_default_handler_uses_noop_executor_for_unknown_executor_name() ->
     )
     result = handler(name="click", selector="#cta")
 
-    assert result["status"] == "ok"
+    assert result["status"] == "unsupported"
+    assert result["ok"] is False
     assert result["executor"] == "no_op"
-    assert result["message"] == "computer_use_noop_executed"
+    assert result["message"] == "computer_use_noop_blocked"
     assert result["action"] == {"name": "click", "args": {"selector": "#cta"}}
 
 
@@ -1173,7 +1176,8 @@ def test_build_default_handler_wraps_base_non_dict_context() -> None:
 
     result = handler(action="click", selector="#cta")
 
-    assert result["status"] == "ok"
+    assert result["status"] == "degraded"
+    assert result["ok"] is False
     assert result["target"]["context"] == {"value": "raw-base-context"}
 
 

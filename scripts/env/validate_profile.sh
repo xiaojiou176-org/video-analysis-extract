@@ -5,6 +5,7 @@ SCRIPT_NAME="validate_profile"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 ENV_PROFILE="${ENV_PROFILE:-local}"
 PROFILE_INPUT="${ENV_PROFILE:-local}"
+WORKSPACE_HYGIENE="$ROOT_DIR/scripts/runtime/workspace_hygiene.sh"
 
 usage() {
   cat <<'USAGE'
@@ -55,6 +56,12 @@ if [[ ! -f "$PROFILE_FILE" ]]; then
   log "error: missing profile file: $PROFILE_FILE"
   log "hint: available profiles: ${available_profiles:-none}"
   log "hint: run 'bash scripts/env/validate_profile.sh --help' for usage."
+  exit 1
+fi
+
+if ! bash "$WORKSPACE_HYGIENE" >/dev/null 2>&1; then
+  log "error: forbidden workspace runtime residue detected"
+  log "hint: run './bin/workspace-hygiene --apply' before validate-profile."
   exit 1
 fi
 

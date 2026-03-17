@@ -8,7 +8,12 @@ vd_entrypoint_bootstrap() {
   local argv_json="[]"
   shift 3
 
+  if [[ "${VD_SKIP_WORKSPACE_HYGIENE:-0}" != "1" ]]; then
+    bash "$ROOT_DIR/bin/workspace-hygiene" --normalize --quiet
+  fi
+
   export PYTHONDONTWRITEBYTECODE="${PYTHONDONTWRITEBYTECODE:-1}"
+  export PYTHONPYCACHEPREFIX="${PYTHONPYCACHEPREFIX:-$ROOT_DIR/.runtime-cache/tmp/pycache}"
   argv_json="$(
     python3 - <<'PY' "$@"
 import json

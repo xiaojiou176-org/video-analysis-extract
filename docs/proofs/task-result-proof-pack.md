@@ -17,6 +17,13 @@
 - 这也不是 current external verdict；凡是 historical example、synthetic sample、repo-side contract，都必须显式写出边界。
 - 这里优先复用仓库里已经 public-safe 的材料，不编造用户故事、不伪造外部采用、不虚构性能提升。
 
+## How To Pair This Pack With Current Truth
+
+- 想知道“当前 HEAD 的 repo-side newcomer / strict 收据今天拿到没有”，先看 [newcomer-result-proof.md](../reference/newcomer-result-proof.md)。
+- 想知道“外部世界今天认不认账”，看 [external-lane-status.md](../reference/external-lane-status.md) 与 runtime-owned `current-state-summary.md`。
+- 想知道“这套系统到底靠什么 representative cases 证明自己有任务价值”，再回来看这份 pack。
+- 换句话说：`newcomer-result-proof` 负责**今天的 repo-side 收据**，`Task Result Proof Pack` 负责**代表性结果案例**；两者要一起读，不能互相冒充。
+
 ## Source Inventory
 
 | 证据源 | 类型 | 为什么可公开 | 在 proof pack 里的用途 |
@@ -31,7 +38,7 @@
 | `artifacts/releases/v0.1.0/manifest.json` | historical example | 明确标记 `historical-example` | 展示历史样例如何公开但不冒充当前 verdict |
 | `docs/reference/newcomer-result-proof.md` | repo-side proof reading rule | 只说明读数规则，不含敏感运行数据 | 帮 reviewer 区分“有治理收据”和“有当前 strict 收据” |
 
-## Representative Case 1: 持续发现新内容并稳定入队
+## Representative Case 1: `rep-case-01-ingest-queue` 持续发现新内容并稳定入队
 
 ### 这类任务在现实里是什么
 
@@ -92,7 +99,7 @@
 - 所有下游价值都要先经过“发现并入队”这一关
 - 如果这关不稳，后面的 digest、eval、artifact 证明都会变成空中楼阁
 
-## Representative Case 2: 单条内容被处理成结构化 digest，而不是一次性笔记
+## Representative Case 2: `rep-case-02-structured-digest` 单条内容被处理成结构化 digest，而不是一次性笔记
 
 ### 这类任务在现实里是什么
 
@@ -170,7 +177,7 @@
 - “把视频内容变成结构化 digest”本来就是仓库最核心的承诺之一
 - 如果这个 case 站不住，整个项目就只剩治理外壳，没有任务结果内核
 
-## Representative Case 3: 失败时能解释坏在哪，而不是只知道“没出结果”
+## Representative Case 3: `rep-case-03-failure-replayability` 失败时能解释坏在哪，而不是只知道“没出结果”
 
 ### 这类任务在现实里是什么
 
@@ -233,7 +240,7 @@
 - 这是区分“脚本能跑”和“系统可运营”的最硬差别之一
 - 对长期运行的视频处理系统，这个差别比单次 demo 更重要
 
-## Representative Case 4: 改 prompt 或 tool path 后，质量回归可以被判定
+## Representative Case 4: `rep-case-04-ai-regression-detectability` 改 prompt 或 tool path 后，质量回归可以被判定
 
 ### 这类任务在现实里是什么
 
@@ -300,7 +307,7 @@
 - 仓库里最核心的 AI 任务就是 outline 与 digest
 - 如果连回归都无法判定，这类系统很难在真实维护中站住脚
 
-## Representative Case 5: 给陌生读者展示结果时，既要具体，也要 public-safe
+## Representative Case 5: `rep-case-05-public-safe-evidence` 给陌生读者展示结果时，既要具体，也要 public-safe
 
 ### 这类任务在现实里是什么
 

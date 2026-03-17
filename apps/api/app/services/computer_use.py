@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from integrations.providers.gemini import build_gemini_client, load_gemini_sdk
+
 from ..config import Settings
 
 _DEFAULT_MODEL_TIMEOUT_SECONDS = 12.0

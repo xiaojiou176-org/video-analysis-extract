@@ -8,10 +8,11 @@ import re
 from pathlib import Path
 from typing import Any, Literal, cast
 
-from integrations.providers.gemini import build_gemini_client, load_gemini_sdk
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session
+
+from integrations.providers.gemini import build_gemini_client, load_gemini_sdk
 
 from ..config import Settings
 from ..errors import ApiServiceError, ApiTimeoutError

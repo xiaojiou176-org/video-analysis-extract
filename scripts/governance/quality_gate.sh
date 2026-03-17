@@ -1,8 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+export PYTHONDONTWRITEBYTECODE="${PYTHONDONTWRITEBYTECODE:-1}"
+
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 SCRIPT_NAME="quality_gate"
+export PYTHONDONTWRITEBYTECODE="${PYTHONDONTWRITEBYTECODE:-1}"
+export PYTHONPYCACHEPREFIX="${PYTHONPYCACHEPREFIX:-$ROOT_DIR/.runtime-cache/tmp/pycache}"
 
 # shellcheck source=./scripts/runtime/logging.sh
 source "$ROOT_DIR/scripts/runtime/logging.sh"
@@ -1464,7 +1468,7 @@ run_pre_commit_mode() {
   if is_true "$EFFECTIVE_WEB_CHANGED"; then
     prepare_web_runtime
     run_async_gate "web_lint" "frontend lint" \
-      "VIDEO_ANALYSIS_REPO_ROOT=\"$ROOT_DIR\" npm --prefix \"$WEB_RUNTIME_WEB_DIR\" run lint"
+      "cd \"$WEB_RUNTIME_WEB_DIR\" && VIDEO_ANALYSIS_REPO_ROOT=\"$ROOT_DIR\" npm run lint"
   else
       record_gate_status "web_lint" "frontend lint" "skipped" ""
       echo "[quality-gate] skip: frontend lint (effective_web_changed=false)"
@@ -1562,7 +1566,7 @@ run_pre_push_mode() {
     echo "[quality-gate] skip: frontend lint (--ci-dedupe=1)"
   elif is_true "$EFFECTIVE_WEB_CHANGED"; then
     run_async_gate "web_lint" "frontend lint" \
-      "npm --prefix \"$WEB_RUNTIME_WEB_DIR\" run lint"
+      "cd \"$WEB_RUNTIME_WEB_DIR\" && npm run lint"
   else
     record_gate_status "web_lint" "frontend lint" "skipped" ""
     echo "[quality-gate] skip: frontend lint (effective_web_changed=false)"

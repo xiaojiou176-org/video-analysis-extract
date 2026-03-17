@@ -1,22 +1,31 @@
 <!-- generated: docs governance control plane; do not edit directly -->
 
-# External Lane Snapshot
+# External Lane Truth Entry
 
-This page is machine-rendered from current external-lane contracts and runtime reports.
+This tracked page is a machine-rendered pointer only.
 
-| Lane | Current State | Blocker / Evidence | Canonical Artifact |
-| --- | --- | --- | --- |
-| `remote-platform-integrity` | `pass` | `ok` | `.runtime-cache/reports/governance/remote-platform-truth.json` |
-| `ghcr-standard-image` | `blocked` | `registry-auth-failure; historical remote workflow targets `07324519dba2feddafef4a36f4340d8ff476258e`, current HEAD is `abeda4817fdb893abcaddaab1bf7b80cca0416bc`` | `.runtime-cache/reports/governance/standard-image-publish-readiness.json` |
-| `release-evidence-attestation` | `ready` | `ok; historical remote workflow targets `9ba1c564b1840472a51946db21a10ffd831d1dae`, current HEAD is `abeda4817fdb893abcaddaab1bf7b80cca0416bc`` | `.runtime-cache/reports/release/release-evidence-attest-readiness.json` |
-| `rsshub-youtube-ingest-chain` | `verified` | `provider` | `.runtime-cache/reports/governance/upstream-compat-report.json` |
-| `resend-digest-delivery-chain` | `verified` | `provider` | `.runtime-cache/reports/governance/upstream-compat-report.json` |
-| `strict-ci-compose-image-set` | `pending` | `external` | `.runtime-cache/reports/governance/upstream-compat-report.json` |
+It does not carry commit-sensitive current verdicts.
+Current external state must be read from runtime-owned reports under `.runtime-cache/reports/**`.
+
+## Canonical Runtime Reports
+
+| Lane | Canonical Artifact | Reading Rule |
+| --- | --- | --- |
+| `remote-platform-integrity` | `.runtime-cache/reports/governance/remote-platform-truth.json` | read runtime artifact directly; tracked docs only explain semantics |
+| `ghcr-standard-image` | `.runtime-cache/reports/governance/standard-image-publish-readiness.json` | read runtime artifact directly; tracked docs only explain semantics |
+| `release-evidence-attestation` | `.runtime-cache/reports/release/release-evidence-attest-readiness.json` | read runtime artifact directly; tracked docs only explain semantics |
 
 ## Reading Rule
 
 - explanation lives in `docs/reference/external-lane-status.md`
-- current status must come from this generated page or the underlying runtime reports
-- current-state runtime reports must be current-commit aligned; stale commit artifacts are historical evidence only
-- actor-sensitive remote truth is carried by `.runtime-cache/reports/governance/remote-platform-truth.json`
-- `ready` means preflight/evidence inputs are in place; it does not mean the external lane has already closed successfully
+- current state must come from runtime-owned reports under `.runtime-cache/reports/**`
+- tracked docs may explain state semantics, but must not carry current verdict payload
+- runtime metadata `source_commit` must match the current HEAD before any report can be treated as current truth
+- `ready` means preflight inputs exist; it does not mean the external lane has closed successfully
+
+## Canonical Commands
+
+- `python3 scripts/governance/probe_remote_platform_truth.py --repo xiaojiou176-org/video-analysis-extract`
+- `python3 scripts/governance/check_remote_required_checks.py`
+- `bash scripts/ci/check_standard_image_publish_readiness.sh`
+- `python3 scripts/release/check_release_evidence_attest_readiness.py --release-tag <tag>`

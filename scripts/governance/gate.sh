@@ -64,10 +64,15 @@ python3 scripts/governance/check_root_policy_alignment.py
 python3 scripts/governance/check_evidence_contract.py
 python3 scripts/governance/check_external_lane_contract.py
 python3 scripts/governance/check_current_proof_commit_alignment.py
+bash scripts/runtime/run_runtime_cache_maintenance.sh --apply --subdir run --subdir logs --subdir reports --subdir evidence
+if [[ "$MODE" == "audit" ]]; then
+  bash scripts/runtime/run_runtime_cache_maintenance.sh --apply --subdir tmp
+else
+  bash scripts/runtime/run_runtime_cache_maintenance.sh --normalize-only --subdir tmp
+fi
 python3 scripts/governance/check_runtime_outputs.py
 python3 scripts/governance/check_runtime_artifact_writer_coverage.py
 python3 scripts/governance/check_runtime_cache_retention.py
-bash scripts/runtime/run_runtime_cache_maintenance.sh --normalize-only --subdir run --subdir logs --subdir reports --subdir evidence
 python3 scripts/governance/check_runtime_metadata_completeness.py
 python3 scripts/governance/check_runtime_cache_freshness.py
 python3 scripts/governance/check_governance_language.py
@@ -79,6 +84,7 @@ python3 scripts/governance/check_no_cross_app_implementation_imports.py
 python3 scripts/governance/check_logging_contract.py
 python3 scripts/governance/check_log_correlation_completeness.py
 python3 scripts/governance/check_log_retention.py
+python3 scripts/runtime/build_evidence_index.py --rebuild-all
 python3 scripts/governance/check_no_unindexed_evidence.py
 python3 scripts/governance/check_run_manifest_completeness.py
 python3 scripts/governance/check_contract_surfaces.py

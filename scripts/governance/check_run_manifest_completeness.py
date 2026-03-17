@@ -14,6 +14,22 @@ if str(ROOT / "scripts" / "governance") not in sys.path:
 from common import load_governance_json, read_runtime_metadata, rel_path
 
 
+def _log_has_complete_event(log_path: Path, run_id: str) -> bool:
+    try:
+        for raw in log_path.read_text(encoding="utf-8", errors="ignore").splitlines():
+            try:
+                payload = json.loads(raw)
+            except json.JSONDecodeError:
+                continue
+            if str(payload.get("run_id") or payload.get("test_run_id") or payload.get("gate_run_id") or "").strip() != run_id:
+                continue
+            if str(payload.get("event") or "").strip() == "complete":
+                return True
+    except OSError:
+        return False
+    return False
+
+
 def _runtime_artifacts_for_run(run_id: str) -> list[Path]:
     artifacts: list[Path] = []
     contract = load_governance_json("evidence-contract.json")
@@ -71,18 +87,21 @@ def main() -> int:
             errors.append(f"{rel_path(manifest_path)}: log metadata source_run_id does not match manifest run_id")
 
         artifacts = _runtime_artifacts_for_run(run_id)
+        run_complete = _log_has_complete_event(log_path, run_id)
         if not artifacts:
-            errors.append(f"{rel_path(manifest_path)}: no runtime artifacts found for run_id={run_id}")
+            if run_complete:
+                errors.append(f"{rel_path(manifest_path)}: no runtime artifacts found for run_id={run_id}")
             continue
 
         index_path = index_root / f"{run_id}.json"
         if not index_path.is_file():
-            errors.append(f"{rel_path(manifest_path)}: missing evidence index for run_id={run_id}")
+            if run_complete:
+                errors.append(f"{rel_path(manifest_path)}: missing evidence index for run_id={run_id}")
             continue
         index_payload = json.loads(index_path.read_text(encoding="utf-8"))
         indexed = set(index_payload.get("logs", [])) | set(index_payload.get("reports", [])) | set(index_payload.get("evidence", []))
         missing = [rel_path(path) for path in artifacts if rel_path(path) not in indexed]
-        if missing:
+        if missing and run_complete:
             errors.append(
                 f"{rel_path(manifest_path)}: evidence index missing {len(missing)} runtime artifact(s); first={missing[0]}"
             )

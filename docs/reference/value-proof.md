@@ -16,11 +16,18 @@
 
 详细 case pack 见 [Task Result Proof Pack](../proofs/task-result-proof-pack.md)。
 
+搭配阅读建议：
+
+- 如果你想确认“当前 HEAD 的 repo-side newcomer / strict 收据今天拿到没有”，先看 [newcomer-result-proof.md](./newcomer-result-proof.md)。
+- 如果你想确认“外部世界今天认不认账”，看 [external-lane-status.md](./external-lane-status.md) 和 runtime-owned `current-state-summary.md`。
+- 如果你想确认“这套系统靠哪些 representative cases 证明自己有任务价值”，继续看 [Task Result Proof Pack](../proofs/task-result-proof-pack.md)。
+
 ## Why This Page Exists
 
 - 防止把“治理很强、文档很全”误讲成“任务结果一定很硬”。
 - 给 README、项目定位页、面试讲解和 reviewer 审阅提供一个统一的任务级证据入口。
 - 把“为什么这套复杂度值得存在”讲成可检查的 case，而不是一句“工程化更强”。
+- 明确区分“真实执行结果”与“fallback/noop 让流程看起来没坏”这两种完全不同的信号。
 
 ## Summary Matrix
 
@@ -113,6 +120,7 @@
 - 不证明 external lane、GHCR、provider/live stability 已全部闭环。
 - 不证明 checked-in historical example 就等于当前官方结论。
 - 不证明 repo-side governance 强，就自动等于用户结果、外部分发和 adoption 风险都已经解决。
+- 不证明任何 `unsupported` / `degraded` / `failed` 的 AI path 可以被当成“执行成功”。
 
 ## Next Read
 

@@ -343,7 +343,7 @@ def _render_release_evidence() -> str:
             "",
             f"- upstream inventory entries tracked: `{len(upstreams.get('entries', []))}`",
             f"- compatibility matrix rows tracked: `{len(compat.get('matrix', []))}`",
-            "- external lane current snapshot: `docs/generated/external-lane-snapshot.md`",
+            "- external lane truth entry: `docs/generated/external-lane-snapshot.md` (tracked pointer) + `.runtime-cache/reports/governance/*.json` / `.runtime-cache/reports/release/*.json` (current verdict)",
         ]
     )
     if "monthly-governance-audit" in monthly_audit_text:
@@ -353,113 +353,27 @@ def _render_release_evidence() -> str:
 
 def _render_external_lane_snapshot() -> str:
     contract = _load_json(REPO_ROOT / "config" / "governance" / "external-lane-contract.json")
-    compat = _load_json(REPO_ROOT / "config" / "governance" / "upstream-compat-matrix.json")
-    remote_report = _maybe_load_json(REPO_ROOT / ".runtime-cache" / "reports" / "governance" / "remote-platform-truth.json")
-    workflow_report = _maybe_load_json(REPO_ROOT / ".runtime-cache" / "reports" / "governance" / "external-lane-workflows.json")
-    ghcr_report = _maybe_load_json(REPO_ROOT / ".runtime-cache" / "reports" / "governance" / "standard-image-publish-readiness.json")
-    release_report = _maybe_load_json(REPO_ROOT / ".runtime-cache" / "reports" / "release" / "release-evidence-attest-readiness.json")
-
-    compat_rows = {str(row.get("name") or ""): row for row in compat.get("matrix", [])}
-    workflow_rows = {
-        str(item.get("name") or ""): item
-        for item in (workflow_report or {}).get("lanes", [])
-        if isinstance(item, dict)
-    }
-    lane_contracts = {
-        str(item.get("name") or ""): item
-        for item in contract.get("lanes", [])
-        if isinstance(item, dict)
-    }
-    workflow_current_head = str((workflow_report or {}).get("source_commit") or "").strip()
-
-    def _merge_workflow_state(
-        base_state: str,
-        base_note: str,
-        lane_name: str,
-    ) -> tuple[str, str]:
-        row = workflow_rows.get(lane_name)
-        if not row:
-            return base_state, base_note
-        lane_contract = lane_contracts.get(lane_name, {})
-        workflow_note = str(row.get("note") or "").strip()
-        matches_current_head = row.get("latest_run_matches_current_head") is True
-        latest_run = row.get("latest_run") or {}
-        latest_head = str(latest_run.get("headSha") or "").strip()
-        current_head_required_statuses = {
-            str(value).strip()
-            for value in lane_contract.get("current_head_required_statuses", [])
-            if str(value).strip()
-        }
-        if not current_head_required_statuses and lane_contract.get("verified_requires_current_head") is True:
-            current_head_required_statuses = {"verified"}
-        historical_state = str(lane_contract.get("historical_state") or "historical")
-        if matches_current_head:
-            return str(row.get("state") or base_state), workflow_note or base_note
-        if base_state in current_head_required_statuses:
-            if workflow_note:
-                return historical_state, workflow_note
-            if latest_head and workflow_current_head and latest_head != workflow_current_head:
-                return (
-                    historical_state,
-                    f"{base_note}; historical remote workflow targets `{latest_head}`, current HEAD is `{workflow_current_head}`",
-                )
-            return historical_state, f"{base_note}; current HEAD has no matching remote workflow proof"
-        if workflow_note:
-            if latest_head and workflow_current_head and latest_head != workflow_current_head:
-                return (
-                    base_state,
-                    f"{base_note}; historical remote workflow targets `{latest_head}`, current HEAD is `{workflow_current_head}`",
-                )
-            return base_state, f"{base_note}; {workflow_note}"
-        return base_state, base_note
-
     outputs = [
         GENERATED_HEADER,
-        "# External Lane Snapshot",
+        "# External Lane Truth Entry",
         "",
-        "This page is machine-rendered from current external-lane contracts and runtime reports.",
+        "This tracked page is a machine-rendered pointer only.",
         "",
-        "| Lane | Current State | Blocker / Evidence | Canonical Artifact |",
-        "| --- | --- | --- | --- |",
+        "It does not carry commit-sensitive current verdicts.",
+        "Current external state must be read from runtime-owned reports under `.runtime-cache/reports/**`.",
+        "",
+        "## Canonical Runtime Reports",
+        "",
+        "| Lane | Canonical Artifact | Reading Rule |",
+        "| --- | --- | --- |",
     ]
-    remote_state = "missing"
-    remote_note = "probe report missing"
-    if remote_report:
-        remote_state = str(remote_report.get("status") or "unknown")
-        remote_note = str(remote_report.get("blocker_type") or "ok")
-    outputs.append(
-        f"| `remote-platform-integrity` | `{remote_state}` | `{remote_note}` | `{contract['lanes'][0]['canonical_artifact']}` |"
-    )
-
-    ghcr_state = "missing"
-    ghcr_note = "readiness report missing"
-    if ghcr_report:
-        ghcr_state = str(ghcr_report.get("status") or "unknown")
-        ghcr_note = str(ghcr_report.get("blocker_type") or "ok")
-    ghcr_state, ghcr_note = _merge_workflow_state(ghcr_state, ghcr_note, "ghcr-standard-image")
-    outputs.append(
-        f"| `ghcr-standard-image` | `{ghcr_state}` | `{ghcr_note}` | `{contract['lanes'][1]['canonical_artifact']}` |"
-    )
-
-    release_state = "missing"
-    release_note = "attest readiness report missing"
-    if release_report:
-        release_state = str(release_report.get("status") or "unknown")
-        release_note = str(release_report.get("blocker_type") or "ok")
-    release_state, release_note = _merge_workflow_state(
-        release_state,
-        release_note,
-        "release-evidence-attestation",
-    )
-    outputs.append(
-        f"| `release-evidence-attestation` | `{release_state}` | `{release_note}` | `{contract['lanes'][2]['canonical_artifact']}` |"
-    )
-
-    for provider_lane in ("rsshub-youtube-ingest-chain", "resend-digest-delivery-chain", "strict-ci-compose-image-set"):
-        row = compat_rows.get(provider_lane, {})
-        outputs.append(
-            f"| `{provider_lane}` | `{row.get('verification_status', 'missing')}` | `{row.get('verification_lane', 'unknown')}` | `{row.get('evidence_artifact', 'n/a')}` |"
-        )
+    for lane in contract.get("lanes", []):
+        if not isinstance(lane, dict):
+            continue
+        name = str(lane.get("name") or "").strip()
+        artifact = str(lane.get("canonical_artifact") or "").strip()
+        reading_rule = "read runtime artifact directly; tracked docs only explain semantics"
+        outputs.append(f"| `{name}` | `{artifact}` | {reading_rule} |")
 
     outputs.extend(
         [
@@ -467,10 +381,17 @@ def _render_external_lane_snapshot() -> str:
             "## Reading Rule",
             "",
             "- explanation lives in `docs/reference/external-lane-status.md`",
-            "- current status must come from this generated page or the underlying runtime reports",
-            "- current-state runtime reports must be current-commit aligned; stale commit artifacts are historical evidence only",
-            "- actor-sensitive remote truth is carried by `.runtime-cache/reports/governance/remote-platform-truth.json`",
-            "- `ready` means preflight/evidence inputs are in place; it does not mean the external lane has already closed successfully",
+            "- current state must come from runtime-owned reports under `.runtime-cache/reports/**`",
+            "- tracked docs may explain state semantics, but must not carry current verdict payload",
+            "- runtime metadata `source_commit` must match the current HEAD before any report can be treated as current truth",
+            "- `ready` means preflight inputs exist; it does not mean the external lane has closed successfully",
+            "",
+            "## Canonical Commands",
+            "",
+            "- `python3 scripts/governance/probe_remote_platform_truth.py --repo xiaojiou176-org/video-analysis-extract`",
+            "- `python3 scripts/governance/check_remote_required_checks.py`",
+            "- `bash scripts/ci/check_standard_image_publish_readiness.sh`",
+            "- `python3 scripts/release/check_release_evidence_attest_readiness.py --release-tag <tag>`",
         ]
     )
     return "\n".join(outputs).rstrip() + "\n"
@@ -499,7 +420,7 @@ def _fragment_lines(boundary: dict) -> dict[str, str]:
                 f"- self-hosted CI 只接受 **trusted internal PR**；若 PR 来自 fork，GitHub Actions 会在边界门禁直接阻断。",
                 "- repo-side 严格验收入口：`./bin/repo-side-strict-ci --mode pre-push --strict-full-run 1 --ci-dedupe 0`。",
                 "- external lane 入口：`./bin/strict-ci --mode pre-push --strict-full-run 1 --ci-dedupe 0`。",
-                "- external lane current snapshot：`docs/generated/external-lane-snapshot.md`。",
+                "- external lane truth entry：`docs/generated/external-lane-snapshot.md`（tracked pointer）+ `.runtime-cache/reports/**`（current verdict）。",
                 "- 契约主层已迁到 `contracts/`，长期跟踪 artifact 已迁到 `artifacts/`。",
             ]
         )
@@ -512,7 +433,7 @@ def _fragment_lines(boundary: dict) -> dict[str, str]:
                 "- runner baseline 参考页：`docs/generated/runner-baseline.md`。",
                 "- CI 主链与 aggregate gate 清单：`docs/generated/ci-topology.md`。",
                 "- release evidence 结构与 canonical 规则：`docs/generated/release-evidence.md`。",
-                "- external lane current snapshot：`docs/generated/external-lane-snapshot.md`。",
+                "- external lane truth entry：`docs/generated/external-lane-snapshot.md`（tracked pointer）+ `.runtime-cache/reports/**`（current verdict）。",
                 "- repo-side / external 双层完成模型：`docs/reference/done-model.md`。",
             ]
         )

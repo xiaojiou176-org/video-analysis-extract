@@ -17,6 +17,7 @@
 - 覆盖两大任务面：
   - structured outline / topic coverage
   - grounded digest / citation hygiene / failure honesty
+- 这里的 failure honesty 现在也包括：tool/computer-use fallback 不能再把 `unsupported` / `degraded` 包装成 `ok`
 - 这仍然不是 provider-heavy live eval，也不是学术 benchmark；它的目标是让 repo-side 改动可以被更厚地判定进退
 
 ## Eval Goal
@@ -50,3 +51,8 @@ repo-side 最小门禁现在分两层：
 - 质量优先： factuality、coverage、citation hygiene、failure honesty
 - 成本受控：先用小样本 golden set + fixture responses 做 deterministic regression，而不是每次都跑重型 live eval
 - 延迟受控：repo-side 强制 deterministic regression；真实 provider/live eval 继续放在 external lane
+
+## Failure Honesty Note
+
+- AI path 的 fallback/noop/stub 若未真实执行，不得继续报告 `status=ok`。
+- `unsupported`、`degraded`、`failed` 必须与运行时真实语义一致；否则 eval 只能证明“脚本跑过”，不能证明“系统诚实”。

@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+HELPER="$ROOT_DIR/scripts/runtime/workspace_hygiene.sh"
+
+usage() {
+  cat <<'EOF'
+Usage: ./bin/workspace-hygiene [--apply|--normalize] [--quiet]
+
+Stable repo-owned entrypoint for forbidden workspace runtime residue cleanup.
+
+Default mode reports residue and exits non-zero when cleanup is needed.
+`--apply` and `--normalize` are aliases and remove the residue.
+EOF
+}
+
+quiet=0
+helper_args=()
+
+while (($# > 0)); do
+  case "$1" in
+    --apply|--normalize)
+      helper_args+=("--apply")
+      shift
+      ;;
+    --quiet)
+      quiet=1
+      shift
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      helper_args+=("$1")
+      shift
+      ;;
+  esac
+done
+
+if (( quiet == 1 )); then
+  exec bash "$HELPER" "${helper_args[@]}" >/dev/null 2>&1
+fi
+
+exec bash "$HELPER" "${helper_args[@]}"

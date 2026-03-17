@@ -50,6 +50,13 @@ def main() -> int:
     allowed = {"pass", "missing_current_receipt"}
     if strict_receipt.get("status") not in allowed:
         errors.append("repo_side_strict_receipt must be `pass` or `missing_current_receipt`")
+    overall_status = str(payload.get("status") or "")
+    if newcomer.get("status") == "pass" and governance.get("status") == "pass" and strict_receipt.get("status") == "pass":
+        if overall_status != "pass":
+            errors.append("newcomer result proof must be `pass` when newcomer/governance/strict receipts are all pass")
+    elif newcomer.get("status") == "pass" and governance.get("status") in {"pass", "in_progress"}:
+        if overall_status not in {"partial", "pass"}:
+            errors.append("newcomer result proof must be `partial` or `pass` when newcomer/governance receipts exist")
 
     eval_regression = payload.get("eval_regression") or {}
     if not eval_regression:

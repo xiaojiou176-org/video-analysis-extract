@@ -6,7 +6,7 @@
 
 ## Scope
 
-- Python runtime inventory comes from the current `uv run python` environment, but its uv project environment is forced under `.runtime-cache/tmp/third-party-license-uv` instead of root `.venv`.
+- Python runtime inventory comes from the canonical `uv run --extra dev --extra e2e python` environment, using a throwaway temp uv environment instead of root `.venv` or repo-owned runtime roots.
 - Web runtime inventory comes from `apps/web/package-lock.json` and excludes `dev=true` packages.
 - `UNKNOWN` means the package metadata did not expose a machine-readable license field/classifier in this inventory pass; it is a follow-up item, not a silent pass.
 
@@ -14,7 +14,7 @@
 
 | Ecosystem | Packages | UNKNOWN license declarations |
 | --- | ---: | ---: |
-| Python runtime | 73 | 0 |
+| Python runtime | 98 | 0 |
 | Web runtime | 284 | 0 |
 
 ## Python Runtime Packages
@@ -34,28 +34,143 @@
 | `charset-normalizer` | `3.4.4` | `MIT` | `license-field` |
 | `click` | `8.3.1` | `BSD-3-Clause` | `license-expression` |
 | `courlan` | `1.3.2` | `Apache 2.0` | `license-field` |
+| `coverage` | `7.13.4` | `Apache-2.0` | `license-field` |
 | `cryptography` | `46.0.5` | `Apache-2.0 OR BSD-3-Clause` | `license-expression` |
 | `dateparser` | `1.3.0` | `BSD` | `license-field` |
 | `distro` | `1.9.0` | `Apache License, Version 2.0` | `license-field` |
+| `execnet` | `2.1.2` | `MIT` | `license-expression` |
 | `fastapi` | `0.129.0` | `MIT` | `license-expression` |
 | `frozenlist` | `1.8.0` | `Apache-2.0` | `license-field` |
 | `google-auth` | `2.48.0` | `Apache 2.0` | `license-field` |
 | `google-genai` | `1.64.0` | `Apache-2.0` | `license-expression` |
+| `greenlet` | `3.3.2` | `MIT AND PSF-2.0` | `license-expression` |
 | `h11` | `0.16.0` | `MIT` | `license-field` |
 | `htmldate` | `1.9.4` | `Apache 2.0` | `license-field` |
 | `httpcore` | `1.0.9` | `BSD-3-Clause` | `license-expression` |
 | `httpx` | `0.28.1` | `BSD-3-Clause` | `license-field` |
 | `httpx-sse` | `0.4.3` | `MIT` | `license-field` |
 | `idna` | `3.11` | `BSD-3-Clause` | `license-expression` |
+| `iniconfig` | `2.3.0` | `MIT` | `license-expression` |
 | `jsonschema` | `4.26.0` | `MIT` | `license-expression` |
 | `jsonschema-specifications` | `2025.9.1` | `MIT` | `license-expression` |
 | `jusText` | `3.0.2` | `The BSD 2-Clause License` | `license-field` |
+| `libcst` | `1.8.6` | `All contributions towards LibCST are MIT licensed.
+
+Some Python files have been derived from the standard library and are therefore
+PSF licensed. Modifications on these files are dual licensed (both MIT and
+PSF). These files are:
+
+- libcst/_parser/base_parser.py
+- libcst/_parser/parso/utils.py
+- libcst/_parser/parso/pgen2/generator.py
+- libcst/_parser/parso/pgen2/grammar_parser.py
+- libcst/_parser/parso/python/py_token.py
+- libcst/_parser/parso/python/tokenize.py
+- libcst/_parser/parso/tests/test_fstring.py
+- libcst/_parser/parso/tests/test_tokenize.py
+- libcst/_parser/parso/tests/test_utils.py
+- native/libcst/src/tokenizer/core/mod.rs
+- native/libcst/src/tokenizer/core/string_types.rs
+
+Some Python files have been taken from dataclasses and are therefore Apache
+licensed. Modifications on these files are licensed under Apache 2.0 license.
+These files are:
+
+- libcst/_add_slots.py
+
+-------------------------------------------------------------------------------
+
+MIT License
+
+Copyright (c) Meta Platforms, Inc. and affiliates.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+-------------------------------------------------------------------------------
+
+PYTHON SOFTWARE FOUNDATION LICENSE VERSION 2
+
+1. This LICENSE AGREEMENT is between the Python Software Foundation
+("PSF"), and the Individual or Organization ("Licensee") accessing and
+otherwise using this software ("Python") in source or binary form and
+its associated documentation.
+
+2. Subject to the terms and conditions of this License Agreement, PSF hereby
+grants Licensee a nonexclusive, royalty-free, world-wide license to reproduce,
+analyze, test, perform and/or display publicly, prepare derivative works,
+distribute, and otherwise use Python alone or in any derivative version,
+provided, however, that PSF's License Agreement and PSF's notice of copyright,
+i.e., "Copyright (c) 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010,
+2011, 2012, 2013, 2014, 2015 Python Software Foundation; All Rights Reserved"
+are retained in Python alone or in any derivative version prepared by Licensee.
+
+3. In the event Licensee prepares a derivative work that is based on
+or incorporates Python or any part thereof, and wants to make
+the derivative work available to others as provided herein, then
+Licensee hereby agrees to include in any such work a brief summary of
+the changes made to Python.
+
+4. PSF is making Python available to Licensee on an "AS IS"
+basis.  PSF MAKES NO REPRESENTATIONS OR WARRANTIES, EXPRESS OR
+IMPLIED.  BY WAY OF EXAMPLE, BUT NOT LIMITATION, PSF MAKES NO AND
+DISCLAIMS ANY REPRESENTATION OR WARRANTY OF MERCHANTABILITY OR FITNESS
+FOR ANY PARTICULAR PURPOSE OR THAT THE USE OF PYTHON WILL NOT
+INFRINGE ANY THIRD PARTY RIGHTS.
+
+5. PSF SHALL NOT BE LIABLE TO LICENSEE OR ANY OTHER USERS OF PYTHON
+FOR ANY INCIDENTAL, SPECIAL, OR CONSEQUENTIAL DAMAGES OR LOSS AS
+A RESULT OF MODIFYING, DISTRIBUTING, OR OTHERWISE USING PYTHON,
+OR ANY DERIVATIVE THEREOF, EVEN IF ADVISED OF THE POSSIBILITY THEREOF.
+
+6. This License Agreement will automatically terminate upon a material
+breach of its terms and conditions.
+
+7. Nothing in this License Agreement shall be deemed to create any
+relationship of agency, partnership, or joint venture between PSF and
+Licensee.  This License Agreement does not grant permission to use PSF
+trademarks or trade name in a trademark sense to endorse or promote
+products or services of Licensee, or any third party.
+
+8. By copying, installing or otherwise using Python, Licensee
+agrees to be bound by the terms and conditions of this License
+Agreement.
+
+-------------------------------------------------------------------------------
+
+APACHE LICENSE, VERSION 2.0
+
+http://www.apache.org/licenses/LICENSE-2.0` | `license-field` |
+| `linkify-it-py` | `2.0.3` | `MIT` | `license-field` |
 | `lxml` | `6.0.2` | `BSD-3-Clause` | `license-field` |
 | `lxml_html_clean` | `0.4.4` | `BSD-3-Clause` | `license-field` |
 | `Markdown` | `3.10.2` | `BSD-3-Clause` | `license-expression` |
+| `markdown-it-py` | `4.0.0` | `MIT License` | `classifier` |
 | `mcp` | `1.26.0` | `MIT` | `license-field` |
+| `mdit-py-plugins` | `0.5.0` | `MIT License` | `classifier` |
+| `mdurl` | `0.1.2` | `MIT License` | `classifier` |
 | `multidict` | `6.7.1` | `Apache License 2.0` | `license-field` |
+| `mutmut` | `3.5.0` | `BSD-3-Clause` | `license-expression` |
 | `nexus-rpc` | `1.3.0` | `MIT` | `license-expression` |
+| `packaging` | `26.0` | `Apache-2.0 OR BSD-2-Clause` | `license-expression` |
+| `platformdirs` | `4.9.2` | `MIT` | `license-expression` |
+| `playwright` | `1.58.0` | `Apache-2.0` | `license-expression` |
+| `pluggy` | `1.6.0` | `MIT` | `license-field` |
 | `propcache` | `0.4.1` | `Apache-2.0` | `license-field` |
 | `protobuf` | `6.33.5` | `3-Clause BSD License` | `license-field` |
 | `psycopg` | `3.3.3` | `LGPL-3.0-only` | `license-expression` |
@@ -66,16 +181,25 @@
 | `pydantic` | `2.12.5` | `MIT` | `license-expression` |
 | `pydantic-settings` | `2.13.1` | `MIT` | `license-expression` |
 | `pydantic_core` | `2.41.5` | `MIT` | `license-expression` |
+| `pyee` | `13.0.1` | `MIT` | `license-field` |
+| `Pygments` | `2.19.2` | `BSD-2-Clause` | `license-field` |
 | `PyJWT` | `2.12.1` | `MIT` | `license-expression` |
+| `pytest` | `8.4.2` | `MIT` | `license-field` |
+| `pytest-cov` | `6.3.0` | `MIT` | `license-field` |
+| `pytest-rerunfailures` | `15.1` | `MPL-2.0` | `license-field` |
+| `pytest-xdist` | `3.8.0` | `MIT` | `license-expression` |
 | `python-dateutil` | `2.9.0.post0` | `Dual License` | `license-field` |
 | `python-dotenv` | `1.2.1` | `BSD-3-Clause` | `license-expression` |
 | `python-multipart` | `0.0.22` | `Apache-2.0` | `license-expression` |
 | `pytz` | `2026.1.post1` | `MIT` | `license-field` |
+| `PyYAML` | `6.0.3` | `MIT` | `license-field` |
 | `referencing` | `0.37.0` | `MIT` | `license-expression` |
 | `regex` | `2026.2.28` | `Apache-2.0 AND CNRI-Python` | `license-expression` |
 | `requests` | `2.32.5` | `Apache-2.0` | `license-field` |
+| `rich` | `14.3.3` | `MIT` | `license-field` |
 | `rpds-py` | `0.30.0` | `MIT` | `license-expression` |
 | `rsa` | `4.9.1` | `Apache-2.0` | `license-field` |
+| `setproctitle` | `1.3.7` | `BSD-3-Clause` | `license-field` |
 | `six` | `1.17.0` | `MIT` | `license-field` |
 | `sniffio` | `1.3.1` | `MIT OR Apache-2.0` | `license-field` |
 | `SQLAlchemy` | `2.0.46` | `MIT` | `license-field` |
@@ -83,6 +207,7 @@
 | `starlette` | `0.52.1` | `BSD-3-Clause` | `license-expression` |
 | `temporalio` | `1.23.0` | `MIT` | `license-expression` |
 | `tenacity` | `9.1.4` | `Apache 2.0` | `license-field` |
+| `textual` | `8.0.0` | `MIT` | `license-field` |
 | `tld` | `0.13.2` | `MPL-1.1 OR GPL-2.0-only OR LGPL-2.1-or-later` | `license-expression` |
 | `trafilatura` | `1.12.2` | `Apache-2.0` | `license-field` |
 | `types-protobuf` | `6.32.1.20260221` | `Apache-2.0` | `license-expression` |
@@ -90,6 +215,7 @@
 | `typing_extensions` | `4.15.0` | `PSF-2.0` | `license-expression` |
 | `tzdata` | `2025.3` | `Apache-2.0` | `license-field` |
 | `tzlocal` | `5.3.1` | `MIT` | `license-field` |
+| `uc-micro-py` | `1.0.3` | `MIT` | `license-field` |
 | `urllib3` | `2.6.3` | `MIT` | `license-expression` |
 | `uvicorn` | `0.41.0` | `BSD-3-Clause` | `license-expression` |
 | `websockets` | `15.0.1` | `BSD-3-Clause` | `license-field` |

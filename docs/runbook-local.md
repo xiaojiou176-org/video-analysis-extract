@@ -37,7 +37,7 @@ devcontainer up --workspace-folder .
 - runner baseline 参考页：`docs/generated/runner-baseline.md`。
 - CI 主链与 aggregate gate 清单：`docs/generated/ci-topology.md`。
 - release evidence 结构与 canonical 规则：`docs/generated/release-evidence.md`。
-- external lane current snapshot：`docs/generated/external-lane-snapshot.md`。
+- external lane truth entry：`docs/generated/external-lane-snapshot.md`（tracked pointer）+ `.runtime-cache/reports/**`（current verdict）。
 - repo-side / external 双层完成模型：`docs/reference/done-model.md`。
 <!-- docs:generated governance-snapshot end -->
 
@@ -78,11 +78,17 @@ brew install postgresql@16 redis temporal
 安装依赖：
 
 ```bash
-UV_PROJECT_ENVIRONMENT="$PWD/.runtime-cache/tmp/uv-project-env" uv sync --frozen --extra dev --extra e2e
+UV_PROJECT_ENVIRONMENT="$HOME/.cache/video-digestor/project-venv" uv sync --frozen --extra dev --extra e2e
 ./bin/prepare-web-runtime
 ```
 
 说明：`./bin/prepare-web-runtime` 只是稳定入口层，真正执行的是 `scripts/ci/prepare_web_runtime.sh`。这个 helper 必须保持可执行位；如果 wrapper 报 `Permission denied`，那是入口契约损坏，不是 Web runtime 内容本身坏掉。
+
+如果当前工作区已经残留了根目录 `.venv`、源码树 `apps/web/node_modules` 或 `apps/**/__pycache__`，先执行：
+
+```bash
+./bin/workspace-hygiene --apply
+```
 
 - `build-ci-standard-image.yml` 现在会先显式准备 Docker Buildx，再调用 `scripts/ci/build_standard_image.sh` 做多架构标准镜像构建；如果镜像工作流仍在构建入口阶段立刻失败，先检查 runner 的 buildx 准备步骤是否成功，而不是先怀疑 GHCR 权限。
 - 标准镜像构建链依赖 `.devcontainer/Dockerfile`；当前约定会对 NodeSource signing key 做显式重试，并先写入临时 key 文件再 `gpg --dearmor`，这样 ARM64/QEMU buildx 路径遇到短暂 HTTP/2 抖动时，不会把空响应直接当成有效 key。
@@ -334,6 +340,7 @@ bash -n scripts/runtime/start_ops_workflows.sh
 脚本说明：
 
 - `./bin/bootstrap-full-stack`：依赖安装、环境校验、数据库迁移、可选 reader stack。
+- `./bin/bootstrap-full-stack` 现在会先运行 `./bin/workspace-hygiene --apply`，清掉根目录 `.venv`、源码树 `apps/web/node_modules`、以及 `apps/**/__pycache__` 这类非法运行态。
 - `./bin/bootstrap-full-stack` 除首次 `.env` 不存在时复制模板外，不再持久化改写 `.env`；端口冲突和运行时路由决策会写入 `.runtime-cache/run/full-stack/resolved.env`，仅对当前运行生效。
 - `./bin/full-stack`：统一起停 API/Worker/Web；`up` 会等待 API health(`GET /healthz`) 与 Web 端口就绪，失败时输出关键服务日志片段。
 - `./bin/dev-mcp`：交互式 stdio MCP 入口，不由 `./bin/full-stack` 作为后台守护进程管理。

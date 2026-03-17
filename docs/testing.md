@@ -225,6 +225,8 @@ Live 诊断与执行策略（本地/CI 一致）：
 - 若所有来源都无效：脚本直接失败，并输出“需要用户提供有效key”。
 - `./bin/smoke-computer-use-local` 默认严格判定：只有 `status=200` 且响应字段完整才算 `passed`；遇到 provider 未开通能力会失败（不是隐式 skip）。
 - 若确需允许 provider 能力未开通时的跳过，必须显式传 `--allow-unsupported-skip=1`，并在日志中出现 `result=skipped`。
+- `computer_use` 的 fallback / stub / noop 语义必须和真实执行对齐：`unsupported` / `degraded` / `failed` 不能再包装成 `ok`。测试与文档都应把这类结果当成“诚实失败或降级”，不是“执行成功”。
+- repo-owned Python entrypoints 与 quality gates 现在默认把 bytecode 重定向到 `.runtime-cache/tmp/pycache`；如果 strict path 里再次出现 `apps/**/__pycache__`，应按 execution hygiene 回归处理，而不是当成可接受噪音。
 - 失败分类：诊断 JSON 必须携带 `failure_kind`，取值为 `code_logic_error` 或 `network_or_environment_timeout`。
 - Full-stack / smoke 口径（硬切后）：
   - `./bin/smoke-full-stack` 统一 fail-fast，不再接受 offline fallback。

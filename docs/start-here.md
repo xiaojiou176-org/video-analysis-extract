@@ -44,7 +44,7 @@
 - self-hosted CI 只接受 **trusted internal PR**；若 PR 来自 fork，GitHub Actions 会在边界门禁直接阻断。
 - repo-side 严格验收入口：`./bin/repo-side-strict-ci --mode pre-push --strict-full-run 1 --ci-dedupe 0`。
 - external lane 入口：`./bin/strict-ci --mode pre-push --strict-full-run 1 --ci-dedupe 0`。
-- external lane current snapshot：`docs/generated/external-lane-snapshot.md`。
+- external lane truth entry：`docs/generated/external-lane-snapshot.md`（tracked pointer）+ `.runtime-cache/reports/**`（current verdict）。
 - 契约主层已迁到 `contracts/`，长期跟踪 artifact 已迁到 `artifacts/`。
 <!-- docs:generated governance-snapshot end -->
 
@@ -66,6 +66,7 @@ python3 scripts/governance/check_env_contract.py --strict
 - public-ready/source-first 入口：`README.md`、`docs/start-here.md`
 - deeper operator runbook：`docs/runbook-local.md`
 - repo-side / external 双层完成模型：`docs/reference/done-model.md`
+- repo-side current receipt：`.runtime-cache/reports/governance/newcomer-result-proof.json`
 - public readiness 边界：`docs/reference/public-repo-readiness.md`
 - 当前文档口径是 **public source-first repo + dual completion lanes**，不是 adoption-grade 开源分发包，也不是 hosted product 发布页。
 
@@ -76,6 +77,19 @@ python3 scripts/governance/check_env_contract.py --strict
 ```bash
 ./bin/validate-profile --profile local
 ```
+
+如果这一步提示存在 forbidden workspace runtime residue，先执行：
+
+```bash
+./bin/workspace-hygiene --apply
+./bin/validate-profile --profile local
+```
+
+补充判断：
+
+- `validate-profile` 通过，只说明 newcomer preflight 已拿到。
+- `governance-audit` 通过，只说明 repo-side 控制面站稳。
+- 只有 fresh strict receipt 也拿到，repo-side 终局收据才算闭环。
 
 ## 初始化质量门禁（建议在首次 clone 后执行）
 
@@ -169,7 +183,7 @@ DevContainer 启动拓扑补充（2026-03）：
 ## 6 步启动（Host Fallback，仅排障时使用）
 
 ```bash
-UV_PROJECT_ENVIRONMENT="$PWD/.runtime-cache/tmp/uv-project-env" uv sync --frozen --extra dev --extra e2e
+UV_PROJECT_ENVIRONMENT="$HOME/.cache/video-digestor/project-venv" uv sync --frozen --extra dev --extra e2e
 ./bin/prepare-web-runtime
 
 brew services start postgresql@16
@@ -206,6 +220,7 @@ curl -sS -X POST http://127.0.0.1:9000/api/v1/ingest/poll -H 'Content-Type: appl
 
 默认行为：
 
+- `./bin/bootstrap-full-stack` 会先运行 `./bin/workspace-hygiene --apply`，清掉根目录 `.venv`、源码树 `apps/web/node_modules`、以及 `apps/**/__pycache__` 这类非法运行态。
 - `./bin/bootstrap-full-stack` 会拉起 core services + Miniflux + Nextflux。
 - `./bin/bootstrap-full-stack` 除首次 `.env` 不存在时复制模板外，不再持久化改写 `.env`；端口冲突与运行时路由决策会写入 `.runtime-cache/run/full-stack/resolved.env`，仅对当前运行生效。
 - `core-services.compose.yml` 现在使用 digest-pinned service 镜像（Postgres/Redis/Temporal），并优先接受 strict contract 导出的 `STRICT_CI_SERVICE_IMAGE_*` 值；端口与 Postgres `DB/User` 仍收口为固定默认（`6379` / `7233` / `video_analysis` / `postgres`）。

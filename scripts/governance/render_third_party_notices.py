@@ -7,6 +7,7 @@ import os
 import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 sys.dont_write_bytecode = True
@@ -14,9 +15,6 @@ sys.dont_write_bytecode = True
 ROOT = Path(__file__).resolve().parents[2]
 ARTIFACT_PATH = ROOT / "artifacts" / "licenses" / "third-party-license-inventory.json"
 NOTICE_PATH = ROOT / "THIRD_PARTY_NOTICES.md"
-UV_ENV_PATH = ROOT / ".runtime-cache" / "tmp" / "third-party-license-uv"
-
-
 def _run_python_runtime_inventory() -> list[dict[str, str]]:
     code = r"""
 import importlib.metadata as md
@@ -56,14 +54,16 @@ for dist in md.distributions():
         }
     )
 
-rows.sort(key=lambda item: item["name"].lower())
+    rows.sort(key=lambda item: item["name"].lower())
 print(json.dumps(rows, ensure_ascii=False))
 """
     env = dict(os.environ)
-    env["UV_PROJECT_ENVIRONMENT"] = str(UV_ENV_PATH)
+    uv_env_path = Path(tempfile.mkdtemp(prefix="video-analysis-third-party-license-"))
+    env["UV_PROJECT_ENVIRONMENT"] = str(uv_env_path)
+    env.setdefault("UV_LINK_MODE", "copy")
     try:
         result = subprocess.run(
-            ["uv", "run", "python", "-c", code],
+            ["uv", "run", "--extra", "dev", "--extra", "e2e", "python", "-c", code],
             cwd=ROOT,
             check=True,
             capture_output=True,
@@ -71,7 +71,7 @@ print(json.dumps(rows, ensure_ascii=False))
             env=env,
         )
     finally:
-        shutil.rmtree(UV_ENV_PATH, ignore_errors=True)
+        shutil.rmtree(uv_env_path, ignore_errors=True)
     return json.loads(result.stdout)
 
 
@@ -139,7 +139,7 @@ def _render_notice(inventory: dict[str, object]) -> str:
         "",
         "## Scope",
         "",
-        "- Python runtime inventory comes from the current `uv run python` environment, but its uv project environment is forced under `.runtime-cache/tmp/third-party-license-uv` instead of root `.venv`.",
+        "- Python runtime inventory comes from the canonical `uv run --extra dev --extra e2e python` environment, using a throwaway temp uv environment instead of root `.venv` or repo-owned runtime roots.",
         "- Web runtime inventory comes from `apps/web/package-lock.json` and excludes `dev=true` packages.",
         "- `UNKNOWN` means the package metadata did not expose a machine-readable license field/classifier in this inventory pass; it is a follow-up item, not a silent pass.",
         "",

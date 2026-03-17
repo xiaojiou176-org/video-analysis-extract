@@ -106,7 +106,13 @@ def _artifact_summary(rel: str, commit: str) -> dict[str, Any]:
 def main() -> int:
     commit = current_git_commit()
     validate_manifest = _latest_manifest("validate-profile", commit)
-    strict_manifest = _latest_manifest("strict-ci", commit)
+    strict_completed_manifest = _latest_completed_manifest(
+        "strict-ci",
+        commit,
+        [ROOT / ".runtime-cache" / "logs" / "governance" / "strict-ci-entry.jsonl"],
+    )
+    strict_latest_manifest = _latest_manifest("strict-ci", commit)
+    strict_manifest = strict_completed_manifest or strict_latest_manifest
     governance_manifest = _latest_completed_manifest(
         "governance-audit",
         commit,
@@ -115,6 +121,7 @@ def main() -> int:
 
     validate_log = ROOT / str((validate_manifest or {}).get("log_path") or "")
     strict_log = ROOT / str((strict_manifest or {}).get("log_path") or "")
+    strict_log_candidates = [strict_log, ROOT / ".runtime-cache" / "logs" / "governance" / "strict-ci-entry.jsonl"]
     governance_log = ROOT / str((governance_manifest or {}).get("log_path") or "")
     governance_log_candidates = [governance_log, ROOT / ".runtime-cache" / "logs" / "governance" / "governance-gate.jsonl"]
 
@@ -126,7 +133,7 @@ def main() -> int:
     newcomer_preflight_status = "pass" if validate_manifest and validate_log.is_file() and validate_resolved.is_file() else "missing"
     repo_side_strict_status = (
         "pass"
-        if strict_manifest and _log_has_complete([strict_log], str(strict_manifest.get("run_id") or ""))
+        if strict_completed_manifest and _log_has_complete(strict_log_candidates, str(strict_completed_manifest.get("run_id") or ""))
         else "missing_current_receipt"
     )
     governance_status = "missing"
@@ -137,9 +144,15 @@ def main() -> int:
             else "in_progress"
         )
 
+    overall_status = "missing"
+    if newcomer_preflight_status == "pass" and governance_status == "pass" and repo_side_strict_status == "pass":
+        overall_status = "pass"
+    elif newcomer_preflight_status == "pass" and governance_status in {"pass", "in_progress"}:
+        overall_status = "partial"
+
     payload = {
         "version": 1,
-        "status": "partial" if newcomer_preflight_status == "pass" and governance_status in {"pass", "in_progress"} else "missing",
+        "status": overall_status,
         "source_commit": commit,
         "newcomer_preflight": {
             "status": newcomer_preflight_status,
@@ -153,10 +166,12 @@ def main() -> int:
             "manifest": strict_manifest,
             "log_exists": strict_log.is_file(),
             "pass_receipt_detected": (
-                _log_has_complete([strict_log], str(strict_manifest.get("run_id") or ""))
-                if strict_manifest
+                _log_has_complete(strict_log_candidates, str(strict_completed_manifest.get("run_id") or ""))
+                if strict_completed_manifest
                 else False
             ),
+            "latest_seen_manifest": strict_latest_manifest,
+            "pass_receipt_manifest": strict_completed_manifest,
             "note": "missing_current_receipt means the current commit has a strict entry manifest but no captured PASS completion receipt yet",
         },
         "governance_audit_receipt": {
@@ -169,6 +184,28 @@ def main() -> int:
                 else False
             ),
         },
+        "representative_result_proof_pack": {
+            "path": "docs/proofs/task-result-proof-pack.md",
+            "exists": (ROOT / "docs" / "proofs" / "task-result-proof-pack.md").is_file(),
+            "note": "public-safe representative result cases for human review; not a current external verdict surface",
+        },
+        "representative_result_cases": [
+            {
+                "id": "rep-case-01-ingest-queue",
+                "proof_pack_path": "docs/proofs/task-result-proof-pack.md",
+                "note": "持续发现新内容并稳定入队",
+            },
+            {
+                "id": "rep-case-02-structured-digest",
+                "proof_pack_path": "docs/proofs/task-result-proof-pack.md",
+                "note": "单条内容被处理成结构化 digest",
+            },
+            {
+                "id": "rep-case-03-failure-replayability",
+                "proof_pack_path": "docs/proofs/task-result-proof-pack.md",
+                "note": "失败路径可复盘而不是只剩红灯",
+            },
+        ],
         "eval_regression": eval_summary,
         "current_proof_alignment": current_proof,
         "external_standard_image": external_snapshot,

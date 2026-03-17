@@ -44,10 +44,40 @@ done
 mkdir -p "$RUNTIME_ROOT" "$STATE_DIR"
 
 PACKAGE_HASH="$(
-  {
-    sha256sum "$ROOT_DIR/apps/web/package.json"
-    sha256sum "$ROOT_DIR/apps/web/package-lock.json"
-  } | sha256sum | awk '{print $1}'
+  python3 - <<'PY' "$ROOT_DIR"
+from __future__ import annotations
+
+import hashlib
+from pathlib import Path
+import sys
+
+root = Path(sys.argv[1])
+source_dir = root / "apps" / "web"
+blocked_names = {
+    "node_modules",
+    ".next",
+    "coverage",
+    "out",
+    "build",
+    "tsconfig.tsbuildinfo",
+    ".DS_Store",
+}
+
+digest = hashlib.sha256()
+for path in sorted(source_dir.rglob("*")):
+    rel = path.relative_to(source_dir).as_posix()
+    if any(part in blocked_names for part in path.parts):
+        continue
+    if any(part.startswith(".next-e2e-") for part in path.parts):
+        continue
+    if path.is_dir():
+        continue
+    digest.update(rel.encode("utf-8"))
+    digest.update(b"\0")
+    digest.update(path.read_bytes())
+    digest.update(b"\0")
+print(digest.hexdigest(), end="")
+PY
 )"
 
 acquire_lock() {
@@ -71,6 +101,8 @@ workspace_ready() {
   [[ -f "$HASH_FILE" ]] || return 1
   [[ -d "$WORKSPACE_WEB_DIR" ]] || return 1
   [[ "$(cat "$HASH_FILE" 2>/dev/null || true)" == "$PACKAGE_HASH" ]] || return 1
+  [[ -f "$WORKSPACE_WEB_DIR/eslint.config.mjs" ]] || return 1
+  [[ -f "$WORKSPACE_WEB_DIR/tsconfig.json" ]] || return 1
   if [[ "$SKIP_INSTALL" != "1" ]]; then
     [[ -x "$WORKSPACE_WEB_DIR/node_modules/.bin/next" ]] || return 1
   fi
@@ -135,7 +167,7 @@ def ignore(_path: str, names: list[str]) -> set[str]:
 if target_dir.exists():
     shutil.rmtree(target_dir)
 target_dir.parent.mkdir(parents=True, exist_ok=True)
-shutil.copytree(source_dir, target_dir, ignore=ignore)
+shutil.copytree(source_dir, target_dir, ignore=ignore, copy_function=shutil.copy)
 PY
 
 CURRENT_HASH=""

@@ -36,6 +36,35 @@ done
 wait "${test_pid}"
 python3 scripts/runtime/clean_source_runtime_residue.py --apply
 
+python3 - <<'PY'
+from __future__ import annotations
+
+import os
+import sys
+from pathlib import Path
+
+ROOT = Path.cwd()
+sys.path.insert(0, str(ROOT / "scripts" / "governance"))
+from common import write_runtime_metadata
+
+reports_dir = ROOT / ".runtime-cache" / "reports" / "python"
+gate_run_id = os.getenv("vd_gate_run_id", "") or os.getenv("vd_log_run_id", "") or "python-tests-with-coverage"
+repo_commit = os.getenv("vd_log_repo_commit", "")
+
+for artifact in sorted(reports_dir.glob(".coverage*")):
+    if artifact.name.endswith(".meta.json") or not artifact.is_file():
+        continue
+    write_runtime_metadata(
+        artifact,
+        source_entrypoint="scripts/ci/python_tests.sh",
+        verification_scope="python-tests-coverage-shard",
+        source_run_id=gate_run_id,
+        source_commit=repo_commit,
+        freshness_window_hours=24,
+        extra={"report_kind": "python-coverage-shard"},
+    )
+PY
+
 set -o pipefail
 PYTHONDONTWRITEBYTECODE=1 uv run coverage report \
   --include="*/apps/worker/worker/pipeline/orchestrator.py,*/apps/worker/worker/pipeline/policies.py,*/apps/worker/worker/pipeline/runner.py,*/apps/worker/worker/pipeline/types.py" \

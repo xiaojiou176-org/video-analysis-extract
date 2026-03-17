@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT / "scripts" / "governance") not in sys.path:
     sys.path.insert(0, str(ROOT / "scripts" / "governance"))
 
-from common import artifact_age_hours, ensure_runtime_metadata, load_governance_json, parse_iso8601, rel_path, runtime_metadata_path, write_runtime_metadata
+from common import artifact_age_hours, ensure_runtime_metadata, load_governance_json, parse_iso8601, rel_path, runtime_metadata_path, write_json_artifact, write_runtime_metadata
 
 
 def _iter_runtime_files(path: Path) -> list[Path]:
@@ -51,6 +51,8 @@ def _infer_source_run_id(path: Path) -> str:
 
 
 def _default_created_at(name: str, path: Path) -> str:
+    if name == "tmp":
+        return datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
     return datetime.fromtimestamp(path.stat().st_mtime, UTC).replace(microsecond=0).isoformat().replace(
         "+00:00", "Z"
     )
@@ -197,7 +199,11 @@ def main() -> int:
                 stale.append(rel_path(item))
 
         if args.apply and not args.normalize_only:
-            for rel in expired:
+            removal_targets = list(expired)
+            for rel in stale:
+                if rel not in removal_targets:
+                    removal_targets.append(rel)
+            for rel in removal_targets:
                 target = ROOT / rel
                 meta = runtime_metadata_path(target)
                 if target.exists():
@@ -242,10 +248,9 @@ def main() -> int:
         report["errors"] = errors
 
     report_path = ROOT / args.write_report
-    report_path.parent.mkdir(parents=True, exist_ok=True)
-    report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    write_runtime_metadata(
+    write_json_artifact(
         report_path,
+        report,
         source_entrypoint="scripts/runtime/prune_runtime_cache.py",
         verification_scope="runtime-cache-maintenance",
         source_run_id="runtime-cache-maintenance",

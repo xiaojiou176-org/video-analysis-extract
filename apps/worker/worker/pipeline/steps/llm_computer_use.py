@@ -85,9 +85,9 @@ def _execute_noop(action_name: str, action_args: dict[str, Any]) -> dict[str, An
     if not action_name:
         return {"ok": False, "status": "error", "error": "computer_use_action_missing"}
     return {
-        "ok": True,
-        "status": "ok",
-        "message": "computer_use_noop_executed",
+        "ok": False,
+        "status": "unsupported",
+        "message": "computer_use_noop_blocked",
         "action": {"name": action_name, "args": action_args},
     }
 
@@ -96,9 +96,9 @@ def _execute_browser_stub(action_name: str, action_args: dict[str, Any]) -> dict
     if not action_name:
         return {"ok": False, "status": "error", "error": "computer_use_action_missing"}
     return {
-        "ok": True,
-        "status": "ok",
-        "message": "computer_use_browser_stub_executed",
+        "ok": False,
+        "status": "degraded",
+        "message": "computer_use_browser_stub_simulated",
         "action": {"name": action_name, "args": action_args},
     }
 
@@ -193,6 +193,9 @@ def build_default_computer_use_handler(
     def _handler(**payload: Any) -> dict[str, Any]:
         incoming = dict(payload or {})
         action_name, action_args = _normalize_action(incoming)
+        requested_url = str(incoming.get("url") or "").strip()
+        if action_name in {"navigate", "goto"} and requested_url:
+            action_args["url"] = requested_url
         url = str(incoming.get("url") or base_payload.get("url") or "").strip()
         screenshot = str(incoming.get("screenshot") or base_payload.get("screenshot") or "").strip()
         context = incoming.get("context")

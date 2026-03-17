@@ -23,6 +23,7 @@ WEB_PORT="3000"
 API_PORT_EXPLICIT="0"
 WEB_PORT_EXPLICIT="0"
 RESOLVED_ENV_PATH="$(get_runtime_resolved_env_path "$ROOT_DIR")"
+WORKSPACE_HYGIENE="$ROOT_DIR/scripts/runtime/workspace_hygiene.sh"
 
 log() { vd_log info bootstrap "$*"; }
 fail() { vd_log error bootstrap_error "$*"; exit 1; }
@@ -101,6 +102,9 @@ done
 
 [[ "$PROFILE" == "local" || "$PROFILE" == "gce" ]] || fail "--profile must be local|gce"
 rm -f "$RESOLVED_ENV_PATH"
+
+log "Normalizing forbidden workspace runtime residue"
+bash "$WORKSPACE_HYGIENE" --apply >/dev/null || fail "workspace hygiene failed"
 
 command -v python3 >/dev/null 2>&1 || fail "python3 not found"
 command -v uv >/dev/null 2>&1 || fail "uv not found"

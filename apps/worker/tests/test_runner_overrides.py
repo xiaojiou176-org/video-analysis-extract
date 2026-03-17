@@ -232,8 +232,8 @@ def test_step_llm_outline_applies_overrides(monkeypatch: Any, tmp_path: Path) ->
     assert first["computer_use_timeout_seconds"] == 8.0
     assert first["media_resolution"] == {"frame": "high", "image": "medium", "pdf": "low"}
     computer_use_result = first["computer_use_handler"](action="click")
-    assert computer_use_result["status"] == "ok"
-    assert computer_use_result["ok"] is True
+    assert computer_use_result["status"] == "degraded"
+    assert computer_use_result["ok"] is False
     assert computer_use_result["executor"] == "playwright"
     assert computer_use_result["fallback_from"] == "playwright"
     assert computer_use_result["target"]["url"] == "https://www.youtube.com/watch?v=demo"

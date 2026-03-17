@@ -76,6 +76,7 @@ def main() -> int:
         print("[root-allowlist] FAIL")
         for item in errors:
             print(f"  - {item}")
+        print("  - remediation: run `./bin/workspace-hygiene --apply` to clear repo-root/source-tree runtime residue before rerunning the gate")
         return 1
 
     print(

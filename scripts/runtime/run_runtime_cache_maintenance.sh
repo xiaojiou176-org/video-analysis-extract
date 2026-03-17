@@ -3,6 +3,8 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
+bash "$ROOT_DIR/bin/workspace-hygiene" --normalize --quiet
+
 subdir_args=()
 assert_clean=0
 apply=0

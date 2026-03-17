@@ -151,6 +151,14 @@ python3 scripts/governance/check_runtime_cache_retention.py
 python3 scripts/governance/check_runtime_cache_freshness.py
 ```
 
+补充规则：
+
+- `python3 scripts/runtime/prune_runtime_cache.py --apply` 现在会同时删除两类旧收据：
+  - TTL 已过期的 artifact
+  - freshness-required 子树里已经超过 `freshness_window_hours` 的 stale artifact
+- 目的不是“多删一点文件”，而是避免旧 reports/evidence 继续冒充 current verification 输入。
+- `./bin/governance-audit --mode pre-push|audit` 现在会先运行 repo-owned runtime cache maintenance，再进入 retention/freshness 断言，避免 strict path 被历史 runtime 垃圾先绊倒。
+
 ## Doc-Drift Enforcement
 
 - 触发文件：
