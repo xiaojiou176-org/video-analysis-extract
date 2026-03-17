@@ -135,25 +135,141 @@ if not match:
 print(match.group("owner"))
 PY
 )"
+expected_package_name="${expected_repository##*/}"
 if [[ "$expected_owner" != "$repo_owner" ]]; then
   status="blocked"
   blocker_type="package-ownership-or-write-package-failure"
   errors+=("GHCR repository owner mismatch: contract=${expected_owner} repo=${repo_owner}")
 fi
 
+probe_github_package_api() {
+  local token="$1"
+  local owner="$2"
+  local package_name="$3"
+
+  python3 - <<'PY' "$token" "$owner" "$package_name"
+from __future__ import annotations
+
+import json
+import sys
+import urllib.error
+import urllib.request
+
+token, owner, package_name = sys.argv[1:4]
+endpoints = [
+    f"https://api.github.com/orgs/{owner}/packages/container/{package_name}",
+    f"https://api.github.com/users/{owner}/packages/container/{package_name}",
+]
+result = {
+    "status": 0,
+    "endpoint": "",
+    "message": "",
+}
+for endpoint in endpoints:
+    request = urllib.request.Request(
+        endpoint,
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Accept": "application/vnd.github+json",
+            "X-GitHub-Api-Version": "2022-11-28",
+            "User-Agent": "video-analysis-extract-standard-image-readiness",
+        },
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=15) as response:
+            result = {
+                "status": response.getcode(),
+                "endpoint": endpoint,
+                "message": response.read().decode("utf-8", "replace")[:500],
+            }
+            break
+    except urllib.error.HTTPError as exc:
+        result = {
+            "status": exc.code,
+            "endpoint": endpoint,
+            "message": exc.read().decode("utf-8", "replace")[:500],
+        }
+        if exc.code != 404:
+            break
+    except Exception as exc:  # pragma: no cover - bash-driven probe surface
+        result = {
+            "status": 0,
+            "endpoint": endpoint,
+            "message": str(exc),
+        }
+        break
+
+print(json.dumps(result, ensure_ascii=False))
+PY
+}
+
 token_mode="none"
 token_scope_ok="false"
-if [[ -n "${GITHUB_ACTIONS:-}" && -n "${GITHUB_TOKEN:-}" ]]; then
-  token_mode="github-actions-token"
-  token_scope_ok="true"
-elif [[ -n "${GHCR_TOKEN:-}" ]]; then
+package_probe_json='{}'
+if [[ -n "${GHCR_TOKEN:-}" ]]; then
   token_mode="ghcr-token"
-  token_scope_ok="true"
+  package_probe_json="$(probe_github_package_api "$GHCR_TOKEN" "$expected_owner" "$expected_package_name")"
+elif [[ -n "${GITHUB_ACTIONS:-}" && -n "${GITHUB_TOKEN:-}" ]]; then
+  token_mode="github-actions-token"
+  package_probe_json="$(probe_github_package_api "$GITHUB_TOKEN" "$expected_owner" "$expected_package_name")"
 elif gh auth status -h github.com >/tmp/video-analysis-gh-auth-status.txt 2>/dev/null; then
   token_mode="gh-cli"
-  if grep -Eq "write:packages|'repo'" /tmp/video-analysis-gh-auth-status.txt; then
+  # repo scope alone does not grant GHCR package push rights, and we must only
+  # inspect the active account instead of any secondary cached logins.
+  if python3 - <<'PY' /tmp/video-analysis-gh-auth-status.txt
+from pathlib import Path
+import sys
+
+text = Path(sys.argv[1]).read_text(encoding="utf-8")
+blocks = [block.strip() for block in text.split("\n\n") if block.strip()]
+for block in blocks:
+    if "- Active account: true" not in block:
+        continue
+    raise SystemExit(0 if "write:packages" in block else 1)
+raise SystemExit(1)
+PY
+  then
     token_scope_ok="true"
   fi
+fi
+
+package_probe_status="$(python3 - <<'PY' "$package_probe_json"
+import json
+import sys
+
+payload = json.loads(sys.argv[1])
+print(payload.get("status", 0))
+PY
+)"
+package_probe_endpoint="$(python3 - <<'PY' "$package_probe_json"
+import json
+import sys
+
+payload = json.loads(sys.argv[1])
+print(payload.get("endpoint", ""))
+PY
+)"
+if [[ "$token_mode" == "ghcr-token" || "$token_mode" == "github-actions-token" ]]; then
+  case "$package_probe_status" in
+    200|404)
+      token_scope_ok="true"
+      ;;
+    403)
+      status="blocked"
+      blocker_type="registry-auth-failure"
+      errors+=("package access probe rejected the selected GHCR token via ${package_probe_endpoint:-github-packages-api} (HTTP 403)")
+      ;;
+    0)
+      status="blocked"
+      blocker_type="registry-auth-failure"
+      errors+=("package access probe could not verify the selected GHCR token")
+      ;;
+    *)
+      status="blocked"
+      blocker_type="registry-auth-failure"
+      errors+=("package access probe returned unexpected HTTP ${package_probe_status} for ${package_probe_endpoint:-github-packages-api}")
+      ;;
+  esac
 fi
 
 if [[ "$token_scope_ok" != "true" ]]; then
@@ -162,14 +278,11 @@ if [[ "$token_scope_ok" != "true" ]]; then
   errors+=("no token path with packages write capability detected")
 fi
 
-ERRORS_JSON="$(python3 - <<'PY' "${errors[@]-}"
-import json
-import sys
-print(json.dumps(sys.argv[1:], ensure_ascii=False))
-PY
+ERRORS_JSON="$(
+  printf '%s\n' "${errors[@]}" | python3 -c 'import json, sys; print(json.dumps([line.rstrip("\n") for line in sys.stdin if line.rstrip("\n")], ensure_ascii=False))'
 )"
 
-python3 - <<'PY' "$OUTPUT_PATH" "$status" "$blocker_type" "$repo_slug" "$repo_owner" "$expected_repository" "$token_mode" "$token_scope_ok" "$buildx_version" "$buildx_ls" "$buildx_inspect" "$ERRORS_JSON"
+python3 - <<'PY' "$OUTPUT_PATH" "$status" "$blocker_type" "$repo_slug" "$repo_owner" "$expected_repository" "$token_mode" "$token_scope_ok" "$buildx_version" "$buildx_ls" "$buildx_inspect" "$ERRORS_JSON" "$package_probe_json"
 import json
 import sys
 from pathlib import Path
@@ -192,6 +305,7 @@ payload = {
     "docker_buildx_ls": sys.argv[10],
     "docker_buildx_inspect": sys.argv[11],
     "errors": json.loads(sys.argv[12]),
+    "package_access_probe": json.loads(sys.argv[13]),
 }
 write_json_artifact(
     ROOT / output,

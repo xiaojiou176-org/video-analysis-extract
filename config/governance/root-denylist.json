@@ -1,6 +1,8 @@
 {
   "version": 1,
   "forbidden_exact_paths": [
+    ".cache",
+    "cache",
     "data",
     "logs",
     "reports",

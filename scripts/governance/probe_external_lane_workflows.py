@@ -46,53 +46,75 @@ def _json_or_none(command: list[str]) -> tuple[Any | None, dict[str, Any] | None
     }
 
 
-def _lane_state(current_head: str, run: dict[str, Any] | None) -> tuple[str, str, bool]:
+def _lane_state(current_head: str, run: dict[str, Any] | None) -> tuple[str, str, bool, str, str]:
     if not run:
-        return "missing", "no remote workflow run found", False
+        return "missing", "no remote workflow run found", False, "", "missing"
     status = str(run.get("status") or "")
     conclusion = str(run.get("conclusion") or "")
     run_head = str(run.get("headSha") or "")
     if not run_head and conclusion == "success":
-        return "blocked", "remote workflow completed without headSha; current HEAD cannot be verified", False
+        return (
+            "blocked",
+            "remote workflow completed without headSha; current HEAD cannot be verified",
+            False,
+            run_head,
+            "missing",
+        )
     if run_head and run_head != current_head:
         if status in {"queued", "pending"}:
             return (
                 "historical",
                 f"latest queued remote workflow targets old head `{run_head}`; current HEAD `{current_head}` has no queued remote run",
                 False,
+                run_head,
+                "historical",
             )
         if status == "in_progress":
             return (
                 "historical",
                 f"latest in-progress remote workflow targets old head `{run_head}`; current HEAD `{current_head}` has no active remote run",
                 False,
+                run_head,
+                "historical",
             )
         if conclusion == "success":
             return (
                 "historical",
                 f"latest successful remote workflow targets old head `{run_head}`; current HEAD `{current_head}` still not externally verified",
                 False,
+                run_head,
+                "historical",
             )
         if conclusion:
             return (
                 "historical",
                 f"latest completed remote workflow targets old head `{run_head}` with conclusion `{conclusion}`; current HEAD `{current_head}` still unresolved",
                 False,
+                run_head,
+                "historical",
             )
         return (
             "historical",
             f"latest remote workflow targets old head `{run_head}`; current HEAD `{current_head}` still unresolved",
             False,
+            run_head,
+            "historical",
         )
     if status in {"queued", "pending"}:
-        return "queued", "remote workflow queued for current HEAD", True
+        return "queued", "remote workflow queued for current HEAD", True, run_head, "current"
     if status == "in_progress":
-        return "in_progress", "remote workflow in progress for current HEAD", True
+        return "in_progress", "remote workflow in progress for current HEAD", True, run_head, "current"
     if conclusion == "success":
-        return "verified", "remote workflow completed successfully for current HEAD", True
+        return "verified", "remote workflow completed successfully for current HEAD", True, run_head, "current"
     if conclusion:
-        return "blocked", f"remote workflow for current HEAD concluded `{conclusion}`", True
-    return "blocked", f"unexpected workflow state status={status} conclusion={conclusion}", bool(run_head == current_head)
+        return "blocked", f"remote workflow for current HEAD concluded `{conclusion}`", True, run_head, "current"
+    return (
+        "blocked",
+        f"unexpected workflow state status={status} conclusion={conclusion}",
+        bool(run_head == current_head),
+        run_head,
+        "current" if run_head == current_head and run_head else "missing",
+    )
 
 
 def main() -> int:
@@ -129,7 +151,7 @@ def main() -> int:
             ]
         )
         latest_run = payload[0] if isinstance(payload, list) and payload else None
-        lane_state, note, matches_current_head = _lane_state(current_head, latest_run)
+        lane_state, note, matches_current_head, latest_run_head_sha, head_alignment = _lane_state(current_head, latest_run)
         if lane_state == "blocked":
             overall_status = "blocked"
         lanes.append(
@@ -139,6 +161,8 @@ def main() -> int:
                 "state": lane_state,
                 "note": note,
                 "latest_run_matches_current_head": matches_current_head,
+                "latest_run_head_sha": latest_run_head_sha,
+                "head_alignment": head_alignment,
                 "latest_run": latest_run,
                 "error": error,
             }

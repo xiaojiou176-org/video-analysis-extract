@@ -20,12 +20,19 @@
       "canonical_artifact": ".runtime-cache/reports/governance/standard-image-publish-readiness.json",
       "remote_workflow_artifact": ".runtime-cache/reports/governance/external-lane-workflows.json",
       "verified_requires_current_head": true,
+      "current_head_required_statuses": [
+        "verified",
+        "queued",
+        "in_progress"
+      ],
+      "historical_state": "historical",
       "verification_scope": "standard-image-publish-readiness",
       "allowed_statuses": [
         "ready",
         "queued",
         "in_progress",
         "verified",
+        "historical",
         "blocked"
       ],
       "blocked_types": [
@@ -39,12 +46,19 @@
       "canonical_artifact": ".runtime-cache/reports/release/release-evidence-attest-readiness.json",
       "remote_workflow_artifact": ".runtime-cache/reports/governance/external-lane-workflows.json",
       "verified_requires_current_head": true,
+      "current_head_required_statuses": [
+        "verified",
+        "queued",
+        "in_progress"
+      ],
+      "historical_state": "historical",
       "verification_scope": "release-evidence-attest-readiness",
       "allowed_statuses": [
         "ready",
         "queued",
         "in_progress",
         "verified",
+        "historical",
         "blocked"
       ],
       "blocked_types": [

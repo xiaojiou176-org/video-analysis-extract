@@ -27,14 +27,31 @@
       "remove_after": "2026-06-30T00:00:00-07:00",
       "source_paths": [
         "./bin/start-ops-workflows",
-        "scripts/runtime/start_ops_workflows.sh"
+        "scripts/runtime/start_ops_workflows.sh",
+        "apps/worker/worker/temporal/activities_entry.py",
+        "apps/worker/worker/temporal/activities_cleanup.py"
       ],
       "target_paths": [
         ".runtime-cache/tmp",
         ".runtime-cache/run",
         ".runtime-cache/logs"
       ],
-      "notes": "Long-running ops workflows are allowed to clean and recycle only governed runtime roots; repo root cache/.cache is no longer a legal repo-side bridge target."
+      "bridge_kind": "runtime-cleanup-boundary",
+      "repo_side_default_targets": [
+        ".runtime-cache/tmp/ops-cleanup/workspace",
+        ".runtime-cache/tmp/ops-cleanup/cache"
+      ],
+      "operator_side_override_prefixes": [
+        "/tmp/video-digestor",
+        "/tmp/video-analysis",
+        "/private/tmp/video-digestor",
+        "/private/tmp/video-analysis"
+      ],
+      "forbidden_repo_root_targets": [
+        "cache",
+        ".cache"
+      ],
+      "notes": "Long-running ops workflows must default to repo-side .runtime-cache/tmp staging and may override only into governed operator-side tmp roots; repo root cache/.cache is not a legal bridge target."
     },
     {
       "name": "standard-image-readiness-bridge",

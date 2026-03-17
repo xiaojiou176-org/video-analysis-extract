@@ -2,6 +2,9 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+REPO_SIDE_CLEANUP_ROOT="$ROOT_DIR/.runtime-cache/tmp/ops-cleanup"
+REPO_SIDE_CLEANUP_WORKSPACE_DIR="$REPO_SIDE_CLEANUP_ROOT/workspace"
+REPO_SIDE_CLEANUP_CACHE_DIR="$REPO_SIDE_CLEANUP_ROOT/cache"
 
 # Runtime knobs use CLI flags with internal defaults (no same-name env fallback).
 OPS_DAILY_LOCAL_HOUR="9"
@@ -56,6 +59,8 @@ PY
     "$ROOT_DIR/.runtime-cache"
     "/tmp/video-digestor"
     "/tmp/video-analysis"
+    "/private/tmp/video-digestor"
+    "/private/tmp/video-analysis"
   )
   local prefix
   for prefix in "${allowed_prefixes[@]}"; do
@@ -65,6 +70,8 @@ PY
     fi
   done
   echo "[start_ops_workflows] ${name} is outside allowed cleanup prefixes: $resolved" >&2
+  echo "[start_ops_workflows] repo-side cleanup must stay under: $ROOT_DIR/.runtime-cache" >&2
+  echo "[start_ops_workflows] operator-side overrides may use: /tmp/video-digestor* or /tmp/video-analysis* (including /private/tmp resolved paths)" >&2
   echo "[start_ops_workflows] allowed prefixes: ${allowed_prefixes[*]}" >&2
   exit 2
 }
@@ -103,7 +110,9 @@ Options:
   --cleanup-cache-max-size-mb <mb>
                                    Cleanup cache max size override (MB)
   --cleanup-workspace-dir <path>   Cleanup workspace dir override
+                                   Default repo-side path: .runtime-cache/tmp/ops-cleanup/workspace
   --cleanup-cache-dir <path>       Cleanup cache dir override
+                                   Default repo-side path: .runtime-cache/tmp/ops-cleanup/cache
   --cleanup-workflow-id <id>       Cleanup workflow id (default: cleanup-workspace-workflow)
   --cleanup-run-once               Run cleanup workflow once (default: disabled)
   --show-hints                     Print startup summary logs (default)
@@ -310,9 +319,13 @@ fi
 
 if [[ -n "$OPS_CLEANUP_WORKSPACE_DIR" ]]; then
   OPS_CLEANUP_WORKSPACE_DIR="$(validate_cleanup_dir OPS_CLEANUP_WORKSPACE_DIR "$OPS_CLEANUP_WORKSPACE_DIR")"
+else
+  OPS_CLEANUP_WORKSPACE_DIR="$REPO_SIDE_CLEANUP_WORKSPACE_DIR"
 fi
 if [[ -n "$OPS_CLEANUP_CACHE_DIR" ]]; then
   OPS_CLEANUP_CACHE_DIR="$(validate_cleanup_dir OPS_CLEANUP_CACHE_DIR "$OPS_CLEANUP_CACHE_DIR")"
+else
+  OPS_CLEANUP_CACHE_DIR="$REPO_SIDE_CLEANUP_CACHE_DIR"
 fi
 
 if [[ "$OPS_SHOW_HINTS" == "1" ]]; then
@@ -332,11 +345,12 @@ EOM
   if [[ -n "$OPS_CLEANUP_CACHE_MAX_SIZE_MB" ]]; then
     echo "[start_ops_workflows] cleanup_workspace cache_max_size_mb=$OPS_CLEANUP_CACHE_MAX_SIZE_MB"
   fi
-  if [[ -n "$OPS_CLEANUP_WORKSPACE_DIR" ]]; then
-    echo "[start_ops_workflows] cleanup_workspace workspace_dir=$OPS_CLEANUP_WORKSPACE_DIR"
-  fi
-  if [[ -n "$OPS_CLEANUP_CACHE_DIR" ]]; then
-    echo "[start_ops_workflows] cleanup_workspace cache_dir=$OPS_CLEANUP_CACHE_DIR"
+  echo "[start_ops_workflows] cleanup_workspace workspace_dir=$OPS_CLEANUP_WORKSPACE_DIR"
+  echo "[start_ops_workflows] cleanup_workspace cache_dir=$OPS_CLEANUP_CACHE_DIR"
+  if [[ "$OPS_CLEANUP_WORKSPACE_DIR" == "$REPO_SIDE_CLEANUP_WORKSPACE_DIR" && "$OPS_CLEANUP_CACHE_DIR" == "$REPO_SIDE_CLEANUP_CACHE_DIR" ]]; then
+    echo "[start_ops_workflows] cleanup_workspace boundary=repo-side-default (.runtime-cache/tmp only)"
+  else
+    echo "[start_ops_workflows] cleanup_workspace boundary=override (must stay under governed prefixes)"
   fi
   if [[ "$OPS_DRY_RUN" == "1" ]]; then
     echo "[start_ops_workflows] dry-run enabled: no commands will be executed"

@@ -365,6 +365,11 @@ def _render_external_lane_snapshot() -> str:
         for item in (workflow_report or {}).get("lanes", [])
         if isinstance(item, dict)
     }
+    lane_contracts = {
+        str(item.get("name") or ""): item
+        for item in contract.get("lanes", [])
+        if isinstance(item, dict)
+    }
     workflow_current_head = str((workflow_report or {}).get("source_commit") or "").strip()
 
     def _merge_workflow_state(
@@ -375,12 +380,30 @@ def _render_external_lane_snapshot() -> str:
         row = workflow_rows.get(lane_name)
         if not row:
             return base_state, base_note
+        lane_contract = lane_contracts.get(lane_name, {})
         workflow_note = str(row.get("note") or "").strip()
         matches_current_head = row.get("latest_run_matches_current_head") is True
         latest_run = row.get("latest_run") or {}
         latest_head = str(latest_run.get("headSha") or "").strip()
+        current_head_required_statuses = {
+            str(value).strip()
+            for value in lane_contract.get("current_head_required_statuses", [])
+            if str(value).strip()
+        }
+        if not current_head_required_statuses and lane_contract.get("verified_requires_current_head") is True:
+            current_head_required_statuses = {"verified"}
+        historical_state = str(lane_contract.get("historical_state") or "historical")
         if matches_current_head:
             return str(row.get("state") or base_state), workflow_note or base_note
+        if base_state in current_head_required_statuses:
+            if workflow_note:
+                return historical_state, workflow_note
+            if latest_head and workflow_current_head and latest_head != workflow_current_head:
+                return (
+                    historical_state,
+                    f"{base_note}; historical remote workflow targets `{latest_head}`, current HEAD is `{workflow_current_head}`",
+                )
+            return historical_state, f"{base_note}; current HEAD has no matching remote workflow proof"
         if workflow_note:
             if latest_head and workflow_current_head and latest_head != workflow_current_head:
                 return (

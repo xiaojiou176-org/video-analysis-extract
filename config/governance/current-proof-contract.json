@@ -17,7 +17,14 @@
       "name": "ghcr-standard-image-readiness",
       "artifact": ".runtime-cache/reports/governance/standard-image-publish-readiness.json",
       "required": false,
-      "reason": "GHCR readiness is a current-state claim in external-lane reporting"
+      "reason": "GHCR readiness is a current-state claim in external-lane reporting",
+      "external_lane": "ghcr-standard-image",
+      "workflow_artifact": ".runtime-cache/reports/governance/external-lane-workflows.json",
+      "require_current_head_for_statuses": [
+        "verified",
+        "queued",
+        "in_progress"
+      ]
     },
     {
       "name": "external-lane-workflows",
@@ -29,7 +36,14 @@
       "name": "release-evidence-attestation",
       "artifact": ".runtime-cache/reports/release/release-evidence-attest-readiness.json",
       "required": false,
-      "reason": "release evidence readiness is used as current external proof"
+      "reason": "release evidence readiness is used as current external proof",
+      "external_lane": "release-evidence-attestation",
+      "workflow_artifact": ".runtime-cache/reports/governance/external-lane-workflows.json",
+      "require_current_head_for_statuses": [
+        "verified",
+        "queued",
+        "in_progress"
+      ]
     }
   ]
 }
