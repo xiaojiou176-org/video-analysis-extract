@@ -44,6 +44,7 @@
 - `docs/testing.md` 现在以**策略解释**为主；高漂移 job inventory 已移到 `docs/generated/ci-topology.md`。
 - PR 信任模型：仅同仓 trusted internal PR 允许进入 self-hosted 主链。
 - docs gate 现在同时要求：`config/docs/*.json` control plane 一致、render output 新鲜、manual boundary 不越界。
+- 生成型治理快照当前统一收口到 `docs/generated/governance-dashboard.md`、`docs/generated/ci-topology.md`、`docs/generated/runner-baseline.md`、`docs/generated/release-evidence.md`；本页只解释这些快照各自代表什么，不手抄高漂移 inventory。
 - repo-side strict canonical path：`./bin/repo-side-strict-ci --mode pre-push --strict-full-run 1 --ci-dedupe 0`。
 - external lane 只允许通过 generated snapshot 或 runtime reports 宣称 current state。
 <!-- docs:generated governance-snapshot end -->
