@@ -3,63 +3,40 @@
 from __future__ import annotations
 
 import asyncio
-import builtins
-import sys
-from types import ModuleType, SimpleNamespace
-from typing import Any, Self
+from types import SimpleNamespace
+from typing import Any
 from unittest.mock import AsyncMock, patch
 
 import worker.pipeline.steps.article as article_step
 from worker.pipeline.steps.article import step_fetch_article_content
 
 
-class _FakeResponse:
-    def __init__(self, text: str, *, raise_error: Exception | None = None) -> None:
-        self.text = text
-        self._raise_error = raise_error
-
-    def raise_for_status(self) -> None:
-        if self._raise_error is not None:
-            raise self._raise_error
-
-
-class _FakeAsyncClient:
-    def __init__(self, response: _FakeResponse, *, get_error: Exception | None = None) -> None:
-        self._response = response
-        self._get_error = get_error
-
-    async def __aenter__(self) -> Self:
-        return self
-
-    async def __aexit__(self, exc_type, exc, tb) -> bool:
-        return False
-
-    async def get(self, _url: str) -> _FakeResponse:
-        if self._get_error is not None:
-            raise self._get_error
-        return self._response
-
-
-def _patch_async_client(
+def _patch_fetch_article_html(
     monkeypatch,
     *,
     response_text: str = "<html></html>",
-    get_error: Exception | None = None,
-    raise_error: Exception | None = None,
+    fetch_error: Exception | None = None,
 ) -> None:
-    def _factory(*_args: Any, **_kwargs: Any) -> _FakeAsyncClient:
-        return _FakeAsyncClient(
-            response=_FakeResponse(response_text, raise_error=raise_error),
-            get_error=get_error,
-        )
+    async def _fake_fetch_article_html(_source_url: str) -> str:
+        if fetch_error is not None:
+            raise fetch_error
+        return response_text
 
-    monkeypatch.setattr(article_step.httpx, "AsyncClient", _factory)
+    monkeypatch.setattr(article_step, "fetch_article_html", _fake_fetch_article_html)
 
 
-def _install_trafilatura(monkeypatch, *, extracted: str | None) -> None:
-    module = ModuleType("trafilatura")
-    module.extract = lambda *_args, **_kwargs: extracted
-    monkeypatch.setitem(sys.modules, "trafilatura", module)
+def _patch_extract_article_text(
+    monkeypatch,
+    *,
+    extracted: str | None = None,
+    extract_error: Exception | None = None,
+) -> None:
+    def _fake_extract_article_text(_html: str) -> str | None:
+        if extract_error is not None:
+            raise extract_error
+        return extracted
+
+    monkeypatch.setattr(article_step, "extract_article_text", _fake_extract_article_text)
 
 
 def test_step_fetch_article_content_fails_when_source_url_missing() -> None:
@@ -84,7 +61,7 @@ def test_step_fetch_article_content_fails_when_http_fails_without_rss_fallback(m
         "title": "",
         "overrides": {},
     }
-    _patch_async_client(monkeypatch, get_error=Exception("Connection refused"))
+    _patch_fetch_article_html(monkeypatch, fetch_error=Exception("Connection refused"))
 
     async def _run() -> Any:
         return await step_fetch_article_content(
@@ -110,13 +87,11 @@ def test_step_fetch_article_content_uses_rss_fallback_when_http_fails() -> None:
     }
 
     async def _run() -> Any:
-        with patch("httpx.AsyncClient") as mock_client:
-            mock_client.return_value.__aenter__ = AsyncMock(
-                return_value=AsyncMock(
-                    get=AsyncMock(side_effect=Exception("Connection refused")),
-                )
-            )
-            mock_client.return_value.__aexit__ = AsyncMock(return_value=None)
+        with patch.object(
+            article_step,
+            "fetch_article_html",
+            AsyncMock(side_effect=Exception("Connection refused")),
+        ):
             return await step_fetch_article_content(
                 SimpleNamespace(),
                 state,
@@ -133,8 +108,8 @@ def test_step_fetch_article_content_uses_rss_fallback_when_http_fails() -> None:
 
 def test_step_fetch_article_content_uses_trafilatura_when_available(monkeypatch) -> None:
     state = {"source_url": "https://example.com/article/3", "title": "Article"}
-    _patch_async_client(monkeypatch, response_text="<article>Hello</article>")
-    _install_trafilatura(monkeypatch, extracted="  extracted body  ")
+    _patch_fetch_article_html(monkeypatch, response_text="<article>Hello</article>")
+    _patch_extract_article_text(monkeypatch, extracted="extracted body")
 
     async def _run() -> Any:
         return await step_fetch_article_content(
@@ -155,8 +130,8 @@ def test_step_fetch_article_content_uses_rss_fallback_when_trafilatura_empty(mon
         "title": "Fallback article",
         "overrides": {"rss_summary": "rss summary"},
     }
-    _patch_async_client(monkeypatch, response_text="<article>empty</article>")
-    _install_trafilatura(monkeypatch, extracted=" ")
+    _patch_fetch_article_html(monkeypatch, response_text="<article>empty</article>")
+    _patch_extract_article_text(monkeypatch, extracted=None)
 
     async def _run() -> Any:
         return await step_fetch_article_content(
@@ -174,8 +149,8 @@ def test_step_fetch_article_content_uses_rss_fallback_when_trafilatura_empty(mon
 
 def test_step_fetch_article_content_fails_when_trafilatura_empty_and_no_rss(monkeypatch) -> None:
     state = {"source_url": "https://example.com/article/5", "title": ""}
-    _patch_async_client(monkeypatch, response_text="<article>empty</article>")
-    _install_trafilatura(monkeypatch, extracted="")
+    _patch_fetch_article_html(monkeypatch, response_text="<article>empty</article>")
+    _patch_extract_article_text(monkeypatch, extracted=None)
 
     async def _run() -> Any:
         return await step_fetch_article_content(
@@ -196,23 +171,15 @@ def test_step_fetch_article_content_handles_missing_trafilatura(monkeypatch) -> 
         "title": "Import fallback",
         "overrides": {"rss_content": "rss content"},
     }
-    _patch_async_client(monkeypatch, response_text="<article>hello</article>")
-    monkeypatch.delitem(sys.modules, "trafilatura", raising=False)
-
-    real_import = builtins.__import__
-
-    def _fake_import(name: str, *args: Any, **kwargs: Any) -> Any:
-        if name == "trafilatura":
-            raise ImportError("missing dependency")
-        return real_import(name, *args, **kwargs)
+    _patch_fetch_article_html(monkeypatch, response_text="<article>hello</article>")
+    _patch_extract_article_text(monkeypatch, extract_error=ImportError("missing dependency"))
 
     async def _run() -> Any:
-        with patch("builtins.__import__", side_effect=_fake_import):
-            return await step_fetch_article_content(
-                SimpleNamespace(),
-                state,
-                run_command=lambda _ctx, _cmd: asyncio.sleep(0),
-            )
+        return await step_fetch_article_content(
+            SimpleNamespace(),
+            state,
+            run_command=lambda _ctx, _cmd: asyncio.sleep(0),
+        )
 
     execution = asyncio.run(_run())
     assert execution.status == "succeeded"
@@ -223,23 +190,15 @@ def test_step_fetch_article_content_handles_missing_trafilatura(monkeypatch) -> 
 
 def test_step_fetch_article_content_fails_when_trafilatura_missing_and_no_rss(monkeypatch) -> None:
     state = {"source_url": "https://example.com/article/7", "title": ""}
-    _patch_async_client(monkeypatch, response_text="<article>hello</article>")
-    monkeypatch.delitem(sys.modules, "trafilatura", raising=False)
-
-    real_import = builtins.__import__
-
-    def _fake_import(name: str, *args: Any, **kwargs: Any) -> Any:
-        if name == "trafilatura":
-            raise ImportError("missing dependency")
-        return real_import(name, *args, **kwargs)
+    _patch_fetch_article_html(monkeypatch, response_text="<article>hello</article>")
+    _patch_extract_article_text(monkeypatch, extract_error=ImportError("missing dependency"))
 
     async def _run() -> Any:
-        with patch("builtins.__import__", side_effect=_fake_import):
-            return await step_fetch_article_content(
-                SimpleNamespace(),
-                state,
-                run_command=lambda _ctx, _cmd: asyncio.sleep(0),
-            )
+        return await step_fetch_article_content(
+            SimpleNamespace(),
+            state,
+            run_command=lambda _ctx, _cmd: asyncio.sleep(0),
+        )
 
     execution = asyncio.run(_run())
     assert execution.status == "succeeded"
@@ -256,19 +215,11 @@ def test_step_fetch_article_content_succeeds_with_trafilatura_extract() -> None:
     }
 
     async def _run() -> Any:
-        fake_response = SimpleNamespace(
-            raise_for_status=lambda: None,
-            text="<html><body>article</body></html>",
-        )
-        with patch("httpx.AsyncClient") as mock_client, patch(
-            "trafilatura.extract", return_value="Extracted full text"
-        ):
-            mock_client.return_value.__aenter__ = AsyncMock(
-                return_value=AsyncMock(
-                    get=AsyncMock(return_value=fake_response),
-                )
-            )
-            mock_client.return_value.__aexit__ = AsyncMock(return_value=None)
+        with patch.object(
+            article_step,
+            "fetch_article_html",
+            AsyncMock(return_value="<html><body>article</body></html>"),
+        ), patch.object(article_step, "extract_article_text", return_value="Extracted full text"):
             return await step_fetch_article_content(
                 SimpleNamespace(),
                 state,
@@ -291,17 +242,11 @@ def test_step_fetch_article_content_fails_when_trafilatura_empty_and_no_rss_fall
     }
 
     async def _run() -> Any:
-        fake_response = SimpleNamespace(
-            raise_for_status=lambda: None,
-            text="<html><body>empty</body></html>",
-        )
-        with patch("httpx.AsyncClient") as mock_client, patch("trafilatura.extract", return_value=""):
-            mock_client.return_value.__aenter__ = AsyncMock(
-                return_value=AsyncMock(
-                    get=AsyncMock(return_value=fake_response),
-                )
-            )
-            mock_client.return_value.__aexit__ = AsyncMock(return_value=None)
+        with patch.object(
+            article_step,
+            "fetch_article_html",
+            AsyncMock(return_value="<html><body>empty</body></html>"),
+        ), patch.object(article_step, "extract_article_text", return_value=None):
             return await step_fetch_article_content(
                 SimpleNamespace(),
                 state,
@@ -326,23 +271,11 @@ def test_step_fetch_article_content_uses_rss_fallback_when_trafilatura_missing()
     }
 
     async def _run() -> Any:
-        original_import = __import__
-        fake_response = SimpleNamespace(
-            raise_for_status=lambda: None,
-            text="<html><body>content</body></html>",
-        )
-        with patch("httpx.AsyncClient") as mock_client, patch(
-            "builtins.__import__",
-            side_effect=lambda name, *args, **kwargs: (_ for _ in ()).throw(ImportError(name))
-            if name == "trafilatura"
-            else original_import(name, *args, **kwargs),
-        ):
-            mock_client.return_value.__aenter__ = AsyncMock(
-                return_value=AsyncMock(
-                    get=AsyncMock(return_value=fake_response),
-                )
-            )
-            mock_client.return_value.__aexit__ = AsyncMock(return_value=None)
+        with patch.object(
+            article_step,
+            "fetch_article_html",
+            AsyncMock(return_value="<html><body>content</body></html>"),
+        ), patch.object(article_step, "extract_article_text", side_effect=ImportError("trafilatura")):
             return await step_fetch_article_content(
                 SimpleNamespace(),
                 state,

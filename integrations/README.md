@@ -5,10 +5,17 @@
 ## 负责什么
 
 - `binaries/`：外部 CLI / binary 的命令构造与适配。
+- `providers/`：外部 HTTP/API/provider 协议层与 request/response helper。
 - 后续可扩展：
-  - `providers/`
   - `reader/`
   - `runtime-images/`
+
+当前已收口的 provider 样例：
+
+- `providers/article_fetch.py`
+- `providers/rsshub.py`
+- `providers/youtube_comments.py`
+- `providers/bilibili_comments.py`
 
 ## 不负责什么
 

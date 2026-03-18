@@ -1,21 +1,20 @@
 from __future__ import annotations
 
-import asyncio
 import logging
 from datetime import UTC, datetime
 from typing import Any
-from urllib.parse import parse_qs, urlparse
 from uuid import uuid4
 
 import httpx
 
-YOUTUBE_API_BASE = "https://www.googleapis.com/youtube/v3"
-YOUTUBE_HOSTS = {
-    "youtube.com",
-    "www.youtube.com",
-    "m.youtube.com",
-    "youtu.be",
-}
+from integrations.providers.youtube_comments import (
+    create_youtube_client,
+    request_youtube_json,
+)
+from integrations.providers.youtube_comments import (
+    extract_video_id as provider_extract_video_id,
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -40,30 +39,7 @@ def _ts_to_iso(raw: Any) -> str | None:
 
 
 def _extract_video_id(source_url: str | None, video_uid: str | None) -> str:
-    uid = str(video_uid or "").strip()
-    if uid:
-        return uid
-
-    url = str(source_url or "").strip()
-    if not url:
-        return ""
-    parsed = urlparse(url)
-    host = parsed.netloc.lower()
-    if host not in YOUTUBE_HOSTS:
-        return ""
-
-    if host == "youtu.be":
-        return parsed.path.strip("/").split("/")[0]
-
-    query = parse_qs(parsed.query)
-    values = query.get("v") or []
-    if values:
-        return str(values[0]).strip()
-
-    parts = [part for part in parsed.path.split("/") if part]
-    if len(parts) >= 2 and parts[0] == "shorts":
-        return parts[1]
-    return ""
+    return provider_extract_video_id(source_url, video_uid)
 
 
 class YouTubeCommentCollector:
@@ -91,41 +67,16 @@ class YouTubeCommentCollector:
         *,
         params: dict[str, Any],
     ) -> dict[str, Any]:
-        trace_id = str(getattr(self, "_log_trace_id", "missing_trace"))
-        user = str(getattr(self, "_log_user", "youtube_comment_collector"))
-        last_error: Exception | None = None
-        for attempt in range(self._retry_attempts + 1):
-            try:
-                response = await client.get(path, params=params)
-                if response.status_code >= 400:
-                    response.raise_for_status()
-                payload = response.json()
-                if isinstance(payload, dict):
-                    return payload
-                return {}
-            except (httpx.TimeoutException, httpx.RequestError, httpx.HTTPStatusError) as exc:
-                last_error = exc
-                logger.warning(
-                    "youtube_api_request_retry",
-                    extra={
-                        "trace_id": trace_id,
-                        "user": user,
-                        "path": path,
-                        "attempt": attempt + 1,
-                        "max_attempts": self._retry_attempts + 1,
-                        "error": str(exc),
-                    },
-                )
-                if attempt >= self._retry_attempts:
-                    break
-                await asyncio.sleep(self._retry_backoff_seconds * float(2**attempt))
-        if last_error is not None:
-            logger.error(
-                "youtube_api_request_failed",
-                extra={"trace_id": trace_id, "user": user, "path": path, "error": str(last_error)},
-            )
-            raise last_error
-        raise RuntimeError("youtube_request_failed")
+        return await request_youtube_json(
+            client,
+            path,
+            params=params,
+            retry_attempts=self._retry_attempts,
+            retry_backoff_seconds=self._retry_backoff_seconds,
+            logger_obj=logger,
+            trace_id=str(getattr(self, "_log_trace_id", "missing_trace")),
+            user=str(getattr(self, "_log_user", "youtube_comment_collector")),
+        )
 
     def _normalize_top_comment(self, item: dict[str, Any]) -> dict[str, Any]:
         snippet = item.get("snippet") or {}
@@ -211,6 +162,15 @@ class YouTubeCommentCollector:
     ) -> dict[str, Any]:
         self._log_trace_id = uuid4().hex
         self._log_user = "youtube_comment_collector"
+        logger.info(
+            "youtube_comment_collect_started",
+            extra={
+                "trace_id": self._log_trace_id,
+                "user": self._log_user,
+                "source_url_present": bool(str(source_url or "").strip()),
+                "video_uid_present": bool(str(video_uid or "").strip()),
+            },
+        )
         if not self._api_key:
             raise ValueError("youtube_api_key_missing")
 
@@ -218,13 +178,15 @@ class YouTubeCommentCollector:
         if not video_id:
             raise ValueError("youtube_video_id_not_resolved")
 
-        timeout = httpx.Timeout(self._request_timeout_seconds)
         top_comments: list[dict[str, Any]] = []
         replies_index: dict[str, list[dict[str, Any]]] = {}
         page_token: str | None = None
         page_size = min(100, self._top_n)
 
-        async with httpx.AsyncClient(base_url=YOUTUBE_API_BASE, timeout=timeout) as client:
+        async with create_youtube_client(
+            request_timeout_seconds=self._request_timeout_seconds,
+            async_client_cls=httpx.AsyncClient,
+        ) as client:
             while len(top_comments) < self._top_n:
                 params: dict[str, Any] = {
                     "part": "snippet,replies",
@@ -287,7 +249,7 @@ class YouTubeCommentCollector:
         top_comments.sort(key=lambda item: _to_int(item.get("like_count"), 0), reverse=True)
         top_comments = top_comments[: self._top_n]
 
-        return {
+        payload = {
             "sort": "hot",
             "top_n": self._top_n,
             "replies_per_comment": self._replies_per_comment,
@@ -295,3 +257,13 @@ class YouTubeCommentCollector:
             "replies": replies_index,
             "fetched_at": _utc_now_iso(),
         }
+        logger.info(
+            "youtube_comment_collect_succeeded",
+            extra={
+                "trace_id": self._log_trace_id,
+                "user": self._log_user,
+                "top_comment_count": len(top_comments),
+                "reply_bucket_count": len(replies_index),
+            },
+        )
+        return payload

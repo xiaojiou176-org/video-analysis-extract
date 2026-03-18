@@ -5,10 +5,13 @@ import re
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any
-from urllib.parse import parse_qsl, urlparse
 
+from integrations.providers import youtube_transcript as youtube_transcript_provider
 from worker.pipeline.policies import coerce_bool
 from worker.pipeline.types import CommandResult, PipelineContext, StepExecution
+
+extract_youtube_video_id = youtube_transcript_provider.extract_youtube_video_id
+fetch_youtube_transcript_text = youtube_transcript_provider.fetch_youtube_transcript_text
 
 
 def subtitle_candidates(download_dir: Path) -> list[Path]:
@@ -54,62 +57,6 @@ def collect_subtitle_text_from_files(
         used_files.append(str(path.resolve()))
     transcript = "\n".join(chunk for chunk in transcript_chunks if chunk).strip()
     return transcript, used_files
-
-
-def extract_youtube_video_id(source_url: str | None, video_uid: str | None) -> str:
-    uid = str(video_uid or "").strip()
-    if uid:
-        return uid
-
-    raw = str(source_url or "").strip()
-    if not raw:
-        return ""
-    parsed = urlparse(raw)
-    host = (parsed.netloc or "").lower()
-    if host == "youtu.be":
-        return parsed.path.strip("/").split("/")[0]
-    if "youtube.com" not in host:
-        return ""
-
-    query = dict(parse_qsl(parsed.query, keep_blank_values=True))
-    candidate = str(query.get("v") or "").strip()
-    if candidate:
-        return candidate
-
-    parts = [part for part in parsed.path.split("/") if part]
-    if len(parts) >= 2 and parts[0] == "shorts":
-        return parts[1]
-    return ""
-
-
-def fetch_youtube_transcript_text(video_id: str) -> str:
-    from youtube_transcript_api import YouTubeTranscriptApi  # type: ignore[import-not-found]
-
-    languages = ["zh-Hans", "zh-Hant", "zh", "en", "en-US"]
-    entries: Any = None
-
-    if hasattr(YouTubeTranscriptApi, "get_transcript"):
-        entries = YouTubeTranscriptApi.get_transcript(video_id, languages=languages)
-    else:
-        api = YouTubeTranscriptApi()  # type: ignore[operator]
-        if hasattr(api, "get_transcript"):
-            entries = api.get_transcript(video_id, languages=languages)  # type: ignore[call-arg]
-        elif hasattr(api, "fetch"):
-            try:
-                entries = api.fetch(video_id, languages=languages)  # type: ignore[call-arg]
-            except TypeError:
-                entries = api.fetch(video_id)  # type: ignore[call-arg]
-
-    lines: list[str] = []
-    iterable = entries if isinstance(entries, list) else list(entries or [])
-    for item in iterable:
-        if isinstance(item, dict):
-            text = str(item.get("text") or "").strip()
-        else:
-            text = str(getattr(item, "text", "") or "").strip()
-        if text:
-            lines.append(text)
-    return "\n".join(lines).strip()
 
 
 def collect_asr_output_text(download_dir: Path, media_path: str) -> str:

@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import json
 from typing import Any
-from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from sqlalchemy import text
 
 from integrations.providers import gemini as gemini_provider
+from integrations.providers import http_probe as http_probe_provider
 from integrations.providers import resend as resend_provider
 from integrations.providers import rsshub as rsshub_provider
 from integrations.providers import youtube_data_api as youtube_provider
@@ -57,56 +57,17 @@ def _http_probe(
     headers: dict[str, str] | None = None,
     timeout_seconds: int = 8,
 ) -> dict[str, Any]:
-    sanitized_url = _sanitize_url_for_payload(url)
-    request = Request(url, headers=headers or {}, method=method)
-    try:
-        with urlopen(request, timeout=timeout_seconds) as response:
-            status_code = int(response.status)
-            body_preview = _sanitize_text_preview(
-                response.read(512).decode("utf-8", errors="replace")
-            )
-    except HTTPError as exc:
-        error_body = _sanitize_text_preview(exc.read().decode("utf-8", errors="replace"))
-        error_kind = _classify_http_error_kind(status_code=exc.code, error_message=error_body)
-        status = "warn" if error_kind == "rate_limit" else "fail"
-        return {
-            "status": status,
-            "error_kind": error_kind,
-            "message": f"http_error:{exc.code}",
-            "payload_json": {
-                "url": sanitized_url,
-                "status_code": exc.code,
-                "body": error_body,
-            },
-        }
-    except URLError as exc:
-        reason = _sanitize_text_preview(str(exc.reason))
-        return {
-            "status": "fail",
-            "error_kind": "transient",
-            "message": f"network_error:{reason}",
-            "payload_json": {"url": sanitized_url},
-        }
-
-    if 200 <= status_code < 300:
-        return {
-            "status": "ok",
-            "error_kind": None,
-            "message": "ok",
-            "payload_json": {"url": sanitized_url, "status_code": status_code},
-        }
-
-    error_kind = _classify_http_error_kind(status_code=status_code, error_message=body_preview)
-    return {
-        "status": "warn" if error_kind == "rate_limit" else "fail",
-        "error_kind": error_kind,
-        "message": f"http_status:{status_code}",
-        "payload_json": {
-            "url": sanitized_url,
-            "status_code": status_code,
-            "body": body_preview,
-        },
-    }
+    return http_probe_provider.http_probe(
+        url=url,
+        method=method,
+        headers=headers,
+        timeout_seconds=timeout_seconds,
+        request_cls=Request,
+        urlopen_func=urlopen,
+        sanitize_url=_sanitize_url_for_payload,
+        sanitize_preview=_sanitize_text_preview,
+        classify_error_kind=_classify_http_error_kind,
+    )
 
 
 def _record_provider_health_check(

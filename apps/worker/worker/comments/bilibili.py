@@ -2,25 +2,20 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import re
 from datetime import UTC, datetime
 from typing import Any
-from urllib.parse import parse_qs, urlparse
 from uuid import uuid4
 
 import httpx
 
-BILIBILI_API_BASE = "https://api.bilibili.com"
-BILIBILI_VIDEO_TYPE = 1
-BILIBILI_HOSTS = {"bilibili.com", "www.bilibili.com", "m.bilibili.com", "b23.tv"}
-DEFAULT_HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
-    ),
-    "Referer": "https://www.bilibili.com/",
-    "Origin": "https://www.bilibili.com",
-}
+from integrations.providers.bilibili_comments import (
+    BILIBILI_VIDEO_TYPE,
+    create_bilibili_client,
+    extract_aid_from_url,
+    extract_bvid,
+    request_bilibili_json,
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -52,10 +47,7 @@ def _ts_to_iso(ts: Any) -> str | None:
 
 
 def _extract_bvid(text: str) -> str | None:
-    match = re.search(r"(BV[0-9A-Za-z]+)", text)
-    if not match:
-        return None
-    return match.group(1)
+    return extract_bvid(text)
 
 
 class BilibiliCommentCollector:
@@ -88,16 +80,19 @@ class BilibiliCommentCollector:
     ) -> dict[str, Any]:
         self._log_trace_id = uuid4().hex
         self._log_user = "bilibili_comment_collector"
-        timeout = httpx.Timeout(self._request_timeout_seconds)
-        headers = dict(DEFAULT_HEADERS)
-        if self._cookie:
-            headers["Cookie"] = self._cookie
-
-        async with httpx.AsyncClient(
-            base_url=BILIBILI_API_BASE,
-            timeout=timeout,
-            headers=headers,
-            follow_redirects=True,
+        logger.info(
+            "bilibili_comment_collect_started",
+            extra={
+                "trace_id": self._log_trace_id,
+                "user": self._log_user,
+                "source_url_present": bool(str(source_url or "").strip()),
+                "video_uid_present": bool(str(video_uid or "").strip()),
+            },
+        )
+        async with create_bilibili_client(
+            request_timeout_seconds=self._request_timeout_seconds,
+            cookie=self._cookie,
+            async_client_cls=httpx.AsyncClient,
         ) as client:
             aid = await self._resolve_aid(client=client, source_url=source_url, video_uid=video_uid)
             if aid <= 0:
@@ -111,12 +106,22 @@ class BilibiliCommentCollector:
                 item["replies"] = replies
                 replies_index[str(item.get("comment_id") or "")] = replies
 
-        return {
+        payload = {
             "sort": "like",
             "top_comments": top_comments,
             "replies": replies_index,
             "fetched_at": _utc_now_iso(),
         }
+        logger.info(
+            "bilibili_comment_collect_succeeded",
+            extra={
+                "trace_id": self._log_trace_id,
+                "user": self._log_user,
+                "top_comment_count": len(top_comments),
+                "reply_bucket_count": len(replies_index),
+            },
+        )
+        return payload
 
     async def _throttle(self) -> None:
         if self._min_request_interval_seconds <= 0:
@@ -137,82 +142,21 @@ class BilibiliCommentCollector:
         *,
         params: dict[str, Any],
     ) -> dict[str, Any]:
-        trace_id = str(getattr(self, "_log_trace_id", "missing_trace"))
-        user = str(getattr(self, "_log_user", "bilibili_comment_collector"))
-        last_error: Exception | None = None
-        for attempt in range(self._retry_attempts + 1):
-            await self._throttle()
-            try:
-                response = await client.get(path, params=params)
-                if response.status_code in {412, 429}:
-                    raise httpx.HTTPStatusError(
-                        f"rate_limited:{response.status_code}",
-                        request=response.request,
-                        response=response,
-                    )
-                if response.status_code >= 500:
-                    response.raise_for_status()
-                if response.status_code >= 400:
-                    response.raise_for_status()
-                payload = response.json()
-                code = _to_int(payload.get("code"), default=0)
-                if code != 0:
-                    raise ValueError(
-                        f"bilibili_api_error:{code}:{str(payload.get('message') or payload.get('msg') or '').strip()}"
-                    )
-                data = payload.get("data")
-                if isinstance(data, dict):
-                    return data
-                return {}
-            except (
-                httpx.TimeoutException,
-                httpx.RequestError,
-                httpx.HTTPStatusError,
-                ValueError,
-            ) as exc:
-                last_error = exc
-                logger.warning(
-                    "bilibili_api_request_retry",
-                    extra={
-                        "trace_id": trace_id,
-                        "user": user,
-                        "path": path,
-                        "attempt": attempt + 1,
-                        "max_attempts": self._retry_attempts + 1,
-                        "error": str(exc),
-                    },
-                )
-                if attempt >= self._retry_attempts:
-                    break
-                await asyncio.sleep(self._retry_backoff_seconds * float(2**attempt))
-
-        if last_error is not None:
-            logger.error(
-                "bilibili_api_request_failed",
-                extra={"trace_id": trace_id, "user": user, "path": path, "error": str(last_error)},
-            )
-            raise last_error
-        raise RuntimeError("bilibili_request_failed")
+        return await request_bilibili_json(
+            client,
+            path,
+            params=params,
+            retry_attempts=self._retry_attempts,
+            retry_backoff_seconds=self._retry_backoff_seconds,
+            throttle=self._throttle,
+            logger_obj=logger,
+            trace_id=str(getattr(self, "_log_trace_id", "missing_trace")),
+            user=str(getattr(self, "_log_user", "bilibili_comment_collector")),
+            to_int=_to_int,
+        )
 
     def _extract_aid_from_url(self, source_url: str | None) -> int | None:
-        if not source_url:
-            return None
-        parsed = urlparse(source_url)
-        host = parsed.netloc.lower()
-        if host not in BILIBILI_HOSTS:
-            return None
-
-        aid_match = re.search(r"/video/av(\d+)", parsed.path)
-        if aid_match:
-            return _to_int(aid_match.group(1), default=0) or None
-
-        query = parse_qs(parsed.query)
-        aid_values = query.get("aid") or []
-        if aid_values:
-            aid = _to_int(aid_values[0], default=0)
-            if aid > 0:
-                return aid
-        return None
+        return extract_aid_from_url(source_url, to_int=_to_int)
 
     async def _resolve_aid(
         self,

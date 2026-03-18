@@ -5,8 +5,7 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 from typing import Any
 
-import httpx
-
+from integrations.providers.article_fetch import extract_article_text, fetch_article_html
 from worker.pipeline.step_executor import utc_now_iso
 from worker.pipeline.types import PipelineContext, StepExecution
 
@@ -53,10 +52,7 @@ async def step_fetch_article_content(
     rss_summary = str(overrides.get("rss_summary") or "").strip()
 
     try:
-        async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
-            response = await client.get(source_url)
-            response.raise_for_status()
-            html = response.text
+        html = await fetch_article_html(source_url)
     except Exception as exc:
         transcript = _build_fallback_transcript(
             title=title,
@@ -85,11 +81,9 @@ async def step_fetch_article_content(
         )
 
     try:
-        from trafilatura import extract
-
-        extracted = extract(html, include_comments=False, include_tables=True)
-        if extracted and extracted.strip():
-            transcript = extracted.strip()
+        extracted = extract_article_text(html)
+        if extracted:
+            transcript = extracted
         else:
             transcript = _build_fallback_transcript(
                 title=title,

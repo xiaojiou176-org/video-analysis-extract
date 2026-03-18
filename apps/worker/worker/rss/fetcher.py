@@ -6,65 +6,14 @@ from collections.abc import Iterable
 from dataclasses import dataclass, field
 from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
-from xml.etree import ElementTree as ET
 
 import httpx
 
-
-def _local_name(tag: str) -> str:
-    if "}" in tag:
-        return tag.split("}", 1)[1]
-    return tag
-
-
-def _find_text(node: ET.Element, names: set[str]) -> str | None:
-    for child in node:
-        if _local_name(child.tag) in names and child.text:
-            text = child.text.strip()
-            if text:
-                return text
-    return None
-
-
-def _extract_link(node: ET.Element) -> str | None:
-    for child in node:
-        if _local_name(child.tag) != "link":
-            continue
-
-        href = (child.attrib.get("href") or "").strip()
-        if href:
-            return href
-
-        if child.text and child.text.strip():
-            return child.text.strip()
-    return None
-
-
-def parse_feed(xml_content: str) -> list[dict[str, Any]]:
-    root = ET.fromstring(xml_content)
-    root_name = _local_name(root.tag)
-
-    if root_name == "rss":
-        channel = next((c for c in root if _local_name(c.tag) == "channel"), None)
-        items = [c for c in (channel or []) if _local_name(c.tag) == "item"]
-    elif root_name == "feed":
-        items = [c for c in root if _local_name(c.tag) == "entry"]
-    else:
-        items = []
-
-    entries: list[dict[str, Any]] = []
-    for item in items:
-        entries.append(
-            {
-                "title": _find_text(item, {"title"}),
-                "link": _extract_link(item),
-                "guid": _find_text(item, {"guid", "id"}),
-                "published_at": _find_text(item, {"pubDate", "published", "updated"}),
-                "summary": _find_text(item, {"description", "summary"}),
-                "content": _find_text(item, {"content", "encoded"}),
-            }
-        )
-    return entries
+from integrations.providers.rsshub import (
+    build_health_url,
+    is_risk_control_response,
+    parse_feed,
+)
 
 
 class RSSHubFetcher:
@@ -144,11 +93,6 @@ class RSSHubFetcher:
         if not base.scheme or not base.netloc:
             return feed_url
         return urlunparse(feed._replace(scheme=base.scheme, netloc=base.netloc))
-
-    @staticmethod
-    def _is_risk_control_response(response: httpx.Response) -> bool:
-        body = response.text or ""
-        return "-352" in body or "风控" in body or "412 Precondition Failed" in body
 
     @staticmethod
     def _dedupe_entries(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -234,7 +178,7 @@ class RSSHubFetcher:
     async def _probe_public_base(self, *, client: httpx.AsyncClient, base_url: str) -> float:
         score = 0.0
         timeout = httpx.Timeout(self._fallback_probe_timeout_seconds)
-        health_url = f"{base_url}/healthz"
+        health_url = build_health_url(base_url)
         try:
             response = await client.get(health_url, follow_redirects=True, timeout=timeout)
             if 200 <= response.status_code < 300:
@@ -298,7 +242,7 @@ class RSSHubFetcher:
                 try:
                     response = await client.get(candidate_url, follow_redirects=True)
                     if response.status_code >= 400:
-                        if self._is_risk_control_response(response):
+                        if is_risk_control_response(response):
                             raise httpx.HTTPStatusError(
                                 f"risk_control_or_precondition: {response.status_code}",
                                 request=response.request,
@@ -313,9 +257,9 @@ class RSSHubFetcher:
                     last_error = exc
                     status_code = exc.response.status_code
                     # Retry server errors; for known anti-bot errors, switch candidate route immediately.
-                    if status_code < 500 or self._is_risk_control_response(exc.response):
+                    if status_code < 500 or is_risk_control_response(exc.response):
                         break
-                except (httpx.RequestError, ET.ParseError) as exc:
+                except (httpx.RequestError, ValueError) as exc:
                     last_error = exc
 
                 if attempt >= self._retry_attempts:
