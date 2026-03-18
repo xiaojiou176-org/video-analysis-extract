@@ -66,13 +66,13 @@ Reader overlay 规则：
 
 ### 1) 安装依赖与前置
 
-前置：PostgreSQL 16、Temporal dev server、Python 3.11+、`uv`、(可选) Redis。
+前置：PostgreSQL 16、Temporal dev server、Python 3.11+、`uv`。
 
 macOS 示例：
 
 ```bash
 brew update
-brew install postgresql@16 redis temporal
+brew install postgresql@16 temporal
 ```
 
 安装依赖：
@@ -91,6 +91,7 @@ UV_PROJECT_ENVIRONMENT="$HOME/.cache/video-digestor/project-venv" uv sync --froz
 ```
 
 - `build-ci-standard-image.yml` 现在会先显式准备 Docker Buildx，再调用 `scripts/ci/build_standard_image.sh` 做多架构标准镜像构建；如果镜像工作流仍在构建入口阶段立刻失败，先检查 runner 的 buildx 准备步骤是否成功，而不是先怀疑 GHCR 权限。
+- GHCR 相关本地/预检凭证优先级现在是：workflow 对齐的 `GHCR_WRITE_USERNAME/GHCR_WRITE_TOKEN` -> 本地调试用 `GHCR_USERNAME/GHCR_TOKEN` -> 当前 `gh auth` 身份。只有前两者之一存在时，readiness 才能进一步预探 blob upload 写权限。
 - 标准镜像构建链依赖 `.devcontainer/Dockerfile`；当前约定会对 NodeSource signing key 做显式重试，并先写入临时 key 文件再 `gpg --dearmor`，这样 ARM64/QEMU buildx 路径遇到短暂 HTTP/2 抖动时，不会把空响应直接当成有效 key。
 - self-hosted runner 在进入 `build-ci-standard-image.yml` 之前，会用 `scripts/governance/runner_workspace_maintenance.sh` 统一清理 `.runtime-cache`、`mutants/` 和 `/tmp/video-digestor-*` 下的目录/单文件 stale residue；如果 workflow 再次在 runner hygiene 阶段失败，先看是否出现新的不可写残留，而不是先怀疑 GHCR 权限。
 
@@ -148,7 +149,6 @@ pre-commit run --all-files
 
 ```bash
 brew services start postgresql@16
-brew services start redis
 temporal server start-dev --ip 127.0.0.1 --port 7233
 ```
 
@@ -357,7 +357,7 @@ bash -n scripts/runtime/start_ops_workflows.sh
   - `.runtime-cache/logs/tests/`
   - `.runtime-cache/reports/tests/`
   - `.runtime-cache/evidence/tests/`
-- compose 固定默认（不再通过 env 覆盖）：core Postgres `DB/User`、Redis 端口、Temporal 端口；Miniflux `DB/User/DB_NAME` 与 Miniflux 端口。
+- compose 固定默认（不再通过 env 覆盖）：core Postgres `DB/User` 与 Temporal 端口；Miniflux `DB/User/DB_NAME` 与 Miniflux 端口。
 
 `full_stack.sh` 运行约束（稳定性修复）：
 

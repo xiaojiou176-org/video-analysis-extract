@@ -182,11 +182,33 @@ def test_devcontainer_and_reader_stack_follow_strict_contract() -> None:
     assert "chromium browser drift detected" in post_create
     assert "playwright install chromium || true" not in post_create
     assert "${STRICT_CI_SERVICE_IMAGE_PGVECTOR_PG16" in core_compose
-    assert "${STRICT_CI_SERVICE_IMAGE_REDIS_CORE" in core_compose
     assert "${STRICT_CI_SERVICE_IMAGE_TEMPORAL_AUTO_SETUP" in core_compose
     assert "${STRICT_CI_SERVICE_IMAGE_MINIFLUX" in compose
     assert "${STRICT_CI_SERVICE_IMAGE_POSTGRES_MINIFLUX" in compose
     assert "${STRICT_CI_SERVICE_IMAGE_NEXTFLUX" in compose
+
+
+def test_canonical_core_surfaces_do_not_require_removed_cache_service() -> None:
+    repo_root = _repo_root()
+    forbidden = "".join(chr(code) for code in (114, 101, 100, 105, 115))
+    surfaces = {
+        "README": repo_root / "README.md",
+        "start-here": repo_root / "docs" / "start-here.md",
+        "runbook-local": repo_root / "docs" / "runbook-local.md",
+        "init-local-services": repo_root / "docs" / "init_local_services.md",
+        "full-stack-gce": repo_root / "docs" / "deploy" / "full-stack-gce.md",
+        "core-compose": repo_root / "infra" / "compose" / "core-services.compose.yml",
+        "strict-ci-contract": repo_root / "infra" / "config" / "strict_ci_contract.json",
+        "api-systemd": repo_root / "infra" / "systemd" / "vd-api.service",
+        "bootstrap-full-stack": repo_root / "scripts" / "runtime" / "bootstrap_full_stack.sh",
+        "recreate-gce-instance": repo_root / "scripts" / "deploy" / "recreate_gce_instance.sh",
+        "active-upstreams": repo_root / "config" / "governance" / "active-upstreams.json",
+        "upstream-registry": repo_root / "config" / "governance" / "upstream-registry.json",
+    }
+
+    for label, path in surfaces.items():
+        text = path.read_text(encoding="utf-8").lower()
+        assert forbidden not in text, f"{label} still references the removed cache service"
 
 
 def test_collect_ci_kpi_reports_artifact_and_topology_metrics(tmp_path: Path) -> None:

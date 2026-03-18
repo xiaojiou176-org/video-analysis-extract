@@ -5,13 +5,12 @@
 ## 1) 安装依赖
 ```bash
 brew update
-brew install postgresql@16 redis temporal
+brew install postgresql@16 temporal
 ```
 
-## 2) 启动 PostgreSQL + Redis
+## 2) 启动 PostgreSQL
 ```bash
 brew services start postgresql@16
-brew services start redis
 ```
 
 ## 3) 初始化数据库
@@ -42,7 +41,6 @@ export VD_API_BASE_URL='http://127.0.0.1:9000'
 ## 6) 停止服务
 ```bash
 brew services stop postgresql@16
-brew services stop redis
 ```
 
 Temporal Dev Server 在其终端 `Ctrl+C` 停止。

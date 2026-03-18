@@ -215,9 +215,11 @@ Exception detail sanitization contract:
 - Script entry controls for `dev_api/dev_worker/dev_mcp/init_env_example` are CLI-only after Batch C (see `docs/reference/env-script-overrides.md`)
 - `scripts/deploy/recreate_gce_instance.sh` now uses CLI flags only (no GCE recreate env contract vars)
 - `CORE_POSTGRES_PORT`, `CORE_POSTGRES_PASSWORD` (docker compose core-services overrides)
-- `GHCR_USERNAME`, `GHCR_TOKEN` are optional local-only credentials for pulling the private strict CI standard image from `ghcr.io` during `scripts/strict_ci_entry.sh` runs.
+- `GHCR_WRITE_USERNAME`, `GHCR_WRITE_TOKEN` are the workflow-aligned GHCR credentials used by the standard-image publish lane and accepted by local readiness probes when exported manually.
+- `GHCR_USERNAME`, `GHCR_TOKEN` remain optional local-only fallback credentials for pulling the private strict CI standard image from `ghcr.io` during `scripts/strict_ci_entry.sh` runs.
 - `VD_STANDARD_ENV_LOAD_PLATFORM_ARCH`, `API_REAL_SMOKE_DATABASE_URL`, `API_REAL_SMOKE_TEMPORAL_TARGET_HOST`, and `FULL_STACK_TEMPORAL_POLLER_READY_TIMEOUT_SECONDS` are optional script/runtime overrides for strict standard image loading, API real-smoke targeting, and full-stack Temporal readiness waits.
 - `TMPDIR`, `UV_LINK_MODE`, `UV_PROJECT_ENVIRONMENT`, and `PYTHONDONTWRITEBYTECODE` are optional local strict-runtime overrides used by `scripts/ci/bootstrap_strict_ci_runtime.sh`, `scripts/ci/python_tests.sh`, and `scripts/governance/quality_gate.sh` to keep Python verification environments out of the workspace and suppress repo-side `__pycache__` / `*.pyc` residue.
+- `MUTATION_WORKDIR_ROOT` is an optional scratch root for `scripts/ci/run_mutmut.sh`; keep it outside the repo (default `/tmp/video-digestor-mutation/workdir`) so mutation campaigns do not exhaust `.runtime-cache/tmp`.
 - 若历史本地运行已经留下 workspace-root `.venv`、源码树 `apps/web/node_modules` 或 `apps/**/__pycache__`，先执行 `./bin/workspace-hygiene --apply` 再继续做 profile validation / bootstrap。
 - `GCP_PROJECT_ID`, `GCP_ZONE` are optional defaults for runner maintenance helpers:
   - `scripts/governance/audit_github_runner_host.sh`

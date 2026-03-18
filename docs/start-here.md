@@ -187,7 +187,6 @@ UV_PROJECT_ENVIRONMENT="$HOME/.cache/video-digestor/project-venv" uv sync --froz
 ./bin/prepare-web-runtime
 
 brew services start postgresql@16
-brew services start redis
 temporal server start-dev --ip 127.0.0.1 --port 7233
 
 cp .env.example .env
@@ -223,7 +222,7 @@ curl -sS -X POST http://127.0.0.1:9000/api/v1/ingest/poll -H 'Content-Type: appl
 - `./bin/bootstrap-full-stack` 会先运行 `./bin/workspace-hygiene --apply`，清掉根目录 `.venv`、源码树 `apps/web/node_modules`、以及 `apps/**/__pycache__` 这类非法运行态。
 - `./bin/bootstrap-full-stack` 会拉起 core services + Miniflux + Nextflux。
 - `./bin/bootstrap-full-stack` 除首次 `.env` 不存在时复制模板外，不再持久化改写 `.env`；端口冲突与运行时路由决策会写入 `.runtime-cache/run/full-stack/resolved.env`，仅对当前运行生效。
-- `core-services.compose.yml` 现在使用 digest-pinned service 镜像（Postgres/Redis/Temporal），并优先接受 strict contract 导出的 `STRICT_CI_SERVICE_IMAGE_*` 值；端口与 Postgres `DB/User` 仍收口为固定默认（`6379` / `7233` / `video_analysis` / `postgres`）。
+- `core-services.compose.yml` 现在使用 digest-pinned service 镜像（Postgres/Temporal），并优先接受 strict contract 导出的 `STRICT_CI_SERVICE_IMAGE_*` 值；端口与 Postgres `DB/User` 仍收口为固定默认（`7233` / `video_analysis` / `postgres`）。
 - `miniflux-nextflux.compose.yml` 的 Miniflux 端口与 `DB/User/DB_NAME` 已收口为固定默认（`8080` / `miniflux` / `miniflux`）。
 - 本地路由真相源是 `API_PORT/WEB_PORT`；`VD_API_BASE_URL` 与 `NEXT_PUBLIC_API_BASE_URL` 属于派生目标地址。
 - `./bin/full-stack up` 会按 `API health -> Web -> Worker` 顺序启动；Worker 启动前会先做 Temporal preflight（`TEMPORAL_TARGET_HOST`，默认 `localhost:7233`），不通时直接 fail-fast。
@@ -259,7 +258,8 @@ curl -sS -X POST http://127.0.0.1:9000/api/v1/ingest/poll -H 'Content-Type: appl
 
 本地执行正式 pinned-image 严格验收时，必须满足以下其一：
 
-- 已显式导出 `GHCR_USERNAME` + `GHCR_TOKEN`
+- 已显式导出 workflow 对齐的 `GHCR_WRITE_USERNAME` + `GHCR_WRITE_TOKEN`
+- 已显式导出本地调试用的 `GHCR_USERNAME` + `GHCR_TOKEN`
 - `gh auth` 当前登录态可用（仓库脚本会自动复用该身份）
 
 `--debug-build` 只用于排障标准环境构建问题，不计入 CI 等价完成信号。

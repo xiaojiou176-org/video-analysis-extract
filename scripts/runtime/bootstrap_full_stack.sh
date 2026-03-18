@@ -171,7 +171,7 @@ log "Validating env contract"
 
 if is_truthy "$WITH_CORE_SERVICES"; then
   command -v docker >/dev/null 2>&1 || fail "docker not found; required for core services"
-  log "Starting core services (postgres/redis/temporal)"
+  log "Starting core services (postgres/temporal)"
   (cd "$ROOT_DIR" && ./scripts/deploy/core_services.sh up --env-file "$ROOT_DIR/.env") || fail "core services failed"
 fi
 

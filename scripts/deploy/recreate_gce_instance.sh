@@ -140,7 +140,7 @@ export DEBIAN_FRONTEND=noninteractive
 
 # Install system deps
 apt-get update -qq
-apt-get install -y -qq git curl nginx postgresql postgresql-contrib redis-server python3-pip python3-venv docker.io docker-compose
+apt-get install -y -qq git curl nginx postgresql postgresql-contrib python3-pip python3-venv docker.io docker-compose
 
 # Install uv (Python package manager) with pinned version + checksum validation.
 UV_VERSION="0.10.7"
@@ -171,8 +171,8 @@ fi
 export PATH="$HOME/.local/bin:$PATH"
 
 # Enable & start services
-systemctl enable docker redis-server postgresql nginx
-systemctl start docker redis-server postgresql nginx
+systemctl enable docker postgresql nginx
+systemctl start docker postgresql nginx
 STARTUP
 )"
 

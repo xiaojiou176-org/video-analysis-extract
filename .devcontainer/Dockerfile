@@ -29,7 +29,6 @@ RUN rm -f /etc/apt/sources.list.d/yarn.list \
     nodejs \
     postgresql-client \
     sqlite3 \
-    redis-tools \
     unzip \
   && rm -rf /var/lib/apt/lists/* \
   && python3 -m pip install --no-cache-dir "uv==${STRICT_CI_UV_VERSION}" \

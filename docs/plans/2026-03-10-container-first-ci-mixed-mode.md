@@ -220,7 +220,6 @@ RUN apt-get update \
     jq \
     postgresql-client \
     sqlite3 \
-    redis-tools \
     ripgrep \
   && python3 -m pip install --no-cache-dir "uv==${UV_VERSION}" \
   && rm -rf /var/lib/apt/lists/*
