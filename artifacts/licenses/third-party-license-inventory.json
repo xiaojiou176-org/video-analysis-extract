@@ -7,7 +7,7 @@
   "summary": {
     "python_runtime_packages": 98,
     "python_unknown_licenses": 0,
-    "web_runtime_packages": 284,
+    "web_runtime_packages": 286,
     "web_unknown_licenses": 0
   },
   "python_runtime": [
@@ -1004,8 +1004,8 @@
       "version": "1.8.1",
       "license": "MIT",
       "license_source": "package-lock",
-      "resolved": "https://registry.npmjs.org/@emnapi/core/-/core-1.8.1.tgz",
-      "integrity": "sha512-AvT9QFpxK0Zd8J0jopedNm+w/2fIzvtPKPjqyw9jwvBaReTTqPBk9Hixaz7KbjimP+QNz605/XnjFcDAL2pqBg=="
+      "resolved": "",
+      "integrity": ""
     },
     {
       "name": "@emnapi/runtime",
@@ -1016,12 +1016,20 @@
       "integrity": "sha512-mehfKSMWjjNol8659Z8KxEMrdSJDDot5SXMq00dM8BN4o+CLNXQ0xH2V7EchNHV4RmbZLmmPdEaXZc5H2FXmDg=="
     },
     {
+      "name": "@emnapi/runtime",
+      "version": "1.8.1",
+      "license": "MIT",
+      "license_source": "package-lock",
+      "resolved": "",
+      "integrity": ""
+    },
+    {
       "name": "@emnapi/wasi-threads",
       "version": "1.1.0",
       "license": "MIT",
       "license_source": "package-lock",
-      "resolved": "https://registry.npmjs.org/@emnapi/wasi-threads/-/wasi-threads-1.1.0.tgz",
-      "integrity": "sha512-WI0DdZ8xFSbgMjR1sFsKABJ/C5OnRrjT06JXbZKexJGrDuPTzZdDYfFlsgcCXCyf+suG5QU2e/y1Wo2V/OapLQ=="
+      "resolved": "",
+      "integrity": ""
     },
     {
       "name": "@floating-ui/core",
@@ -1297,83 +1305,83 @@
     },
     {
       "name": "@napi-rs/wasm-runtime",
-      "version": "0.2.12",
+      "version": "1.1.1",
       "license": "MIT",
       "license_source": "package-lock",
-      "resolved": "https://registry.npmjs.org/@napi-rs/wasm-runtime/-/wasm-runtime-0.2.12.tgz",
-      "integrity": "sha512-ZVWUcfwY4E/yPitQJl481FjFo3K22D6qF0DuFH6Y/nbnE11GY5uguDxZMGXPQ8WQ0128MXQD7TnfHyK4oWoIJQ=="
+      "resolved": "",
+      "integrity": ""
     },
     {
       "name": "@next/env",
-      "version": "16.1.6",
+      "version": "16.1.7",
       "license": "MIT",
       "license_source": "package-lock",
-      "resolved": "https://registry.npmjs.org/@next/env/-/env-16.1.6.tgz",
-      "integrity": "sha512-N1ySLuZjnAtN3kFnwhAwPvZah8RJxKasD7x1f8shFqhncnWZn4JMfg37diLNuoHsLAlrDfM3g4mawVdtAG8XLQ=="
+      "resolved": "https://registry.npmjs.org/@next/env/-/env-16.1.7.tgz",
+      "integrity": "sha512-rJJbIdJB/RQr2F1nylZr/PJzamvNNhfr3brdKP6s/GW850jbtR70QlSfFselvIBbcPUOlQwBakexjFzqLzF6pg=="
     },
     {
       "name": "@next/swc-darwin-arm64",
-      "version": "16.1.6",
+      "version": "16.1.7",
       "license": "MIT",
       "license_source": "package-lock",
-      "resolved": "https://registry.npmjs.org/@next/swc-darwin-arm64/-/swc-darwin-arm64-16.1.6.tgz",
-      "integrity": "sha512-wTzYulosJr/6nFnqGW7FrG3jfUUlEf8UjGA0/pyypJl42ExdVgC6xJgcXQ+V8QFn6niSG2Pb8+MIG1mZr2vczw=="
+      "resolved": "https://registry.npmjs.org/@next/swc-darwin-arm64/-/swc-darwin-arm64-16.1.7.tgz",
+      "integrity": "sha512-b2wWIE8sABdyafc4IM8r5Y/dS6kD80JRtOGrUiKTsACFQfWWgUQ2NwoUX1yjFMXVsAwcQeNpnucF2ZrujsBBPg=="
     },
     {
       "name": "@next/swc-darwin-x64",
-      "version": "16.1.6",
+      "version": "16.1.7",
       "license": "MIT",
       "license_source": "package-lock",
-      "resolved": "https://registry.npmjs.org/@next/swc-darwin-x64/-/swc-darwin-x64-16.1.6.tgz",
-      "integrity": "sha512-BLFPYPDO+MNJsiDWbeVzqvYd4NyuRrEYVB5k2N3JfWncuHAy2IVwMAOlVQDFjj+krkWzhY2apvmekMkfQR0CUQ=="
+      "resolved": "https://registry.npmjs.org/@next/swc-darwin-x64/-/swc-darwin-x64-16.1.7.tgz",
+      "integrity": "sha512-zcnVaaZulS1WL0Ss38R5Q6D2gz7MtBu8GZLPfK+73D/hp4GFMrC2sudLky1QibfV7h6RJBJs/gOFvYP0X7UVlQ=="
     },
     {
       "name": "@next/swc-linux-arm64-gnu",
-      "version": "16.1.6",
+      "version": "16.1.7",
       "license": "MIT",
       "license_source": "package-lock",
-      "resolved": "https://registry.npmjs.org/@next/swc-linux-arm64-gnu/-/swc-linux-arm64-gnu-16.1.6.tgz",
-      "integrity": "sha512-OJYkCd5pj/QloBvoEcJ2XiMnlJkRv9idWA/j0ugSuA34gMT6f5b7vOiCQHVRpvStoZUknhl6/UxOXL4OwtdaBw=="
+      "resolved": "https://registry.npmjs.org/@next/swc-linux-arm64-gnu/-/swc-linux-arm64-gnu-16.1.7.tgz",
+      "integrity": "sha512-2ant89Lux/Q3VyC8vNVg7uBaFVP9SwoK2jJOOR0L8TQnX8CAYnh4uctAScy2Hwj2dgjVHqHLORQZJ2wH6VxhSQ=="
     },
     {
       "name": "@next/swc-linux-arm64-musl",
-      "version": "16.1.6",
+      "version": "16.1.7",
       "license": "MIT",
       "license_source": "package-lock",
-      "resolved": "https://registry.npmjs.org/@next/swc-linux-arm64-musl/-/swc-linux-arm64-musl-16.1.6.tgz",
-      "integrity": "sha512-S4J2v+8tT3NIO9u2q+S0G5KdvNDjXfAv06OhfOzNDaBn5rw84DGXWndOEB7d5/x852A20sW1M56vhC/tRVbccQ=="
+      "resolved": "https://registry.npmjs.org/@next/swc-linux-arm64-musl/-/swc-linux-arm64-musl-16.1.7.tgz",
+      "integrity": "sha512-uufcze7LYv0FQg9GnNeZ3/whYfo+1Q3HnQpm16o6Uyi0OVzLlk2ZWoY7j07KADZFY8qwDbsmFnMQP3p3+Ftprw=="
     },
     {
       "name": "@next/swc-linux-x64-gnu",
-      "version": "16.1.6",
+      "version": "16.1.7",
       "license": "MIT",
       "license_source": "package-lock",
-      "resolved": "https://registry.npmjs.org/@next/swc-linux-x64-gnu/-/swc-linux-x64-gnu-16.1.6.tgz",
-      "integrity": "sha512-2eEBDkFlMMNQnkTyPBhQOAyn2qMxyG2eE7GPH2WIDGEpEILcBPI/jdSv4t6xupSP+ot/jkfrCShLAa7+ZUPcJQ=="
+      "resolved": "https://registry.npmjs.org/@next/swc-linux-x64-gnu/-/swc-linux-x64-gnu-16.1.7.tgz",
+      "integrity": "sha512-KWVf2gxYvHtvuT+c4MBOGxuse5TD7DsMFYSxVxRBnOzok/xryNeQSjXgxSv9QpIVlaGzEn/pIuI6Koosx8CGWA=="
     },
     {
       "name": "@next/swc-linux-x64-musl",
-      "version": "16.1.6",
+      "version": "16.1.7",
       "license": "MIT",
       "license_source": "package-lock",
-      "resolved": "https://registry.npmjs.org/@next/swc-linux-x64-musl/-/swc-linux-x64-musl-16.1.6.tgz",
-      "integrity": "sha512-oicJwRlyOoZXVlxmIMaTq7f8pN9QNbdes0q2FXfRsPhfCi8n8JmOZJm5oo1pwDaFbnnD421rVU409M3evFbIqg=="
+      "resolved": "https://registry.npmjs.org/@next/swc-linux-x64-musl/-/swc-linux-x64-musl-16.1.7.tgz",
+      "integrity": "sha512-HguhaGwsGr1YAGs68uRKc4aGWxLET+NevJskOcCAwXbwj0fYX0RgZW2gsOCzr9S11CSQPIkxmoSbuVaBp4Z3dA=="
     },
     {
       "name": "@next/swc-win32-arm64-msvc",
-      "version": "16.1.6",
+      "version": "16.1.7",
       "license": "MIT",
       "license_source": "package-lock",
-      "resolved": "https://registry.npmjs.org/@next/swc-win32-arm64-msvc/-/swc-win32-arm64-msvc-16.1.6.tgz",
-      "integrity": "sha512-gQmm8izDTPgs+DCWH22kcDmuUp7NyiJgEl18bcr8irXA5N2m2O+JQIr6f3ct42GOs9c0h8QF3L5SzIxcYAAXXw=="
+      "resolved": "https://registry.npmjs.org/@next/swc-win32-arm64-msvc/-/swc-win32-arm64-msvc-16.1.7.tgz",
+      "integrity": "sha512-S0n3KrDJokKTeFyM/vGGGR8+pCmXYrjNTk2ZozOL1C/JFdfUIL9O1ATaJOl5r2POe56iRChbsszrjMAdWSv7kQ=="
     },
     {
       "name": "@next/swc-win32-x64-msvc",
-      "version": "16.1.6",
+      "version": "16.1.7",
       "license": "MIT",
       "license_source": "package-lock",
-      "resolved": "https://registry.npmjs.org/@next/swc-win32-x64-msvc/-/swc-win32-x64-msvc-16.1.6.tgz",
-      "integrity": "sha512-NRfO39AIrzBnixKbjuo2YiYhB6o9d8v/ymU9m/Xk8cyVk+k7XylniXkHwjs4s70wedVffc6bQNbufk5v0xEm0A=="
+      "resolved": "https://registry.npmjs.org/@next/swc-win32-x64-msvc/-/swc-win32-x64-msvc-16.1.7.tgz",
+      "integrity": "sha512-mwgtg8CNZGYm06LeEd+bNnOUfwOyNem/rOiP14Lsz+AnUY92Zq/LXwtebtUiaeVkhbroRCQ0c8GlR4UT1U+0yg=="
     },
     {
       "name": "@radix-ui/number",
@@ -1996,8 +2004,8 @@
       "version": "0.10.1",
       "license": "MIT",
       "license_source": "package-lock",
-      "resolved": "https://registry.npmjs.org/@tybys/wasm-util/-/wasm-util-0.10.1.tgz",
-      "integrity": "sha512-9tTaPJLSiejZKx+Bmog4uSubteqTvFrVrURwkmHixBo0G4seD0zUxp98E1DzUBJxLQ3NPwXrGKDiVjwx/DpPsg=="
+      "resolved": "",
+      "integrity": ""
     },
     {
       "name": "@types/debug",
@@ -2881,11 +2889,11 @@
     },
     {
       "name": "next",
-      "version": "16.1.6",
+      "version": "16.1.7",
       "license": "MIT",
       "license_source": "package-lock",
-      "resolved": "https://registry.npmjs.org/next/-/next-16.1.6.tgz",
-      "integrity": "sha512-hkyRkcu5x/41KoqnROkfTm2pZVbKxvbZRuNvKXLRXxs3VfyO0WhY50TQS40EuKO9SW3rBj/sF3WbVwDACeMZyw=="
+      "resolved": "https://registry.npmjs.org/next/-/next-16.1.7.tgz",
+      "integrity": "sha512-WM0L7WrSvKwoLegLYr6V+mz+RIofqQgVAfHhMp9a88ms0cFX8iX9ew+snpWlSBwpkURJOUdvCEt3uLl3NNzvWg=="
     },
     {
       "name": "next-themes",
@@ -3142,6 +3150,14 @@
       "license_source": "package-lock",
       "resolved": "https://registry.npmjs.org/trough/-/trough-2.2.0.tgz",
       "integrity": "sha512-tmMpK00BjZiUyVyvrBK7knerNgmgvcV/KLVyuma/SC+TQN167GrMRciANTz09+k3zW8L8t60jWO1GpfkZdjTaw=="
+    },
+    {
+      "name": "tslib",
+      "version": "2.8.1",
+      "license": "0BSD",
+      "license_source": "package-lock",
+      "resolved": "",
+      "integrity": ""
     },
     {
       "name": "tslib",

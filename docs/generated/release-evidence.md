@@ -37,7 +37,7 @@ Generated from the release evidence workflow and manifest capture script.
 
 ## Adjacent Governance Evidence
 
-- upstream inventory entries tracked: `19`
+- upstream inventory entries tracked: `18`
 - compatibility matrix rows tracked: `7`
 - external lane truth entry: `docs/generated/external-lane-snapshot.md` (tracked pointer) + `.runtime-cache/reports/governance/*.json` / `.runtime-cache/reports/release/*.json` (current verdict)
 - monthly governance audit snapshots are complementary hygiene evidence, not release verdict proof

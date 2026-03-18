@@ -26,7 +26,7 @@
 - current-run CI KPI summary: `.runtime-cache/reports/release-readiness/ci-kpi-summary.json`
 - current-run rollback/readiness reports: `.runtime-cache/reports/release-readiness/`
 - current-run release-evidence attestation readiness: `.runtime-cache/reports/release/release-evidence-attest-readiness.json`
-- active upstream inventory entries: `19`
+- active upstream inventory entries: `18`
 - upstream templates: `1`
 - governance gate entrypoint: `./bin/governance-audit --mode pre-commit|pre-push|ci|audit`
 - GHCR image publish workflow primes Docker Buildx on self-hosted runners before calling `scripts/ci/build_standard_image.sh`

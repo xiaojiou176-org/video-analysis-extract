@@ -388,7 +388,7 @@ def test_probe_remote_platform_truth_uses_dedicated_pvr_endpoint_when_repo_field
     monkeypatch.setattr(module, "_current_actor", lambda: "tester")
     monkeypatch.setattr(module, "_run", lambda *args, check=True: type("R", (), {"returncode": 0, "stdout": '{"login":"tester"}', "stderr": ""})())
     monkeypatch.setattr(module, "_json_or_none", _fake_json_or_none)
-    monkeypatch.setattr(module, "_load_required_checks", lambda: [])
+    monkeypatch.setattr(module, "_load_required_checks", list)
     monkeypatch.setattr(module, "_actual_required_checks", lambda payload: [])
     monkeypatch.setattr(module, "current_git_commit", lambda: head)
 

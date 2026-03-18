@@ -15,7 +15,7 @@
 | Ecosystem | Packages | UNKNOWN license declarations |
 | --- | ---: | ---: |
 | Python runtime | 98 | 0 |
-| Web runtime | 284 | 0 |
+| Web runtime | 286 | 0 |
 
 ## Python Runtime Packages
 
@@ -228,6 +228,7 @@ http://www.apache.org/licenses/LICENSE-2.0` | `license-field` |
 | `@alloc/quick-lru` | `5.2.0` | `MIT` | `package-lock` |
 | `@emnapi/core` | `1.8.1` | `MIT` | `package-lock` |
 | `@emnapi/runtime` | `1.8.1` | `MIT` | `package-lock` |
+| `@emnapi/runtime` | `1.8.1` | `MIT` | `package-lock` |
 | `@emnapi/wasi-threads` | `1.1.0` | `MIT` | `package-lock` |
 | `@floating-ui/core` | `1.7.5` | `MIT` | `package-lock` |
 | `@floating-ui/dom` | `1.7.6` | `MIT` | `package-lock` |
@@ -263,16 +264,16 @@ http://www.apache.org/licenses/LICENSE-2.0` | `license-field` |
 | `@jridgewell/resolve-uri` | `3.1.2` | `MIT` | `package-lock` |
 | `@jridgewell/sourcemap-codec` | `1.5.5` | `MIT` | `package-lock` |
 | `@jridgewell/trace-mapping` | `0.3.31` | `MIT` | `package-lock` |
-| `@napi-rs/wasm-runtime` | `0.2.12` | `MIT` | `package-lock` |
-| `@next/env` | `16.1.6` | `MIT` | `package-lock` |
-| `@next/swc-darwin-arm64` | `16.1.6` | `MIT` | `package-lock` |
-| `@next/swc-darwin-x64` | `16.1.6` | `MIT` | `package-lock` |
-| `@next/swc-linux-arm64-gnu` | `16.1.6` | `MIT` | `package-lock` |
-| `@next/swc-linux-arm64-musl` | `16.1.6` | `MIT` | `package-lock` |
-| `@next/swc-linux-x64-gnu` | `16.1.6` | `MIT` | `package-lock` |
-| `@next/swc-linux-x64-musl` | `16.1.6` | `MIT` | `package-lock` |
-| `@next/swc-win32-arm64-msvc` | `16.1.6` | `MIT` | `package-lock` |
-| `@next/swc-win32-x64-msvc` | `16.1.6` | `MIT` | `package-lock` |
+| `@napi-rs/wasm-runtime` | `1.1.1` | `MIT` | `package-lock` |
+| `@next/env` | `16.1.7` | `MIT` | `package-lock` |
+| `@next/swc-darwin-arm64` | `16.1.7` | `MIT` | `package-lock` |
+| `@next/swc-darwin-x64` | `16.1.7` | `MIT` | `package-lock` |
+| `@next/swc-linux-arm64-gnu` | `16.1.7` | `MIT` | `package-lock` |
+| `@next/swc-linux-arm64-musl` | `16.1.7` | `MIT` | `package-lock` |
+| `@next/swc-linux-x64-gnu` | `16.1.7` | `MIT` | `package-lock` |
+| `@next/swc-linux-x64-musl` | `16.1.7` | `MIT` | `package-lock` |
+| `@next/swc-win32-arm64-msvc` | `16.1.7` | `MIT` | `package-lock` |
+| `@next/swc-win32-x64-msvc` | `16.1.7` | `MIT` | `package-lock` |
 | `@radix-ui/number` | `1.1.1` | `MIT` | `package-lock` |
 | `@radix-ui/primitive` | `1.1.3` | `MIT` | `package-lock` |
 | `@radix-ui/react-accessible-icon` | `1.1.7` | `MIT` | `package-lock` |
@@ -461,7 +462,7 @@ http://www.apache.org/licenses/LICENSE-2.0` | `license-field` |
 | `micromark-util-types` | `2.0.2` | `MIT` | `package-lock` |
 | `ms` | `2.1.3` | `MIT` | `package-lock` |
 | `nanoid` | `3.3.11` | `MIT` | `package-lock` |
-| `next` | `16.1.6` | `MIT` | `package-lock` |
+| `next` | `16.1.7` | `MIT` | `package-lock` |
 | `next-themes` | `0.4.6` | `MIT` | `package-lock` |
 | `parse-entities` | `4.0.2` | `MIT` | `package-lock` |
 | `picocolors` | `1.1.1` | `ISC` | `package-lock` |
@@ -494,6 +495,7 @@ http://www.apache.org/licenses/LICENSE-2.0` | `license-field` |
 | `tapable` | `2.3.0` | `MIT` | `package-lock` |
 | `trim-lines` | `3.0.1` | `MIT` | `package-lock` |
 | `trough` | `2.2.0` | `MIT` | `package-lock` |
+| `tslib` | `2.8.1` | `0BSD` | `package-lock` |
 | `tslib` | `2.8.1` | `0BSD` | `package-lock` |
 | `unified` | `11.0.5` | `MIT` | `package-lock` |
 | `unist-util-is` | `6.0.1` | `MIT` | `package-lock` |
