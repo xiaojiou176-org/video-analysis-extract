@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -38,6 +39,19 @@ def _current_head() -> str:
         target = REPO_ROOT / ".git" / ref[5:]
         return target.read_text(encoding="utf-8").strip() if target.exists() else ""
     return ref
+
+
+def _worktree_changes() -> list[str]:
+    result = subprocess.run(
+        ["git", "status", "--short"],
+        cwd=REPO_ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        return []
+    return [line.rstrip() for line in result.stdout.splitlines() if line.strip()]
 
 
 def _lane_row(name: str, state: str, note: str, artifact: str) -> str:
@@ -80,6 +94,8 @@ def render() -> str:
     workflow_lanes = _workflow_lane_map(workflow_report)
 
     head_commit = _current_head()
+    worktree_changes = _worktree_changes()
+    worktree_dirty = bool(worktree_changes)
     lines = [
         GENERATED_HEADER.rstrip(),
         "# Current State Summary",
@@ -90,6 +106,9 @@ def render() -> str:
     ]
     if alignment_report:
         lines.append(f"- current-proof alignment: `{alignment_report.get('status', 'unknown')}`")
+    lines.append(f"- worktree dirty: `{str(worktree_dirty).lower()}`")
+    if worktree_dirty:
+        lines.append("- dirty-worktree note: current runtime receipts are commit-aligned, but they do not fully prove the uncommitted workspace state")
     lines.extend(
         [
             "- reading rule: `docs/generated/external-lane-snapshot.md` 只负责解释如何读，当前状态以本文件和底层 runtime reports 为准",
@@ -113,6 +132,13 @@ def render() -> str:
         lines.append(
             f"- remote-required-checks artifact: `{required_checks.get('status', 'unknown')}` "
             f"(expected={len(required_checks.get('expected_required_checks', []))}, actual={len(required_checks.get('actual_required_checks', []))})"
+        )
+    open_source_audit_freshness = _maybe_load_json(
+        REPO_ROOT / ".runtime-cache" / "reports" / "governance" / "open-source-audit-freshness.json"
+    )
+    if open_source_audit_freshness:
+        lines.append(
+            f"- open-source-audit-freshness artifact: `{open_source_audit_freshness.get('status', 'unknown')}`"
         )
     lines.extend(
         [
@@ -144,12 +170,29 @@ def render() -> str:
     ghcr_workflow = workflow_lanes.get("ghcr-standard-image") or {}
     ghcr_workflow_state = str(ghcr_workflow.get("state") or "")
     ghcr_workflow_note = str(ghcr_workflow.get("note") or "")
+    ghcr_failure_details = ghcr_workflow.get("failure_details") or {}
+    if not isinstance(ghcr_failure_details, dict):
+        ghcr_failure_details = {}
     if ghcr_workflow_state in {"in_progress", "queued", "verified"}:
         ghcr_state = ghcr_workflow_state
         ghcr_note = (
             f"{ghcr_workflow_note}; local readiness artifact="
             f"{str((ghcr_report or {}).get('status') or 'missing')}:{str((ghcr_report or {}).get('blocker_type') or 'ok')}"
         )
+    elif ghcr_workflow_state == "blocked" and ghcr_failure_details:
+        failed_step = str(ghcr_failure_details.get("failed_step_name") or "")
+        failure_signature = str(ghcr_failure_details.get("failure_signature") or "")
+        if failed_step and failure_signature == "blob-head-403-forbidden":
+            local_readiness = (
+                f"local readiness artifact={str((ghcr_report or {}).get('status') or 'missing')}:"
+                f"{str((ghcr_report or {}).get('blocker_type') or 'ok')}"
+            )
+            ghcr_note = (
+                f"{local_readiness}; latest remote current-head workflow preflight passed; "
+                "blocked at `Build and push strict CI standard image`; GHCR blob HEAD returned 403 Forbidden"
+            )
+        elif failed_step:
+            ghcr_note = f"{ghcr_workflow_note}; failed_step={failed_step}"
     lines.append(
         _lane_row(
             "ghcr-standard-image",
@@ -212,6 +255,7 @@ def render() -> str:
             "",
             "- `ready` 不等于 `verified`。",
             "- remote workflow 指向旧 head 时，只能算 historical，不算 current closure。",
+            "- GHCR lane 若显示 `preflight passed` 但后续仍 `blocked`，说明失败已经进入 build/push 或 registry write 边界，而不是卡在 readiness preflight。",
             "- platform capability claim 必须用 live probe 或 current runtime artifact 支撑，不能只凭 tracked docs 声明。",
             "",
         ]

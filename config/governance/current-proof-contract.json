@@ -4,20 +4,20 @@
     {
       "name": "remote-platform-truth",
       "artifact": ".runtime-cache/reports/governance/remote-platform-truth.json",
-      "required": false,
-      "reason": "generated external-lane state consumes actor-sensitive remote truth"
+      "required": true,
+      "reason": "fail-close: current external-lane reporting must not proceed without actor-sensitive remote truth"
     },
     {
       "name": "remote-required-checks",
       "artifact": ".runtime-cache/reports/governance/remote-required-checks.json",
-      "required": false,
-      "reason": "required-check integrity must not be reported from an older local commit snapshot"
+      "required": true,
+      "reason": "fail-close: aggregate-required-check integrity is a current-proof surface and must exist before it can be reported"
     },
     {
       "name": "ghcr-standard-image-readiness",
       "artifact": ".runtime-cache/reports/governance/standard-image-publish-readiness.json",
-      "required": false,
-      "reason": "GHCR readiness is a current-state claim in external-lane reporting",
+      "required": true,
+      "reason": "fail-close: GHCR readiness is a current-state claim in external-lane reporting",
       "external_lane": "ghcr-standard-image",
       "workflow_artifact": ".runtime-cache/reports/governance/external-lane-workflows.json",
       "require_current_head_for_statuses": [
@@ -29,14 +29,14 @@
     {
       "name": "external-lane-workflows",
       "artifact": ".runtime-cache/reports/governance/external-lane-workflows.json",
-      "required": false,
-      "reason": "generated external-lane snapshot must not consume stale workflow probes"
+      "required": true,
+      "reason": "fail-close: external-lane workflow probes are required for current external semantics"
     },
     {
       "name": "release-evidence-attestation",
       "artifact": ".runtime-cache/reports/release/release-evidence-attest-readiness.json",
-      "required": false,
-      "reason": "release evidence readiness is used as current external proof",
+      "required": true,
+      "reason": "fail-close: release evidence readiness is used as current external proof",
       "external_lane": "release-evidence-attestation",
       "workflow_artifact": ".runtime-cache/reports/governance/external-lane-workflows.json",
       "require_current_head_for_statuses": [
@@ -44,6 +44,12 @@
         "queued",
         "in_progress"
       ]
+    },
+    {
+      "name": "open-source-audit-freshness",
+      "artifact": ".runtime-cache/reports/governance/open-source-audit-freshness.json",
+      "required": true,
+      "reason": "fail-close: public/security current-proof must not rely on stale gitleaks history or working-tree receipts"
     }
   ]
 }

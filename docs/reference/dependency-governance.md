@@ -10,6 +10,7 @@
 - 测试重试基线：默认 `pytest reruns=0`（仅在专门 flaky/nightly 任务中显式开启重试）
 - 测试标记治理：`pyproject.toml` 统一声明 `allow_unauth_write` marker，用于显式标注需要写入白名单的测试。
 - 安全关键传递依赖若命中阻断级漏洞，允许在 `pyproject.toml` 中显式加直接约束钉住安全版本；当前示例：`pyjwt[crypto]>=2.12.0,<3` 用于覆盖上游传递依赖中的已知 CVE。
+- 当前 fresh 示例：canonical repo-side strict 在 `pip-audit` 命中 `pyasn1 0.6.2 -> CVE-2026-30922` 后，仓库采用在 `pyproject.toml` 中显式钉住 `pyasn1>=0.6.3,<1` 的方式，把传递依赖提升到安全版本，再由 `uv lock` 回收锁文件。
 
 ### Web (Node)
 

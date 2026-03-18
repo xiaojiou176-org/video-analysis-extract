@@ -21,6 +21,8 @@
 - 权利与来源边界：见 `docs/reference/public-rights-and-provenance.md`
 - 数据与隐私边界：见 `docs/reference/public-privacy-and-data-boundary.md`
 - 平台与品牌边界：见 `docs/reference/public-brand-boundary.md`
+- 平台安全能力当前态：读 `.runtime-cache/reports/governance/remote-platform-truth.json`；`private_vulnerability_reporting` 只能按 `enabled|disabled|unverified` 陈述
+- 开源安全 freshness 当前态：读 `.runtime-cache/reports/governance/open-source-audit-freshness.json`；旧 commit 的 gitleaks 收据不能冒充 current-proof
 - 项目定位与目标用户：见 `docs/reference/project-positioning.md`
 - AI formal eval 最小系统：见 `docs/reference/ai-evaluation.md`
 
@@ -50,7 +52,7 @@
 - 任务执行：Temporal Worker（按 `content_type` 路由：video 9-step / article 5-step）
 - 工具层：FastMCP
 - 前端：Next.js
-- 存储：PostgreSQL（含 pgvector 扩展用于向量检索）+ SQLite（状态）+ Redis（可选）
+- 存储：PostgreSQL（含 pgvector 扩展用于向量检索）+ SQLite（状态）
 - 质量门禁：uv、pytest、Playwright、ruff、npm lint/test、git hooks
 
 ## 1 分钟入口
@@ -80,7 +82,7 @@
 说明：
 
 - `./bin/bootstrap-full-stack` 现在会先运行 `./bin/workspace-hygiene --apply`，把根目录 `.venv`、源码树 `apps/web/node_modules`、以及 `apps/**/__pycache__` 这类非法运行态先清掉，再继续做依赖安装与环境准备。
-- `bootstrap_full_stack.sh` 默认会拉起 core services（Postgres/Redis/Temporal）和 reader stack（Miniflux/Nextflux）。
+- `bootstrap_full_stack.sh` 默认会拉起 core services（Postgres/Temporal）和 reader stack（Miniflux/Nextflux）。
 - `bootstrap_full_stack.sh` 除首次 `.env` 不存在时复制模板外，不再持久化改写 `.env`；端口冲突和运行时路由决策会写入 `.runtime-cache/run/full-stack/resolved.env`，仅对当前运行生效。
 - `full_stack.sh` 默认只管理 API/Worker/Web；`bin/dev-mcp` 是交互式 stdio 入口，需要时单独开终端启动。
 - `full_stack.sh` 起 Web 时会自动把当前 API 端口注入为 `NEXT_PUBLIC_API_BASE_URL`，避免开发页在 18000/18001 口径下仍回落到 `127.0.0.1:9000`。
@@ -171,7 +173,7 @@ devcontainer up --workspace-folder .
 - 现有 `scripts/deploy/core_services.sh` 与 `./bin/reader-stack` 已直接绑定上述 compose 文件，不需要改脚本。
 - 风险 1：DevContainer 依赖宿主 Docker（通过 `/var/run/docker.sock`），若宿主未启动 Docker，容器内 compose 无法拉起。
 - 风险 1.1：严格验收入口 `bin/strict-ci` 同样依赖宿主 Docker 与可拉取的标准镜像；若 Docker daemon 未启动，或当前环境无法获取 contract 中声明的 digest 镜像，脚本会直接 fail-fast，不再回退到旧本地镜像。
-- 风险 1.2：本地执行正式 pinned-image strict 链时，必须具备 GHCR 拉取身份；仓库脚本会优先读取 `GHCR_USERNAME/GHCR_TOKEN`，否则复用 `gh auth` 当前登录态。两者都不存在时会直接 fail-fast。
+- 风险 1.2：本地执行正式 pinned-image strict 链时，必须具备 GHCR 拉取身份；仓库脚本会优先读取 workflow 对齐的 `GHCR_WRITE_USERNAME/GHCR_WRITE_TOKEN`，其次读取本地调试用的 `GHCR_USERNAME/GHCR_TOKEN`，最后才复用 `gh auth` 当前登录态。三者都不存在时会直接 fail-fast。
 - 风险 1.4：external lane 还依赖 GitHub Actions workflow 状态与 package 权限；若 `build-ci-standard-image.yml` 被禁用，或当前 GitHub token 缺少 `read:packages/write:packages` 能力，external image path 会被平台阻断，而不是被 repo-side gate 解决。
 - 风险 1.3：DevContainer 现在固定把 workspace 挂到 `/workspace` 并复用 strict contract 的缓存路径；若仍依赖旧 `/workspaces/...` 路径的本地脚本，需要同步修正。
 - `--debug-build` 仅用于本地诊断标准环境问题，不属于 release/pre-push completion evidence。
@@ -261,7 +263,7 @@ Article pipeline（`videos.content_type='article'`）：
 
 ### 1) 安装依赖
 
-前置：Python 3.11+、`uv`、PostgreSQL 16、Temporal dev server、(可选) Redis。
+前置：Python 3.11+、`uv`、PostgreSQL 16、Temporal dev server。
 
 ```bash
 UV_PROJECT_ENVIRONMENT="$HOME/.cache/video-digestor/project-venv" uv sync --frozen --extra dev --extra e2e
@@ -274,7 +276,6 @@ UV_PROJECT_ENVIRONMENT="$HOME/.cache/video-digestor/project-venv" uv sync --froz
 
 ```bash
 brew services start postgresql@16
-brew services start redis
 temporal server start-dev --ip 127.0.0.1 --port 7233
 ```
 

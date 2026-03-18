@@ -34,3 +34,4 @@
 - “本仓库集成 / 依赖 / 调用 `<platform>`”
 - “该能力是否当前可验证，取决于 external lane current-proof”
 - “这不代表与 `<platform>` 存在官方合作或托管承诺”
+- “GitHub security / package capability 是否当前可用，取决于 runtime probe，而不是本仓文档是否写了入口”

@@ -35,6 +35,7 @@
 - **不能直接当官方当前证明**：checked-in historical release evidence、旧 run 的 external workflow 成功记录、任何缺 current-proof 对齐的历史 artifact。
 - **不能因为仓库 public 就自动推断**：镜像分发已成熟、平台许可已完全闭环、品牌关系已成立。
 - **不能因为 tracked 政策文件存在就自动推断**：GitHub 私密漏洞上报、GHCR 包权限、release distribution UI 等平台能力当前一定可用。
+- **不能因为 `SECURITY.md` 存在就自动推断**：private vulnerability reporting 已启用；该状态必须以最新 `remote-platform-truth.json` 为准。
 
 ## Reporting Rule
 

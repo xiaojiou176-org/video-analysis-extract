@@ -11,7 +11,10 @@ on:
       - "apps/mcp/schemas/tools.json"
       - "contracts/generated/jsonschema/mcp-tools.schema.json"
       - "scripts/governance/check_env_contract.py"
+      - "scripts/governance/check_open_source_audit_freshness.py"
+      - "scripts/governance/probe_remote_platform_truth.py"
       - "scripts/governance/report_env_governance.py"
+      - "bin/open-source-audit-refresh"
       - ".github/workflows/env-governance.yml"
       - ".github/actions/**"
   push:
@@ -27,7 +30,10 @@ on:
       - "apps/mcp/schemas/tools.json"
       - "contracts/generated/jsonschema/mcp-tools.schema.json"
       - "scripts/governance/check_env_contract.py"
+      - "scripts/governance/check_open_source_audit_freshness.py"
+      - "scripts/governance/probe_remote_platform_truth.py"
       - "scripts/governance/report_env_governance.py"
+      - "bin/open-source-audit-refresh"
       - ".github/workflows/env-governance.yml"
       - ".github/actions/**"
 
@@ -139,3 +145,28 @@ jobs:
           else
             gitleaks detect --source . "${config_args[@]}" --verbose --redact
           fi
+
+      - name: Refresh open-source audit receipts
+        run: ./bin/open-source-audit-refresh
+
+      - name: Check open-source audit freshness
+        run: python3 scripts/governance/check_open_source_audit_freshness.py
+
+      - name: Probe remote platform truth
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/governance/probe_remote_platform_truth.py
+
+      - name: Upload security proof artifacts
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: open-source-security-proof
+          path: |
+            .runtime-cache/reports/governance/remote-platform-truth.json
+            .runtime-cache/reports/governance/open-source-audit-freshness.json
+            .runtime-cache/reports/open-source-audit/gitleaks-history.json
+            .runtime-cache/reports/open-source-audit/gitleaks-history.json.meta.json
+            .runtime-cache/reports/open-source-audit/gitleaks-working-tree.json
+            .runtime-cache/reports/open-source-audit/gitleaks-working-tree.json.meta.json

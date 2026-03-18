@@ -14,6 +14,7 @@
 - `representative_result_cases` 会给出 2-3 个稳定 case id，指向 `docs/proofs/task-result-proof-pack.md` 里的代表性结果案例；这些案例是 public-safe representative proof，不是 current external verdict。
 - `repo_side_strict_receipt=status=missing_current_receipt` 不是“命令不存在”，也不是“governance 已经自动兜底通过”，而是“当前 HEAD 的 latest strict receipt 还没被 fresh 捕获成 PASS”。
 - `governance_audit_receipt=status=pass` 代表 repo-side governance 总闸已拿到 fresh PASS 收据。
+- `worktree_state.dirty=true` 代表当前工作树带有未提交改动；这时报告最多只能诚实到 `partial`，因为 commit-aligned 收据并不能完整证明这份脏工作树。
 - newcomer/result proof 的职责是回答“repo-side newcomer 与 strict 收据今天拿到了没有”；它不替代 external lane current verdict。
 - 如果你想看“这个仓库到底拿什么代表性结果来证明自己有价值”，请继续读 `docs/proofs/task-result-proof-pack.md`；它提供的是 representative cases，不是 current external verdict。
 - 结果证明不只看治理，还会同时引用 eval regression 与 current-proof 对齐结果。
@@ -23,6 +24,8 @@
 
 - 不得把 `governance_audit_receipt=status=pass` 单独解释成 repo-side done。
 - 不得把 `repo_side_strict_receipt=status=missing_current_receipt` 轻描淡写成“差不多完成”；这正是 repo-side current receipt 尚未闭环的信号。
+- 不得在 `worktree_state.dirty=true` 时，把 `status=partial` 包装成“已经等价 pass”；这只是“当前脏工作树下，有一批 commit-aligned 收据可参考”。
+- 不得把 `remote-required-checks=status=pass`、`governance_audit_receipt=status=pass` 或 newcomer receipt 组合包装成 `ci-final-gate` / `live-smoke` / nightly terminal closure；这些外层 terminal lane 仍要看各自 current runtime/workflow 证据。
 - 若要判断“外部世界是否认账”，应转到 `docs/reference/external-lane-status.md` 和 `.runtime-cache/reports/governance/current-state-summary.md`，不要从 newcomer 页面反推 external lane。
 
 ## Why This Exists
@@ -30,5 +33,6 @@
 - 防止把 “newcomer path 看起来写清楚了” 误读成 “已经有 fresh newcomer receipt”
 - 防止把 “repo-side strict 命令启动过” 误读成 “已经拿到 fresh strict PASS 收据”
 - 防止把 “governance-audit 已绿” 误读成 “repo-side done 已闭环”
+- 防止把 “当前工作树是脏的，但 receipts 都是 pass” 误读成 “当前这份脏工作树已经 fresh 验证完毕”
 - 给下一轮把 newcomer/result proof 真正接进主链时，提供一个当前 truth pack 入口
 - 防止把“AI 路径返回了某种结构化结果”误读成“该路径已经真实成功执行”

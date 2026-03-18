@@ -4,6 +4,9 @@
 
 Generated from `aggregate-gate` in `.github/workflows/ci.yml`.
 
+这页先讲人话：它只回答“需要进入 branch protection / aggregate gate 的 required checks 列表有没有漂移”。
+`remote-required-checks=status=pass` 只证明 aggregate-required-check integrity，**不证明** `ci-final-gate`、`live-smoke` 或 nightly terminal closure。
+
 | Check | Classification |
 | --- | --- |
 | `trusted-pr-boundary` | required |

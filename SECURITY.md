@@ -16,13 +16,17 @@ Unsupported reports include:
 
 Please do **not** open a public GitHub issue for a suspected vulnerability.
 
-Use this private path if the repository security page currently exposes a private submission UI:
+Current platform truth for private reporting must come from the latest runtime probe:
+
+- `.runtime-cache/reports/governance/remote-platform-truth.json`
+- `private_vulnerability_reporting.status = enabled|disabled|unverified`
+
+Use this private path only if the latest probe reports `private_vulnerability_reporting.status=enabled`:
 
 1. GitHub Security Advisories / private vulnerability reporting:
    `https://github.com/xiaojiou176-org/video-analysis-extract/security`
 
-If the repository security page does **not** currently expose a private submission UI,
-do **not** assume private vulnerability reporting is enabled just because this file exists.
+If the latest probe reports `disabled` or `unverified`, do **not** assume private vulnerability reporting is enabled just because this file exists.
 In that case:
 
 1. open a minimal public issue that asks maintainers to enable private reporting
@@ -44,3 +48,10 @@ Include:
 - This repository is maintained on a best-effort basis.
 - Triage aims to acknowledge valid reports within **5 business days**.
 - Fix timing is not guaranteed for non-blocker issues or for issues that only affect optional external lanes.
+
+## Current-Proof Reminder
+
+- `SECURITY.md` is policy, not runtime truth.
+- `enabled` means the probe observed an explicit platform capability.
+- `disabled` means the probe observed an explicit negative platform capability.
+- `unverified` means the probe could not prove either state; it must not be reported as enabled.

@@ -231,3 +231,177 @@ def test_render_external_lane_snapshot_demotes_stale_verified_to_historical(monk
     assert ".runtime-cache/reports/governance/standard-image-publish-readiness.json" in rendered
     assert "must not carry current verdict payload" in rendered
     assert "| `ghcr-standard-image` | `verified` |" not in rendered
+
+
+def test_render_current_state_summary_distinguishes_local_readiness_from_remote_push_failure(
+    monkeypatch, tmp_path: Path
+) -> None:
+    module = _load_governance_module(
+        "render_current_state_summary_test",
+        "scripts/governance/render_current_state_summary.py",
+    )
+    head = "1111111111111111111111111111111111111111"
+
+    (tmp_path / ".runtime-cache" / "reports" / "governance").mkdir(parents=True, exist_ok=True)
+    (tmp_path / ".runtime-cache" / "reports" / "release").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "config" / "governance").mkdir(parents=True, exist_ok=True)
+
+    _write_json(
+        tmp_path / ".runtime-cache/reports/governance/standard-image-publish-readiness.json",
+        {
+            "version": 1,
+            "status": "blocked",
+            "blocker_type": "registry-auth-failure",
+            "token_mode": "gh-cli",
+            "token_scope_ok": False,
+            "blob_upload_scope_ok": False,
+        },
+    )
+    _write_json(
+        tmp_path / ".runtime-cache/reports/governance/external-lane-workflows.json",
+        {
+            "version": 1,
+            "source_commit": head,
+            "lanes": [
+                {
+                    "name": "ghcr-standard-image",
+                    "state": "blocked",
+                    "note": "remote workflow for current HEAD concluded `failure`; preflight passed",
+                    "latest_run_matches_current_head": True,
+                    "latest_run": {
+                        "databaseId": 42,
+                        "status": "completed",
+                        "conclusion": "failure",
+                        "headSha": head,
+                    },
+                    "failure_details": {
+                        "failed_step_name": "Build and push strict CI standard image",
+                        "failure_signature": "blob-head-403-forbidden",
+                    },
+                }
+            ],
+        },
+    )
+    _write_json(
+        tmp_path / ".runtime-cache/reports/governance/remote-platform-truth.json",
+        {"version": 1, "status": "pass", "blocker_type": ""},
+    )
+    _write_json(
+        tmp_path / ".runtime-cache/reports/governance/remote-required-checks.json",
+        {
+            "version": 1,
+            "status": "pass",
+            "expected_required_checks": ["a"],
+            "actual_required_checks": ["a"],
+        },
+    )
+    _write_json(
+        tmp_path / ".runtime-cache/reports/governance/open-source-audit-freshness.json",
+        {"version": 1, "status": "pass"},
+    )
+    _write_json(
+        tmp_path / ".runtime-cache/reports/governance/newcomer-result-proof.json",
+        {
+            "version": 1,
+            "status": "partial",
+            "repo_side_strict_receipt": {"status": "pass"},
+        },
+    )
+    _write_json(tmp_path / "config/governance/upstream-compat-matrix.json", {"matrix": []})
+
+    monkeypatch.setattr(module, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(module, "_current_head", lambda: head)
+    monkeypatch.setattr(module, "_worktree_changes", lambda: [" M apps/worker/worker/comments/youtube.py"])
+
+    rendered = module.render()
+
+    assert "local readiness artifact=blocked:registry-auth-failure" in rendered
+    assert "latest remote current-head workflow preflight passed" in rendered
+    assert "GHCR blob HEAD returned 403 Forbidden" in rendered
+
+
+def test_current_proof_contract_requires_critical_external_current_artifacts() -> None:
+    payload = json.loads(
+        (_repo_root() / "config" / "governance" / "current-proof-contract.json").read_text(
+            encoding="utf-8"
+        )
+    )
+
+    artifacts = {
+        item["name"]: item
+        for item in payload["artifacts"]
+        if isinstance(item, dict) and isinstance(item.get("name"), str)
+    }
+
+    for name in (
+        "remote-platform-truth",
+        "remote-required-checks",
+        "ghcr-standard-image-readiness",
+        "external-lane-workflows",
+        "release-evidence-attestation",
+    ):
+        assert artifacts[name]["required"] is True
+
+    assert artifacts["remote-required-checks"]["reason"].startswith("fail-close:")
+
+
+def test_probe_remote_platform_truth_uses_dedicated_pvr_endpoint_when_repo_field_missing(
+    monkeypatch, tmp_path: Path
+) -> None:
+    module = _load_governance_module(
+        "probe_remote_platform_truth_test",
+        "scripts/governance/probe_remote_platform_truth.py",
+    )
+    head = "1111111111111111111111111111111111111111"
+
+    def _fake_json_or_none(command: list[str]):
+        cmd = " ".join(command)
+        if cmd == "gh api user":
+            return {"login": "tester"}, None
+        if cmd.startswith("gh repo view "):
+            return {
+                "name": "video-analysis-extract",
+                "owner": {"login": "xiaojiou176-org"},
+                "visibility": "PUBLIC",
+                "defaultBranchRef": {"name": "main"},
+                "isPrivate": False,
+            }, None
+        if cmd == "gh api repos/xiaojiou176-org/video-analysis-extract":
+            return {
+                "private_vulnerability_reporting": None,
+                "security_and_analysis": {},
+            }, None
+        if cmd == "gh api repos/xiaojiou176-org/video-analysis-extract/private-vulnerability-reporting":
+            return {"enabled": True}, None
+        if cmd == "gh api repos/xiaojiou176-org/video-analysis-extract/actions/permissions":
+            return {"enabled": True}, None
+        if cmd == "gh api repos/xiaojiou176-org/video-analysis-extract/branches/main/protection":
+            return {
+                "required_status_checks": {
+                    "contexts": [],
+                }
+            }, None
+        raise AssertionError(f"unexpected command: {cmd}")
+
+    monkeypatch.setattr(module, "ROOT", tmp_path)
+    monkeypatch.setattr(module, "_repo_slug", lambda: "xiaojiou176-org/video-analysis-extract")
+    monkeypatch.setattr(module, "_current_actor", lambda: "tester")
+    monkeypatch.setattr(module, "_run", lambda *args, check=True: type("R", (), {"returncode": 0, "stdout": '{"login":"tester"}', "stderr": ""})())
+    monkeypatch.setattr(module, "_json_or_none", _fake_json_or_none)
+    monkeypatch.setattr(module, "_load_required_checks", lambda: [])
+    monkeypatch.setattr(module, "_actual_required_checks", lambda payload: [])
+    monkeypatch.setattr(module, "current_git_commit", lambda: head)
+
+    captured = {}
+
+    def _capture_artifact(path, report, **kwargs):
+        captured["report"] = report
+
+    monkeypatch.setattr(module, "write_json_artifact", _capture_artifact)
+    monkeypatch.setattr(sys, "argv", ["probe_remote_platform_truth.py", "--repo", "xiaojiou176-org/video-analysis-extract"])
+
+    exit_code = module.main()
+
+    assert exit_code == 0
+    assert captured["report"]["private_vulnerability_reporting"]["status"] == "enabled"
+    assert captured["report"]["private_vulnerability_reporting"]["reason"].startswith("dedicated private-vulnerability-reporting endpoint")

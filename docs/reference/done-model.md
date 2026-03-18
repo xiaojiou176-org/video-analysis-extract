@@ -15,11 +15,13 @@
 | Compat | `upstream-compat-matrix` 中 repo-side required rows 达到期望状态 |
 | Public/source-first onboarding | 源码优先入口可解释、可执行、可区分 public docs 与 internal runbook |
 | Public governance pack | `README.md`、`SECURITY.md`、`SUPPORT.md`、`.github/CODEOWNERS`、`docs/reference/public-repo-readiness.md` 与 `docs/reference/public-artifact-exposure.md` 不含 placeholder routing，且 public-safe surface、policy allowlist 与 tracked 文件一致 |
+| Public security proof | `private_vulnerability_reporting` 必须来自最新 `remote-platform-truth.json` 的显式 `enabled|disabled|unverified` 状态，且 `gitleaks` history / working-tree freshness 报告必须对齐当前 HEAD |
 
 补充硬规则：
 
 - `governance-audit` fresh PASS 不等于 repo-side done；它只证明控制面和制度面站稳了。
 - repo-side done 必须同时满足：governance PASS + strict current receipt + docs truth + current-proof 对齐。
+- dirty worktree 不能被 commit-aligned current receipts 自动包装成 `pass`；如果当前工作树有未提交改动，newcomer/current-proof 报告至少应降级为 `partial` 并显式标出 dirty state。
 - 若 `newcomer-result-proof.json` 里 `repo_side_strict_receipt=status=missing_current_receipt`，则当前 HEAD 还不能宣称 repo-side done。
 
 ## Layer B: External Done
@@ -37,6 +39,7 @@
 
 - remote workflow 就算成功，只要 `headSha` 不是当前 HEAD，也只能算历史证据，不能计入 External Done
 - `ready` / `queued` / `in_progress` 只代表“外层前置条件或执行过程存在”，不代表 external closure
+- `remote-required-checks=status=pass` 只证明 branch protection / aggregate-required-check integrity 对齐；它不是 terminal CI 收据，不能替代 `ci-final-gate`、`live-smoke`、`nightly-flaky-*` 的当前闭环证明
 
 ## Not In Scope For Repo-side Completion
 

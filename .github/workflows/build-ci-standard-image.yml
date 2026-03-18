@@ -48,6 +48,8 @@ jobs:
 
       - name: Standard image publish preflight
         env:
+          GHCR_WRITE_USERNAME: ${{ secrets.GHCR_WRITE_USERNAME }}
+          GHCR_WRITE_TOKEN: ${{ secrets.GHCR_WRITE_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GHCR_TOKEN: ${{ secrets.GHCR_WRITE_TOKEN }}
           GITHUB_ACTIONS: "true"

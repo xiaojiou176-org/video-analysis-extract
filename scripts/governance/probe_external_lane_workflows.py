@@ -46,6 +46,75 @@ def _json_or_none(command: list[str]) -> tuple[Any | None, dict[str, Any] | None
     }
 
 
+def _failed_job_summary(repo: str, run_id: int | str | None) -> tuple[dict[str, Any], dict[str, Any] | None]:
+    if not run_id:
+        return {}, None
+    payload, error = _json_or_none(
+        [
+            "gh",
+            "run",
+            "view",
+            str(run_id),
+            "--repo",
+            repo,
+            "--json",
+            "jobs",
+        ]
+    )
+    if error is not None or not isinstance(payload, dict):
+        return {}, error
+    jobs = payload.get("jobs")
+    if not isinstance(jobs, list):
+        return {}, None
+    for job in jobs:
+        if not isinstance(job, dict):
+            continue
+        if str(job.get("conclusion") or "") != "failure":
+            continue
+        steps = job.get("steps")
+        failed_step_name = ""
+        if isinstance(steps, list):
+            for step in steps:
+                if isinstance(step, dict) and str(step.get("conclusion") or "") == "failure":
+                    failed_step_name = str(step.get("name") or "")
+                    break
+        return {
+            "job_name": str(job.get("name") or ""),
+            "job_id": job.get("databaseId"),
+            "failed_step_name": failed_step_name,
+            "job_url": str(job.get("url") or ""),
+        }, None
+    return {}, None
+
+
+def _failure_signature(repo: str, run_id: int | str | None) -> tuple[str, dict[str, Any] | None]:
+    if not run_id:
+        return "", None
+    result = _run(
+        "gh",
+        "run",
+        "view",
+        str(run_id),
+        "--repo",
+        repo,
+        "--log-failed",
+        check=False,
+    )
+    if result.returncode != 0:
+        return "", {
+            "returncode": result.returncode,
+            "stdout": result.stdout.strip(),
+            "stderr": result.stderr.strip(),
+        }
+    for raw_line in result.stdout.splitlines():
+        line = raw_line.strip()
+        if "403 Forbidden" in line and "blobs/sha256" in line:
+            return "blob-head-403-forbidden", None
+        if "failed to push" in line and "ghcr.io/" in line:
+            return line[:400], None
+    return "", None
+
+
 def _lane_state(current_head: str, run: dict[str, Any] | None) -> tuple[str, str, bool, str, str]:
     if not run:
         return "missing", "no remote workflow run found", False, "", "missing"
@@ -152,6 +221,20 @@ def main() -> int:
         )
         latest_run = payload[0] if isinstance(payload, list) and payload else None
         lane_state, note, matches_current_head, latest_run_head_sha, head_alignment = _lane_state(current_head, latest_run)
+        failure_details: dict[str, Any] = {}
+        failed_job_error: dict[str, Any] | None = None
+        failure_signature_error: dict[str, Any] | None = None
+        if lane_state == "blocked" and matches_current_head and isinstance(latest_run, dict):
+            run_id = latest_run.get("databaseId")
+            failure_details, failed_job_error = _failed_job_summary(repo, run_id)
+            failure_signature, failure_signature_error = _failure_signature(repo, run_id)
+            if failure_signature:
+                failure_details["failure_signature"] = failure_signature
+            if failure_details.get("failed_step_name") and failure_details.get("failure_signature") == "blob-head-403-forbidden":
+                note = (
+                    f"{note}; preflight passed; failed at `{failure_details['failed_step_name']}` "
+                    "with GHCR blob HEAD 403 Forbidden"
+                )
         if lane_state == "blocked":
             overall_status = "blocked"
         lanes.append(
@@ -164,6 +247,9 @@ def main() -> int:
                 "latest_run_head_sha": latest_run_head_sha,
                 "head_alignment": head_alignment,
                 "latest_run": latest_run,
+                "failure_details": failure_details,
+                "failed_job_error": failed_job_error,
+                "failure_signature_error": failure_signature_error,
                 "error": error,
             }
         )

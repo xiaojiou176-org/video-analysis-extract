@@ -175,7 +175,7 @@ http://www.apache.org/licenses/LICENSE-2.0` | `license-field` |
 | `protobuf` | `6.33.5` | `3-Clause BSD License` | `license-field` |
 | `psycopg` | `3.3.3` | `LGPL-3.0-only` | `license-expression` |
 | `psycopg-binary` | `3.3.3` | `LGPL-3.0-only` | `license-expression` |
-| `pyasn1` | `0.6.2` | `BSD-2-Clause` | `license-field` |
+| `pyasn1` | `0.6.3` | `BSD-2-Clause` | `license-field` |
 | `pyasn1_modules` | `0.4.2` | `BSD` | `license-field` |
 | `pycparser` | `3.0` | `BSD-3-Clause` | `license-expression` |
 | `pydantic` | `2.12.5` | `MIT` | `license-expression` |

@@ -21,7 +21,6 @@ Internet
 
 Docker Compose (core-services):
   ├── postgres:5432
-  ├── redis:6379
   └── temporal:7233
 
 可选 Docker Compose (reader-stack):
@@ -186,7 +185,7 @@ export RESEND_FROM_EMAIL='digest@YOUR_DOMAIN'
 ```bash
 cd /opt/vd/repo
 
-# 启动 Postgres / Redis / Temporal
+# 启动 Postgres / Temporal
 sudo docker compose -f infra/compose/core-services.compose.yml up -d
 
 # 等待 postgres 健康
@@ -333,7 +332,6 @@ sudo docker compose -f /opt/vd/repo/infra/compose/miniflux-nextflux.compose.yml 
 | FastAPI (vd-api) | 127.0.0.1:8000 | 否（仅通过 nginx /api/）|
 | Next.js (vd-web) | 127.0.0.1:3001 | 否（仅通过 nginx /）|
 | PostgreSQL | 127.0.0.1:5432 | 否 |
-| Redis | 127.0.0.1:6379 | 否 |
 | Temporal | 127.0.0.1:7233 | 否 |
 | Miniflux（可选）| 0.0.0.0:8080 | 是（如启用）|
 | Nextflux（可选）| 0.0.0.0:3000 | 是（如启用）|

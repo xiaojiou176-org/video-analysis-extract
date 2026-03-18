@@ -25,3 +25,4 @@
 - tracked docs 不再承载 commit-sensitive current-state payload。
 - `docs/generated/external-lane-snapshot.md` 只能当 pointer / reading rule。
 - 当前 external/public 状态必须从 runtime-owned reports 读取，尤其是 `.runtime-cache/reports/governance/current-state-summary.md` 与底层 runtime artifacts。
+- 当前 public/security freshness 还必须读取 `.runtime-cache/reports/governance/open-source-audit-freshness.json`；旧 commit 的 gitleaks 收据不能当 current artifact exposure proof。

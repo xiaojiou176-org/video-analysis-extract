@@ -97,6 +97,48 @@ def _actual_required_checks(branch_payload: dict[str, Any] | None) -> list[str]:
     return []
 
 
+def _private_vulnerability_reporting_status(value: Any) -> str:
+    if value is True:
+        return "enabled"
+    if value is False:
+        return "disabled"
+    return "unverified"
+
+
+def _private_vulnerability_reporting_probe(slug: str) -> dict[str, Any]:
+    payload, error = _json_or_none(["gh", "api", f"repos/{slug}/private-vulnerability-reporting"])
+    if payload is not None:
+        raw_enabled = payload.get("enabled")
+        return {
+            "status": _private_vulnerability_reporting_status(raw_enabled),
+            "value": raw_enabled,
+            "reason": "dedicated private-vulnerability-reporting endpoint returned explicit enabled flag",
+        }
+    return {
+        "status": "unverified",
+        "value": None,
+        "reason": (
+            "dedicated private-vulnerability-reporting endpoint unavailable"
+            if error is None
+            else "dedicated private-vulnerability-reporting endpoint did not return a readable state"
+        ),
+    }
+
+
+def _security_and_analysis_summary(payload: dict[str, Any] | None) -> dict[str, Any]:
+    if not isinstance(payload, dict):
+        return {"status": "unverified", "features": {}}
+    features: dict[str, Any] = {}
+    for key, raw_value in sorted(payload.items()):
+        if isinstance(raw_value, dict):
+            status = str(raw_value.get("status") or "").strip() or "unverified"
+            features[key] = {"status": status}
+        else:
+            features[key] = {"status": "unverified"}
+    overall_status = "unverified" if not features else "observed"
+    return {"status": overall_status, "features": features}
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Probe remote GitHub repository/platform truth for the current repo.")
     parser.add_argument(
@@ -138,6 +180,7 @@ def main() -> int:
         repo_payload, repo_error = _json_or_none(
             ["gh", "repo", "view", slug, "--json", "name,owner,visibility,defaultBranchRef,isPrivate"]
         )
+        raw_repo_payload, raw_repo_error = _json_or_none(["gh", "api", f"repos/{slug}"])
         actions_payload, actions_error = _json_or_none(["gh", "api", f"repos/{slug}/actions/permissions"])
         branch_payload, branch_error = _json_or_none(["gh", "api", f"repos/{slug}/branches/main/protection"])
 
@@ -158,6 +201,29 @@ def main() -> int:
             overall_status = "blocked"
             blocker_type = "required-check-integrity-mismatch"
 
+        private_vulnerability_reporting = {
+            "status": "unverified",
+            "value": None,
+            "reason": "raw repo API unavailable",
+        }
+        security_and_analysis = {"status": "unverified", "features": {}}
+        if raw_repo_payload:
+            raw_pvr = raw_repo_payload.get("private_vulnerability_reporting")
+            private_vulnerability_reporting = {
+                "status": _private_vulnerability_reporting_status(raw_pvr),
+                "value": raw_pvr,
+                "reason": (
+                    "raw repo API returned explicit boolean"
+                    if isinstance(raw_pvr, bool)
+                    else "raw repo API returned null or omitted the field"
+                ),
+            }
+            security_and_analysis = _security_and_analysis_summary(
+                raw_repo_payload.get("security_and_analysis")
+            )
+            if private_vulnerability_reporting["status"] == "unverified":
+                private_vulnerability_reporting = _private_vulnerability_reporting_probe(slug)
+
         report = {
             "version": 2,
             "status": overall_status,
@@ -170,10 +236,14 @@ def main() -> int:
             "source_commit": current_git_commit(),
             "repo_view": repo_payload,
             "repo_view_error": repo_error,
+            "raw_repo_api": raw_repo_payload,
+            "raw_repo_api_error": raw_repo_error,
             "actions_permissions": actions_payload,
             "actions_permissions_error": actions_error,
             "branch_protection": branch_payload,
             "branch_protection_error": branch_error,
+            "private_vulnerability_reporting": private_vulnerability_reporting,
+            "security_and_analysis": security_and_analysis,
             "required_checks": {
                 "expected": expected_required_checks,
                 "actual": actual_required_checks,
@@ -197,12 +267,20 @@ def main() -> int:
             print("[remote-platform-truth] PASS")
             print(f"  - repo={slug}")
             print(f"  - actor={actor or '<unknown>'}")
+            print(
+                "  - private_vulnerability_reporting="
+                f"{private_vulnerability_reporting['status']}"
+            )
             return 0
 
         print("[remote-platform-truth] BLOCKED")
         print(f"  - repo={slug}")
         print(f"  - actor={actor or '<unknown>'}")
         print(f"  - blocker_type={blocker_type}")
+        print(
+            "  - private_vulnerability_reporting="
+            f"{private_vulnerability_reporting['status']}"
+        )
         if branch_error:
             print(f"  - branch_protection_error={branch_error.get('stderr') or branch_error.get('stdout')}")
         elif repo_error:

@@ -27,6 +27,7 @@
 - `repo-side done` 与 `external done` 必须分层说明；后者可能依赖真实 provider、GHCR、远端 workflow、平台权限。
 - 外部链路如果 blocked，必须诚实写成 blocker，不能因为仓库已经公开就说“外部也可高信心采用”。
 - 平台能力如果只是 policy 文档里写了入口，但 current probe 没有证明当前可用，也必须按 conditional capability 说明，不能包装成默认可用。
+- 私密漏洞入口同样适用这条规则：若 probe 只能给出 `unverified`，公开叙事就只能写 `unverified`，不能写成“已有私密入口”。
 
 ## Privacy Rule
 

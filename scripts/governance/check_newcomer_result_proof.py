@@ -46,14 +46,22 @@ def main() -> int:
     if governance.get("status") not in {"pass", "in_progress"}:
         errors.append("governance audit receipt must be `pass` or `in_progress` in newcomer result proof")
 
+    worktree_state = payload.get("worktree_state") or {}
+    if not isinstance(worktree_state.get("dirty"), bool):
+        errors.append("worktree_state.dirty must be present and boolean")
+
     strict_receipt = payload.get("repo_side_strict_receipt") or {}
     allowed = {"pass", "missing_current_receipt"}
     if strict_receipt.get("status") not in allowed:
         errors.append("repo_side_strict_receipt must be `pass` or `missing_current_receipt`")
     overall_status = str(payload.get("status") or "")
+    worktree_dirty = bool(worktree_state.get("dirty"))
     if newcomer.get("status") == "pass" and governance.get("status") == "pass" and strict_receipt.get("status") == "pass":
-        if overall_status != "pass":
-            errors.append("newcomer result proof must be `pass` when newcomer/governance/strict receipts are all pass")
+        expected_status = "partial" if worktree_dirty else "pass"
+        if overall_status != expected_status:
+            errors.append(
+                f"newcomer result proof must be `{expected_status}` when newcomer/governance/strict receipts are all pass"
+            )
     elif newcomer.get("status") == "pass" and governance.get("status") in {"pass", "in_progress"}:
         if overall_status not in {"partial", "pass"}:
             errors.append("newcomer result proof must be `partial` or `pass` when newcomer/governance receipts exist")

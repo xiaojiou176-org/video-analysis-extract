@@ -538,7 +538,7 @@
     },
     {
       "name": "pyasn1",
-      "version": "0.6.2",
+      "version": "0.6.3",
       "license": "BSD-2-Clause",
       "license_source": "license-field",
       "classifiers": [],

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any
@@ -12,6 +13,19 @@ from common import current_git_commit, read_runtime_metadata, repo_root, write_j
 
 
 ROOT = repo_root()
+
+
+def _worktree_changes() -> list[str]:
+    result = subprocess.run(
+        ["git", "status", "--short"],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        return []
+    return [line.rstrip() for line in result.stdout.splitlines() if line.strip()]
 
 
 def _latest_manifest(entrypoint: str, commit: str) -> dict[str, Any] | None:
@@ -129,6 +143,8 @@ def main() -> int:
     eval_summary = _latest_eval(commit)
     current_proof = _artifact_summary(".runtime-cache/reports/governance/current-proof-commit-alignment.json", commit)
     external_snapshot = _artifact_summary(".runtime-cache/reports/governance/standard-image-publish-readiness.json", commit)
+    worktree_changes = _worktree_changes()
+    worktree_dirty = bool(worktree_changes)
 
     newcomer_preflight_status = "pass" if validate_manifest and validate_log.is_file() and validate_resolved.is_file() else "missing"
     repo_side_strict_status = (
@@ -146,7 +162,7 @@ def main() -> int:
 
     overall_status = "missing"
     if newcomer_preflight_status == "pass" and governance_status == "pass" and repo_side_strict_status == "pass":
-        overall_status = "pass"
+        overall_status = "partial" if worktree_dirty else "pass"
     elif newcomer_preflight_status == "pass" and governance_status in {"pass", "in_progress"}:
         overall_status = "partial"
 
@@ -182,6 +198,13 @@ def main() -> int:
                 _log_has_complete(governance_log_candidates, str(governance_manifest.get("run_id") or ""))
                 if governance_manifest
                 else False
+            ),
+        },
+        "worktree_state": {
+            "dirty": worktree_dirty,
+            "changed_paths_sample": worktree_changes[:20],
+            "note": (
+                "dirty worktree means commit-aligned receipts do not fully prove the current uncommitted workspace state"
             ),
         },
         "representative_result_proof_pack": {

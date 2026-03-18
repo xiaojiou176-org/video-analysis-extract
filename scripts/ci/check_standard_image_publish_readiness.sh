@@ -203,15 +203,81 @@ print(json.dumps(result, ensure_ascii=False))
 PY
 }
 
+probe_ghcr_blob_upload() {
+  local username="$1"
+  local token="$2"
+  local repository="$3"
+
+  python3 - <<'PY' "$username" "$token" "$repository"
+from __future__ import annotations
+
+import base64
+import json
+import sys
+import urllib.error
+import urllib.parse
+import urllib.request
+
+username, token, repository = sys.argv[1:4]
+repo_path = repository.removeprefix("ghcr.io/").strip("/")
+endpoint = f"https://ghcr.io/v2/{repo_path}/blobs/uploads/"
+auth = base64.b64encode(f"{username}:{token}".encode("utf-8")).decode("ascii")
+headers = {
+    "Authorization": f"Basic {auth}",
+    "User-Agent": "video-analysis-extract-standard-image-readiness",
+}
+result = {
+    "status": 0,
+    "endpoint": endpoint,
+    "message": "",
+    "cleanup_status": None,
+}
+request = urllib.request.Request(endpoint, method="POST", headers=headers)
+try:
+    with urllib.request.urlopen(request, timeout=15) as response:
+        result["status"] = response.getcode()
+        result["message"] = response.read().decode("utf-8", "replace")[:500]
+        location = response.headers.get("Location") or ""
+        if location:
+            cleanup_target = urllib.parse.urljoin(endpoint, location)
+            cleanup_request = urllib.request.Request(cleanup_target, method="DELETE", headers=headers)
+            try:
+                with urllib.request.urlopen(cleanup_request, timeout=15) as cleanup_response:
+                    result["cleanup_status"] = cleanup_response.getcode()
+            except urllib.error.HTTPError as exc:
+                result["cleanup_status"] = exc.code
+            except Exception:
+                result["cleanup_status"] = 0
+except urllib.error.HTTPError as exc:
+    result["status"] = exc.code
+    result["message"] = exc.read().decode("utf-8", "replace")[:500]
+except Exception as exc:  # pragma: no cover - bash-driven probe surface
+    result["status"] = 0
+    result["message"] = str(exc)
+
+print(json.dumps(result, ensure_ascii=False))
+PY
+}
+
 token_mode="none"
 token_scope_ok="false"
+blob_upload_scope_ok="false"
 package_probe_json='{}'
-if [[ -n "${GHCR_TOKEN:-}" ]]; then
+blob_upload_probe_json='{}'
+selected_token=""
+selected_username="${GHCR_WRITE_USERNAME:-${GHCR_USERNAME:-${GITHUB_ACTOR:-}}}"
+if [[ -n "${GHCR_WRITE_TOKEN:-}" ]]; then
+  token_mode="ghcr-write-token"
+  selected_token="$GHCR_WRITE_TOKEN"
+  package_probe_json="$(probe_github_package_api "$selected_token" "$expected_owner" "$expected_package_name")"
+elif [[ -n "${GHCR_TOKEN:-}" ]]; then
   token_mode="ghcr-token"
-  package_probe_json="$(probe_github_package_api "$GHCR_TOKEN" "$expected_owner" "$expected_package_name")"
+  selected_token="$GHCR_TOKEN"
+  package_probe_json="$(probe_github_package_api "$selected_token" "$expected_owner" "$expected_package_name")"
 elif [[ -n "${GITHUB_ACTIONS:-}" && -n "${GITHUB_TOKEN:-}" ]]; then
   token_mode="github-actions-token"
-  package_probe_json="$(probe_github_package_api "$GITHUB_TOKEN" "$expected_owner" "$expected_package_name")"
+  selected_token="$GITHUB_TOKEN"
+  package_probe_json="$(probe_github_package_api "$selected_token" "$expected_owner" "$expected_package_name")"
 elif gh auth status -h github.com >/tmp/video-analysis-gh-auth-status.txt 2>/dev/null; then
   token_mode="gh-cli"
   # repo scope alone does not grant GHCR package push rights, and we must only
@@ -272,6 +338,44 @@ if [[ "$token_mode" == "ghcr-token" || "$token_mode" == "github-actions-token" ]
   esac
 fi
 
+if [[ "$status" == "ready" && "$token_scope_ok" == "true" && ( "$token_mode" == "ghcr-write-token" || "$token_mode" == "ghcr-token" || "$token_mode" == "github-actions-token" ) ]]; then
+  if [[ -z "$selected_username" ]]; then
+    status="blocked"
+    blocker_type="registry-auth-failure"
+    errors+=("selected GHCR token is missing a username required for blob upload probe")
+  else
+    blob_upload_probe_json="$(probe_ghcr_blob_upload "$selected_username" "$selected_token" "$expected_repository")"
+    blob_upload_probe_status="$(python3 - <<'PY' "$blob_upload_probe_json"
+import json
+import sys
+
+payload = json.loads(sys.argv[1])
+print(payload.get("status", 0))
+PY
+)"
+    case "$blob_upload_probe_status" in
+      202)
+        blob_upload_scope_ok="true"
+        ;;
+      401|403)
+        status="blocked"
+        blocker_type="registry-auth-failure"
+        errors+=("GHCR blob upload probe rejected the selected token via ghcr blob upload endpoint (HTTP ${blob_upload_probe_status})")
+        ;;
+      0)
+        status="blocked"
+        blocker_type="registry-auth-failure"
+        errors+=("GHCR blob upload probe could not verify blob write capability")
+        ;;
+      *)
+        status="blocked"
+        blocker_type="registry-auth-failure"
+        errors+=("GHCR blob upload probe returned unexpected HTTP ${blob_upload_probe_status}")
+        ;;
+    esac
+  fi
+fi
+
 if [[ "$token_scope_ok" != "true" ]]; then
   status="blocked"
   blocker_type="registry-auth-failure"
@@ -282,7 +386,7 @@ ERRORS_JSON="$(
   printf '%s\n' "${errors[@]}" | python3 -c 'import json, sys; print(json.dumps([line.rstrip("\n") for line in sys.stdin if line.rstrip("\n")], ensure_ascii=False))'
 )"
 
-python3 - <<'PY' "$OUTPUT_PATH" "$status" "$blocker_type" "$repo_slug" "$repo_owner" "$expected_repository" "$token_mode" "$token_scope_ok" "$buildx_version" "$buildx_ls" "$buildx_inspect" "$ERRORS_JSON" "$package_probe_json"
+python3 - <<'PY' "$OUTPUT_PATH" "$status" "$blocker_type" "$repo_slug" "$repo_owner" "$expected_repository" "$token_mode" "$token_scope_ok" "$blob_upload_scope_ok" "$buildx_version" "$buildx_ls" "$buildx_inspect" "$ERRORS_JSON" "$package_probe_json" "$blob_upload_probe_json"
 import json
 import sys
 from pathlib import Path
@@ -301,11 +405,13 @@ payload = {
     "expected_repository": sys.argv[6],
     "token_mode": sys.argv[7],
     "token_scope_ok": sys.argv[8] == "true",
-    "docker_buildx_version": sys.argv[9],
-    "docker_buildx_ls": sys.argv[10],
-    "docker_buildx_inspect": sys.argv[11],
-    "errors": json.loads(sys.argv[12]),
-    "package_access_probe": json.loads(sys.argv[13]),
+    "blob_upload_scope_ok": sys.argv[9] == "true",
+    "docker_buildx_version": sys.argv[10],
+    "docker_buildx_ls": sys.argv[11],
+    "docker_buildx_inspect": sys.argv[12],
+    "errors": json.loads(sys.argv[13]),
+    "package_access_probe": json.loads(sys.argv[14]),
+    "blob_upload_probe": json.loads(sys.argv[15]),
 }
 write_json_artifact(
     ROOT / output,

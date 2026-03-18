@@ -24,7 +24,8 @@
 - local-private root tolerations: `5`
 - runtime root: `.runtime-cache`
 - current-run CI KPI summary: `.runtime-cache/reports/release-readiness/ci-kpi-summary.json`
-- current-run readiness reports: `.runtime-cache/reports/release-readiness/`
+- current-run rollback/readiness reports: `.runtime-cache/reports/release-readiness/`
+- current-run release-evidence attestation readiness: `.runtime-cache/reports/release/release-evidence-attest-readiness.json`
 - active upstream inventory entries: `19`
 - upstream templates: `1`
 - governance gate entrypoint: `./bin/governance-audit --mode pre-commit|pre-push|ci|audit`

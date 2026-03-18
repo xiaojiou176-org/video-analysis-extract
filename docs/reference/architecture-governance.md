@@ -29,6 +29,13 @@
 - `contracts/` 不得引入网络、env、subprocess、socket 等运行时 side effect。
 - 所有外部 provider / binary / platform glue 必须进入 `integrations/`，不得散落在业务层。
 
+当前已完成的收口样例：
+
+- article 外部抓取与正文提取：`integrations/providers/article_fetch.py`
+- RSS feed 解析与 risk-control helper：`integrations/providers/rsshub.py`
+- YouTube comments API base / video id / request-retry：`integrations/providers/youtube_comments.py`
+- Bilibili comments API base / headers / aid/bvid 提取 / request-retry：`integrations/providers/bilibili_comments.py`
+
 ## 门禁
 
 ```bash

@@ -101,3 +101,26 @@ def test_render_docs_governance_uses_runtime_release_readiness_inputs() -> None:
 
     assert 'REPO_ROOT / ".runtime-cache" / "reports" / "release-readiness" / "ci-kpi-summary.json"' in script
     assert 'REPO_ROOT / "artifacts" / "release-readiness" / "ci-kpi-summary.json"' not in script
+
+
+def test_reference_docs_fail_close_remote_required_checks_semantics() -> None:
+    root = _repo_root()
+    external_lane_status = (root / "docs" / "reference" / "external-lane-status.md").read_text(
+        encoding="utf-8"
+    )
+    done_model = (root / "docs" / "reference" / "done-model.md").read_text(encoding="utf-8")
+    newcomer_result = (
+        root / "docs" / "reference" / "newcomer-result-proof.md"
+    ).read_text(encoding="utf-8")
+
+    assert "`remote-required-checks=status=pass`" in external_lane_status
+    assert "aggregate-required-check integrity" in external_lane_status
+    assert "`ci-final-gate`" in external_lane_status
+    assert "`live-smoke`" in external_lane_status
+
+    assert "`remote-required-checks=status=pass`" in done_model
+    assert "aggregate-required-check integrity" in done_model
+    assert "`nightly-flaky-*`" in done_model
+
+    assert "`remote-required-checks=status=pass`" in newcomer_result
+    assert "`ci-final-gate` / `live-smoke` / nightly terminal closure" in newcomer_result

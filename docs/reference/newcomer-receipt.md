@@ -45,7 +45,7 @@
 - 需要 `env/profiles/local.env`
 - 需要 `python3` 与仓库脚本运行能力
 - **本次运行时 `.env` 缺失**，但该命令仍然通过；脚本把这件事标成 `risk hint`，没有假装当前机器已经具备完整运行态
-- 这条路径**不要求**当前先启动 Docker、Postgres、Redis、Temporal，也不证明这些依赖已经可用
+- 这条路径**不要求**当前先启动 Docker、Postgres、Temporal，也不证明这些依赖已经可用
 
 ## 精确命令
 
@@ -146,7 +146,7 @@ ENV_PROFILE=local
 
 - `.env` 已存在且完整
 - Docker / DevContainer 可用
-- Postgres / Redis / Temporal 可用
+- Postgres / Temporal 可用
 - API/Worker/Web 能启动
 - smoke / real smoke / strict-ci 已 fresh 通过
 

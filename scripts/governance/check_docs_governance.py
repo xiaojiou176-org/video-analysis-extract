@@ -96,6 +96,26 @@ def _check_generated_doc_semantics() -> list[str]:
     expected_runtime_root = f"- runtime root: `{runtime_outputs.get('runtime_root', '.runtime-cache')}`"
     if expected_runtime_root not in ci_topology:
         failures.append("docs/generated/ci-topology.md: runtime root drifted from control plane")
+    if ".runtime-cache/reports/release/release-evidence-attest-readiness.json" not in ci_topology:
+        failures.append(
+            "docs/generated/ci-topology.md: missing release-evidence attestation readiness path"
+        )
+    if "- current-run readiness reports: `.runtime-cache/reports/release-readiness/`" in ci_topology:
+        failures.append(
+            "docs/generated/ci-topology.md: still uses ambiguous release-readiness wording"
+        )
+
+    runner_baseline = (REPO_ROOT / "docs" / "generated" / "runner-baseline.md").read_text(
+        encoding="utf-8"
+    )
+    if ".runtime-cache/reports/release/" not in runner_baseline:
+        failures.append(
+            "docs/generated/runner-baseline.md: missing release-evidence attestation readiness path"
+        )
+    if "- current-run release/readiness reports are emitted under `.runtime-cache/reports/release-readiness/`" in runner_baseline:
+        failures.append(
+            "docs/generated/runner-baseline.md: still uses old combined release/readiness wording"
+        )
 
     release_reference = (REPO_ROOT / "docs" / "generated" / "release-evidence.md").read_text(
         encoding="utf-8"
@@ -105,12 +125,56 @@ def _check_generated_doc_semantics() -> list[str]:
         failures.append("docs/generated/release-evidence.md: compatibility row count drifted from control plane")
     if "docs/reference/done-model.md" not in release_reference:
         failures.append("docs/generated/release-evidence.md: missing done-model reference")
+    if ".runtime-cache/reports/release/release-evidence-attest-readiness.json" not in release_reference:
+        failures.append(
+            "docs/generated/release-evidence.md: missing release-evidence attestation readiness path"
+        )
+    if "- current-run KPI and readiness summaries live under `.runtime-cache/reports/release-readiness/`" in release_reference:
+        failures.append(
+            "docs/generated/release-evidence.md: still mixes release readiness with release-evidence attestation"
+        )
 
     governance_dashboard = (
         REPO_ROOT / "docs" / "generated" / "governance-dashboard.md"
     ).read_text(encoding="utf-8")
     if "docs/reference/done-model.md" not in governance_dashboard:
         failures.append("docs/generated/governance-dashboard.md: missing done-model reference")
+
+    external_lane_status = (
+        REPO_ROOT / "docs" / "reference" / "external-lane-status.md"
+    ).read_text(encoding="utf-8")
+    if "aggregate-required-check integrity" not in external_lane_status:
+        failures.append(
+            "docs/reference/external-lane-status.md: missing aggregate-required-check integrity wording"
+        )
+    if "`ci-final-gate`" not in external_lane_status or "`live-smoke`" not in external_lane_status:
+        failures.append(
+            "docs/reference/external-lane-status.md: missing terminal CI closure examples for remote-required-checks semantics"
+        )
+    if "`remote-required-checks=status=pass`" not in external_lane_status:
+        failures.append(
+            "docs/reference/external-lane-status.md: missing explicit remote-required-checks status reading rule"
+        )
+
+    done_model = (REPO_ROOT / "docs" / "reference" / "done-model.md").read_text(encoding="utf-8")
+    if "aggregate-required-check integrity" not in done_model:
+        failures.append("docs/reference/done-model.md: missing aggregate-required-check integrity wording")
+    if "`remote-required-checks=status=pass`" not in done_model:
+        failures.append("docs/reference/done-model.md: missing explicit remote-required-checks status rule")
+    if "`nightly-flaky-*" not in done_model:
+        failures.append("docs/reference/done-model.md: missing nightly terminal-lane example")
+
+    newcomer_result_proof = (
+        REPO_ROOT / "docs" / "reference" / "newcomer-result-proof.md"
+    ).read_text(encoding="utf-8")
+    if "`remote-required-checks=status=pass`" not in newcomer_result_proof:
+        failures.append(
+            "docs/reference/newcomer-result-proof.md: missing explicit remote-required-checks non-equivalence rule"
+        )
+    if "`ci-final-gate` / `live-smoke` / nightly terminal closure" not in newcomer_result_proof:
+        failures.append(
+            "docs/reference/newcomer-result-proof.md: missing explicit terminal-closure non-equivalence rule"
+        )
     return failures
 
 

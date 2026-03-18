@@ -9,7 +9,8 @@ Generated from the release evidence workflow and manifest capture script.
 - repo-side closure and external closure must be reported separately; see `docs/reference/done-model.md`
 - external lane live status is tracked in `docs/reference/external-lane-status.md`
 - current run evidence is the only canonical source for release verdicts, and its runtime metadata `source_commit` must match the current HEAD
-- current-run KPI and readiness summaries live under `.runtime-cache/reports/release-readiness/`
+- current-run CI KPI summaries live under `.runtime-cache/reports/release-readiness/`
+- current-run release-evidence attestation readiness lives under `.runtime-cache/reports/release/release-evidence-attest-readiness.json`
 - historical examples under `artifacts/releases/*` are documentation examples, not release verdict proof
 - manifest paths must be repo-relative, not host-absolute
 

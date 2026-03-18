@@ -38,7 +38,7 @@
 - Worker：Python + Temporal + pipeline steps
 - MCP：FastMCP 工具层
 - Frontend：Next.js（`apps/web`）
-- Data：PostgreSQL + SQLite（状态存储）+ Redis（可选）
+- Data：PostgreSQL + SQLite（状态存储）
 - Tooling：uv、pytest、Playwright、npm lint/test、ruff
 
 ### 0.3 导航入口（先后顺序）
@@ -146,7 +146,6 @@ set -a; source .env; set +a
 
 ```bash
 brew services start postgresql@16
-brew services start redis
 temporal server start-dev --ip 127.0.0.1 --port 7233
 ```
 

@@ -10,7 +10,6 @@
     "nextflux-service",
     "strict-ci-standard-image",
     "pgvector-pg16-image",
-    "redis-core-image",
     "temporal-auto-setup-image",
     "miniflux-image",
     "postgres-miniflux-image",

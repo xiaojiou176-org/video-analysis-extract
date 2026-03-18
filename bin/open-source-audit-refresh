@@ -1,0 +1,64 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT_DIR"
+
+history_path=".runtime-cache/reports/open-source-audit/gitleaks-history.json"
+working_tree_path=".runtime-cache/reports/open-source-audit/gitleaks-working-tree.json"
+run_id="open-source-audit-refresh-$(date +%Y%m%dT%H%M%S)"
+
+config_args=()
+if [[ -f .gitleaks.toml ]]; then
+  config_args+=(--config .gitleaks.toml)
+fi
+
+mkdir -p "$(dirname "$history_path")"
+
+history_status=0
+if ! gitleaks git "${config_args[@]}" --report-format json --report-path "$history_path" --redact; then
+  history_status=$?
+fi
+
+working_tree_status=0
+if ! gitleaks detect --source . "${config_args[@]}" --report-format json --report-path "$working_tree_path" --redact; then
+  working_tree_status=$?
+fi
+
+[[ -f "$history_path" ]] || printf '[]\n' >"$history_path"
+[[ -f "$working_tree_path" ]] || printf '[]\n' >"$working_tree_path"
+
+python3 - <<'PY' "$history_path" "$working_tree_path" "$run_id"
+from pathlib import Path
+import sys
+
+ROOT = Path.cwd()
+sys.path.insert(0, str(ROOT / "scripts" / "governance"))
+
+from common import write_runtime_metadata
+
+history_path = ROOT / sys.argv[1]
+working_tree_path = ROOT / sys.argv[2]
+run_id = sys.argv[3]
+
+write_runtime_metadata(
+    history_path,
+    source_entrypoint="bin/open-source-audit-refresh",
+    verification_scope="open-source-audit:gitleaks-history",
+    source_run_id=run_id,
+    freshness_window_hours=24,
+    extra={"report_kind": "open-source-audit-history"},
+)
+write_runtime_metadata(
+    working_tree_path,
+    source_entrypoint="bin/open-source-audit-refresh",
+    verification_scope="open-source-audit:gitleaks-working-tree",
+    source_run_id=run_id,
+    freshness_window_hours=24,
+    extra={"report_kind": "open-source-audit-working-tree"},
+)
+PY
+
+if (( history_status != 0 || working_tree_status != 0 )); then
+  exit 1
+fi
