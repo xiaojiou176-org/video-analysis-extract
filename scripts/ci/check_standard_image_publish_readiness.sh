@@ -266,17 +266,20 @@ package_probe_json='{}'
 blob_upload_probe_json='{}'
 selected_token=""
 selected_username="${GHCR_WRITE_USERNAME:-${GHCR_USERNAME:-${GITHUB_ACTOR:-}}}"
-if [[ -n "${GHCR_WRITE_TOKEN:-}" ]]; then
+# In hosted GitHub Actions runs, prefer the repository-scoped GITHUB_TOKEN first
+# so stale GHCR_WRITE_* secrets cannot mask a healthier current token path.
+if [[ -n "${GITHUB_ACTIONS:-}" && -n "${GITHUB_TOKEN:-}" ]]; then
+  token_mode="github-actions-token"
+  selected_username="${GITHUB_ACTOR:-$selected_username}"
+  selected_token="$GITHUB_TOKEN"
+  package_probe_json="$(probe_github_package_api "$selected_token" "$expected_owner" "$expected_package_name")"
+elif [[ -n "${GHCR_WRITE_TOKEN:-}" ]]; then
   token_mode="ghcr-write-token"
   selected_token="$GHCR_WRITE_TOKEN"
   package_probe_json="$(probe_github_package_api "$selected_token" "$expected_owner" "$expected_package_name")"
 elif [[ -n "${GHCR_TOKEN:-}" ]]; then
   token_mode="ghcr-token"
   selected_token="$GHCR_TOKEN"
-  package_probe_json="$(probe_github_package_api "$selected_token" "$expected_owner" "$expected_package_name")"
-elif [[ -n "${GITHUB_ACTIONS:-}" && -n "${GITHUB_TOKEN:-}" ]]; then
-  token_mode="github-actions-token"
-  selected_token="$GITHUB_TOKEN"
   package_probe_json="$(probe_github_package_api "$selected_token" "$expected_owner" "$expected_package_name")"
 elif gh auth status -h github.com >/tmp/video-analysis-gh-auth-status.txt 2>/dev/null; then
   token_mode="gh-cli"
