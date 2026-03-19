@@ -1,20 +1,20 @@
 # Self-Hosted Runner Baseline
 
-本文件定义 self-hosted runner 的最小基线合同。目标不是在 workflow 里“缺什么装什么”，而是让 runner 先满足固定前提，再执行仓库 CI。
+This document defines the minimum contract for self-hosted runners. The goal is not to let workflows install whatever is missing on the fly, but to require the runner to satisfy fixed prerequisites before repository CI starts.
 
-## 真相源
+## Sources Of Truth
 
-- 合同文件：`infra/config/self_hosted_runner_baseline.json`
-- 检查脚本：`scripts/governance/check_runner_baseline.py`
-- 调用位置：
-  - `.github/workflows/_preflight-fast-steps.yml` 使用 `--profile preflight-fast`
-  - `.github/workflows/runner-health.yml` 使用 `--profile runner-health`
+- Contract file: `infra/config/self_hosted_runner_baseline.json`
+- Check script: `scripts/governance/check_runner_baseline.py`
+- Call sites:
+  - `.github/workflows/_preflight-fast-steps.yml` uses `--profile preflight-fast`
+  - `.github/workflows/runner-health.yml` uses `--profile runner-health`
 
-## 当前 profile
+## Current Profiles
 
 ### `preflight-fast`
 
-必须存在：
+Must exist:
 
 - `bash`
 - `python3`
@@ -25,7 +25,7 @@
 
 ### `runner-health`
 
-必须存在：
+Must exist:
 
 - `bash`
 - `python3`
@@ -36,8 +36,8 @@
 - `jq`
 - `rg`
 
-## 治理原则
+## Governance Rules
 
-- workflow 不再通过 `apt-get install` 补齐 runner 缺失工具。
-- runner 缺少合同要求的工具时，直接在 preflight 或 runner-health 失败。
-- `runner-health.yml` 负责 runner 控制面健康检查；主 `ci.yml` 不再承担 runner 运维职责。
+- Workflows must no longer patch missing runner tools with `apt-get install`.
+- If the runner is missing a contract-required tool, fail directly in preflight or runner-health.
+- `runner-health.yml` owns runner control-plane health checks; the main `ci.yml` no longer carries runner-ops duties.

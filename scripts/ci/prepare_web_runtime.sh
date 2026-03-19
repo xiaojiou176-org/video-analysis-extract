@@ -10,6 +10,7 @@ READY_FILE="$STATE_DIR/ready"
 LOCK_DIR="$STATE_DIR/.prepare-lock"
 SHELL_EXPORTS="0"
 SKIP_INSTALL="0"
+PLATFORM_ID="$(uname -s | tr '[:upper:]' '[:lower:]')-$(uname -m)"
 
 usage() {
   cat <<'EOF'
@@ -79,6 +80,26 @@ for path in sorted(source_dir.rglob("*")):
 print(digest.hexdigest(), end="")
 PY
 )"
+PACKAGE_HASH="${PACKAGE_HASH}-${PLATFORM_ID}"
+
+expected_lightningcss_artifact() {
+  case "$PLATFORM_ID" in
+    darwin-arm64) printf '%s\n' "lightningcss-darwin-arm64/lightningcss.darwin-arm64.node" ;;
+    darwin-x86_64) printf '%s\n' "lightningcss-darwin-x64/lightningcss.darwin-x64.node" ;;
+    linux-aarch64|linux-arm64) printf '%s\n' "lightningcss-linux-arm64-gnu/lightningcss.linux-arm64-gnu.node" ;;
+    linux-x86_64) printf '%s\n' "lightningcss-linux-x64-gnu/lightningcss.linux-x64-gnu.node" ;;
+    *) printf '%s\n' "" ;;
+  esac
+}
+
+runtime_native_deps_ready() {
+  local expected
+  expected="$(expected_lightningcss_artifact)"
+  if [[ -z "$expected" ]]; then
+    return 0
+  fi
+  [[ -f "$WORKSPACE_WEB_DIR/node_modules/$expected" ]]
+}
 
 acquire_lock() {
   local attempts=0
@@ -105,6 +126,7 @@ workspace_ready() {
   [[ -f "$WORKSPACE_WEB_DIR/tsconfig.json" ]] || return 1
   if [[ "$SKIP_INSTALL" != "1" ]]; then
     [[ -x "$WORKSPACE_WEB_DIR/node_modules/.bin/next" ]] || return 1
+    runtime_native_deps_ready || return 1
   fi
   return 0
 }
@@ -183,6 +205,18 @@ if [[ "$SKIP_INSTALL" != "1" ]]; then
       (cd "$WORKSPACE_WEB_DIR" && npm ci --no-audit --no-fund)
     fi
     printf '%s' "$PACKAGE_HASH" > "$HASH_FILE"
+  fi
+  if ! runtime_native_deps_ready; then
+    rm -rf "$WORKSPACE_WEB_DIR/node_modules"
+    if [[ "$SHELL_EXPORTS" == "1" ]]; then
+      (cd "$WORKSPACE_WEB_DIR" && npm ci --no-audit --no-fund) >&2
+    else
+      (cd "$WORKSPACE_WEB_DIR" && npm ci --no-audit --no-fund)
+    fi
+    runtime_native_deps_ready || {
+      echo "[prepare_web_runtime] expected native runtime dependency missing for platform $PLATFORM_ID" >&2
+      exit 1
+    }
   fi
 fi
 

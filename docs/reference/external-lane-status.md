@@ -1,56 +1,56 @@
 # External Lane Status
 
-本页专门回答一个问题：**仓库内部已经绿了以后，外部世界到底认不认账。**
+This page answers one narrow question: **after the repository goes green internally, does the outside world also accept the claim?**
 
 ## Current Snapshot Source
 
-当前 external lane 的**状态表本身**不再写进 tracked docs。请直接看：
+The external-lane **state table itself** no longer lives in tracked docs. Read these runtime-owned artifacts directly:
 
 - `.runtime-cache/reports/governance/remote-platform-truth.json`
 - `.runtime-cache/reports/governance/standard-image-publish-readiness.json`
 - `.runtime-cache/reports/release/release-evidence-attest-readiness.json`
 
-`docs/generated/external-lane-snapshot.md` 现在只保留 pointer / reading rule，不再承载 current verdict payload。
+`docs/generated/external-lane-snapshot.md` now keeps only the pointer / reading rule. It no longer carries the current-verdict payload.
 
-当前 canonical lane 名称仍然是：
+The canonical lane names are still:
 
 - GHCR standard image
 - Release evidence attestation
 - `rsshub-youtube-ingest-chain`
 - `resend-digest-delivery-chain`
 
-这些 current-state artifact 还必须满足一条额外规则：
+Those current-state artifacts must also satisfy one additional rule:
 
-- runtime metadata 的 `source_commit` 必须和当前 HEAD 对齐；旧 commit 产物只能当历史档案，不能当 current snapshot
+- runtime metadata `source_commit` must align with the current HEAD; artifacts from an old commit are historical records, not a current snapshot
 
 ## Verification Rules
 
-- repo-side green 不等于 external lane green
-- `governance-audit PASS` 也不等于 external lane green；它连 repo-side strict current receipt 都不能单独替代
-- `remote-required-checks=status=pass` 只证明 merge-relevant required-check integrity，也就是 `docs/generated/required-checks.md` 与远端 branch protection required checks 没漂移；它回答的是“PR/merge 会看的 required lane 清单有没有对齐”，其中现在包含 `remote-integrity`，但它仍不证明 `ci-final-gate`、`live-smoke` 或 nightly terminal closure
-- external lane 只在 fresh artifact + runtime metadata + same-run proof 同时满足时才算 `verified`
-- 对消费 remote workflow 结果的 lane，`verified` 还必须满足：最新成功 run 的 `headSha == 当前 HEAD`
-- 如果 remote workflow 成功的是旧 commit，那份 run 只能算历史证据，不能升级当前状态
-- 平台权限问题必须写成平台 blocker，不能伪装成仓库 bug
-- GHCR lane 若 workflow artifact 记录 `failed_step_name=Build and push strict CI standard image` 且 `failure_signature=blob-head-403-forbidden`，应解释为：preflight 已过，真正失败落在 registry blob write 边界
-- `check_standard_image_publish_readiness.sh` 现在不仅检查 token 路径和 GitHub Packages API 可见性；当显式 token 路径可用时，它还会预探 `ghcr.io/v2/<repo>/blobs/uploads/`。`202` 才算 blob write 预检通过；`401/403` 应直接按平台写权限 blocker 处理
-- GHCR 预检会优先对齐 workflow secret 路径：`GHCR_WRITE_USERNAME` / `GHCR_WRITE_TOKEN`，其次才是本地调试用的 `GHCR_USERNAME` / `GHCR_TOKEN`，最后才退回 GitHub Actions / `gh auth` 上下文
-- 远端仓库当前是否公开、是否具备 branch protection 平台能力，也属于 external truth，不得由本地 docs 单方面宣布
-- actor-sensitive remote truth 必须从 `remote-platform-truth.json` 读取，不能把一次 probe 的账号上下文偷换成永久事实
-- `ready` / `queued` / `in_progress` 只能表示“尚未闭环完成”，不能包装成 external done
+- Repo-side green does not equal external-lane green.
+- `governance-audit PASS` also does not equal external-lane green; it cannot even replace the repo-side strict current receipt on its own.
+- `remote-required-checks=status=pass` only proves merge-relevant required-check integrity, meaning `docs/generated/required-checks.md` and remote branch-protection required checks have not drifted apart. It answers “is the required lane list aligned for PR/merge,” not “did `ci-final-gate`, `live-smoke`, or nightly terminal closure pass.”
+- An external lane counts as `verified` only when fresh artifacts, runtime metadata, and same-run proof all line up.
+- For lanes that consume remote workflow results, `verified` also requires the latest successful run to have `headSha == current HEAD`.
+- If a remote workflow succeeded on an old commit, that run is historical evidence only and must not upgrade the current state.
+- Platform permission problems must be reported as platform blockers instead of being disguised as repository bugs.
+- If a GHCR lane workflow artifact records `failed_step_name=Build and push strict CI standard image` and `failure_signature=blob-head-403-forbidden`, interpret it as: preflight passed, and the real failure landed on the registry blob-write boundary.
+- `check_standard_image_publish_readiness.sh` now checks more than token-path visibility and GitHub Packages API visibility. When an explicit token path is available, it also probes `ghcr.io/v2/<repo>/blobs/uploads/`. Only `202` counts as a blob-write preflight pass; `401/403` must be treated as platform write-permission blockers.
+- For hosted `build-ci-standard-image.yml` runs, GHCR readiness intentionally uses `github.actor + GITHUB_TOKEN` first so a stale `GHCR_WRITE_*` secret cannot mask a healthier repository-scoped token path. Local debug paths still check explicit `GHCR_WRITE_*`, then `GHCR_*`, and finally GitHub Actions / `gh auth`.
+- Whether the remote repository is public and whether branch-protection platform capabilities are enabled are also external truths; local docs must not declare them unilaterally.
+- Actor-sensitive remote truth must come from `remote-platform-truth.json`; do not turn one probe’s account context into a permanent fact.
+- `ready`, `queued`, and `in_progress` only mean “not yet closed,” and must not be wrapped into external done.
 
 ## Reading Rule
 
-- 解释层只负责说明“为什么 blocked / verified”
-- repo-side newcomer / strict receipt 请看 `.runtime-cache/reports/governance/newcomer-result-proof.json`；尤其先看 `current_workspace_verdict.status` 和 `blocking_conditions`。这就像先看法院判决，再看旁证；本页不负责替 repo-side done 兜底
-- current state 只允许从 runtime report 引用；tracked generated docs 只能当 pointer / reading rule
-- `.runtime-cache/reports/governance/current-state-summary.md` 这类 runtime 聚合页也必须先过“票据日期检查”：先看它自己的 `.meta.json` `source_commit` 是否等于当前 HEAD；如果不是，它只能算 historical snapshot
-- 如果 `current-state-summary.md` 显示 `current workspace verdict=partial|missing`，那就必须按 fail-close 读取；不能因为下面某一行 `repo-side-strict receipt=pass` 或某个 external row 是绿的，就把整页脑补成“当前 workspace 已经闭环”
-- 如果 runtime report 的 `source_commit` 不等于当前 HEAD，这份 report 只能当历史证据，不得当 current state
-- 如果 remote probe、GHCR readiness、release evidence readiness 与解释文档冲突，以 runtime report 为准
-- `remote-required-checks` 是 external reading rule 里的“merge-relevant required lane 清单对齐检查”，不是 terminal CI 收据；`ci-final-gate`、`live-smoke`、nightly lanes 仍要分别看它们自己的 current runtime/workflow 证据
-- 如果 GHCR blocked 的当前 run 已明确给出 failed step / failure signature，优先用这些字段判断失败是在 preflight、buildx setup，还是 build-and-push 的最后一跳
-- 如果 remote workflow 还是旧 head，summary/pointer 最多只能诚实到 `historical`、`ready` 或 `blocked`；绝不能把这份旧 run 包装成当前 `verified`
+- The explanation layer only answers “why blocked / verified.”
+- For repo-side newcomer / strict receipts, read `.runtime-cache/reports/governance/newcomer-result-proof.json`, especially `current_workspace_verdict.status` and `blocking_conditions`. Think of that as reading the court verdict before reading supporting evidence; this page does not rescue repo-side done on its own.
+- Current state may only be cited from runtime reports; tracked generated docs are pointers and reading rules only.
+- A runtime aggregate page such as `.runtime-cache/reports/governance/current-state-summary.md` must also pass its own “receipt date check”: inspect whether its `.meta.json` `source_commit` equals the current HEAD. If not, treat it as a historical snapshot.
+- If `current-state-summary.md` shows `current workspace verdict=partial|missing`, read it fail-close. Do not mentally promote the whole page to “current workspace closed” because one sub-line says `repo-side-strict receipt=pass` or one external row is green.
+- If a runtime report’s `source_commit` does not equal the current HEAD, the report is historical evidence only and must not be treated as current state.
+- If remote probe results, GHCR readiness, release-evidence readiness, and explanation docs disagree, runtime reports win.
+- `remote-required-checks` is an external reading-rule check for merge-relevant required-lane alignment, not a terminal CI receipt; `ci-final-gate`, `live-smoke`, and nightly lanes still need their own current runtime/workflow proof.
+- When the current GHCR blocked run provides an explicit failed step or failure signature, use that data first to distinguish preflight failures from buildx-setup failures or final build-and-push failures.
+- If the remote workflow still points at an old head, the summary/pointer may only honestly say `historical`, `ready`, or `blocked`. It must never wrap that old run into current `verified`.
 
 ## Canonical Commands
 
@@ -89,10 +89,10 @@ Provider lanes:
 
 ## Reporting Rule
 
-最终汇报 external lane 时，必须至少写出：
+When reporting the external lane, always include at least:
 
-- 成功到哪一步
-- 哪个 artifact / log / run id 是证据
-- 如果失败，最后一跳卡在平台权限、provider 账户、还是仓库脚本
-- 对 GHCR lane，若当前 workflow 已提供 failed job/step 或 failure signature，汇报里必须带上这些字段
-- 不得用 repo-side governance 或 newcomer receipt 替 external lane 补票
+- how far the lane got
+- which artifact / log / run id proves it
+- if it failed, whether the final stop was platform permission, provider account state, or repository script logic
+- for GHCR lanes, include the failed job/step or failure signature whenever the current workflow already exposes that data
+- never let repo-side governance or newcomer receipts stand in for external-lane proof

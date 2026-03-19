@@ -13,7 +13,7 @@ from common import find_forbidden_runtime_entries, load_governance_json, repo_ro
 
 _DIRECT_RUNTIME_REF = re.compile(r"\.runtime-cache/([A-Za-z0-9._-]+)")
 _RUNTIME_RETENTION_SECTION = re.compile(
-    r"## 固定语义分舱\s+(.*?)\n## ",
+    r"## Canonical Compartments\s+(.*?)\n## ",
     flags=re.DOTALL,
 )
 _RUNTIME_RETENTION_ENTRY = re.compile(r"^- `([A-Za-z0-9._-]+)/`$", flags=re.MULTILINE)
@@ -40,7 +40,7 @@ def _doc_runtime_subdirs(root: Path) -> set[str]:
     text = doc_path.read_text(encoding="utf-8")
     match = _RUNTIME_RETENTION_SECTION.search(text)
     if match is None:
-        raise ValueError("docs/reference/runtime-cache-retention.md missing `固定语义分舱` section")
+        raise ValueError("docs/reference/runtime-cache-retention.md missing `Canonical Compartments` section")
     return set(_RUNTIME_RETENTION_ENTRY.findall(match.group(1)))
 
 

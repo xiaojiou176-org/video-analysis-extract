@@ -129,7 +129,7 @@ def render() -> str:
         GENERATED_HEADER.rstrip(),
         "# Current State Summary",
         "",
-        "这是 runtime-owned 的当前状态页。它不是 tracked docs 的一部分，目的是避免 commit-sensitive current truth 再次卡在 checked-in 文档里。",
+        "This runtime-owned page is the current-state verdict surface. It is intentionally not a tracked doc, so commit-sensitive truth cannot get stuck in checked-in prose again.",
         "",
         f"- current HEAD: `{head_commit or 'unknown'}`",
     ]
@@ -147,10 +147,10 @@ def render() -> str:
         lines.append(
             "- repo-side reading rule: `repo-side-strict receipt=pass` can still be commit-aligned-only evidence; the current workspace verdict above is the fail-close interpretation you must trust"
         )
-    lines.extend(
+        lines.extend(
         [
-            "- reading rule: `docs/generated/external-lane-snapshot.md` 只负责解释如何读，当前状态以本文件和底层 runtime reports 为准",
-            "- stale-summary rule: 只有当 `current-state-summary.md.meta.json` 的 `source_commit` 与当前 HEAD 对齐时，本页里的 green-like 行才算 current；否则整页只能按 historical 读取",
+            "- reading rule: `docs/generated/external-lane-snapshot.md` is only a pointer and reading guide; current state must come from this file plus the underlying runtime reports",
+            "- stale-summary rule: only treat green-like lines here as current when `current-state-summary.md.meta.json` points at the current HEAD; otherwise the whole page is historical",
             "",
             "## Repo-side Signals",
             "",
@@ -324,10 +324,10 @@ def render() -> str:
             "",
             "## Public Capability Reminder",
             "",
-            "- `ready` 不等于 `verified`。",
-            "- remote workflow 指向旧 head 时，只能算 historical，不算 current closure。",
-            "- GHCR lane 若显示 `preflight passed` 但后续仍 `blocked`，说明失败已经进入 build/push 或 registry write 边界，而不是卡在 readiness preflight。",
-            "- platform capability claim 必须用 live probe 或 current runtime artifact 支撑，不能只凭 tracked docs 声明。",
+            "- `ready` does not mean `verified`.",
+            "- When a remote workflow points at an old head, it is only historical evidence and does not count as current closure.",
+            "- If the GHCR lane shows `preflight passed` and later stays `blocked`, the failure has already crossed into build/push or registry-write territory instead of stopping in readiness preflight.",
+            "- Platform capability claims must be backed by a live probe or a current runtime artifact; tracked docs alone are not enough.",
             "",
         ]
     )

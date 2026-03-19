@@ -38,20 +38,14 @@ jobs:
           python3 scripts/governance/check_runner_baseline.py --profile ci-heavy --workspace "$GITHUB_WORKSPACE"
 
       - name: Login to GHCR
-        env:
-          GHCR_WRITE_USERNAME: ${{ secrets.GHCR_WRITE_USERNAME }}
-          GHCR_WRITE_TOKEN: ${{ secrets.GHCR_WRITE_TOKEN }}
         run: |
-          username="${GHCR_WRITE_USERNAME:-${{ github.actor }}}"
-          token="${GHCR_WRITE_TOKEN:-${{ secrets.GITHUB_TOKEN }}}"
+          username="${{ github.actor }}"
+          token="${{ secrets.GITHUB_TOKEN }}"
           echo "$token" | docker login ghcr.io -u "$username" --password-stdin
 
       - name: Standard image publish preflight
         env:
-          GHCR_WRITE_USERNAME: ${{ secrets.GHCR_WRITE_USERNAME }}
-          GHCR_WRITE_TOKEN: ${{ secrets.GHCR_WRITE_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GHCR_TOKEN: ${{ secrets.GHCR_WRITE_TOKEN }}
           GITHUB_ACTIONS: "true"
         run: ./scripts/ci/check_standard_image_publish_readiness.sh
 
@@ -81,8 +75,8 @@ jobs:
           format: spdx-json
           output-file: .runtime-cache/reports/attestations/strict-ci-image.spdx.json
           upload-artifact: false
-          registry-username: ${{ secrets.GHCR_WRITE_USERNAME || github.actor }}
-          registry-password: ${{ secrets.GHCR_WRITE_TOKEN || secrets.GITHUB_TOKEN }}
+          registry-username: ${{ github.actor }}
+          registry-password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload strict CI supply-chain artifacts
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

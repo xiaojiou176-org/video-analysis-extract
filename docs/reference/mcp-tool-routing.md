@@ -1,6 +1,6 @@
 # MCP Tool Routing Guide
 
-本指南面向 AI Agent，目标是减少工具误用与盲选。
+This guide is for AI agents. Its goal is to reduce tool misuse and blind tool selection.
 
 ## Tool Set (13)
 
@@ -20,66 +20,66 @@
 
 ## Routing Rules
 
-- 查任务状态：先 `vd.jobs.get`，不要先查 artifacts。
-- 拉取内容证据：先 `vd.artifacts.get(kind=markdown)`，图像再用 `kind=asset`。
-- 查问题根因：先 `vd.retrieval.search(mode=hybrid)`，再按命中 `job_id` 调 `vd.jobs.get`。
-- 触发生产动作：`vd.videos.process`、`vd.ingest.poll`、`vd.workflows.run`。
-- 管理类操作：统一用 `manage` 工具，必须显式传 `action`。
+- To inspect job state, call `vd.jobs.get` before touching artifacts.
+- To fetch content evidence, call `vd.artifacts.get(kind=markdown)` first and then `kind=asset` for images.
+- To find a root cause, start with `vd.retrieval.search(mode=hybrid)` and then follow matching `job_id` values into `vd.jobs.get`.
+- Production-triggering actions live behind `vd.videos.process`, `vd.ingest.poll`, and `vd.workflows.run`.
+- Management actions must go through the `manage` tools with an explicit `action`.
 
 ## Manage Tool Quick Reference
 
 ### `vd.subscriptions.manage`
 
-- `action=list`: 可选 `platform`, `category`, `enabled_only`
-- `action=upsert`: 必填 `platform`, `source_type`, `source_value`
-  - 可选 `adapter_type`（`rsshub_route|rss_generic`）
-  - 当 `adapter_type=rss_generic` 时建议显式传 `source_url`
-  - 可选 `category`, `tags`
-- `action=remove`: 必填 `id`
-- 常见失败:
-  - `action` 缺失或非法 -> 参数校验失败（4xx）
-  - `remove` 目标不存在 -> 幂等删除（建议上层按成功处理）
+- `action=list`: optional `platform`, `category`, `enabled_only`
+- `action=upsert`: required `platform`, `source_type`, `source_value`
+  - optional `adapter_type` (`rsshub_route|rss_generic`)
+  - when `adapter_type=rss_generic`, prefer sending `source_url` explicitly
+  - optional `category`, `tags`
+- `action=remove`: required `id`
+- Common failures:
+  - missing or invalid `action` -> parameter validation failure (4xx)
+  - missing remove target -> idempotent delete; upper layers should usually treat it as success
 
 ### `vd.notifications.manage`
 
 - `action=get_config`
-- `action=set_config`: 推荐传 `enabled`, `to_email`
-- `action=send_test`: 可传 `to_email`, `subject`, `body`
-- `action=daily_send`: 可传 `date`, `to_email`, `subject`, `body`
-- 常见失败:
-  - Webhook/邮件服务不可达 -> 可重试错误
-  - 目标邮箱缺失或配置无效 -> 不可重试错误（先修配置）
+- `action=set_config`: prefer `enabled`, `to_email`
+- `action=send_test`: optional `to_email`, `subject`, `body`
+- `action=daily_send`: optional `date`, `to_email`, `subject`, `body`
+- Common failures:
+  - webhook or email service unreachable -> retryable error
+  - missing target mailbox or invalid config -> non-retryable error; fix configuration first
 
 ### `vd.artifacts.get`
 
-- `kind=markdown`: 需要 `job_id` 或 `video_url`
-- `kind=asset`: 必须 `job_id` + `path`，可选 `include_base64=true`
-- 常见失败:
-  - 产物不存在 -> 返回 404 语义，先用 `vd.jobs.get` 校验任务状态
-  - `kind=asset` 丢 `path` -> 参数错误（4xx）
+- `kind=markdown`: requires `job_id` or `video_url`
+- `kind=asset`: requires `job_id` + `path`, optional `include_base64=true`
+- Common failures:
+  - missing artifact -> 404 semantics; verify task state with `vd.jobs.get` first
+  - missing `path` for `kind=asset` -> parameter error (4xx)
 
 ### `vd.ui_audit.read`
 
-- `action=get`: 读取 run 摘要（包含 `gemini_review.status/reason_code/provider_status/model`）
-- `action=list_findings`: 可带 `severity`
-- `action=get_artifact`: 必填 `key`，可带 `include_base64`
-- `action=autofix`: 可带 `mode`, `max_files`, `max_changed_lines`
-- 常见失败:
-  - `run_id` 不存在 -> 404
-  - `autofix` 超出限制 -> 4xx（请收紧 `max_files/max_changed_lines`）
-  - `action=get` 返回 `status=completed_with_gemini_failure` -> 说明基础证据已收集，但 Gemini 深审失败，不能视为深审通过
+- `action=get`: reads the run summary (including `gemini_review.status/reason_code/provider_status/model`)
+- `action=list_findings`: optional `severity`
+- `action=get_artifact`: required `key`, optional `include_base64`
+- `action=autofix`: optional `mode`, `max_files`, `max_changed_lines`
+- Common failures:
+  - unknown `run_id` -> 404
+  - `autofix` exceeds limits -> 4xx; tighten `max_files/max_changed_lines`
+  - `action=get` returning `status=completed_with_gemini_failure` means the base evidence was collected but the Gemini deep review failed, so do not treat it as a deep-review pass
 
 ## I/O Example Snippets
 
 ### `vd.jobs.get`
 
-- 输入:
+- Input:
 
 ```json
 {"job_id":"00000000-0000-4000-8000-000000000001"}
 ```
 
-- 关键输出字段:
+- Key output fields:
 
 ```json
 {
@@ -93,13 +93,13 @@
 
 ### `vd.retrieval.search`
 
-- 输入:
+- Input:
 
 ```json
 {"query":"provider timeout","mode":"hybrid","top_k":5}
 ```
 
-- 关键输出字段:
+- Key output fields:
 
 ```json
 {
@@ -111,7 +111,7 @@
 
 ### `vd.notifications.manage(action=set_config)`
 
-- 输入:
+- Input:
 
 ```json
 {
@@ -123,7 +123,7 @@
 }
 ```
 
-- 关键输出字段:
+- Key output fields:
 
 ```json
 {"ok":true,"enabled":true,"to_email":"you@example.com"}
@@ -131,14 +131,14 @@
 
 ## Workflow Examples
 
-### 1) 检索 -> 取工件 -> 触发重跑 -> 查状态
+### 1) Search -> Fetch Artifact -> Trigger Re-run -> Check Status
 
-1. `vd.retrieval.search(query=\"字幕缺失\", mode=\"hybrid\")`
+1. `vd.retrieval.search(query=\"subtitle missing\", mode=\"hybrid\")`
 2. `vd.jobs.get(job_id=<hit.job_id>)`
 3. `vd.videos.process(video={...}, mode=\"refresh_llm\", force=true)`
 4. `vd.jobs.get(job_id=<new_job_id>)`
 
-### 2) UI 审计闭环
+### 2) UI Audit Loop
 
 1. `vd.ui_audit.run(job_id=<job_id>)`
 2. `vd.ui_audit.read(action=\"list_findings\", run_id=<run_id>, severity=\"high\")`
@@ -147,4 +147,4 @@
 ### 3) Computer Use
 
 1. `vd.computer_use.run(instruction=..., screenshot_base64=...)`
-2. 若返回 `require_confirmation=true`，由上层审批后再执行动作链。
+2. If it returns `require_confirmation=true`, wait for upper-layer approval before executing the action chain.

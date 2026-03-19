@@ -1,27 +1,27 @@
 # Root Governance
 
-根目录只承担两类职责：
+The repository root only serves two roles:
 
-- **公共仓库资产**：允许被 Git 跟踪、允许作为公共制度入口存在。
-- **本地私有容忍项**：允许出现在根目录，但必须保持 untracked。
+- **Public repository assets**: tracked by Git and allowed to exist as public governance entrypoints.
+- **Local-private tolerated items**: allowed to exist at the root, but they must stay untracked.
 
-## 公共仓库资产真相源
+## Sources Of Truth For Public Root Assets
 
-- `config/governance/root-allowlist.json` 的 `tracked_root_allowlist`
+- `tracked_root_allowlist` in `config/governance/root-allowlist.json`
 - `config/governance/root-denylist.json`
 - `config/governance/root-layout-budget.json`
 - `config/governance/public-entrypoints.json`
 
-## 终局入口约束
+## Final Entry-Point Constraints
 
-- `.agents/Plans/`：仓库内执行计划与施工控制板，属于受治理的公共制度入口。
-- `bin/`：稳定公开命令入口。人类、Hook、CI、文档只应引用 `bin/*`，不应再把 `scripts/*` 当作长期公共接口。
-- `THIRD_PARTY_NOTICES.md`：公开分发时使用的第三方权利账本，必须保持机器生成，不允许手写漂移。
-- 根目录 `.venv` / `venv` 不属于合法根目录资产；受治理的 Python 环境必须通过受控入口写入 `.runtime-cache/tmp/` 或仓库外受控路径。
+- `.agents/Plans/`: the in-repo execution board and construction log; this is a governed public control surface.
+- `bin/`: the stable public command surface. Humans, hooks, CI, and docs must reference `bin/*` instead of exposing `scripts/*` as long-term public entrypoints.
+- `THIRD_PARTY_NOTICES.md`: the third-party rights ledger used for public distribution. It must stay machine-generated instead of hand-maintained.
+- Root-level `.venv` / `venv` are not legal root assets; governed Python environments must live under `.runtime-cache/tmp/` or a controlled path outside the repository.
 
-## 本地私有容忍项
+## Local-Private Tolerations
 
-以下路径允许出现在根目录，但必须保持 untracked：
+The following paths may exist at the root, but they must stay untracked:
 
 - `.env`
 - `.vscode/`
@@ -29,7 +29,7 @@
 - `.claude/`
 - `.cursor/`
 
-## 门禁
+## Gates
 
 ```bash
 python3 scripts/governance/check_root_allowlist.py --strict-local-private
@@ -40,15 +40,15 @@ python3 scripts/governance/check_public_entrypoint_references.py
 python3 scripts/governance/check_root_policy_alignment.py
 ```
 
-补充口径：
+Additional Reading Rule:
 
-- `check_root_dirtiness_after_tasks.py` 现在不只检查“根目录门厅”有没有新增垃圾，还会同步检查 `.runtime-cache/` 这个仓库级运行时出口是否长出未登记的直系子目录。
-- 换句话说，根目录洁净的最终裁决已经升级为“门厅干净 + 运行时总杂物间入口也没有偷偷长歪”。
+- `check_root_dirtiness_after_tasks.py` now checks more than the root hallway. It also checks whether `.runtime-cache/`, the repository-wide runtime-output root, has grown undeclared direct children.
+- In plain English: the final root cleanliness verdict now means “the hallway is clean and the main runtime storage room entrance has not silently drifted.”
 
-## 硬规则
+## Hard Rules
 
-- 禁止新增未登记顶级项。
-- 禁止把 denylist 中的泛化目录重新放回根目录。
-- 禁止将本地私有容忍项纳入 Git。
-- 禁止把局部 helper、实验脚本、一次性输出平铺到根目录。
-- 禁止为方便起见绕过 `bin/*` 直接把 `scripts/*` 暴露给文档、Hook 或 Workflow 作为公共入口。
+- Do not add undeclared top-level entries.
+- Do not reintroduce denylisted catch-all directories at the root.
+- Do not commit local-private tolerated items.
+- Do not spread local helpers, experiments, or one-off outputs across the root hallway.
+- Do not bypass `bin/*` and expose `scripts/*` directly to docs, hooks, or workflows as public entrypoints.

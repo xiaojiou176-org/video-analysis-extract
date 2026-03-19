@@ -28,8 +28,8 @@
       "verification_lane": "provider",
       "verification_entrypoint": "smoke_full_stack + ingest dispatch tests",
       "verification_status": "verified",
-      "last_verified_at": "2026-03-16T06:52:06Z",
-      "last_verified_run_id": "77c0ba15cbeb41ca849b4297d41d881b",
+      "last_verified_at": "2026-03-19T07:45:44Z",
+      "last_verified_run_id": "27c5f76512b4425e967c7cfa3cd9ddff",
       "freshness_window_hours": 72,
       "verification_scope": "upstream:rsshub-youtube-ingest-chain",
       "verification_artifacts": [
@@ -47,8 +47,8 @@
       "verification_lane": "provider",
       "verification_entrypoint": "notification service tests + run_daily_digest smoke (current provider testing-recipient boundary)",
       "verification_status": "verified",
-      "last_verified_at": "2026-03-16T06:58:02Z",
-      "last_verified_run_id": "cb66852c15274544b9ec0dae829d1296",
+      "last_verified_at": "2026-03-19T07:51:38Z",
+      "last_verified_run_id": "0ca0259f0113444a8c2421f0f1fae728",
       "freshness_window_hours": 72,
       "verification_scope": "upstream:resend-digest-delivery-chain",
       "verification_artifacts": [

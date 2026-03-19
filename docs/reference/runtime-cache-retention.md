@@ -1,12 +1,12 @@
 # Runtime Cache Retention
 
-`.runtime-cache/` 是唯一合法 repo-side 运行时输出根。
+`.runtime-cache/` is the only legal repo-side runtime output root.
 
-## 真相源
+## Source Of Truth
 
 - `config/governance/runtime-outputs.json`
 
-## 固定语义分舱
+## Canonical Compartments
 
 - `run/`
 - `logs/`
@@ -14,9 +14,9 @@
 - `evidence/`
 - `tmp/`
 
-以上清单必须与 `config/governance/runtime-outputs.json` 的 `subdirectories` 完全一致；当前唯一合法的临时分舱是 `tmp/`，不再保留 `temp/` 双口径。
+The list above must match the `subdirectories` declared in `config/governance/runtime-outputs.json` exactly. The only legal scratch compartment is `tmp/`; the old `temp/` dual wording is no longer allowed.
 
-每个舱位都必须声明：
+Each compartment must declare:
 
 - `owner`
 - `classification`
@@ -26,9 +26,9 @@
 - `rebuild_entrypoint`
 - `freshness_required`
 
-## 元数据规则
+## Metadata Rules
 
-`reports/**` 与 `evidence/**` 的 artifact 必须伴随 sidecar metadata，至少包含：
+Artifacts under `reports/**` and `evidence/**` must ship with sidecar metadata that includes at least:
 
 - `created_at`
 - `source_entrypoint`
@@ -37,7 +37,7 @@
 - `verification_scope`
 - `freshness_window_hours`
 
-## 门禁与维护入口
+## Gates And Maintenance Entrypoints
 
 ```bash
 python3 scripts/runtime/prune_runtime_cache.py --assert-clean
@@ -47,7 +47,7 @@ python3 scripts/governance/check_runtime_cache_freshness.py
 ./bin/runtime-cache-maintenance --normalize-only
 ```
 
-## 硬规则
+## Hard Rules
 
-- 历史 artifact 过 freshness window 后不得再作为 current verification。
-- 删除 `.runtime-cache/**` 后，仓库必须可以通过标准入口重建。
+- Historical artifacts must not be reused as current verification once they exceed their freshness window.
+- After deleting `.runtime-cache/**`, the repository must be able to rebuild the runtime tree through standard entrypoints.

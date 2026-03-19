@@ -392,7 +392,7 @@ def test_render_current_state_summary_keeps_release_lane_as_readiness_when_remot
 
     monkeypatch.setattr(module, "REPO_ROOT", tmp_path)
     monkeypatch.setattr(module, "_current_head", lambda: head)
-    monkeypatch.setattr(module, "_worktree_changes", lambda: [])
+    monkeypatch.setattr(module, "_worktree_changes", list)
 
     rendered = module.render()
 
@@ -738,7 +738,7 @@ def test_render_current_state_summary_explains_pending_strict_ci_compose_row_via
 
     monkeypatch.setattr(module, "REPO_ROOT", tmp_path)
     monkeypatch.setattr(module, "_current_head", lambda: head)
-    monkeypatch.setattr(module, "_worktree_changes", lambda: [])
+    monkeypatch.setattr(module, "_worktree_changes", list)
 
     rendered = module.render()
 

@@ -210,9 +210,9 @@ def _render_required_checks() -> str:
         "",
         "Generated from `aggregate-gate` in `.github/workflows/ci.yml`.",
         "",
-        "这页先讲人话：它回答的是“会影响 PR/merge 放行的 required lane 清单有没有漂移”。",
-        "换句话说，这里列的是 branch protection / aggregate gate 共同依赖的 merge-relevant required checks，其中现在**包含** `remote-integrity`。",
-        "`remote-required-checks=status=pass` 只证明 merge-relevant required-check integrity（也就是 branch protection / aggregate-required-check integrity）对齐，**不证明** `ci-final-gate`、`live-smoke` 或 nightly terminal closure。",
+        "This page answers one narrow question in plain English: has the required-check list that controls PR/merge drifted or not?",
+        "In other words, it lists the merge-relevant required checks shared by branch protection and `aggregate-gate`; that list now **includes** `remote-integrity`.",
+        "`remote-required-checks=status=pass` only proves merge-relevant required-check integrity, which means branch protection and aggregate-required-check integrity stay aligned. It does **not** prove `ci-final-gate`, `live-smoke`, or nightly terminal closure.",
         "",
         "| Check | Classification |",
         "| --- | --- |",
@@ -446,11 +446,11 @@ def _fragment_lines(boundary: dict) -> dict[str, str]:
             [
                 "## Governance Snapshot",
                 "",
-                f"- **Docs control plane**：`config/docs/*.json` 现在是文档治理真相源；reference 由 `docs/generated/*.md` 承担。",
-                f"- **CI 信任边界**：`{trust['mode']}`。fork / untrusted PR 不进入 privileged self-hosted 主链。",
-                "- **Strict CI 真相源**：`infra/config/strict_ci_contract.json`。",
-                "- **Repo-side done model**：`docs/reference/done-model.md`。",
-                "- **Generated references**：`docs/generated/ci-topology.md`、`docs/generated/runner-baseline.md`、`docs/generated/release-evidence.md`、`docs/generated/external-lane-snapshot.md`。",
+                f"- **Docs control plane**: `config/docs/*.json` is the source of truth for docs governance, and `docs/generated/*.md` is the render layer.",
+                f"- **CI trust boundary**: `{trust['mode']}`. Fork and untrusted PRs must not enter the privileged self-hosted path.",
+                "- **Strict CI source of truth**: `infra/config/strict_ci_contract.json`.",
+                "- **Repo-side done model**: `docs/reference/done-model.md`.",
+                "- **Generated references**: `docs/generated/ci-topology.md`, `docs/generated/runner-baseline.md`, `docs/generated/release-evidence.md`, and `docs/generated/external-lane-snapshot.md`.",
             ]
         )
         + "\n",
@@ -458,12 +458,12 @@ def _fragment_lines(boundary: dict) -> dict[str, str]:
             [
                 "## Generated Governance Snapshot",
                 "",
-                "- 文档高漂移事实已开始收口到 `docs/generated/*.md`；入口文档只保留 onboarding 必需信息。",
-                f"- self-hosted CI 只接受 **trusted internal PR**；若 PR 来自 fork，GitHub Actions 会在边界门禁直接阻断。",
-                "- repo-side 严格验收入口：`./bin/repo-side-strict-ci --mode pre-push --strict-full-run 1 --ci-dedupe 0`。",
-                "- external lane 入口：`./bin/strict-ci --mode pre-push --strict-full-run 1 --ci-dedupe 0`。",
-                "- external lane truth entry：`docs/generated/external-lane-snapshot.md`（tracked pointer）+ `.runtime-cache/reports/**`（current verdict）。",
-                "- 契约主层已迁到 `contracts/`，长期跟踪 artifact 已迁到 `artifacts/`。",
+                "- High-drift facts have been pulled into `docs/generated/*.md`; entry docs now keep only the onboarding-critical surface.",
+                f"- Self-hosted CI only accepts **trusted internal PRs**; fork PRs are blocked at the trust-boundary gate.",
+                "- Repo-side strict entrypoint: `./bin/repo-side-strict-ci --mode pre-push --strict-full-run 1 --ci-dedupe 0`.",
+                "- External lane entrypoint: `./bin/strict-ci --mode pre-push --strict-full-run 1 --ci-dedupe 0`.",
+                "- External lane truth entry: `docs/generated/external-lane-snapshot.md` (tracked pointer) plus `.runtime-cache/reports/**` (current verdict).",
+                "- Contract sources now live under `contracts/`, and long-lived tracked artifacts now live under `artifacts/`.",
             ]
         )
         + "\n",
@@ -471,12 +471,12 @@ def _fragment_lines(boundary: dict) -> dict[str, str]:
             [
                 "## Generated Governance Snapshot",
                 "",
-                "- 运行说明文档只解释执行与排障语义；高漂移 CI/runner/release 清单见 `docs/generated/*.md`。",
-                "- runner baseline 参考页：`docs/generated/runner-baseline.md`。",
-                "- CI 主链与 aggregate gate 清单：`docs/generated/ci-topology.md`。",
-                "- release evidence 结构与 canonical 规则：`docs/generated/release-evidence.md`。",
-                "- external lane truth entry：`docs/generated/external-lane-snapshot.md`（tracked pointer）+ `.runtime-cache/reports/**`（current verdict）。",
-                "- repo-side / external 双层完成模型：`docs/reference/done-model.md`。",
+                "- Runbook pages explain execution and troubleshooting semantics only; high-drift CI/runner/release inventories live in `docs/generated/*.md`.",
+                "- Runner baseline reference: `docs/generated/runner-baseline.md`.",
+                "- CI topology and aggregate-gate inventory: `docs/generated/ci-topology.md`.",
+                "- Release evidence structure and canonical rules: `docs/generated/release-evidence.md`.",
+                "- External lane truth entry: `docs/generated/external-lane-snapshot.md` (tracked pointer) plus `.runtime-cache/reports/**` (current verdict).",
+                "- Repo-side versus external completion model: `docs/reference/done-model.md`.",
             ]
         )
         + "\n",
@@ -484,11 +484,11 @@ def _fragment_lines(boundary: dict) -> dict[str, str]:
             [
                 "## Generated Governance Snapshot",
                 "",
-                "- `docs/testing.md` 现在以**策略解释**为主；高漂移 job inventory 已移到 `docs/generated/ci-topology.md`。",
-                "- PR 信任模型：仅同仓 trusted internal PR 允许进入 self-hosted 主链。",
-                "- docs gate 现在同时要求：`config/docs/*.json` control plane 一致、render output 新鲜、manual boundary 不越界。",
-                "- repo-side strict canonical path：`./bin/repo-side-strict-ci --mode pre-push --strict-full-run 1 --ci-dedupe 0`。",
-                "- external lane 只允许通过 generated snapshot 或 runtime reports 宣称 current state。",
+                "- `docs/testing.md` is now primarily a policy explanation page; high-drift job inventory has moved to `docs/generated/ci-topology.md`.",
+                "- PR trust model: only trusted internal PRs from the same repository may enter the self-hosted path.",
+                "- The docs gate now requires `config/docs/*.json` control-plane alignment, fresh render outputs, and no manual-boundary violations.",
+                "- Repo-side strict canonical path: `./bin/repo-side-strict-ci --mode pre-push --strict-full-run 1 --ci-dedupe 0`.",
+                "- External current-state claims are only allowed through generated snapshots or runtime reports.",
             ]
         )
         + "\n",

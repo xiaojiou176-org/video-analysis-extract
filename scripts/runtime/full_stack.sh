@@ -217,7 +217,11 @@ pid_matches_signature() {
   local cmd
   cmd="$(read_pid_cmdline "$pid")"
   [[ -n "$cmd" ]] || return 1
-  if [[ "$name" != "web" && "$name" != "worker" && "$cmd" != *"$ROOT_DIR"* ]]; then
+  # API processes launched through `uv run uvicorn apps.api.app.main:app ...`
+  # do not necessarily keep the repo root in the final command line on macOS.
+  # Port + signature matching is sufficient for that service, so only require
+  # a repo-root anchor for service types that still need it.
+  if [[ "$name" != "web" && "$name" != "worker" && "$name" != "api" && "$cmd" != *"$ROOT_DIR"* ]]; then
     return 1
   fi
   [[ "$cmd" =~ $pattern ]]

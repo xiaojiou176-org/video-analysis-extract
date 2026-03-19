@@ -62,11 +62,11 @@
 <!-- docs:generated governance-snapshot start -->
 ## Governance Snapshot
 
-- **Docs control plane**：`config/docs/*.json` 现在是文档治理真相源；reference 由 `docs/generated/*.md` 承担。
-- **CI 信任边界**：`trusted_internal_pr_only`。fork / untrusted PR 不进入 privileged self-hosted 主链。
-- **Strict CI 真相源**：`infra/config/strict_ci_contract.json`。
-- **Repo-side done model**：`docs/reference/done-model.md`。
-- **Generated references**：`docs/generated/ci-topology.md`、`docs/generated/runner-baseline.md`、`docs/generated/release-evidence.md`、`docs/generated/external-lane-snapshot.md`。
+- **Docs control plane**: `config/docs/*.json` is the source of truth for docs governance, and `docs/generated/*.md` is the render layer.
+- **CI trust boundary**: `trusted_internal_pr_only`. Fork and untrusted PRs must not enter the privileged self-hosted path.
+- **Strict CI source of truth**: `infra/config/strict_ci_contract.json`.
+- **Repo-side done model**: `docs/reference/done-model.md`.
+- **Generated references**: `docs/generated/ci-topology.md`, `docs/generated/runner-baseline.md`, `docs/generated/release-evidence.md`, and `docs/generated/external-lane-snapshot.md`.
 <!-- docs:generated governance-snapshot end -->
 
 ## Clone 后快速跑通（推荐）
@@ -173,7 +173,7 @@ devcontainer up --workspace-folder .
 - 现有 `scripts/deploy/core_services.sh` 与 `./bin/reader-stack` 已直接绑定上述 compose 文件，不需要改脚本。
 - 风险 1：DevContainer 依赖宿主 Docker（通过 `/var/run/docker.sock`），若宿主未启动 Docker，容器内 compose 无法拉起。
 - 风险 1.1：严格验收入口 `bin/strict-ci` 同样依赖宿主 Docker 与可拉取的标准镜像；若 Docker daemon 未启动，或当前环境无法获取 contract 中声明的 digest 镜像，脚本会直接 fail-fast，不再回退到旧本地镜像。
-- 风险 1.2：本地执行正式 pinned-image strict 链时，必须具备 GHCR 拉取身份；仓库脚本会优先读取 workflow 对齐的 `GHCR_WRITE_USERNAME/GHCR_WRITE_TOKEN`，其次读取本地调试用的 `GHCR_USERNAME/GHCR_TOKEN`，最后才复用 `gh auth` 当前登录态。三者都不存在时会直接 fail-fast。
+- 风险 1.2：本地执行正式 pinned-image strict 链时，必须具备 GHCR 拉取身份。当前本地调试优先级是：显式 `GHCR_WRITE_USERNAME/GHCR_WRITE_TOKEN` -> 本地调试用的 `GHCR_USERNAME/GHCR_TOKEN` -> `gh auth` 当前登录态；若三者都不存在会直接 fail-fast。Hosted `build-ci-standard-image.yml` 则优先使用 `github.actor + GITHUB_TOKEN`，避免陈旧 `GHCR_WRITE_*` secret 掩盖更健康的仓库级 token 路径。
 - 风险 1.4：external lane 还依赖 GitHub Actions workflow 状态与 package 权限；若 `build-ci-standard-image.yml` 被禁用，或当前 GitHub token 缺少 `read:packages/write:packages` 能力，external image path 会被平台阻断，而不是被 repo-side gate 解决。
 - 风险 1.3：DevContainer 现在固定把 workspace 挂到 `/workspace` 并复用 strict contract 的缓存路径；若仍依赖旧 `/workspaces/...` 路径的本地脚本，需要同步修正。
 - `--debug-build` 仅用于本地诊断标准环境问题，不属于 release/pre-push completion evidence。

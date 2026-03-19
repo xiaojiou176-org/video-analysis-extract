@@ -40,12 +40,12 @@
 <!-- docs:generated governance-snapshot start -->
 ## Generated Governance Snapshot
 
-- 文档高漂移事实已开始收口到 `docs/generated/*.md`；入口文档只保留 onboarding 必需信息。
-- self-hosted CI 只接受 **trusted internal PR**；若 PR 来自 fork，GitHub Actions 会在边界门禁直接阻断。
-- repo-side 严格验收入口：`./bin/repo-side-strict-ci --mode pre-push --strict-full-run 1 --ci-dedupe 0`。
-- external lane 入口：`./bin/strict-ci --mode pre-push --strict-full-run 1 --ci-dedupe 0`。
-- external lane truth entry：`docs/generated/external-lane-snapshot.md`（tracked pointer）+ `.runtime-cache/reports/**`（current verdict）。
-- 契约主层已迁到 `contracts/`，长期跟踪 artifact 已迁到 `artifacts/`。
+- High-drift facts have been pulled into `docs/generated/*.md`; entry docs now keep only the onboarding-critical surface.
+- Self-hosted CI only accepts **trusted internal PRs**; fork PRs are blocked at the trust-boundary gate.
+- Repo-side strict entrypoint: `./bin/repo-side-strict-ci --mode pre-push --strict-full-run 1 --ci-dedupe 0`.
+- External lane entrypoint: `./bin/strict-ci --mode pre-push --strict-full-run 1 --ci-dedupe 0`.
+- External lane truth entry: `docs/generated/external-lane-snapshot.md` (tracked pointer) plus `.runtime-cache/reports/**` (current verdict).
+- Contract sources now live under `contracts/`, and long-lived tracked artifacts now live under `artifacts/`.
 <!-- docs:generated governance-snapshot end -->
 
 ## 环境文件准备（必做）
@@ -258,8 +258,10 @@ curl -sS -X POST http://127.0.0.1:9000/api/v1/ingest/poll -H 'Content-Type: appl
 
 本地执行正式 pinned-image 严格验收时，必须满足以下其一：
 
-- 已显式导出 workflow 对齐的 `GHCR_WRITE_USERNAME` + `GHCR_WRITE_TOKEN`
+- 已显式导出本地调试用的 `GHCR_WRITE_USERNAME` + `GHCR_WRITE_TOKEN`
 - 已显式导出本地调试用的 `GHCR_USERNAME` + `GHCR_TOKEN`
+- 或当前 `gh auth` 登录态可拉取目标 GHCR 镜像
+Hosted `build-ci-standard-image.yml` 不再优先依赖 `GHCR_WRITE_*` secret；它会先走 `github.actor + GITHUB_TOKEN` 的仓库级 token 路径。
 - `gh auth` 当前登录态可用（仓库脚本会自动复用该身份）
 
 `--debug-build` 只用于排障标准环境构建问题，不计入 CI 等价完成信号。

@@ -1,10 +1,10 @@
 # Upstream Compatibility Policy
 
-`config/governance/upstream-compat-matrix.json` 记录的是“哪些上游组合被允许进入主链”，不是永久荣誉榜。
+`config/governance/upstream-compat-matrix.json` records which upstream combinations are allowed to enter the mainline. It is not a permanent hall of fame.
 
-## 兼容判定最小条件
+## Minimum Conditions For A Compatibility Verdict
 
-每条 matrix row 至少需要：
+Each matrix row must define at least:
 
 - `verification_status`
 - `last_verified_at`
@@ -13,23 +13,23 @@
 - `verification_scope`
 - `verification_artifacts`
 
-## 状态语义
+## Status Semantics
 
-- `verified`：这条组合在 freshness window 内真的有验收工件，等同于“这批货刚验过，票据就在档案柜里”。
-- `pending`：组合仍被支持，但当前工作区没有新鲜验收工件，不能冒充“刚验过”。
-- `declared`：只有设计/登记，没有进入当前主链验证面。
-- `waived`：明确豁免，必须由文档或决策记录解释原因。
+- `verified`: this combination has real acceptance artifacts inside its freshness window. Think of it as “this batch was just inspected and the receipt is on file.”
+- `pending`: the combination is still supported, but the current workspace has no fresh acceptance artifacts. It must not be reported as “just verified.”
+- `declared`: only designed or registered; not yet promoted into the current mainline verification surface.
+- `waived`: explicitly exempted, and the reason must be explained by docs or a decision record.
 
 ## Freshness Policy
 
-- blocker 链路：推荐 `<= 72h`
-- important 链路：推荐 `<= 168h`
-- 超出 freshness window 后，即使 artifact 仍存在，也必须视为 `stale`
+- blocker lanes: recommended `<= 72h`
+- important lanes: recommended `<= 168h`
+- once an artifact exceeds its freshness window, it must be treated as `stale` even if the file still exists
 
-## 硬规则
+## Hard Rules
 
-- `verified` 状态只能基于 freshness window 内的 artifact；非 `verified` 行不计入当前兼容性通过证明。
-- artifact metadata 必须能追溯到 `source_run_id` 与 `source_commit`。
-- 兼容矩阵的失败归因必须落到统一 failure class 枚举。
-- blocker 行若要升级到 `verified`，其 row-specific artifact 必须和 `last_verified_run_id` 形成同轮次证据束。
-- `upstream-compat-report.json` 这类共享治理汇总页可以作为辅助索引，但不能单独充当 blocker 行的 same-run 闭环证明。
+- A `verified` status may only be backed by artifacts inside the freshness window; non-`verified` rows do not count as current compatibility proof.
+- Artifact metadata must trace back to both `source_run_id` and `source_commit`.
+- Failure attribution inside the compatibility matrix must map to the shared failure-class enum.
+- To upgrade a blocker row to `verified`, its row-specific artifact set must form the same-run evidence bundle referenced by `last_verified_run_id`.
+- Shared governance summary pages such as `upstream-compat-report.json` can serve as indexes, but they cannot independently prove same-run closure for blocker rows.

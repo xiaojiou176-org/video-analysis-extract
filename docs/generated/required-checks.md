@@ -4,9 +4,9 @@
 
 Generated from `aggregate-gate` in `.github/workflows/ci.yml`.
 
-这页先讲人话：它回答的是“会影响 PR/merge 放行的 required lane 清单有没有漂移”。
-换句话说，这里列的是 branch protection / aggregate gate 共同依赖的 merge-relevant required checks，其中现在**包含** `remote-integrity`。
-`remote-required-checks=status=pass` 只证明 merge-relevant required-check integrity（也就是 branch protection / aggregate-required-check integrity）对齐，**不证明** `ci-final-gate`、`live-smoke` 或 nightly terminal closure。
+This page answers one narrow question in plain English: has the required-check list that controls PR/merge drifted or not?
+In other words, it lists the merge-relevant required checks shared by branch protection and `aggregate-gate`; that list now **includes** `remote-integrity`.
+`remote-required-checks=status=pass` only proves merge-relevant required-check integrity, which means branch protection and aggregate-required-check integrity stay aligned. It does **not** prove `ci-final-gate`, `live-smoke`, or nightly terminal closure.
 
 | Check | Classification |
 | --- | --- |

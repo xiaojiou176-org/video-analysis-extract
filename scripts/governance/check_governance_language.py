@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from common import repo_root
@@ -27,6 +28,19 @@ FORBIDDEN_SNIPPETS = [
     "legacy env 仅兼容",
 ]
 
+STRICT_ENGLISH_PATHS = [
+    "scripts/governance/render_current_state_summary.py",
+    "scripts/governance/render_docs_governance.py",
+    "docs/reference/done-model.md",
+    "docs/reference/external-lane-status.md",
+    "docs/reference/runner-baseline.md",
+    "docs/reference/root-governance.md",
+    "docs/reference/upstream-compatibility-policy.md",
+    "docs/reference/mcp-tool-routing.md",
+]
+
+HAN_RE = re.compile(r"[\u4e00-\u9fff]")
+
 
 def main() -> int:
     root = repo_root()
@@ -40,6 +54,15 @@ def main() -> int:
         for snippet in FORBIDDEN_SNIPPETS:
             if snippet in content:
                 errors.append(f"{rel}: contains forbidden governance legacy phrase `{snippet}`")
+
+    for rel in STRICT_ENGLISH_PATHS:
+        path = root / rel
+        if not path.is_file():
+            errors.append(f"{rel}: missing strict English governance target")
+            continue
+        content = path.read_text(encoding="utf-8")
+        if HAN_RE.search(content):
+            errors.append(f"{rel}: contains non-English governance/runtime text on a strict-English surface")
 
     if errors:
         print("[governance-language] FAIL")

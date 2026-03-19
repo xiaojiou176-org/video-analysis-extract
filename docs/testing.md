@@ -41,11 +41,11 @@
 <!-- docs:generated governance-snapshot start -->
 ## Generated Governance Snapshot
 
-- `docs/testing.md` 现在以**策略解释**为主；高漂移 job inventory 已移到 `docs/generated/ci-topology.md`。
-- PR 信任模型：仅同仓 trusted internal PR 允许进入 self-hosted 主链。
-- docs gate 现在同时要求：`config/docs/*.json` control plane 一致、render output 新鲜、manual boundary 不越界。
-- repo-side strict canonical path：`./bin/repo-side-strict-ci --mode pre-push --strict-full-run 1 --ci-dedupe 0`。
-- external lane 只允许通过 generated snapshot 或 runtime reports 宣称 current state。
+- `docs/testing.md` is now primarily a policy explanation page; high-drift job inventory has moved to `docs/generated/ci-topology.md`.
+- PR trust model: only trusted internal PRs from the same repository may enter the self-hosted path.
+- The docs gate now requires `config/docs/*.json` control-plane alignment, fresh render outputs, and no manual-boundary violations.
+- Repo-side strict canonical path: `./bin/repo-side-strict-ci --mode pre-push --strict-full-run 1 --ci-dedupe 0`.
+- External current-state claims are only allowed through generated snapshots or runtime reports.
 <!-- docs:generated governance-snapshot end -->
 
 补充说明：治理渲染输出的当前页面集合统一包括 `docs/generated/governance-dashboard.md`、`docs/generated/ci-topology.md`、`docs/generated/runner-baseline.md`、`docs/generated/release-evidence.md`；本页负责解释这些页面如何阅读，不直接手抄高漂移 inventory。
