@@ -29,7 +29,7 @@
 - active upstream inventory entries: `18`
 - upstream templates: `1`
 - governance gate entrypoint: `./bin/governance-audit --mode pre-commit|pre-push|ci|audit`
-- GHCR image publish workflow primes Docker Buildx on self-hosted runners before calling `scripts/ci/build_standard_image.sh`
+- GHCR image publish workflow runs on `ubuntu-latest` and sets up Docker Buildx before calling `scripts/ci/build_standard_image.sh`
 
 ## Aggregate Gate Inventory
 

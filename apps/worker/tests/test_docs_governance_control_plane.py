@@ -3,11 +3,22 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
 
 
 def _repo_root() -> Path:
     return Path(__file__).resolve().parents[3]
+
+
+def _load_check_docs_governance_module():
+    root = _repo_root()
+    module_path = root / "scripts" / "governance" / "check_docs_governance.py"
+    spec = spec_from_file_location("check_docs_governance", module_path)
+    assert spec is not None and spec.loader is not None
+    module = module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def test_docs_control_plane_files_exist_and_reference_real_paths() -> None:
@@ -71,6 +82,8 @@ def test_generated_docs_reference_done_model_and_semantic_counts() -> None:
     )
 
     assert f"- root allowlist entries: `{len(root_allowlist['tracked_root_allowlist'])}`" in ci_topology
+    assert "- GHCR image publish workflow runs on `ubuntu-latest`" in ci_topology
+    assert "self-hosted runners before calling `scripts/ci/build_standard_image.sh`" not in ci_topology
     assert "docs/reference/done-model.md" in release_evidence
     assert f"- compatibility matrix rows tracked: `{len(compat['matrix'])}`" in release_evidence
     assert "docs/reference/done-model.md" in dashboard
@@ -133,3 +146,17 @@ def test_reference_docs_fail_close_remote_required_checks_semantics() -> None:
 
     assert "`remote-required-checks=status=pass`" in newcomer_result
     assert "`ci-final-gate` / `live-smoke` / nightly terminal closure" in newcomer_result
+
+
+def test_ci_topology_ghcr_workflow_line_tracks_workflow_runner_semantics() -> None:
+    root = _repo_root()
+    module = _load_check_docs_governance_module()
+    ci_topology = (root / "docs/generated/ci-topology.md").read_text(encoding="utf-8")
+
+    expected_line = module._expected_ci_topology_standard_image_line()
+
+    assert expected_line == (
+        "- GHCR image publish workflow runs on `ubuntu-latest` and sets up Docker Buildx "
+        "before calling `scripts/ci/build_standard_image.sh`"
+    )
+    assert expected_line in ci_topology

@@ -21,7 +21,9 @@
 
 - `governance-audit` fresh PASS 不等于 repo-side done；它只证明控制面和制度面站稳了。
 - repo-side done 必须同时满足：governance PASS + strict current receipt + docs truth + current-proof 对齐。
-- dirty worktree 不能被 commit-aligned current receipts 自动包装成 `pass`；如果当前工作树有未提交改动，newcomer/current-proof 报告至少应降级为 `partial` 并显式标出 dirty state。
+- `newcomer-result-proof.json` 现在有一个专门的 `current_workspace_verdict`。你可以把它理解成“总闸刀判词”，也就是最终到底能不能把这些绿灯当成**当前工作区**证据。
+- dirty worktree 不能被 commit-aligned current receipts 自动包装成 `pass`；如果当前工作树有未提交改动，`current_workspace_verdict.status` 必须 fail-close 到 `partial`，并且 `blocking_conditions` 里必须显式带上 `dirty_worktree`。
+- `current_proof_alignment` 缺失或 stale 时，repo-side receipt 就像一张旧日期的收据：它能证明你昨天付过钱，但不能证明你现在手里这单已经结清。所以这类情况最多只能是 `partial`，不能是 `pass`。
 - 若 `newcomer-result-proof.json` 里 `repo_side_strict_receipt=status=missing_current_receipt`，则当前 HEAD 还不能宣称 repo-side done。
 
 ## Layer B: External Done
@@ -71,5 +73,6 @@ External lane state tracking:
 - `docs/generated/external-lane-snapshot.md` 现在只是 tracked pointer / reading rule
 - `.runtime-cache/reports/governance/current-state-summary.md` 是 runtime-owned 当前状态汇总
 - `.runtime-cache/reports/governance/newcomer-result-proof.json` 是 repo-side newcomer / strict 收据入口
+- 优先读 `newcomer-result-proof.json` 里的 `current_workspace_verdict.status` 与 `blocking_conditions`，不要自己把局部绿灯拼成“整体已完成”
 - current-state 文档和 runtime reports 只能消费 current-commit-aligned canonical artifacts；历史 examples 只能当 examples，不能冒充 current verdict
 - `.runtime-cache/reports/governance/current-state-summary.md` 这类聚合页本身也要过同一条门禁：只有它自己的 `.meta.json` `source_commit` 与当前 HEAD 对齐时，才能按 current summary 读取；否则它只是 historical snapshot，必须先 rerender

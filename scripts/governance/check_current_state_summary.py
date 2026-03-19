@@ -73,6 +73,32 @@ def main() -> int:
         errors.append("summary markdown current HEAD line does not match current HEAD")
 
     lane_states = _summary_lane_states(summary_text)
+    newcomer_report_path = root / ".runtime-cache" / "reports" / "governance" / "newcomer-result-proof.json"
+    newcomer_report = _load_json(newcomer_report_path)
+    if newcomer_report is None:
+        errors.append("newcomer result proof report missing or invalid")
+    else:
+        expected_workspace_status = str(
+            ((newcomer_report.get("current_workspace_verdict") or {}).get("status"))
+            or newcomer_report.get("status")
+            or "unknown"
+        )
+        if f"- current workspace verdict: `{expected_workspace_status}`" not in summary_text:
+            errors.append("summary must render the newcomer current workspace verdict line")
+
+        raw_blockers = (newcomer_report.get("current_workspace_verdict") or {}).get("blocking_conditions")
+        expected_blockers = [str(item).strip() for item in raw_blockers if str(item).strip()] if isinstance(raw_blockers, list) else []
+        if expected_blockers:
+            blocker_line = "- fail-close blockers: " + ", ".join(f"`{item}`" for item in expected_blockers)
+            if blocker_line not in summary_text:
+                errors.append("summary must render fail-close blockers from newcomer result proof")
+
+        worktree_state = newcomer_report.get("worktree_state") or {}
+        if worktree_state.get("dirty") is True:
+            if "this page fail-closes to the committed snapshot only" not in summary_text:
+                errors.append("dirty worktree summary must explain that current sub-receipts only prove the committed snapshot")
+            if "current workspace verdict above is the fail-close interpretation you must trust" not in summary_text:
+                errors.append("dirty worktree summary must restate that repo-side strict pass does not upgrade the current workspace verdict")
 
     remote_report_path = root / ".runtime-cache" / "reports" / "governance" / "remote-platform-truth.json"
     remote_report = _load_json(remote_report_path)

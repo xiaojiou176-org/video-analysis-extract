@@ -75,7 +75,7 @@
         ".runtime-cache/reports/governance/quality-gate/summary.json"
       ],
       "evidence_artifact": ".runtime-cache/reports/governance/upstream-compat-report.json",
-      "failure_signature": "compose service health or runner standard-image parity breaks due to digest drift"
+      "failure_signature": "pending until current-head `ghcr-standard-image` is verified; current blocker is GHCR registry auth / packages write boundary, so compose image parity cannot be re-verified yet"
     },
     {
       "name": "yt-dlp-media-chain",

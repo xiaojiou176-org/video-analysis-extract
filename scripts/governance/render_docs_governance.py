@@ -73,6 +73,39 @@ def _extract_ci_trigger_lines(ci_text: str) -> list[str]:
     return lines
 
 
+def _extract_workflow_job_runs_on(workflow_text: str, job_name: str) -> str | None:
+    match = re.search(
+        rf"^\s{{2}}{re.escape(job_name)}:\n(?P<body>(?:^\s{{4}}.*\n?)*)",
+        workflow_text,
+        flags=re.MULTILINE,
+    )
+    if not match:
+        return None
+    body = match.group("body")
+    runner_match = re.search(r"^\s{4}runs-on:\s*(.+)$", body, flags=re.MULTILINE)
+    if not runner_match:
+        return None
+    return runner_match.group(1).strip()
+
+
+def _render_standard_image_publish_line() -> str:
+    workflow_text = _read_text(REPO_ROOT / ".github" / "workflows" / "build-ci-standard-image.yml")
+    runner = _extract_workflow_job_runs_on(workflow_text, "publish") or "unknown"
+    buildx_index = workflow_text.find("Set up Docker Buildx")
+    build_script_index = workflow_text.find("./scripts/ci/build_standard_image.sh")
+    if buildx_index >= 0 and build_script_index >= 0 and buildx_index < build_script_index:
+        return (
+            "- GHCR image publish workflow runs on "
+            f"`{runner}` and sets up Docker Buildx before calling `scripts/ci/build_standard_image.sh`"
+        )
+    if build_script_index >= 0:
+        return (
+            "- GHCR image publish workflow runs on "
+            f"`{runner}` and calls `scripts/ci/build_standard_image.sh` in the `publish` job"
+        )
+    return f"- GHCR image publish workflow runs on `{runner}`"
+
+
 def _render_ci_topology(manifest: dict, boundary: dict) -> str:
     ci_text = _read_text(REPO_ROOT / ".github" / "workflows" / "ci.yml")
     monthly_audit_text = _read_text(REPO_ROOT / ".github" / "workflows" / "monthly-governance-audit.yml")
@@ -115,7 +148,7 @@ def _render_ci_topology(manifest: dict, boundary: dict) -> str:
         f"- active upstream inventory entries: `{len(upstreams.get('entries', []))}`",
         f"- upstream templates: `{len(templates.get('entries', []))}`",
         "- governance gate entrypoint: `./bin/governance-audit --mode pre-commit|pre-push|ci|audit`",
-        "- GHCR image publish workflow primes Docker Buildx on self-hosted runners before calling `scripts/ci/build_standard_image.sh`",
+        _render_standard_image_publish_line(),
         "",
         "## Aggregate Gate Inventory",
         "",

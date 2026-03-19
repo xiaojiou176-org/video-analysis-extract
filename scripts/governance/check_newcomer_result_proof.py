@@ -56,15 +56,48 @@ def main() -> int:
         errors.append("repo_side_strict_receipt must be `pass` or `missing_current_receipt`")
     overall_status = str(payload.get("status") or "")
     worktree_dirty = bool(worktree_state.get("dirty"))
+    current_workspace_verdict = payload.get("current_workspace_verdict") or {}
+    if str(current_workspace_verdict.get("status") or "") != overall_status:
+        errors.append("current_workspace_verdict.status must mirror top-level report status")
+
+    blocking_conditions = current_workspace_verdict.get("blocking_conditions")
+    if not isinstance(blocking_conditions, list) or not all(isinstance(item, str) for item in blocking_conditions):
+        errors.append("current_workspace_verdict.blocking_conditions must be a string list")
+        blocking_conditions = []
+
+    current_proof_alignment = payload.get("current_proof_alignment") or {}
+    current_proof_exists = current_proof_alignment.get("exists") is True
+    current_proof_aligned = current_proof_alignment.get("current_commit_aligned") is True
+
+    if worktree_dirty:
+        if overall_status != "partial":
+            errors.append("dirty worktree must force newcomer result proof to `partial`")
+        if "dirty_worktree" not in blocking_conditions:
+            errors.append("dirty worktree must be listed in current_workspace_verdict.blocking_conditions")
+
+    if not current_proof_exists:
+        if overall_status == "pass":
+            errors.append("missing current_proof_alignment artifact must block `pass`")
+        if "current_proof_alignment_missing" not in blocking_conditions:
+            errors.append("missing current proof alignment must be listed as a blocker")
+    elif not current_proof_aligned:
+        if overall_status == "pass":
+            errors.append("stale current_proof_alignment artifact must block `pass`")
+        if "current_proof_alignment_stale" not in blocking_conditions:
+            errors.append("stale current proof alignment must be listed as a blocker")
+
+    if strict_receipt.get("status") != "pass" and "repo_side_strict_missing_current_receipt" not in blocking_conditions:
+        errors.append("missing current strict receipt must be listed as a blocker")
+
     if newcomer.get("status") == "pass" and governance.get("status") == "pass" and strict_receipt.get("status") == "pass":
-        expected_status = "partial" if worktree_dirty else "pass"
+        expected_status = "partial" if worktree_dirty else ("pass" if current_proof_aligned else "partial")
         if overall_status != expected_status:
             errors.append(
-                f"newcomer result proof must be `{expected_status}` when newcomer/governance/strict receipts are all pass"
+                f"newcomer result proof must be `{expected_status}` when newcomer/governance/strict receipts are pass"
             )
     elif newcomer.get("status") == "pass" and governance.get("status") in {"pass", "in_progress"}:
-        if overall_status not in {"partial", "pass"}:
-            errors.append("newcomer result proof must be `partial` or `pass` when newcomer/governance receipts exist")
+        if overall_status not in {"partial", "missing"}:
+            errors.append("newcomer result proof must be `partial` or `missing` when only partial repo-side receipts exist")
 
     eval_regression = payload.get("eval_regression") or {}
     if not eval_regression:

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -83,6 +84,41 @@ def _check_render_freshness() -> list[str]:
     return lines or ["docs governance render freshness failed"]
 
 
+def _extract_workflow_job_runs_on(workflow_text: str, job_name: str) -> str | None:
+    match = re.search(
+        rf"^\s{{2}}{re.escape(job_name)}:\n(?P<body>(?:^\s{{4}}.*\n?)*)",
+        workflow_text,
+        flags=re.MULTILINE,
+    )
+    if not match:
+        return None
+    body = match.group("body")
+    runner_match = re.search(r"^\s{4}runs-on:\s*(.+)$", body, flags=re.MULTILINE)
+    if not runner_match:
+        return None
+    return runner_match.group(1).strip()
+
+
+def _expected_ci_topology_standard_image_line() -> str:
+    workflow_text = (REPO_ROOT / ".github" / "workflows" / "build-ci-standard-image.yml").read_text(
+        encoding="utf-8"
+    )
+    runner = _extract_workflow_job_runs_on(workflow_text, "publish") or "unknown"
+    buildx_index = workflow_text.find("Set up Docker Buildx")
+    build_script_index = workflow_text.find("./scripts/ci/build_standard_image.sh")
+    if buildx_index >= 0 and build_script_index >= 0 and buildx_index < build_script_index:
+        return (
+            "- GHCR image publish workflow runs on "
+            f"`{runner}` and sets up Docker Buildx before calling `scripts/ci/build_standard_image.sh`"
+        )
+    if build_script_index >= 0:
+        return (
+            "- GHCR image publish workflow runs on "
+            f"`{runner}` and calls `scripts/ci/build_standard_image.sh` in the `publish` job"
+        )
+    return f"- GHCR image publish workflow runs on `{runner}`"
+
+
 def _check_generated_doc_semantics() -> list[str]:
     failures: list[str] = []
     runtime_outputs = _load_json(REPO_ROOT / "config" / "governance" / "runtime-outputs.json")
@@ -103,6 +139,15 @@ def _check_generated_doc_semantics() -> list[str]:
     if "- current-run readiness reports: `.runtime-cache/reports/release-readiness/`" in ci_topology:
         failures.append(
             "docs/generated/ci-topology.md: still uses ambiguous release-readiness wording"
+        )
+    expected_standard_image_line = _expected_ci_topology_standard_image_line()
+    if expected_standard_image_line not in ci_topology:
+        failures.append(
+            "docs/generated/ci-topology.md: GHCR standard image workflow runner/buildx wording drifted from `.github/workflows/build-ci-standard-image.yml`"
+        )
+    if "GHCR image publish workflow primes Docker Buildx on self-hosted runners" in ci_topology:
+        failures.append(
+            "docs/generated/ci-topology.md: still claims GHCR standard image publish runs on self-hosted runners"
         )
 
     runner_baseline = (REPO_ROOT / "docs" / "generated" / "runner-baseline.md").read_text(

@@ -83,6 +83,14 @@ def _workflow_head_alignment(lane: dict | None, head_commit: str) -> tuple[str, 
     return "missing", latest_head
 
 
+def _workspace_blockers(report: dict | None) -> list[str]:
+    verdict = (report or {}).get("current_workspace_verdict") or {}
+    raw = verdict.get("blocking_conditions")
+    if not isinstance(raw, list):
+        return []
+    return [str(item).strip() for item in raw if str(item).strip()]
+
+
 def render() -> str:
     newcomer_report = _maybe_load_json(
         REPO_ROOT / ".runtime-cache" / "reports" / "governance" / "newcomer-result-proof.json"
@@ -111,6 +119,12 @@ def render() -> str:
     head_commit = _current_head()
     worktree_changes = _worktree_changes()
     worktree_dirty = bool(worktree_changes)
+    workspace_verdict = str(
+        ((newcomer_report or {}).get("current_workspace_verdict") or {}).get("status")
+        or (newcomer_report or {}).get("status")
+        or ("partial" if worktree_dirty else "unknown")
+    )
+    workspace_blockers = _workspace_blockers(newcomer_report)
     lines = [
         GENERATED_HEADER.rstrip(),
         "# Current State Summary",
@@ -122,8 +136,17 @@ def render() -> str:
     if alignment_report:
         lines.append(f"- current-proof alignment: `{alignment_report.get('status', 'unknown')}`")
     lines.append(f"- worktree dirty: `{str(worktree_dirty).lower()}`")
+    lines.append(f"- current workspace verdict: `{workspace_verdict}`")
+    if workspace_blockers:
+        lines.append("- fail-close blockers: " + ", ".join(f"`{item}`" for item in workspace_blockers))
     if worktree_dirty:
-        lines.append("- dirty-worktree note: current runtime receipts are commit-aligned, but they do not fully prove the uncommitted workspace state")
+        lines.append(
+            "- dirty-worktree note: this page fail-closes to the committed snapshot only; do not read green sub-receipts as proof for the current uncommitted workspace"
+        )
+    if workspace_verdict != "pass":
+        lines.append(
+            "- repo-side reading rule: `repo-side-strict receipt=pass` can still be commit-aligned-only evidence; the current workspace verdict above is the fail-close interpretation you must trust"
+        )
     lines.extend(
         [
             "- reading rule: `docs/generated/external-lane-snapshot.md` 只负责解释如何读，当前状态以本文件和底层 runtime reports 为准",
@@ -280,11 +303,19 @@ def render() -> str:
     }
     for lane_name in ("rsshub-youtube-ingest-chain", "resend-digest-delivery-chain", "strict-ci-compose-image-set"):
         row = compat_rows.get(lane_name, {})
+        lane_note = str(row.get("verification_lane") or "unknown")
+        if (
+            lane_name == "strict-ci-compose-image-set"
+            and str(row.get("verification_status") or "") == "pending"
+            and ghcr_state == "blocked"
+        ):
+            ghcr_blocker = str((ghcr_report or {}).get("blocker_type") or "unknown")
+            lane_note = f"external; blocked on `ghcr-standard-image` ({ghcr_blocker})"
         lines.append(
             _lane_row(
                 lane_name,
                 str(row.get("verification_status") or "missing"),
-                str(row.get("verification_lane") or "unknown"),
+                lane_note,
                 str(row.get("evidence_artifact") or "n/a"),
             )
         )

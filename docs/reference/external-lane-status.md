@@ -42,9 +42,10 @@
 ## Reading Rule
 
 - 解释层只负责说明“为什么 blocked / verified”
-- repo-side newcomer / strict receipt 请看 `.runtime-cache/reports/governance/newcomer-result-proof.json`；本页不负责替 repo-side done 兜底
+- repo-side newcomer / strict receipt 请看 `.runtime-cache/reports/governance/newcomer-result-proof.json`；尤其先看 `current_workspace_verdict.status` 和 `blocking_conditions`。这就像先看法院判决，再看旁证；本页不负责替 repo-side done 兜底
 - current state 只允许从 runtime report 引用；tracked generated docs 只能当 pointer / reading rule
 - `.runtime-cache/reports/governance/current-state-summary.md` 这类 runtime 聚合页也必须先过“票据日期检查”：先看它自己的 `.meta.json` `source_commit` 是否等于当前 HEAD；如果不是，它只能算 historical snapshot
+- 如果 `current-state-summary.md` 显示 `current workspace verdict=partial|missing`，那就必须按 fail-close 读取；不能因为下面某一行 `repo-side-strict receipt=pass` 或某个 external row 是绿的，就把整页脑补成“当前 workspace 已经闭环”
 - 如果 runtime report 的 `source_commit` 不等于当前 HEAD，这份 report 只能当历史证据，不得当 current state
 - 如果 remote probe、GHCR readiness、release evidence readiness 与解释文档冲突，以 runtime report 为准
 - `remote-required-checks` 是 external reading rule 里的“merge-relevant required lane 清单对齐检查”，不是 terminal CI 收据；`ci-final-gate`、`live-smoke`、nightly lanes 仍要分别看它们自己的 current runtime/workflow 证据

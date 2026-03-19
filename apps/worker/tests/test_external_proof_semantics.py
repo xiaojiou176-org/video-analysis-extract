@@ -554,3 +554,192 @@ def test_probe_remote_platform_truth_uses_dedicated_pvr_endpoint_when_repo_field
     assert exit_code == 0
     assert captured["report"]["private_vulnerability_reporting"]["status"] == "enabled"
     assert captured["report"]["private_vulnerability_reporting"]["reason"].startswith("dedicated private-vulnerability-reporting endpoint")
+
+
+def test_newcomer_workspace_verdict_dirty_worktree_forces_partial() -> None:
+    module = _load_governance_module(
+        "render_newcomer_result_proof_dirty_verdict_test",
+        "scripts/governance/render_newcomer_result_proof.py",
+    )
+
+    status, blockers, note = module._workspace_verdict(
+        newcomer_preflight_status="pass",
+        governance_status="pass",
+        repo_side_strict_status="pass",
+        current_proof={"exists": True, "current_commit_aligned": True},
+        worktree_dirty=True,
+    )
+
+    assert status == "partial"
+    assert blockers == ["dirty_worktree"]
+    assert "last committed snapshot" in note
+
+
+def test_newcomer_workspace_verdict_missing_preflight_stays_missing_even_when_dirty() -> None:
+    module = _load_governance_module(
+        "render_newcomer_result_proof_missing_preflight_test",
+        "scripts/governance/render_newcomer_result_proof.py",
+    )
+
+    status, blockers, note = module._workspace_verdict(
+        newcomer_preflight_status="missing",
+        governance_status="pass",
+        repo_side_strict_status="pass",
+        current_proof={"exists": True, "current_commit_aligned": True},
+        worktree_dirty=True,
+    )
+
+    assert status == "missing"
+    assert "newcomer_preflight_missing" in blockers
+    assert "dirty_worktree" in blockers
+    assert "missing" in note
+
+
+def test_newcomer_result_proof_check_rejects_dirty_partial_without_explicit_blocker(
+    monkeypatch, tmp_path: Path
+) -> None:
+    module = _load_governance_module(
+        "check_newcomer_result_proof_dirty_blocker_test",
+        "scripts/governance/check_newcomer_result_proof.py",
+    )
+    head = "1111111111111111111111111111111111111111"
+
+    report_path = tmp_path / ".runtime-cache/reports/governance/newcomer-result-proof.json"
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    _write_json(
+        report_path,
+        {
+            "version": 1,
+            "status": "partial",
+            "source_commit": head,
+            "current_workspace_verdict": {
+                "status": "partial",
+                "blocking_conditions": [],
+                "note": "incorrect fixture",
+            },
+            "newcomer_preflight": {
+                "status": "pass",
+                "resolved_env_exists": True,
+            },
+            "governance_audit_receipt": {"status": "pass"},
+            "repo_side_strict_receipt": {"status": "pass"},
+            "worktree_state": {
+                "dirty": True,
+            },
+            "current_proof_alignment": {
+                "exists": True,
+                "current_commit_aligned": True,
+            },
+            "eval_regression": {"status": "passed"},
+        },
+    )
+    _write_meta(
+        report_path,
+        source_commit=head,
+        verification_scope="newcomer-result-proof",
+    )
+
+    monkeypatch.setattr(module, "repo_root", lambda: tmp_path)
+    monkeypatch.setattr(module, "current_git_commit", lambda: head)
+
+    stdout = io.StringIO()
+    with redirect_stdout(stdout):
+        exit_code = module.main()
+
+    output = stdout.getvalue()
+    assert exit_code == 1, output
+    assert "dirty worktree must be listed" in output
+
+
+def test_render_current_state_summary_explains_pending_strict_ci_compose_row_via_ghcr_blocker(
+    monkeypatch, tmp_path: Path
+) -> None:
+    module = _load_governance_module(
+        "render_current_state_summary_pending_compose_row_test",
+        "scripts/governance/render_current_state_summary.py",
+    )
+    head = "1111111111111111111111111111111111111111"
+
+    (tmp_path / ".runtime-cache" / "reports" / "governance").mkdir(parents=True, exist_ok=True)
+    (tmp_path / ".runtime-cache" / "reports" / "release").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "config" / "governance").mkdir(parents=True, exist_ok=True)
+
+    _write_json(
+        tmp_path / ".runtime-cache/reports/governance/standard-image-publish-readiness.json",
+        {
+            "version": 1,
+            "status": "blocked",
+            "blocker_type": "registry-auth-failure",
+        },
+    )
+    _write_json(
+        tmp_path / ".runtime-cache/reports/governance/external-lane-workflows.json",
+        {
+            "version": 1,
+            "source_commit": head,
+            "lanes": [
+                {
+                    "name": "ghcr-standard-image",
+                    "state": "blocked",
+                    "note": "remote workflow for current HEAD concluded `failure`",
+                    "latest_run_matches_current_head": True,
+                    "latest_run": {
+                        "databaseId": 42,
+                        "status": "completed",
+                        "conclusion": "failure",
+                        "headSha": head,
+                    },
+                    "failure_details": {
+                        "failed_step_name": "Standard image publish preflight",
+                    },
+                }
+            ],
+        },
+    )
+    _write_json(
+        tmp_path / ".runtime-cache/reports/governance/remote-platform-truth.json",
+        {"version": 1, "status": "pass", "blocker_type": ""},
+    )
+    _write_json(
+        tmp_path / ".runtime-cache/reports/governance/remote-required-checks.json",
+        {
+            "version": 1,
+            "status": "pass",
+            "expected_required_checks": ["a"],
+            "actual_required_checks": ["a"],
+        },
+    )
+    _write_json(
+        tmp_path / ".runtime-cache/reports/governance/open-source-audit-freshness.json",
+        {"version": 1, "status": "pass"},
+    )
+    _write_json(
+        tmp_path / ".runtime-cache/reports/governance/newcomer-result-proof.json",
+        {
+            "version": 1,
+            "status": "pass",
+            "current_workspace_verdict": {"status": "pass", "blocking_conditions": []},
+            "repo_side_strict_receipt": {"status": "pass"},
+        },
+    )
+    _write_json(
+        tmp_path / "config/governance/upstream-compat-matrix.json",
+        {
+            "matrix": [
+                {
+                    "name": "strict-ci-compose-image-set",
+                    "verification_status": "pending",
+                    "verification_lane": "external",
+                    "evidence_artifact": ".runtime-cache/reports/governance/upstream-compat-report.json",
+                }
+            ]
+        },
+    )
+
+    monkeypatch.setattr(module, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(module, "_current_head", lambda: head)
+    monkeypatch.setattr(module, "_worktree_changes", lambda: [])
+
+    rendered = module.render()
+
+    assert "| `strict-ci-compose-image-set` | `pending` | external; blocked on `ghcr-standard-image` (registry-auth-failure) |" in rendered
