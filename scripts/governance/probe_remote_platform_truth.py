@@ -182,6 +182,9 @@ def main() -> int:
         )
         raw_repo_payload, raw_repo_error = _json_or_none(["gh", "api", f"repos/{slug}"])
         actions_payload, actions_error = _json_or_none(["gh", "api", f"repos/{slug}/actions/permissions"])
+        workflow_permissions_payload, workflow_permissions_error = _json_or_none(
+            ["gh", "api", f"repos/{slug}/actions/permissions/workflow"]
+        )
         branch_payload, branch_error = _json_or_none(["gh", "api", f"repos/{slug}/branches/main/protection"])
 
         expected_required_checks = _load_required_checks()
@@ -240,6 +243,8 @@ def main() -> int:
             "raw_repo_api_error": raw_repo_error,
             "actions_permissions": actions_payload,
             "actions_permissions_error": actions_error,
+            "workflow_permissions": workflow_permissions_payload,
+            "workflow_permissions_error": workflow_permissions_error,
             "branch_protection": branch_payload,
             "branch_protection_error": branch_error,
             "private_vulnerability_reporting": private_vulnerability_reporting,

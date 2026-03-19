@@ -524,6 +524,11 @@ def test_probe_remote_platform_truth_uses_dedicated_pvr_endpoint_when_repo_field
             return {"enabled": True}, None
         if cmd == "gh api repos/xiaojiou176-org/video-analysis-extract/actions/permissions":
             return {"enabled": True}, None
+        if cmd == "gh api repos/xiaojiou176-org/video-analysis-extract/actions/permissions/workflow":
+            return {
+                "default_workflow_permissions": "read",
+                "can_approve_pull_request_reviews": False,
+            }, None
         if cmd == "gh api repos/xiaojiou176-org/video-analysis-extract/branches/main/protection":
             return {
                 "required_status_checks": {
@@ -554,6 +559,8 @@ def test_probe_remote_platform_truth_uses_dedicated_pvr_endpoint_when_repo_field
     assert exit_code == 0
     assert captured["report"]["private_vulnerability_reporting"]["status"] == "enabled"
     assert captured["report"]["private_vulnerability_reporting"]["reason"].startswith("dedicated private-vulnerability-reporting endpoint")
+    assert captured["report"]["workflow_permissions"]["default_workflow_permissions"] == "read"
+    assert captured["report"]["workflow_permissions"]["can_approve_pull_request_reviews"] is False
 
 
 def test_newcomer_workspace_verdict_dirty_worktree_forces_partial() -> None:
