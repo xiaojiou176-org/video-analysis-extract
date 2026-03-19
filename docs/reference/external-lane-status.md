@@ -27,7 +27,7 @@ Those current-state artifacts must also satisfy one additional rule:
 
 - Repo-side green does not equal external-lane green.
 - `governance-audit PASS` also does not equal external-lane green; it cannot even replace the repo-side strict current receipt on its own.
-- `remote-required-checks=status=pass` only proves merge-relevant required-check integrity, meaning `docs/generated/required-checks.md` and remote branch-protection required checks have not drifted apart. It answers “is the required lane list aligned for PR/merge,” not “did `ci-final-gate`, `live-smoke`, or nightly terminal closure pass.”
+- `remote-required-checks=status=pass` only proves merge-relevant required-check integrity, meaning `docs/generated/required-checks.md`, branch protection, and merge-relevant lanes such as `remote-integrity` have not drifted apart. It answers “is the required lane list aligned for PR/merge,” not “did `ci-final-gate`, `live-smoke`, or nightly terminal closure pass.”
 - An external lane counts as `verified` only when fresh artifacts, runtime metadata, and same-run proof all line up.
 - For lanes that consume remote workflow results, `verified` also requires the latest successful run to have `headSha == current HEAD`.
 - If a remote workflow succeeded on an old commit, that run is historical evidence only and must not upgrade the current state.
