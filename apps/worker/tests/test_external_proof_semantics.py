@@ -320,6 +320,155 @@ def test_render_current_state_summary_distinguishes_local_readiness_from_remote_
     assert "GHCR blob HEAD returned 403 Forbidden" in rendered
 
 
+def test_render_current_state_summary_keeps_release_lane_as_readiness_when_remote_workflow_is_historical(
+    monkeypatch, tmp_path: Path
+) -> None:
+    module = _load_governance_module(
+        "render_current_state_summary_release_historical_test",
+        "scripts/governance/render_current_state_summary.py",
+    )
+    head = "1111111111111111111111111111111111111111"
+    stale_head = "2222222222222222222222222222222222222222"
+
+    (tmp_path / ".runtime-cache" / "reports" / "governance").mkdir(parents=True, exist_ok=True)
+    (tmp_path / ".runtime-cache" / "reports" / "release").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "config" / "governance").mkdir(parents=True, exist_ok=True)
+
+    _write_json(
+        tmp_path / ".runtime-cache/reports/release/release-evidence-attest-readiness.json",
+        {
+            "version": 1,
+            "status": "ready",
+            "blocker_type": "",
+        },
+    )
+    _write_json(
+        tmp_path / ".runtime-cache/reports/governance/external-lane-workflows.json",
+        {
+            "version": 1,
+            "source_commit": head,
+            "lanes": [
+                {
+                    "name": "release-evidence-attestation",
+                    "state": "historical",
+                    "note": f"latest successful remote workflow targets old head `{stale_head}`; current HEAD `{head}` still not externally verified",
+                    "latest_run_matches_current_head": False,
+                    "latest_run": {
+                        "databaseId": 41,
+                        "status": "completed",
+                        "conclusion": "success",
+                        "headSha": stale_head,
+                    },
+                }
+            ],
+        },
+    )
+    _write_json(
+        tmp_path / ".runtime-cache/reports/governance/remote-platform-truth.json",
+        {"version": 1, "status": "pass", "blocker_type": ""},
+    )
+    _write_json(
+        tmp_path / ".runtime-cache/reports/governance/remote-required-checks.json",
+        {
+            "version": 1,
+            "status": "pass",
+            "expected_required_checks": ["a"],
+            "actual_required_checks": ["a"],
+        },
+    )
+    _write_json(
+        tmp_path / ".runtime-cache/reports/governance/open-source-audit-freshness.json",
+        {"version": 1, "status": "pass"},
+    )
+    _write_json(
+        tmp_path / ".runtime-cache/reports/governance/newcomer-result-proof.json",
+        {
+            "version": 1,
+            "status": "pass",
+            "repo_side_strict_receipt": {"status": "pass"},
+        },
+    )
+    _write_json(tmp_path / "config/governance/upstream-compat-matrix.json", {"matrix": []})
+
+    monkeypatch.setattr(module, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(module, "_current_head", lambda: head)
+    monkeypatch.setattr(module, "_worktree_changes", lambda: [])
+
+    rendered = module.render()
+
+    assert "| `release-evidence-attestation` | `verified` |" not in rendered
+    assert "| `release-evidence-attestation` | `ready` |" in rendered
+    assert "remote workflow is historical for current HEAD and does not count as current external verification" in rendered
+
+
+def test_current_state_summary_check_rejects_stale_summary_and_historical_greenwash(
+    monkeypatch, tmp_path: Path
+) -> None:
+    module = _load_governance_module(
+        "check_current_state_summary_test",
+        "scripts/governance/check_current_state_summary.py",
+    )
+    head = "1111111111111111111111111111111111111111"
+    stale_head = "2222222222222222222222222222222222222222"
+
+    summary_path = tmp_path / ".runtime-cache/reports/governance/current-state-summary.md"
+    summary_path.parent.mkdir(parents=True, exist_ok=True)
+    summary_path.write_text(
+        "\n".join(
+            [
+                "# Current State Summary",
+                "",
+                f"- current HEAD: `{stale_head}`",
+                "",
+                "| Lane | Current State | Evidence / Note | Canonical Artifact |",
+                "| --- | --- | --- | --- |",
+                "| `release-evidence-attestation` | `verified` | stale | `x` |",
+                "| `workflow:release-evidence-attestation` | `historical` | stale workflow | `y` |",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    _write_meta(
+        summary_path,
+        source_commit=stale_head,
+        verification_scope="current-state-summary",
+    )
+    _write_json(
+        tmp_path / ".runtime-cache/reports/governance/external-lane-workflows.json",
+        {
+            "version": 1,
+            "source_commit": head,
+            "lanes": [
+                {
+                    "name": "release-evidence-attestation",
+                    "state": "historical",
+                    "note": "historical run",
+                    "latest_run_matches_current_head": False,
+                    "latest_run": {
+                        "databaseId": 51,
+                        "status": "completed",
+                        "conclusion": "success",
+                        "headSha": stale_head,
+                    },
+                }
+            ],
+        },
+    )
+
+    monkeypatch.setattr(module, "repo_root", lambda: tmp_path)
+    monkeypatch.setattr(module, "current_git_commit", lambda: head)
+
+    stdout = io.StringIO()
+    with redirect_stdout(stdout):
+        exit_code = module.main()
+
+    output = stdout.getvalue()
+    assert exit_code == 1, output
+    assert "source_commit does not match current HEAD" in output
+    assert "must not be rendered as `verified`" in output
+
+
 def test_current_proof_contract_requires_critical_external_current_artifacts() -> None:
     payload = json.loads(
         (_repo_root() / "config" / "governance" / "current-proof-contract.json").read_text(

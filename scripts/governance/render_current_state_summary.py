@@ -15,6 +15,7 @@ if str(REPO_ROOT / "scripts" / "governance") not in sys.path:
 from common import write_text_artifact
 OUTPUT_PATH = REPO_ROOT / ".runtime-cache" / "reports" / "governance" / "current-state-summary.md"
 GENERATED_HEADER = "<!-- runtime-generated: current-state-summary; do not edit directly -->\n"
+CURRENT_WORKFLOW_STATUSES = {"verified", "queued", "in_progress"}
 
 
 def _load_json(path: Path) -> dict:
@@ -68,6 +69,20 @@ def _workflow_lane_map(workflow_report: dict | None) -> dict[str, dict]:
     }
 
 
+def _workflow_head_alignment(lane: dict | None, head_commit: str) -> tuple[str, str]:
+    lane = lane or {}
+    latest_run = lane.get("latest_run") or {}
+    if not isinstance(latest_run, dict):
+        latest_run = {}
+    latest_head = str(lane.get("latest_run_head_sha") or latest_run.get("headSha") or "").strip()
+    matches_current_head = lane.get("latest_run_matches_current_head") is True
+    if matches_current_head or (latest_head and latest_head == head_commit):
+        return "current", latest_head
+    if latest_head:
+        return "historical", latest_head
+    return "missing", latest_head
+
+
 def render() -> str:
     newcomer_report = _maybe_load_json(
         REPO_ROOT / ".runtime-cache" / "reports" / "governance" / "newcomer-result-proof.json"
@@ -112,6 +127,7 @@ def render() -> str:
     lines.extend(
         [
             "- reading rule: `docs/generated/external-lane-snapshot.md` 只负责解释如何读，当前状态以本文件和底层 runtime reports 为准",
+            "- stale-summary rule: 只有当 `current-state-summary.md.meta.json` 的 `source_commit` 与当前 HEAD 对齐时，本页里的 green-like 行才算 current；否则整页只能按 historical 读取",
             "",
             "## Repo-side Signals",
             "",
@@ -165,26 +181,28 @@ def render() -> str:
             ".runtime-cache/reports/governance/remote-required-checks.json",
         )
     )
-    ghcr_state = str((ghcr_report or {}).get("status") or "missing")
+    ghcr_artifact_state = str((ghcr_report or {}).get("status") or "missing")
+    ghcr_state = ghcr_artifact_state
     ghcr_note = str((ghcr_report or {}).get("blocker_type") or "ok")
     ghcr_workflow = workflow_lanes.get("ghcr-standard-image") or {}
     ghcr_workflow_state = str(ghcr_workflow.get("state") or "")
     ghcr_workflow_note = str(ghcr_workflow.get("note") or "")
+    ghcr_head_alignment, _ = _workflow_head_alignment(ghcr_workflow, head_commit)
     ghcr_failure_details = ghcr_workflow.get("failure_details") or {}
     if not isinstance(ghcr_failure_details, dict):
         ghcr_failure_details = {}
-    if ghcr_workflow_state in {"in_progress", "queued", "verified"}:
+    if ghcr_workflow_state in CURRENT_WORKFLOW_STATUSES and ghcr_head_alignment == "current":
         ghcr_state = ghcr_workflow_state
         ghcr_note = (
             f"{ghcr_workflow_note}; local readiness artifact="
-            f"{str((ghcr_report or {}).get('status') or 'missing')}:{str((ghcr_report or {}).get('blocker_type') or 'ok')}"
+            f"{ghcr_artifact_state}:{str((ghcr_report or {}).get('blocker_type') or 'ok')}"
         )
-    elif ghcr_workflow_state == "blocked" and ghcr_failure_details:
+    elif ghcr_workflow_state == "blocked" and ghcr_head_alignment == "current" and ghcr_failure_details:
         failed_step = str(ghcr_failure_details.get("failed_step_name") or "")
         failure_signature = str(ghcr_failure_details.get("failure_signature") or "")
         if failed_step and failure_signature == "blob-head-403-forbidden":
             local_readiness = (
-                f"local readiness artifact={str((ghcr_report or {}).get('status') or 'missing')}:"
+                f"local readiness artifact={ghcr_artifact_state}:"
                 f"{str((ghcr_report or {}).get('blocker_type') or 'ok')}"
             )
             ghcr_note = (
@@ -193,6 +211,18 @@ def render() -> str:
             )
         elif failed_step:
             ghcr_note = f"{ghcr_workflow_note}; failed_step={failed_step}"
+    elif ghcr_head_alignment == "historical":
+        if ghcr_state in CURRENT_WORKFLOW_STATUSES:
+            ghcr_state = "historical"
+        local_readiness = (
+            f"local readiness artifact={ghcr_artifact_state}:"
+            f"{str((ghcr_report or {}).get('blocker_type') or 'ok')}"
+        )
+        ghcr_note = (
+            f"{local_readiness}; remote workflow is historical for current HEAD and cannot upgrade this lane to current external verification"
+        )
+        if ghcr_workflow_note:
+            ghcr_note = f"{ghcr_workflow_note}; {ghcr_note}"
     lines.append(
         _lane_row(
             "ghcr-standard-image",
@@ -202,17 +232,27 @@ def render() -> str:
         )
     )
 
-    release_state = str((release_report or {}).get("status") or "missing")
+    release_artifact_state = str((release_report or {}).get("status") or "missing")
+    release_state = release_artifact_state
     release_note = str((release_report or {}).get("blocker_type") or "ok")
     release_workflow = workflow_lanes.get("release-evidence-attestation") or {}
     release_workflow_state = str(release_workflow.get("state") or "")
     release_workflow_note = str(release_workflow.get("note") or "")
-    if release_workflow_state == "verified" and release_state == "ready":
+    release_head_alignment, _ = _workflow_head_alignment(release_workflow, head_commit)
+    if release_workflow_state == "verified" and release_head_alignment == "current" and release_artifact_state == "ready":
         release_state = "verified"
         release_note = f"{release_workflow_note}; readiness artifact=ready"
-    elif release_workflow_state in {"in_progress", "queued"}:
+    elif release_workflow_state in {"in_progress", "queued"} and release_head_alignment == "current":
         release_state = release_workflow_state
-        release_note = f"{release_workflow_note}; readiness artifact={release_state if not release_report else str((release_report or {}).get('status') or 'missing')}"
+        release_note = f"{release_workflow_note}; readiness artifact={release_artifact_state}"
+    elif release_head_alignment == "historical":
+        if release_state in CURRENT_WORKFLOW_STATUSES:
+            release_state = "historical"
+        release_note = (
+            f"readiness artifact={release_artifact_state}; remote workflow is historical for current HEAD and does not count as current external verification"
+        )
+        if release_workflow_note:
+            release_note = f"{release_workflow_note}; {release_note}"
     lines.append(
         _lane_row(
             "release-evidence-attestation",

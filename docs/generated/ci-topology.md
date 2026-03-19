@@ -47,6 +47,7 @@
 | `required-ci-secrets` | required chain input |
 | `changes` | required chain input |
 | `preflight-fast` | required chain input |
+| `remote-integrity` | required chain input |
 | `preflight-heavy` | required chain input |
 | `profile-governance` | required chain input |
 | `quality-gate-pre-push` | required chain input |

@@ -27,7 +27,7 @@
 
 - repo-side green 不等于 external lane green
 - `governance-audit PASS` 也不等于 external lane green；它连 repo-side strict current receipt 都不能单独替代
-- `remote-required-checks=status=pass` 只证明 aggregate-required-check integrity，也就是 `docs/generated/required-checks.md` 与远端 branch protection required checks 没漂移；它不证明 `ci-final-gate`、`live-smoke` 或 nightly terminal closure
+- `remote-required-checks=status=pass` 只证明 merge-relevant required-check integrity，也就是 `docs/generated/required-checks.md` 与远端 branch protection required checks 没漂移；它回答的是“PR/merge 会看的 required lane 清单有没有对齐”，其中现在包含 `remote-integrity`，但它仍不证明 `ci-final-gate`、`live-smoke` 或 nightly terminal closure
 - external lane 只在 fresh artifact + runtime metadata + same-run proof 同时满足时才算 `verified`
 - 对消费 remote workflow 结果的 lane，`verified` 还必须满足：最新成功 run 的 `headSha == 当前 HEAD`
 - 如果 remote workflow 成功的是旧 commit，那份 run 只能算历史证据，不能升级当前状态
@@ -44,10 +44,12 @@
 - 解释层只负责说明“为什么 blocked / verified”
 - repo-side newcomer / strict receipt 请看 `.runtime-cache/reports/governance/newcomer-result-proof.json`；本页不负责替 repo-side done 兜底
 - current state 只允许从 runtime report 引用；tracked generated docs 只能当 pointer / reading rule
+- `.runtime-cache/reports/governance/current-state-summary.md` 这类 runtime 聚合页也必须先过“票据日期检查”：先看它自己的 `.meta.json` `source_commit` 是否等于当前 HEAD；如果不是，它只能算 historical snapshot
 - 如果 runtime report 的 `source_commit` 不等于当前 HEAD，这份 report 只能当历史证据，不得当 current state
 - 如果 remote probe、GHCR readiness、release evidence readiness 与解释文档冲突，以 runtime report 为准
-- `remote-required-checks` 是 external reading rule 里的“清单对齐检查”，不是 terminal CI 收据；`ci-final-gate`、`live-smoke`、nightly lanes 仍要分别看它们自己的 current runtime/workflow 证据
+- `remote-required-checks` 是 external reading rule 里的“merge-relevant required lane 清单对齐检查”，不是 terminal CI 收据；`ci-final-gate`、`live-smoke`、nightly lanes 仍要分别看它们自己的 current runtime/workflow 证据
 - 如果 GHCR blocked 的当前 run 已明确给出 failed step / failure signature，优先用这些字段判断失败是在 preflight、buildx setup，还是 build-and-push 的最后一跳
+- 如果 remote workflow 还是旧 head，summary/pointer 最多只能诚实到 `historical`、`ready` 或 `blocked`；绝不能把这份旧 run 包装成当前 `verified`
 
 ## Canonical Commands
 

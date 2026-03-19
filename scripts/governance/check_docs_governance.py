@@ -143,9 +143,9 @@ def _check_generated_doc_semantics() -> list[str]:
     external_lane_status = (
         REPO_ROOT / "docs" / "reference" / "external-lane-status.md"
     ).read_text(encoding="utf-8")
-    if "aggregate-required-check integrity" not in external_lane_status:
+    if "merge-relevant required-check integrity" not in external_lane_status:
         failures.append(
-            "docs/reference/external-lane-status.md: missing aggregate-required-check integrity wording"
+            "docs/reference/external-lane-status.md: missing merge-relevant required-check integrity wording"
         )
     if "`ci-final-gate`" not in external_lane_status or "`live-smoke`" not in external_lane_status:
         failures.append(

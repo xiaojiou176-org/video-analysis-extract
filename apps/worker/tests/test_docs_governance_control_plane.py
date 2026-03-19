@@ -108,13 +108,22 @@ def test_reference_docs_fail_close_remote_required_checks_semantics() -> None:
     external_lane_status = (root / "docs" / "reference" / "external-lane-status.md").read_text(
         encoding="utf-8"
     )
+    required_checks = (root / "docs" / "generated" / "required-checks.md").read_text(
+        encoding="utf-8"
+    )
+    ci_topology = (root / "docs" / "generated" / "ci-topology.md").read_text(encoding="utf-8")
     done_model = (root / "docs" / "reference" / "done-model.md").read_text(encoding="utf-8")
     newcomer_result = (
         root / "docs" / "reference" / "newcomer-result-proof.md"
     ).read_text(encoding="utf-8")
 
+    assert "`remote-integrity`" in required_checks
+    assert "merge-relevant required checks" in required_checks
+    assert "`remote-integrity`" in ci_topology
+
     assert "`remote-required-checks=status=pass`" in external_lane_status
-    assert "aggregate-required-check integrity" in external_lane_status
+    assert "merge-relevant required-check integrity" in external_lane_status
+    assert "`remote-integrity`" in external_lane_status
     assert "`ci-final-gate`" in external_lane_status
     assert "`live-smoke`" in external_lane_status
 

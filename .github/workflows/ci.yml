@@ -167,6 +167,12 @@ jobs:
     with:
       runs-on: '["self-hosted","video-analysis-extract"]'
 
+  remote-integrity:
+    needs: [trusted-pr-boundary]
+    if: ${{ always() && needs.trusted-pr-boundary.result == 'success' }}
+    uses: ./.github/workflows/remote-integrity-audit.yml
+    secrets: inherit
+
   preflight-heavy:
     runs-on: [self-hosted, video-analysis-extract]
     timeout-minutes: 20
@@ -1252,6 +1258,7 @@ jobs:
       - required-ci-secrets
       - changes
       - preflight-fast
+      - remote-integrity
       - preflight-heavy
       - profile-governance
       - quality-gate-pre-push
@@ -1286,6 +1293,7 @@ jobs:
           results[required_ci_secrets]="${{ needs.required-ci-secrets.result }}"
           results[changes]="${{ needs.changes.result }}"
           results[preflight_fast]="${{ needs.preflight-fast.result }}"
+          results[remote_integrity]="${{ needs.remote-integrity.result }}"
           results[preflight_heavy]="${{ needs.preflight-heavy.result }}"
           results[profile_governance]="${{ needs.profile-governance.result }}"
           results[quality_gate_pre_push]="${{ needs.quality-gate-pre-push.result }}"
@@ -1310,7 +1318,7 @@ jobs:
           echo "event=$event_name ref=$ref is_pr=$is_pr require_main_schedule_release_only=$require_main_schedule_release_only"
           echo "changes: backend=$backend_changed web=$web_changed deps=$deps_changed migrations=$migrations_changed"
 
-          for job in required_ci_secrets changes preflight_fast preflight_heavy; do
+          for job in required_ci_secrets changes preflight_fast remote_integrity preflight_heavy; do
             result="${results[$job]}"
             echo "$job=$result"
             if [[ "$result" != "success" ]]; then
@@ -1414,6 +1422,7 @@ jobs:
             echo "| required-ci-secrets | \`${{ needs.required-ci-secrets.result }}\` |"
             echo "| changes | \`${{ needs.changes.result }}\` |"
             echo "| preflight-fast | \`${{ needs.preflight-fast.result }}\` |"
+            echo "| remote-integrity | \`${{ needs.remote-integrity.result }}\` |"
             echo "| preflight-heavy | \`${{ needs.preflight-heavy.result }}\` |"
             echo "| quality-gate-pre-push | \`${{ needs.quality-gate-pre-push.result }}\` |"
             echo "| db-migration-smoke | \`${{ needs.db-migration-smoke.result }}\` |"

@@ -12,6 +12,11 @@ from common import find_forbidden_runtime_entries, load_governance_json, repo_ro
 
 
 _DIRECT_RUNTIME_REF = re.compile(r"\.runtime-cache/([A-Za-z0-9._-]+)")
+_RUNTIME_RETENTION_SECTION = re.compile(
+    r"## 固定语义分舱\s+(.*?)\n## ",
+    flags=re.DOTALL,
+)
+_RUNTIME_RETENTION_ENTRY = re.compile(r"^- `([A-Za-z0-9._-]+)/`$", flags=re.MULTILINE)
 
 
 def _tracked_files(root: Path) -> list[Path]:
@@ -28,6 +33,15 @@ def _tracked_files(root: Path) -> list[Path]:
         if line:
             paths.append(root / line)
     return paths
+
+
+def _doc_runtime_subdirs(root: Path) -> set[str]:
+    doc_path = root / "docs" / "reference" / "runtime-cache-retention.md"
+    text = doc_path.read_text(encoding="utf-8")
+    match = _RUNTIME_RETENTION_SECTION.search(text)
+    if match is None:
+        raise ValueError("docs/reference/runtime-cache-retention.md missing `固定语义分舱` section")
+    return set(_RUNTIME_RETENTION_ENTRY.findall(match.group(1)))
 
 
 def main() -> int:
@@ -66,6 +80,23 @@ def main() -> int:
             errors.append(f"runtime subdirectory `{name}` must declare positive max_total_size_mb")
         if int(config["max_file_count"]) <= 0:
             errors.append(f"runtime subdirectory `{name}` must declare positive max_file_count")
+    try:
+        documented_subdirs = _doc_runtime_subdirs(root)
+    except (OSError, UnicodeDecodeError, ValueError) as exc:
+        errors.append(f"runtime retention doc unreadable or malformed: {exc}")
+    else:
+        undocumented = sorted(allowed_subdirs - documented_subdirs)
+        extra_documented = sorted(documented_subdirs - allowed_subdirs)
+        if undocumented:
+            errors.append(
+                "docs/reference/runtime-cache-retention.md missing runtime subdirectories: "
+                + ", ".join(undocumented)
+            )
+        if extra_documented:
+            errors.append(
+                "docs/reference/runtime-cache-retention.md documents undeclared runtime subdirectories: "
+                + ", ".join(extra_documented)
+            )
     if runtime_root.exists():
         for child in runtime_root.iterdir():
             if child.is_dir() and child.name in allowed_subdirs:

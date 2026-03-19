@@ -19,6 +19,7 @@
 - 如果你想看“这个仓库到底拿什么代表性结果来证明自己有价值”，请继续读 `docs/proofs/task-result-proof-pack.md`；它提供的是 representative cases，不是 current external verdict。
 - 结果证明不只看治理，还会同时引用 eval regression 与 current-proof 对齐结果。
 - `docs/generated/external-lane-snapshot.md` 不再提供 current verdict；外层当前状态要看 runtime-owned 汇总和底层 reports。
+- `.runtime-cache/reports/governance/current-state-summary.md` 只是 runtime-owned 聚合页，不是免检通行证；如果它自己的 `.meta.json` `source_commit` 不等于当前 HEAD，整页都只能按 `historical` / `mismatch` 理解，不能拿里面的 green-like 行当 current verdict。
 
 补充边界：
 
@@ -27,6 +28,7 @@
 - 不得在 `worktree_state.dirty=true` 时，把 `status=partial` 包装成“已经等价 pass”；这只是“当前脏工作树下，有一批 commit-aligned 收据可参考”。
 - 不得把 `remote-required-checks=status=pass`、`governance_audit_receipt=status=pass` 或 newcomer receipt 组合包装成 `ci-final-gate` / `live-smoke` / nightly terminal closure；这些外层 terminal lane 仍要看各自 current runtime/workflow 证据。
 - 若要判断“外部世界是否认账”，应转到 `docs/reference/external-lane-status.md` 和 `.runtime-cache/reports/governance/current-state-summary.md`，不要从 newcomer 页面反推 external lane。
+- 如果 external lane 的 remote workflow 明明还是旧 head，那么 current-state summary 最多只能保留 `ready` / `blocked` 这类当前本地读数，不能把它升级包装成 current `verified`。
 
 ## Why This Exists
 

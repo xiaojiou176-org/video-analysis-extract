@@ -72,3 +72,4 @@ External lane state tracking:
 - `.runtime-cache/reports/governance/current-state-summary.md` 是 runtime-owned 当前状态汇总
 - `.runtime-cache/reports/governance/newcomer-result-proof.json` 是 repo-side newcomer / strict 收据入口
 - current-state 文档和 runtime reports 只能消费 current-commit-aligned canonical artifacts；历史 examples 只能当 examples，不能冒充 current verdict
+- `.runtime-cache/reports/governance/current-state-summary.md` 这类聚合页本身也要过同一条门禁：只有它自己的 `.meta.json` `source_commit` 与当前 HEAD 对齐时，才能按 current summary 读取；否则它只是 historical snapshot，必须先 rerender

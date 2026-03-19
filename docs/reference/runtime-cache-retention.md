@@ -13,7 +13,8 @@
 - `reports/`
 - `evidence/`
 - `tmp/`
-- `temp/`
+
+以上清单必须与 `config/governance/runtime-outputs.json` 的 `subdirectories` 完全一致；当前唯一合法的临时分舱是 `tmp/`，不再保留 `temp/` 双口径。
 
 每个舱位都必须声明：
 

@@ -93,6 +93,8 @@ python3 scripts/governance/check_eval_assets.py
 python3 scripts/governance/check_eval_regression.py
 python3 scripts/governance/render_newcomer_result_proof.py
 python3 scripts/governance/check_newcomer_result_proof.py
+python3 scripts/governance/render_current_state_summary.py
+python3 scripts/governance/check_current_state_summary.py
 python3 scripts/governance/check_upstream_governance.py
 python3 scripts/governance/check_unregistered_upstream_usage.py
 python3 scripts/governance/check_upstream_compat_freshness.py

@@ -21,6 +21,8 @@ Current external state must be read from runtime-owned reports under `.runtime-c
 - current state must come from runtime-owned reports under `.runtime-cache/reports/**`
 - tracked docs may explain state semantics, but must not carry current verdict payload
 - runtime metadata `source_commit` must match the current HEAD before any report can be treated as current truth
+- `.runtime-cache/reports/governance/current-state-summary.md` is also commit-sensitive; if its own `.meta.json` source_commit is stale, treat the whole page as historical until rerendered
+- old remote workflow runs may explain `historical` state, but they must not be upgraded into current `verified` wording by any summary or pointer page
 - `ready` means preflight inputs exist; it does not mean the external lane has closed successfully
 
 ## Canonical Commands

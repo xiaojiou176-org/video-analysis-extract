@@ -45,6 +45,6 @@ Generated from `infra/config/self_hosted_runner_baseline.json`.
 - repo-side / external completion split is documented in `docs/reference/done-model.md`
 - repo-side strict canonical path is `./bin/repo-side-strict-ci --mode pre-push --strict-full-run 1 --ci-dedupe 0`
 - image-publish workflows now prime Docker Buildx explicitly before multi-arch standard-image builds
-- remote integrity now has a dedicated workflow: `remote-integrity-audit.yml`
+- remote integrity now serves both as a reusable merge-relevant CI lane and a manual audit workflow: `remote-integrity-audit.yml`
 - standard image publish lane now runs a repo-owned readiness preflight before build/push
 - monthly governance audit reuses self-hosted pre-checkout normalization before checkout
