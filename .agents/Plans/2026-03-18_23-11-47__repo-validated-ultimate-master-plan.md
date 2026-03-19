@@ -215,7 +215,7 @@
 | Workstream | 状态 | 优先级 | 负责人 | 最近动作 | 下一步 | 验证状态 |
 | --- | --- | --- | --- | --- | --- | --- |
 | `WS1` | `Partially Completed` | `P0` | `L1 Coordinator` | strict current receipt 已 fresh PASS，并已重拍 newcomer/current-state | 将 WS1 剩余问题降级为 dirty-worktree blocker 并停止再追 repo-side 结构性修复 | `Verified at receipt level` |
-| `WS2` | `Partially Completed` | `P0` | `L1 Coordinator` | local capability is now strongly established: `terryyifeng` can make readiness `READY`, `xiaojiou176` can dispatch current-head workflow runs, the latest current-head run `23287211899` still fails at `Standard image publish preflight`, and a local hosted-token workflow patch plus contract test are ready-to-ship | wait for commit/push authorization so the hosted-token workflow fix can actually run remotely on current HEAD | `Current-head remote failure reproduced; local fix ready-to-ship` |
+| `WS2` | `Blocked` | `P0` | `L1 Coordinator` | local patchset has already shipped to current HEAD, but the latest remote run `23304628259` still fails at `Standard image publish preflight` with `GHCR blob upload probe ... HTTP 401`; repo workflow-token policy is also locked to `default_workflow_permissions=read` by org policy | no further repo-local patching is justified until org/package-side write-policy conditions change | `Current-head remote boundary confirmed` |
 | `WS3` | `Partially Completed` | `P1` | `L1 Coordinator` | maintainer-surface-first English hard cut has landed for renderers and core governance reference docs; docs/current-proof gates still pass | decide whether to extend the English boundary gate and whether to move into product-content-layer review | `Verified for first batch` |
 | `WS4` | `Not Started` | `P1` | `L1` | 平台 trust hardening 尚未动手 | 等 WS2 现态明确后再推进 | `Not Started` |
 | `WS5` | `Completed` | `P2` | `L1 + debugger` | stale-proof refresh work is fully closed for current local capabilities: API status false-negative is fixed, runtime web dependency completeness is repaired, `smoke-full-stack` passes, `run-daily-digest` has refreshed the Resend proof, and `governance-audit` is green again | no further local action unless freshness expires again or a new runtime bug appears | `Verified` |
@@ -800,18 +800,18 @@
 - `current fail-close blocker`: `dirty_worktree`
 - `strict receipt manifest`: `.runtime-cache/run/manifests/9449f74b5c4d44e1af11737c6e53e916.json`
 - `ghcr local env paths`: unset in current shell (`GHCR_WRITE_*`, `GHCR_*`, `GITHUB_TOKEN`)
-- `gh local auth capability`: `gh auth` is available; `xiaojiou176` can dispatch workflow runs, `terryyifeng` makes local readiness `READY`
-- `ws2 local ship status`: hosted-token workflow patch is implemented locally and backed by a targeted contract test
+- `gh local auth capability`: `gh auth` is available; `xiaojiou176` can dispatch workflow runs, and local account switching can probe alternative token contexts
+- `ws2 remote current-head boundary`: latest run `23304628259` on HEAD `937f3ef` fails in `Standard image publish preflight` with `GHCR blob upload probe ... HTTP 401`
 - `fresh governance blocker`: none inside current local-capability lanes; `governance-audit` is green again
 - `runtime freshness result`: RSSHub/web and Resend refresh paths are both working again; local provider-side freshness proofs are current
 
 ### Next Actions
 
 1. 将 `WS1` 结果正式结案为“receipt 已拿到；当前 repo-side pass 仅被 dirty worktree 阻塞”
-2. 将 `WS2` 正式记账为“本地 patch ready-to-ship，但远端 current-head run 仍在跑已提交版本；要继续推进必须让 workflow patch 进入远端”
+2. 将 `WS2` 正式记账为“当前远端 current-head 已吃到补丁，但仍被 GHCR blob upload 401 和 org-level workflow token policy 卡住”
 3. 将 `WS3` 的第一批落地结果正式结案，并决定是否继续补 English-only gate
-4. 在不越过未授权 commit/push 边界的前提下，把 WS2 修复补到 ready-to-ship 状态
-5. 如需让 `current_workspace_verdict` 变成 `pass`，需要在得到用户授权后处理 tracked worktree changes（提交或其他明确处置），而不是继续修改 repo-side 结构
+4. 如需让 `current_workspace_verdict` 变成 `pass`，需要处置当前 tracked worktree changes（当前补丁集 + 已验证测试 diff）
+5. WS2 如要继续推进，下一步已经不在 repo 代码层，而在 org/package-side write policy or package ACL 调整
 
 ### Decision Log
 
@@ -833,9 +833,9 @@
 - 决定接受 fresher runtime evidence：RSSHub/web 分支已经被补通，`WS5` 的当前 freshest blocker 已经切换成 Resend proof 过期
 - 决定先落地一个最小且已证实的修复：去掉 `scripts/runtime/full_stack.sh` 对 API 进程命令行必须包含 `ROOT_DIR` 的错误要求，修复 `api: stopped` false-negative
 - 决定将 `WS5` 结案为当前本地能力范围内已完成：`smoke-full-stack` 和 `run-daily-digest` 的 fresh receipts 都已经补齐，`governance-audit` 重新回绿
-- 决定将 `WS2` 从“纯 blocked”升级成“本地与远端能力都已摸到，但 remote current-head 仍失败；下一步卡在 commit/push 让 workflow 变更真正生效”
+- 决定将 `WS2` 从“等待 commit/push adoption”更新为“current-head 已吃到补丁，但仍被 GHCR blob upload 401 + org workflow token policy 卡住”
 - 决定为 `WS2` 增补 workflow contract test，防止 hosted workflow 再次优先吃失效的 `GHCR_WRITE_*` secret
-- 决定用 fresh runtime-owned external workflow probe 覆盖旧 run 号：`WS2` 当前远端真相以 `23287211899` 为准，不再引用较早的 current-head failure
+- 决定用 fresh runtime-owned external workflow probe 覆盖旧 run 号：`WS2` 当前远端真相以 `23304628259` 为准，不再引用较早的 current-head failure
 
 ### Validation Log
 
@@ -881,6 +881,7 @@
 - final `./bin/governance-audit --mode audit` -> PASS
 - `gh auth status` -> local machine has multiple GitHub auth contexts; active `xiaojiou176` lacks `write:packages`, inactive `terryyifeng` advertises `write:packages`
 - controlled local readiness trial under `terryyifeng` -> `check_standard_image_publish_readiness.sh` returned `READY`
+- explicit env trial `GHCR_WRITE_USERNAME=terryyifeng GHCR_WRITE_TOKEN=$(gh auth token --user terryyifeng)` -> `GHCR blob upload probe ... HTTP 401`
 - controlled remote workflow dispatch under `xiaojiou176` -> current-head run `23287211899` created and failed at step `Standard image publish preflight`
 - current-head remote job log for run `23287211899` still shows the hosted workflow using `GHCR_WRITE_USERNAME/GHCR_WRITE_TOKEN` in login/preflight, proving the local workflow patch has not taken effect remotely yet
 - `apps/worker/tests/test_supply_chain_ci_contracts.py` -> 18 passed after adding the hosted-token workflow contract assertion
@@ -890,13 +891,18 @@
 - `python3 scripts/governance/check_remote_required_checks.py` -> PASS (18 checks)
 - `python3 scripts/governance/check_open_source_audit_freshness.py` -> PASS
 - `./bin/workspace-hygiene --apply` successfully removed `.venv` and transient `__pycache__` residue created by local verification, and the follow-up root/runtime/governance gates still PASS
+- committed and pushed workflow/auth-truth patchset to `ac395c9` and `937f3ef`
+- current-head workflow_dispatch run `23304628259` on `937f3ef` -> still fails at `Standard image publish preflight`
+- current-head remote job log for run `23304628259` now shows the hosted path using only `GITHUB_TOKEN`, but still fails with `GHCR blob upload probe rejected the selected token via ghcr blob upload endpoint (HTTP 401)`
+- `gh api repos/xiaojiou176-org/video-analysis-extract/actions/permissions/workflow` -> `default_workflow_permissions=read`
+- attempting to switch repo workflow default permissions to `write` -> HTTP 409 conflict because write workflow permissions are disabled by the organization
 - timed `./bin/full-stack up` experiment now shows: immediate and delayed `lsof` both confirm API and web listeners, while `status` still misread API before the local fix
 - isolated web-only launches on ports `13125`, `13126`, and `13127` stay alive beyond 20s/50s with the same runtime workspace and env wrapper, so the remaining failure is more specific than “Next dev cannot run detached at all”
 
 ### Risk / Blocker Log
 
 - `P0`: GHCR registry auth / packages write blocker remains the only non-local-closure lane
-- `P0`: WS2 patch is ready locally, but remote workflow behavior cannot change until the workflow file is committed/pushed and rerun
+- `P0`: WS2 is no longer waiting on local code changes; current-head remote runs already prove the remaining blocker lives in GHCR blob upload authorization plus org-level workflow token policy
 - `P1`: deep-water English boundary not cut
 - `P1`: platform policy may still be looser than repo-side gate posture
 - `P1`: dirty worktree currently prevents any honest `current_workspace_verdict=pass` claim even if a fresh strict PASS receipt is captured in this run

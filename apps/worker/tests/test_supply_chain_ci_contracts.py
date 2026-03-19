@@ -104,7 +104,7 @@ def test_build_ci_standard_image_workflow_uses_hosted_github_token_path_for_logi
 
     preflight_block = workflow.split("Standard image publish preflight", 1)[1]
     assert "GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}" in preflight_block
-    assert "GITHUB_ACTIONS: \"true\"" in preflight_block
+    assert 'GITHUB_ACTIONS: "true"' in preflight_block
     assert "GHCR_WRITE_USERNAME:" not in preflight_block.split("run: ./scripts/ci/check_standard_image_publish_readiness.sh", 1)[0]
     assert "GHCR_WRITE_TOKEN:" not in preflight_block.split("run: ./scripts/ci/check_standard_image_publish_readiness.sh", 1)[0]
     assert "GHCR_TOKEN:" not in preflight_block.split("run: ./scripts/ci/check_standard_image_publish_readiness.sh", 1)[0]
