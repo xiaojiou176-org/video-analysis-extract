@@ -9,8 +9,8 @@
       "verification_lane": "repo-side",
       "verification_entrypoint": "strict_ci_entry:pr-llm-real-smoke + worker llm tests",
       "verification_status": "verified",
-      "last_verified_at": "2026-03-20T08:47:04Z",
-      "last_verified_run_id": "c59e922298ce4339af838a1c25ed9e50",
+      "last_verified_at": "2026-03-20T08:58:40Z",
+      "last_verified_run_id": "c5a338093bba47c090684140c1f95281",
       "freshness_window_hours": 72,
       "verification_scope": "upstream:gemini-worker-llm-chain",
       "verification_artifacts": [
