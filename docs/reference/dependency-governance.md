@@ -18,6 +18,7 @@
 - 锁文件：`apps/web/package-lock.json`
 - 安装命令：`./bin/prepare-web-runtime`
 - 覆盖率运行依赖：`@vitest/coverage-v8`（`vitest run --coverage` 必需）
+- 当前 fresh 示例：最近一次 Web 间接依赖安全升级是 `flatted 3.3.3 -> 3.4.2`，仅通过更新 `apps/web/package-lock.json` 回收安全版本，不额外扩大到 `package.json` 或其他 Web 配置文件。
 - UI 基座依赖：当前 Web shell 使用 `tailwindcss@4` + `@tailwindcss/postcss` + `radix-ui` + `next-themes` + `geist`；
   若继续扩展 UI primitives，优先复用现有 shadcn/radix 风格组件，不要并行引入第二套组件体系。
 
