@@ -10,6 +10,31 @@ TAG_OVERRIDE=""
 METADATA_FILE=""
 PLATFORMS="${VD_STANDARD_ENV_BUILD_PLATFORMS:-linux/amd64,linux/arm64}"
 
+resolve_source_repository_url() {
+  if [[ -n "${GITHUB_SERVER_URL:-}" && -n "${GITHUB_REPOSITORY:-}" ]]; then
+    printf '%s/%s\n' "${GITHUB_SERVER_URL%/}" "${GITHUB_REPOSITORY}"
+    return 0
+  fi
+
+  local remote_url
+  remote_url="$(git config --get remote.origin.url 2>/dev/null || true)"
+  if [[ -z "$remote_url" ]]; then
+    return 0
+  fi
+
+  python3 - <<'PY' "$remote_url"
+import re
+import sys
+
+remote = sys.argv[1]
+match = re.search(r"github\.com[:/](?P<owner>[^/]+)/(?P<repo>[^/.]+?)(?:\.git)?$", remote)
+if not match:
+    print("", end="")
+    raise SystemExit(0)
+print(f"https://github.com/{match.group('owner')}/{match.group('repo')}")
+PY
+}
+
 resolve_local_load_platform() {
   local arch="${VD_STANDARD_ENV_LOAD_PLATFORM_ARCH:-$(uname -m)}"
   case "$arch" in
@@ -83,6 +108,13 @@ common_args=(
   --file "$STRICT_CI_STANDARD_IMAGE_DOCKERFILE"
   --tag "${image_repository}:${image_tag}"
 )
+
+source_repository_url="$(resolve_source_repository_url)"
+if [[ -n "$source_repository_url" ]]; then
+  common_args+=(
+    --label "org.opencontainers.image.source=${source_repository_url}"
+  )
+fi
 
 if [[ "$LOAD_IMAGE" == "1" ]]; then
   PLATFORMS="$(resolve_local_load_platform)"

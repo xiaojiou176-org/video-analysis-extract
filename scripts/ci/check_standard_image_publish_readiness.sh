@@ -124,6 +124,14 @@ payload = json.loads(Path("infra/config/strict_ci_contract.json").read_text(enco
 print(payload["standard_image"]["repository"])
 PY
 )"
+expected_digest="$(python3 - <<'PY'
+import json
+from pathlib import Path
+
+payload = json.loads(Path("infra/config/strict_ci_contract.json").read_text(encoding="utf-8"))
+print(payload["standard_image"]["digest"])
+PY
+)"
 expected_owner="$(python3 - <<'PY' "$expected_repository"
 import re
 import sys
@@ -203,6 +211,35 @@ print(json.dumps(result, ensure_ascii=False))
 PY
 }
 
+probe_registry_manifest() {
+  local repository="$1"
+  local digest="$2"
+
+  python3 - <<'PY' "$repository" "$digest"
+from __future__ import annotations
+
+import json
+import subprocess
+import sys
+
+repository, digest = sys.argv[1:3]
+target = f"{repository}@{digest}"
+result = subprocess.run(
+    ["docker", "manifest", "inspect", target],
+    capture_output=True,
+    text=True,
+    check=False,
+)
+payload = {
+    "target": target,
+    "returncode": result.returncode,
+    "stdout": (result.stdout or "")[:500],
+    "stderr": (result.stderr or "")[:500],
+}
+print(json.dumps(payload, ensure_ascii=False))
+PY
+}
+
 probe_ghcr_blob_upload() {
   local username="$1"
   local token="$2"
@@ -264,6 +301,7 @@ token_scope_ok="false"
 blob_upload_scope_ok="false"
 package_probe_json='{}'
 blob_upload_probe_json='{}'
+manifest_probe_json='{}'
 selected_token=""
 selected_username="${GHCR_WRITE_USERNAME:-${GHCR_USERNAME:-${GITHUB_ACTOR:-}}}"
 # In hosted GitHub Actions runs, prefer the repository-scoped GITHUB_TOKEN first
@@ -385,11 +423,32 @@ if [[ "$token_scope_ok" != "true" ]]; then
   errors+=("no token path with packages write capability detected")
 fi
 
+manifest_probe_json="$(probe_registry_manifest "$expected_repository" "$expected_digest")"
+manifest_probe_returncode="$(python3 - <<'PY' "$manifest_probe_json"
+import json
+import sys
+
+payload = json.loads(sys.argv[1])
+print(payload.get("returncode", 0))
+PY
+)"
+manifest_probe_stderr="$(python3 - <<'PY' "$manifest_probe_json"
+import json
+import sys
+
+payload = json.loads(sys.argv[1])
+print(payload.get("stderr", ""))
+PY
+)"
+if [[ "$manifest_probe_returncode" != "0" && "$manifest_probe_stderr" == *"manifest unknown"* ]]; then
+  errors+=("GHCR manifest probe reports 'manifest unknown' for the digest-pinned standard image; this suggests package-path / ownership / visibility / publication is still unresolved")
+fi
+
 ERRORS_JSON="$(
   printf '%s\n' "${errors[@]}" | python3 -c 'import json, sys; print(json.dumps([line.rstrip("\n") for line in sys.stdin if line.rstrip("\n")], ensure_ascii=False))'
 )"
 
-python3 - <<'PY' "$OUTPUT_PATH" "$status" "$blocker_type" "$repo_slug" "$repo_owner" "$expected_repository" "$token_mode" "$token_scope_ok" "$blob_upload_scope_ok" "$buildx_version" "$buildx_ls" "$buildx_inspect" "$ERRORS_JSON" "$package_probe_json" "$blob_upload_probe_json"
+python3 - <<'PY' "$OUTPUT_PATH" "$status" "$blocker_type" "$repo_slug" "$repo_owner" "$expected_repository" "$expected_digest" "$token_mode" "$token_scope_ok" "$blob_upload_scope_ok" "$buildx_version" "$buildx_ls" "$buildx_inspect" "$ERRORS_JSON" "$package_probe_json" "$blob_upload_probe_json" "$manifest_probe_json"
 import json
 import sys
 from pathlib import Path
@@ -406,15 +465,17 @@ payload = {
     "repo": sys.argv[4],
     "repo_owner": sys.argv[5],
     "expected_repository": sys.argv[6],
-    "token_mode": sys.argv[7],
-    "token_scope_ok": sys.argv[8] == "true",
-    "blob_upload_scope_ok": sys.argv[9] == "true",
-    "docker_buildx_version": sys.argv[10],
-    "docker_buildx_ls": sys.argv[11],
-    "docker_buildx_inspect": sys.argv[12],
-    "errors": json.loads(sys.argv[13]),
-    "package_access_probe": json.loads(sys.argv[14]),
-    "blob_upload_probe": json.loads(sys.argv[15]),
+    "expected_digest": sys.argv[7],
+    "token_mode": sys.argv[8],
+    "token_scope_ok": sys.argv[9] == "true",
+    "blob_upload_scope_ok": sys.argv[10] == "true",
+    "docker_buildx_version": sys.argv[11],
+    "docker_buildx_ls": sys.argv[12],
+    "docker_buildx_inspect": sys.argv[13],
+    "errors": json.loads(sys.argv[14]),
+    "package_access_probe": json.loads(sys.argv[15]),
+    "blob_upload_probe": json.loads(sys.argv[16]),
+    "manifest_probe": json.loads(sys.argv[17]),
 }
 write_json_artifact(
     ROOT / output,

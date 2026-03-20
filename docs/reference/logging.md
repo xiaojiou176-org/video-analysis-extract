@@ -11,6 +11,8 @@
 ## Output Contract
 
 - 开发脚本默认输出到标准输出/标准错误；需要跨运行关联的结构化事件写入 `.runtime-cache/logs/**`，例如 API HTTP 请求日志会写入 `.runtime-cache/logs/app/api-http.jsonl`。
+- Worker CLI 现在会把控制面命令事件写入 `.runtime-cache/logs/app/worker-commands.jsonl`，至少保留 `run_id/request_id/trace_id` 与命令完成状态。
+- MCP API client 现在会把上游 API 请求事件写入 `.runtime-cache/logs/app/mcp-api.jsonl`，至少保留 `run_id/request_id/trace_id`，并附带稳定的 `upstream_operation` 分类；它不是把完整 path 再抄一遍，而是像“包裹类型标签”那样把请求压成 `jobs.json_dict`、`artifacts.binary`、`health.timeout` 这类更适合排障的语义。
 - 计划任务（cron/launchd）场景，日志统一重定向到 `.runtime-cache/logs/`，不再向仓库根级 `logs/` 写入。
 - 脚本日志必须带前缀（如 `[run_daily_digest]`、`[dev_worker]`）以便 grep。
 - 关键运行链必须能按“案号”串联：HTTP 至少保留 `trace_id/request_id`，异步作业至少保留 `run_id`。
@@ -50,6 +52,8 @@ touch .runtime-cache/logs/app/daily_digest.log \
 
 - `./bin/dev-api` 会委托内部启动脚本在检测到 `uv` 时通过 `uv run python -m uvicorn ...` 启动 API，不依赖 `uvicorn` console entry；日志排障时若看到 `Failed to spawn: uvicorn`，优先检查是否绕开了该公共入口。
 - `./bin/full-stack` 与 `./bin/api-real-smoke-local` 会把 API 启动日志落到 `.runtime-cache/logs/components/full-stack/api.log` 与 `.runtime-cache/logs/tests/api-real-smoke-local.log`；本地严格验收时优先检查这两个文件。
+- `apps/worker/worker/main.py` 的控制面命令（如 `start-*-workflow`）现在会同步落结构化日志到 `.runtime-cache/logs/app/worker-commands.jsonl`；排查“到底谁发起了命令、拿到了哪个 run_id”时，优先看这里。
+- `apps/mcp/server.py` 现在会把 MCP 到后端 API 的请求摘要落到 `.runtime-cache/logs/app/mcp-api.jsonl`；排查“tool 调用了哪个 upstream path、最后拿到的是 run_id 还是 request_id、这次更像 jobs JSON 读、artifacts 二进制取件，还是 health timeout”时，优先看这里。
 - `ci_pr_llm_real_smoke.sh`、`ci_live_smoke.sh`、`ci_web_e2e.sh` 的测试日志统一进入 `.runtime-cache/logs/tests/`，对应 JUnit/diagnostics 进入 `.runtime-cache/reports/tests/`，浏览器证据进入 `.runtime-cache/evidence/tests/`。
 - `./bin/full-stack` 还会把运行时路由决议写到 `.runtime-cache/run/full-stack/resolved.env`；排查“明明起在 18001，前端还在打 9000”这类问题时，应把它和 `.runtime-cache/logs/components/full-stack/*.log` 一起看。
 - `./bin/api-real-smoke-local` 会刻意让 pytest 子进程保持“未配置写 token”的 integration harness 语义，同时允许 `bin/dev-api` 为真实 HTTP smoke 进程注入本地 token；排查 401/403 时要区分“测试进程环境”和“API 进程环境”。
@@ -136,6 +140,8 @@ python3 scripts/governance/check_no_unindexed_evidence.py
 - `tests` 通道额外必须带 `test_run_id`
 - `governance` 通道额外必须带 `gate_run_id`
 - `upstreams` 通道额外必须带 `upstream_id` 与 `upstream_operation`
+- `worker-commands` 与 `mcp-api` 这类 app 通道事件至少必须让 `run_id/request_id/trace_id` 三者可见；其中 `mcp-api` 还应尽量补上稳定的 `upstream_operation`，让“哪个路径家族 + 哪种结果语义”一眼可读，而不是只剩原始 path/method。
+- `python3 scripts/governance/check_log_correlation_completeness.py` 现在不仅检查 `api-http.jsonl`，也会显式检查 `.runtime-cache/logs/app/worker-commands.jsonl` 与 `.runtime-cache/logs/app/mcp-api.jsonl`，防止“代码已经接线，但治理门禁没认账”。
 - `reports` / `evidence` artifact 必须带 sidecar metadata，避免历史 artifact 冒充 current verification
 
 互斥策略（必须）：

@@ -1,20 +1,49 @@
 # Public Repo Readiness
 
-本仓库的公开策略是 **public source-first repo with limited-maintenance governance and governed local verification**，不是“镜像优先产品分发”，也不是“高信心 adoption-grade 开源产品”。
+This repository is published as a **public source-first, limited-maintenance engineering repository**.
 
-## Public Status
+It is **not** the same thing as:
 
-- 发布姿态：源码优先的公开仓库（public source-first）
-- 维护模式：limited-maintenance
-- 不承诺 hosted service、镜像即官方交付、或每条 external lane 同步闭环
-- 当前 public 目标是 **安全可审阅、边界清楚、repo-side 验证诚实**，不是让陌生人无条件依赖外部分发链直接采用
-- 远端仓库当前已经公开；但这不等于 GHCR、release evidence、provider/live lanes 已全部闭环。
-- 平台能力必须按 probe truth 读，不能只看文档是否存在；例如 private vulnerability reporting 只能报告为 `enabled`、`disabled` 或 `unverified`，不能被文档脑补成“当前已可用的私密入口”。
-- open-source security proof 还要求 fresh receipt；例如 `gitleaks` history / working-tree 的 meta 必须对齐当前 HEAD，旧 commit 收据不能继续冒充 current-proof。
+- a hosted product,
+- an adoption-grade open source distribution,
+- or a claim that every external lane is currently verified.
+
+In plain English:
+
+- the repository is safe to inspect,
+- its boundaries are meant to be explicit,
+- and its repo-side proof model is intentionally strict,
+- but public visibility alone does not prove full external distribution closure.
+
+## Current Public Posture
+
+- Posture: `public source-first`
+- Maintenance model: `limited-maintenance`
+- Intended public promise: **reviewable source, explicit boundaries, honest repo-side verification**
+- Not promised by default:
+  - hosted service support,
+  - registry-first delivery,
+  - or automatic external verification for every lane on every head
+
+The remote repository is already public.
+That still does **not** mean:
+
+- GHCR distribution is fully closed,
+- release evidence for the current head is externally verified,
+- or provider/live lanes are all green for public consumption.
+
+## Public Reviewable vs Safe Open Source
+
+This repository makes a deliberate distinction:
+
+- **public reviewable** means the source tree and governance surface are intentionally visible,
+- **safe open source** requires clearer contribution rights, contributor-facing collaboration boundaries, and trustworthy external distribution semantics.
+
+Today, the repository is closer to **public reviewable** than to **fully safe open source distribution**.
 
 ## Required Public Governance Pack
 
-以下文件构成最小公共治理包：
+The minimum public governance pack includes:
 
 - `LICENSE`
 - `SECURITY.md`
@@ -25,49 +54,116 @@
 - `.github/ISSUE_TEMPLATE/*`
 - `.github/PULL_REQUEST_TEMPLATE.md`
 
-边界解释层固定入口：
+Boundary explanation entrypoints:
 
 - `docs/reference/public-rights-and-provenance.md`
 - `docs/reference/public-privacy-and-data-boundary.md`
 - `docs/reference/public-brand-boundary.md`
+- `docs/reference/contributor-rights-model.md`
 
 ## Public Boundary
 
-public-safe:
+### Public-safe
 
-- 源码、合同、治理控制面、generated reference docs
-- sanitized performance budgets
-- historical release evidence examples with explicit non-canonical wording
-- sanitized public samples only
+- source code,
+- contracts,
+- governance control-plane files,
+- generated reference docs,
+- sanitized performance budgets,
+- historical examples that are explicitly marked non-canonical,
+- sanitized public samples only.
 
-internal or conditional:
+### Internal or conditional
 
-- provider-level secrets and live tokens
-- GHCR/public distribution lane proof
-- any sample that still points at production-like identities or routes
+- provider-level secrets and live tokens,
+- GHCR / public distribution proof,
+- samples that still point at production-like identities, routes, or credentials,
+- any contribution surface whose rights basis is still unclear.
 
-边界补充说明：
+## Platform Truth Rule
 
-- 权利与历史样例边界：`docs/reference/public-rights-and-provenance.md`
-- 数据 / 隐私 / 样本边界：`docs/reference/public-privacy-and-data-boundary.md`
-- 平台 / 品牌 / affiliation 边界：`docs/reference/public-brand-boundary.md`
+Platform capability claims must come from current probe artifacts, not from tracked policy prose alone.
+
+For example:
+
+- private vulnerability reporting may only be described as `enabled`, `disabled`, or `unverified`,
+- and that status must come from `.runtime-cache/reports/governance/remote-platform-truth.json`.
+
+The same rule applies to external closure:
+
+- `ready`, `queued`, and `historical` are **not** equivalent to `verified`,
+- and old successful workflows must not impersonate current-head proof.
+
+## Security Freshness Rule
+
+Public security claims also require fresh proof.
+
+For example:
+
+- `gitleaks` history and working-tree receipts must align with the current head,
+- and an old receipt must not be reused as current security proof.
+
+Canonical artifacts:
+
+- `.runtime-cache/reports/governance/remote-platform-truth.json`
+- `.runtime-cache/reports/governance/open-source-audit-freshness.json`
+
+## Collaboration Boundary
+
+The repository now treats contributor-facing governance as an explicit public boundary.
+
+That means:
+
+- contribution rights must be explainable,
+- automation-authored changes need a documented responsibility model,
+- and deep-water contributor/runtime/governance surfaces are expected to be English-first for public collaboration.
+
+See:
+
+- `docs/reference/contributor-rights-model.md`
+- `docs/reference/public-rights-and-provenance.md`
+
+## Product-output Locale Boundary
+
+This repository also distinguishes between:
+
+- **governance/contributor/runtime-facing deep-water surfaces**, which are expected to be English-first,
+- and **product-output surfaces**, which may still use Chinese when that language is part of the intended end-user experience.
+
+At the moment, the following rule applies:
+
+- internal prompt/control text must stay English-first, while digest templates and repository-generated end-user content may remain localized as a **controlled locale allowlist**,
+- those product-output surfaces must stay explicitly separated from governance, CI, runbook, and contributor guidance layers,
+- and future Chinese additions outside the product-output allowlist should be treated as governance drift.
+
+Current explicit allowlist examples:
+
+- `apps/worker/worker/pipeline/steps/artifacts.py`
+- `apps/worker/worker/pipeline/runner_rendering.py`
+- `apps/worker/templates/digest.md.mustache`
+
+In plain English:
+
+- Chinese may still exist where the repository is deliberately producing user-facing content,
+- but it must not leak back into the places where contributors, operators, and reviewers need stable global collaboration semantics.
 
 ## Source-first Quickstart
 
-对外默认入口：
+Public entrypoints:
 
 1. `README.md`
 2. `docs/start-here.md`
 3. `docs/reference/done-model.md`
 
-对外默认验收命令：
+Public repo-side verification commands:
 
 ```bash
 ./bin/governance-audit --mode audit
 ./bin/repo-side-strict-ci --mode pre-push --strict-full-run 1 --ci-dedupe 0
 ```
 
-补充：public/security 当前态还应读取：
+Read current public/security state from:
 
 - `.runtime-cache/reports/governance/remote-platform-truth.json`
 - `.runtime-cache/reports/governance/open-source-audit-freshness.json`
+- `.runtime-cache/reports/governance/current-state-summary.md`

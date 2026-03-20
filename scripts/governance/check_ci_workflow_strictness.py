@@ -8,6 +8,7 @@ from pathlib import Path
 WORKFLOW_DIR = Path(".github/workflows")
 WORKFLOW_PATH = WORKFLOW_DIR / "ci.yml"
 RUNNER_HEALTH_WORKFLOW_PATH = WORKFLOW_DIR / "runner-health.yml"
+TRUSTED_BOUNDARY_REUSABLE_WORKFLOW_PATH = WORKFLOW_DIR / "_trusted-pr-boundary.yml"
 CONTRACT_PATH = Path("infra/config/strict_ci_contract.json")
 RUNNER_BASELINE_CONTRACT_PATH = Path("infra/config/self_hosted_runner_baseline.json")
 CHECKOUT_ACTION = "actions/checkout@"
@@ -144,6 +145,77 @@ def _has_needs_dep(block: str, dep: str) -> bool:
         return dep in items
 
     return False
+
+
+def _workflow_has_pull_request_trigger(text: str) -> bool:
+    return bool(re.search(r"^on:\n(?:.+\n)*?\s{2}pull_request:\s*$", text, flags=re.MULTILINE))
+
+
+def _block_has_self_hosted_runs_on(block: str) -> bool:
+    return any(marker in block for marker in SELF_HOSTED_RUNS_ON_MARKERS)
+
+
+def _trusted_boundary_reusable_is_valid() -> bool:
+    if not TRUSTED_BOUNDARY_REUSABLE_WORKFLOW_PATH.is_file():
+        return False
+    text = TRUSTED_BOUNDARY_REUSABLE_WORKFLOW_PATH.read_text(encoding="utf-8")
+    blocks = dict(_job_blocks(text))
+    run_block = blocks.get("trusted-pr-boundary", "")
+    return (
+        "runs-on: ubuntu-latest" in run_block
+        and "trusted internal PR boundary violated" in run_block
+        and "timeout-minutes:" in run_block
+    )
+
+
+def _trusted_boundary_job_is_valid(workflow_name: str, block: str, failures: list[str]) -> None:
+    if not block:
+        failures.append(f"{workflow_name}: trusted-pr-boundary: missing job")
+        return
+    uses_target = _job_level_uses_target(block)
+    if uses_target:
+        if uses_target != "./.github/workflows/_trusted-pr-boundary.yml":
+            failures.append(
+                f"{workflow_name}: trusted-pr-boundary: must use `./.github/workflows/_trusted-pr-boundary.yml`"
+            )
+            return
+        if not _trusted_boundary_reusable_is_valid():
+            failures.append(
+                f"{workflow_name}: trusted-pr-boundary: reusable workflow `_trusted-pr-boundary.yml` is missing hosted runner or explicit failure message"
+            )
+        return
+    if "runs-on: ubuntu-latest" not in block:
+        failures.append(f"{workflow_name}: trusted-pr-boundary: must run on hosted runner")
+    if "trusted internal PR boundary violated" not in block:
+        failures.append(
+            f"{workflow_name}: trusted-pr-boundary: missing explicit trusted internal PR failure message"
+        )
+
+
+def _check_shared_self_hosted_pr_boundary_rules(
+    workflow_path: Path, text: str, blocks: dict[str, str], failures: list[str]
+) -> None:
+    if workflow_path == WORKFLOW_PATH or not _workflow_has_pull_request_trigger(text):
+        return
+
+    self_hosted_jobs = [
+        name for name, block in blocks.items() if name != "trusted-pr-boundary" and _block_has_self_hosted_runs_on(block)
+    ]
+    if not self_hosted_jobs:
+        return
+
+    _trusted_boundary_job_is_valid(workflow_path.name, blocks.get("trusted-pr-boundary", ""), failures)
+    for job_name in self_hosted_jobs:
+        block = blocks[job_name]
+        if not _has_needs_dep(block, "trusted-pr-boundary"):
+            failures.append(
+                f"{workflow_path.name}: {job_name}: missing needs dependency `trusted-pr-boundary`"
+            )
+        if_expr = _extract_job_level_if_expression(block)
+        if not if_expr or not _if_expr_checks_success_for_job(if_expr, "trusted-pr-boundary"):
+            failures.append(
+                f"{workflow_path.name}: {job_name}: must gate self-hosted execution on trusted-pr-boundary success"
+            )
 
 
 def _extract_flag_value(block: str, flag: str) -> float | None:
@@ -647,14 +719,7 @@ def _check_runner_health_specific_rules(blocks: dict[str, str], failures: list[s
 
 
 def _check_ci_post_container_rules(blocks: dict[str, str], failures: list[str]) -> None:
-    trusted_boundary = blocks.get("trusted-pr-boundary", "")
-    if not trusted_boundary:
-        failures.append("ci.yml: trusted-pr-boundary: missing job")
-    else:
-        if "runs-on: ubuntu-latest" not in trusted_boundary:
-            failures.append("ci.yml: trusted-pr-boundary: must run on hosted runner")
-        if "trusted internal PR boundary violated" not in trusted_boundary:
-            failures.append("ci.yml: trusted-pr-boundary: missing explicit trusted internal PR failure message")
+    _trusted_boundary_job_is_valid("ci.yml", blocks.get("trusted-pr-boundary", ""), failures)
 
     for guarded_job in ("required-ci-secrets", "ci-contract", "changes", "preflight-fast", "aggregate-gate", "ci-final-gate", "ci-kpi"):
         block = blocks.get(guarded_job, "")
@@ -816,6 +881,7 @@ def main() -> int:
         text = workflow.read_text(encoding="utf-8")
         blocks = dict(_job_blocks(text))
         _check_global_rules(workflow, text, blocks, failures)
+        _check_shared_self_hosted_pr_boundary_rules(workflow, text, blocks, failures)
         if workflow == WORKFLOW_PATH:
             _check_ci_specific_rules(blocks, failures)
         elif workflow == RUNNER_HEALTH_WORKFLOW_PATH:

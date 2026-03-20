@@ -1,47 +1,101 @@
 # Public Rights And Provenance
 
-这页专门回答一个问题：**仓库里哪些内容是本项目自己的，哪些是第三方依赖、第三方平台引用、历史样例，公开时各自按什么边界解释。**
+This page answers one concrete question:
+
+**what in the repository is ours to publish, what is third-party material, and what still depends on a separate rights or proof boundary.**
 
 ## Canonical Sources
 
-- 项目许可：`LICENSE`
-- 第三方权利账本：`THIRD_PARTY_NOTICES.md`
-- 第三方依赖明细：`artifacts/licenses/third-party-license-inventory.json`
-- public-safe 样本边界：`docs/reference/public-artifact-exposure.md`
-- 对外公开姿态：`docs/reference/public-repo-readiness.md`
+- project license: `LICENSE`
+- contributor rights policy: `docs/reference/contributor-rights-model.md`
+- third-party rights ledger: `THIRD_PARTY_NOTICES.md`
+- third-party dependency inventory: `artifacts/licenses/third-party-license-inventory.json`
+- public-safe artifact boundary: `docs/reference/public-artifact-exposure.md`
+- public posture: `docs/reference/public-repo-readiness.md`
 
 ## Rights Model
 
-- **源码与仓库治理文档**：按仓库当前公开许可解释。
-- **第三方依赖**：不因为仓库根许可而自动变成“本项目原创内容”；它们的许可与 notice 义务以 `THIRD_PARTY_NOTICES.md` 和生成 inventory 为准。
-- **平台名称与接口引用**：只是说明系统依赖了哪些外部平台，不代表官方合作、隶属或代言关系。
-- **历史 release evidence / performance 样例**：可作为文档样例公开，但不能冒充“当前官方 release verdict”。
+### Repository-owned material
+
+- repository source code and repository governance docs are governed by the repository's published license and contribution policy,
+- accepted contributions must satisfy the repository's inbound-rights rule,
+- automation-authored changes are not treated as independent legal actors; they still require a human maintainer review path and contribution-rights justification.
+
+### Third-party material
+
+- third-party dependencies do **not** become repository-owned just because the repository is MIT-licensed,
+- their notice and license obligations continue to follow `THIRD_PARTY_NOTICES.md` and the generated inventory,
+- copied, vendored, patched, or imported third-party material must carry an explicit provenance basis before it becomes part of the tracked public tree.
+
+### Platform references
+
+- platform names, APIs, and service references describe integration dependencies,
+- they do **not** imply endorsement, partnership, affiliation, or delegated rights.
+
+## Automation Contribution Rule
+
+The repository explicitly distinguishes:
+
+- **automation as an execution identity**, and
+- **maintainers as the humans responsible for merge authority and rights confirmation**.
+
+So:
+
+- an automation identity may appear in git history,
+- but that does not remove the maintainer's duty to confirm the contribution can be published,
+- and automation output must not be merged on the theory that "the tool wrote it, so rights are automatic."
+
+For the governing policy, see `docs/reference/contributor-rights-model.md`.
 
 ## Historical Examples Rule
 
-- `artifacts/releases/*` 中的 checked-in 样例是**历史文档样例**，不是当前 release 的正式裁决。
-- 当前 release / attestation / external lane 结论只允许引用 current-run runtime artifacts 与 generated snapshot。
-- 如果一个样例需要公开保留，必须显式带有“historical example / not canonical verdict”语义。
+- checked-in examples under `artifacts/releases/*` are **historical examples**, not current release verdicts,
+- current release / attestation / external-lane conclusions may only be derived from current runtime-owned proof artifacts,
+- and any retained historical example must carry explicit "historical example / not canonical verdict" wording.
 
 ## Third-party Content Rule
 
-- 不允许把第三方依赖、第三方平台能力、或第三方工具链描述成“仓库自带原创能力”。
-- 对第三方依赖的许可、notice、attribution，不允许手写长表；必须以机器生成账本为准。
-- 如果未来引入新的 vendored / copied / patched third-party content，必须先补权利来源说明，再允许进入 tracked public tree。
+- do not describe third-party dependencies, platforms, or toolchains as repository-original capabilities,
+- do not hand-maintain large dependency-attribution tables; use the machine-generated ledger,
+- and do not merge new vendored, copied, or patched third-party content without provenance and license explanation.
 
 ## Decision Boundary
 
-- **可以公开**：源码、合同、治理控制面、sanitized performance 样本、historical examples with boundary note。
-- **不能直接当官方当前证明**：checked-in historical release evidence、旧 run 的 external workflow 成功记录、任何缺 current-proof 对齐的历史 artifact。
-- **不能因为仓库 public 就自动推断**：镜像分发已成熟、平台许可已完全闭环、品牌关系已成立。
-- **不能因为 tracked 政策文件存在就自动推断**：GitHub 私密漏洞上报、GHCR 包权限、release distribution UI 等平台能力当前一定可用。
-- **不能因为 `SECURITY.md` 存在就自动推断**：private vulnerability reporting 已启用；该状态必须以最新 `remote-platform-truth.json` 为准。
+### May be published
+
+- source code,
+- contracts,
+- governance control-plane files,
+- sanitized performance examples,
+- historical examples with explicit non-canonical wording.
+
+### Must not be treated as current official proof
+
+- checked-in historical release evidence,
+- successful external workflows from an old head,
+- any stale artifact that is not current-proof aligned.
+
+### Must not be inferred from public visibility alone
+
+- that registry distribution is already mature,
+- that platform permissions are fully closed,
+- that brand affiliation exists,
+- or that contribution rights have already been completely resolved.
+
+### Must not be inferred from tracked policy files alone
+
+- that private vulnerability reporting is currently enabled,
+- that GHCR package permissions are currently sufficient,
+- or that release-distribution UI/platform state is currently healthy.
+
+Those states must come from current runtime probe artifacts.
 
 ## Reporting Rule
 
-对外说明权利与来源时，必须至少同时写出：
+When describing rights and provenance publicly, always include:
 
-- 当前仓库许可入口
-- 第三方权利账本入口
-- 历史样例与当前证明的边界
-- 平台引用不等于官方关系
+- the repository license entrypoint,
+- the contributor-rights policy entrypoint,
+- the third-party rights ledger entrypoint,
+- the historical-vs-current proof boundary,
+- and the fact that platform references are not affiliation claims.

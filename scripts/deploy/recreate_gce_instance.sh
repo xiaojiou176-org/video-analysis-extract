@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# recreate_gce_instance.sh — 一键在 GCE 上重建全栈实例
-# 用法: ./scripts/deploy/recreate_gce_instance.sh [--project PROJECT_ID] [--zone ZONE] [--instance INSTANCE_NAME] [--scopes SCOPE1,SCOPE2] [--force-delete-instance] [--force-replace-app-dir]
-# 依赖: gcloud CLI 已安装并已 auth login
+# recreate_gce_instance.sh — rebuild a full-stack GCE instance from scratch
+# Usage: ./scripts/deploy/recreate_gce_instance.sh [--project PROJECT_ID] [--zone ZONE] [--instance INSTANCE_NAME] [--scopes SCOPE1,SCOPE2] [--force-delete-instance] [--force-replace-app-dir]
+# Requirement: gcloud CLI must already be installed and authenticated
 set -euo pipefail
 
-# ── 默认参数（仅 CLI 覆盖）───────────────────────────────────────────────────
+# Default parameters (CLI flags may override them)
 GCP_PROJECT=""
 GCP_ZONE="us-west1-b"
 INSTANCE_NAME="vd-prod"

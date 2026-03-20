@@ -36,7 +36,7 @@
 - 只做 Web demo：可展示，但不够 owner-level
 - 只做后台服务：可编排，但对人工运营与调试不友好
 
-更具体的任务级对比请看：`docs/reference/value-proof.md`。
+更具体的任务级对比请看：`docs/reference/value-proof.md`。如果你只是想快速知道这些材料应该按什么顺序读，先看 `docs/generated/public-value-proof.md`。
 
 ## 当前边界与 Non-goals
 
@@ -48,5 +48,6 @@
 ## 当前最硬的价值证据
 
 - 任务级价值对比：`docs/reference/value-proof.md`
+- public-safe value proof pointer：`docs/generated/public-value-proof.md`
 - formal eval 与 regression：`docs/reference/ai-evaluation.md`
 - repo-side 与 external done 的边界：`docs/reference/done-model.md`

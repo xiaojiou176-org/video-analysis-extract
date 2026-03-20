@@ -120,6 +120,66 @@ def main() -> int:
         if channel == "app" and payload.get("trace_id") in (None, "", "missing_trace"):
             errors.append("logging sample for channel `app` must include a real trace_id")
 
+    optional_sample_targets = {
+        str(channel): [root / str(rel_path) for rel_path in rel_paths]
+        for channel, rel_paths in config.get("optional_sample_targets", {}).items()
+        if isinstance(rel_paths, list)
+    }
+    for channel, paths in optional_sample_targets.items():
+        if channel not in required_channels:
+            errors.append(f"logging contract optional_sample_targets contains unknown channel `{channel}`")
+            continue
+        for path in paths:
+            if not path.is_file():
+                errors.append(
+                    f"logging optional sample for channel `{channel}` missing: {path.relative_to(root).as_posix()}"
+                )
+                continue
+            lines = [line for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+            if not lines:
+                errors.append(
+                    f"logging optional sample for channel `{channel}` is empty: {path.relative_to(root).as_posix()}"
+                )
+                continue
+            try:
+                payload = json.loads(lines[-1])
+            except json.JSONDecodeError as exc:
+                errors.append(
+                    f"logging optional sample for channel `{channel}` is not valid JSONL: {path.relative_to(root).as_posix()} ({exc})"
+                )
+                continue
+            for field in config.get("minimum_common_fields", []):
+                if field not in payload:
+                    errors.append(
+                        f"logging optional sample for channel `{channel}` missing required field `{field}`: {path.relative_to(root).as_posix()}"
+                    )
+                    continue
+                if field != "request_id" and payload[field] in (None, ""):
+                    errors.append(
+                        f"logging optional sample for channel `{channel}` has empty required field `{field}`: {path.relative_to(root).as_posix()}"
+                    )
+            if payload.get("channel") != channel:
+                errors.append(
+                    f"logging optional sample for channel `{channel}` has mismatched channel `{payload.get('channel')}`: {path.relative_to(root).as_posix()}"
+                )
+            if payload.get("source_kind") != channel_source_kind_map.get(channel):
+                errors.append(
+                    f"logging optional sample for channel `{channel}` has mismatched source_kind `{payload.get('source_kind')}`: {path.relative_to(root).as_posix()}"
+                )
+            if not payload.get("service") and not payload.get("component"):
+                errors.append(
+                    f"logging optional sample for channel `{channel}` must include non-empty `service` or `component`: {path.relative_to(root).as_posix()}"
+                )
+            for field in channel_required_fields.get(channel, []):
+                if payload.get(field) in (None, ""):
+                    errors.append(
+                        f"logging optional sample for channel `{channel}` missing channel-required field `{field}`: {path.relative_to(root).as_posix()}"
+                    )
+            if channel == "app" and payload.get("trace_id") in (None, "", "missing_trace"):
+                errors.append(
+                    f"logging optional sample for channel `app` must include a real trace_id: {path.relative_to(root).as_posix()}"
+                )
+
     if errors:
         print("[logging-contract] FAIL")
         for item in errors:

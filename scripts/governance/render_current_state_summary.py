@@ -207,6 +207,10 @@ def render() -> str:
     ghcr_artifact_state = str((ghcr_report or {}).get("status") or "missing")
     ghcr_state = ghcr_artifact_state
     ghcr_note = str((ghcr_report or {}).get("blocker_type") or "ok")
+    ghcr_manifest_probe = (ghcr_report or {}).get("manifest_probe") or {}
+    if not isinstance(ghcr_manifest_probe, dict):
+        ghcr_manifest_probe = {}
+    ghcr_manifest_unknown = "manifest unknown" in str(ghcr_manifest_probe.get("stderr") or "").lower()
     ghcr_workflow = workflow_lanes.get("ghcr-standard-image") or {}
     ghcr_workflow_state = str(ghcr_workflow.get("state") or "")
     ghcr_workflow_note = str(ghcr_workflow.get("note") or "")
@@ -218,12 +222,24 @@ def render() -> str:
         ghcr_state = ghcr_workflow_state
         ghcr_note = (
             f"{ghcr_workflow_note}; local readiness artifact="
-            f"{ghcr_artifact_state}:{str((ghcr_report or {}).get('blocker_type') or 'ok')}"
+            f"{ghcr_artifact_state}:{str((ghcr_report or {}).get('blocker_type') or 'ok')}; "
+            "current external verification remains open until both layers close"
         )
     elif ghcr_workflow_state == "blocked" and ghcr_head_alignment == "current" and ghcr_failure_details:
         failed_step = str(ghcr_failure_details.get("failed_step_name") or "")
         failure_signature = str(ghcr_failure_details.get("failure_signature") or "")
-        if failed_step and failure_signature == "blob-head-403-forbidden":
+        if failed_step and failure_signature == "ghcr-blob-upload-401-unauthorized":
+            local_readiness = (
+                f"local readiness artifact={ghcr_artifact_state}:"
+                f"{str((ghcr_report or {}).get('blocker_type') or 'ok')}"
+            )
+            ghcr_note = (
+                f"{local_readiness}; latest remote current-head workflow failed at "
+                f"`{failed_step}`; GHCR blob upload probe rejected the selected token with HTTP 401"
+            )
+            if ghcr_manifest_unknown:
+                ghcr_note += "; digest-pinned manifest probe also returned `manifest unknown`, so package-path / ownership / visibility remains unresolved"
+        elif failed_step and failure_signature == "blob-head-403-forbidden":
             local_readiness = (
                 f"local readiness artifact={ghcr_artifact_state}:"
                 f"{str((ghcr_report or {}).get('blocker_type') or 'ok')}"
@@ -232,7 +248,18 @@ def render() -> str:
                 f"{local_readiness}; latest remote current-head workflow preflight passed; "
                 "blocked at `Build and push strict CI standard image`; GHCR blob HEAD returned 403 Forbidden"
             )
-        elif failed_step:
+        elif failed_step == "Standard image publish preflight":
+            local_readiness = (
+                f"local readiness artifact={ghcr_artifact_state}:"
+                f"{str((ghcr_report or {}).get('blocker_type') or 'ok')}"
+            )
+            ghcr_note = (
+                f"{local_readiness}; latest remote current-head workflow failed at "
+                f"`{failed_step}` before build/push; treat this as a registry/token preflight boundary failure, not as current external verification progress"
+            )
+            if ghcr_manifest_unknown:
+                ghcr_note += "; digest-pinned manifest probe also returned `manifest unknown`, so package-path / ownership / visibility remains unresolved"
+        elif failed_step and not ghcr_note.startswith("local readiness artifact="):
             ghcr_note = f"{ghcr_workflow_note}; failed_step={failed_step}"
     elif ghcr_head_alignment == "historical":
         if ghcr_state in CURRENT_WORKFLOW_STATUSES:
@@ -267,7 +294,10 @@ def render() -> str:
         release_note = f"{release_workflow_note}; readiness artifact=ready"
     elif release_workflow_state in {"in_progress", "queued"} and release_head_alignment == "current":
         release_state = release_workflow_state
-        release_note = f"{release_workflow_note}; readiness artifact={release_artifact_state}"
+        release_note = (
+            f"{release_workflow_note}; readiness artifact={release_artifact_state}; "
+            "current external verification remains open until the current-head remote run closes"
+        )
     elif release_head_alignment == "historical":
         if release_state in CURRENT_WORKFLOW_STATUSES:
             release_state = "historical"

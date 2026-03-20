@@ -14,7 +14,7 @@ In plain English, this layer asks: “can the repository stand on its own?” It
 | Strict path | `./bin/repo-side-strict-ci --mode pre-push --strict-full-run 1 --ci-dedupe 0` produces a fresh PASS receipt for the current HEAD. Repo-side done requires this strict receipt; the existence of the command is not enough |
 | Compat | Repo-side required rows in `upstream-compat-matrix` are in the expected state |
 | Public/source-first onboarding | Source-first entrypoints are explainable, executable, and clearly separate public docs from the internal runbook |
-| Public governance pack | `README.md`, `SECURITY.md`, `SUPPORT.md`, `.github/CODEOWNERS`, `docs/reference/public-repo-readiness.md`, and `docs/reference/public-artifact-exposure.md` contain no placeholder routing, and the public-safe surface, policy allowlist, and tracked files stay aligned |
+| Public governance pack | `README.md`, `SECURITY.md`, `SUPPORT.md`, `.github/CODEOWNERS`, `docs/reference/public-repo-readiness.md`, `docs/reference/public-artifact-exposure.md`, `docs/reference/contributor-rights-model.md`, and `docs/generated/public-value-proof.md` contain no placeholder routing, and the public-safe surface, policy allowlist, tracked files, and rights wording stay aligned |
 | Public security proof | `private_vulnerability_reporting` must come from the latest `remote-platform-truth.json` with an explicit `enabled|disabled|unverified` state, and `gitleaks` history / working-tree freshness reports must align with the current HEAD |
 
 Additional Hard Rules:
@@ -25,6 +25,7 @@ Additional Hard Rules:
 - A dirty worktree must not be auto-wrapped into `pass` by commit-aligned current receipts. If the current worktree has uncommitted changes, `current_workspace_verdict.status` must fail-close to `partial`, and `blocking_conditions` must explicitly include `dirty_worktree`.
 - If `current_proof_alignment` is missing or stale, the repo-side receipt is like a receipt with yesterday’s date: it proves you paid yesterday, not that the order in your hands is settled right now. In that case the verdict can be at most `partial`, never `pass`.
 - If `newcomer-result-proof.json` shows `repo_side_strict_receipt=status=missing_current_receipt`, then the current HEAD still cannot honestly claim repo-side done.
+- The contributor-rights policy and the public-value-proof pointer are part of the same repo-side truth pack. They explain who may publish accepted material and how representative value proof must stay separate from current external closure.
 
 ## Layer B: External Done
 

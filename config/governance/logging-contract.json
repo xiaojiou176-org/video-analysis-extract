@@ -53,6 +53,12 @@
     "infra": ".runtime-cache/logs/infra/bootstrap/logging-contract-infra.jsonl",
     "upstreams": ".runtime-cache/logs/upstreams/logging-contract-upstreams.jsonl"
   },
+  "optional_sample_targets": {
+    "app": [
+      ".runtime-cache/logs/app/worker-commands.jsonl",
+      ".runtime-cache/logs/app/mcp-api.jsonl"
+    ]
+  },
   "critical_checks": [
     {
       "path": "apps/api/app/main.py",
@@ -64,14 +70,18 @@
     {
       "path": "apps/worker/worker/main.py",
       "contains": [
-        "\"run_id\": run_id"
+        "\"run_id\": run_id",
+        "def _emit_worker_command_log",
+        "\"worker-commands.jsonl\""
       ]
     },
     {
       "path": "apps/mcp/server.py",
       "contains": [
         "def _redact_sensitive_text",
-        "_redact_sensitive_text(self.message)"
+        "_redact_sensitive_text(self.message)",
+        "def _log_mcp_api_event",
+        "\"mcp-api.jsonl\""
       ]
     },
     {

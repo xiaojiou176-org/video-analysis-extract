@@ -3,10 +3,92 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import os
+import subprocess
+import sys
+import time
 from datetime import datetime
+from pathlib import Path
 from uuid import uuid4
 
 from worker.config import Settings
+
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+_LOG_EVENT_SCRIPT = _REPO_ROOT / "scripts" / "runtime" / "log_jsonl_event.py"
+_WORKER_COMMAND_LOG_PATH = _REPO_ROOT / ".runtime-cache" / "logs" / "app" / "worker-commands.jsonl"
+_REPO_COMMIT = (
+    subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=_REPO_ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    or "unknown"
+)
+_ENV_PROFILE = os.getenv("ENV_PROFILE", "unknown")
+
+
+def _emit_worker_command_log(
+    *,
+    event: str,
+    severity: str,
+    message: str,
+    run_id: str,
+    request_id: str,
+    trace_id: str,
+) -> None:
+    if not _LOG_EVENT_SCRIPT.is_file():
+        return
+    subprocess.run(
+        [
+            sys.executable,
+            str(_LOG_EVENT_SCRIPT),
+            "--path",
+            str(_WORKER_COMMAND_LOG_PATH),
+            "--run-id",
+            run_id,
+            "--trace-id",
+            trace_id,
+            "--request-id",
+            request_id,
+            "--service",
+            "worker",
+            "--component",
+            "worker-cli",
+            "--channel",
+            "app",
+            "--entrypoint",
+            "apps.worker.worker.main:_main_async",
+            "--env-profile",
+            _ENV_PROFILE,
+            "--repo-commit",
+            _REPO_COMMIT,
+            "--event",
+            event,
+            "--severity",
+            severity,
+            "--message",
+            message,
+        ],
+        cwd=_REPO_ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+
+def _command_correlation_id(command: str, args: argparse.Namespace, output: dict[str, object] | None) -> str:
+    if isinstance(output, dict):
+        for key in ("run_id", "workflow_id", "job_id"):
+            value = output.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+    for attr in ("job_id", "workflow_id"):
+        value = getattr(args, attr, None)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return f"{command}-{uuid4().hex}"
 
 
 async def _connect_temporal(settings: Settings):
@@ -341,58 +423,110 @@ async def start_cleanup_workflow(
 
 async def _main_async(args: argparse.Namespace) -> None:
     settings = Settings.from_env()
+    command = str(args.command or "").strip() or "unknown"
+    request_id = uuid4().hex
+    started_at = time.perf_counter()
 
-    if args.command == "run-worker":
-        await run_temporal_worker(settings)
-        return
-    if args.command == "start-poll-workflow":
-        output = await start_poll_workflow(
-            settings,
-            subscription_id=args.subscription_id,
-            platform=args.platform,
-            max_new_videos=args.max_new_videos,
+    _emit_worker_command_log(
+        event="worker_command_started",
+        severity="info",
+        message=f"worker command started: command={command}",
+        run_id=request_id,
+        request_id=request_id,
+        trace_id=request_id,
+    )
+
+    try:
+        if args.command == "run-worker":
+            _emit_worker_command_log(
+                event="worker_loop_started",
+                severity="info",
+                message=f"temporal worker loop started: task_queue={settings.temporal_task_queue}",
+                run_id=request_id,
+                request_id=request_id,
+                trace_id=request_id,
+            )
+            await run_temporal_worker(settings)
+            _emit_worker_command_log(
+                event="worker_loop_exited",
+                severity="warning",
+                message="temporal worker loop exited without raising an exception",
+                run_id=request_id,
+                request_id=request_id,
+                trace_id=request_id,
+            )
+            return
+        if args.command == "start-poll-workflow":
+            output = await start_poll_workflow(
+                settings,
+                subscription_id=args.subscription_id,
+                platform=args.platform,
+                max_new_videos=args.max_new_videos,
+            )
+        elif args.command == "start-process-workflow":
+            output = await start_process_workflow(settings, job_id=args.job_id)
+        elif args.command == "start-daily-workflow":
+            output = await start_daily_workflow(
+                settings,
+                run_once=args.run_once,
+                local_hour=args.local_hour,
+                timezone_name=args.timezone_name,
+                timezone_offset_minutes=args.timezone_offset_minutes,
+                workflow_id=args.workflow_id,
+            )
+        elif args.command == "start-notification-retry-workflow":
+            output = await start_notification_retry_workflow(
+                settings,
+                run_once=args.run_once,
+                interval_minutes=args.interval_minutes,
+                retry_batch_limit=args.retry_batch_limit,
+                workflow_id=args.workflow_id,
+            )
+        elif args.command == "start-provider-canary-workflow":
+            output = await start_provider_canary_workflow(
+                settings,
+                run_once=args.run_once,
+                interval_hours=args.interval_hours,
+                timeout_seconds=args.timeout_seconds,
+                workflow_id=args.workflow_id,
+            )
+        elif args.command == "start-cleanup-workflow":
+            output = await start_cleanup_workflow(
+                settings,
+                run_once=args.run_once,
+                interval_hours=args.interval_hours,
+                older_than_hours=args.older_than_hours,
+                workspace_dir=args.workspace_dir,
+                cache_dir=args.cache_dir,
+                cache_older_than_hours=args.cache_older_than_hours,
+                cache_max_size_mb=args.cache_max_size_mb,
+                workflow_id=args.workflow_id,
+            )
+        else:
+            raise ValueError(f"Unsupported command: {args.command}")
+    except Exception as exc:
+        correlation_id = _command_correlation_id(command, args, None)
+        elapsed = max(0.0, time.perf_counter() - started_at)
+        _emit_worker_command_log(
+            event="worker_command_failed",
+            severity="error",
+            message=f"worker command failed: command={command} elapsed_seconds={elapsed:.3f} error={exc}",
+            run_id=correlation_id,
+            request_id=request_id,
+            trace_id=correlation_id,
         )
-    elif args.command == "start-process-workflow":
-        output = await start_process_workflow(settings, job_id=args.job_id)
-    elif args.command == "start-daily-workflow":
-        output = await start_daily_workflow(
-            settings,
-            run_once=args.run_once,
-            local_hour=args.local_hour,
-            timezone_name=args.timezone_name,
-            timezone_offset_minutes=args.timezone_offset_minutes,
-            workflow_id=args.workflow_id,
-        )
-    elif args.command == "start-notification-retry-workflow":
-        output = await start_notification_retry_workflow(
-            settings,
-            run_once=args.run_once,
-            interval_minutes=args.interval_minutes,
-            retry_batch_limit=args.retry_batch_limit,
-            workflow_id=args.workflow_id,
-        )
-    elif args.command == "start-provider-canary-workflow":
-        output = await start_provider_canary_workflow(
-            settings,
-            run_once=args.run_once,
-            interval_hours=args.interval_hours,
-            timeout_seconds=args.timeout_seconds,
-            workflow_id=args.workflow_id,
-        )
-    elif args.command == "start-cleanup-workflow":
-        output = await start_cleanup_workflow(
-            settings,
-            run_once=args.run_once,
-            interval_hours=args.interval_hours,
-            older_than_hours=args.older_than_hours,
-            workspace_dir=args.workspace_dir,
-            cache_dir=args.cache_dir,
-            cache_older_than_hours=args.cache_older_than_hours,
-            cache_max_size_mb=args.cache_max_size_mb,
-            workflow_id=args.workflow_id,
-        )
-    else:
-        raise ValueError(f"Unsupported command: {args.command}")
+        raise
+
+    correlation_id = _command_correlation_id(command, args, output)
+    elapsed = max(0.0, time.perf_counter() - started_at)
+    _emit_worker_command_log(
+        event="worker_command_completed",
+        severity="info",
+        message=f"worker command completed: command={command} elapsed_seconds={elapsed:.3f}",
+        run_id=correlation_id,
+        request_id=request_id,
+        trace_id=correlation_id,
+    )
 
     print(json.dumps(output, ensure_ascii=False, indent=2))
 

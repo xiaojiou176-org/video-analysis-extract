@@ -85,6 +85,8 @@ def test_build_standard_image_script_uses_explicit_buildx_invocation() -> None:
     assert "docker buildx build \\" in script
     assert "docker build \\" in script
     assert "common_args=(" in script
+    assert "resolve_source_repository_url() {" in script
+    assert '--label "org.opencontainers.image.source=${source_repository_url}"' in script
 
     workflow = (_repo_root() / ".github" / "workflows" / "build-ci-standard-image.yml").read_text(
         encoding="utf-8"

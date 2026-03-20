@@ -385,7 +385,7 @@ ensure_valid_youtube_api_key() {
   add_candidate "$(read_key_from_env_file "$ROOT_DIR/.env" "YOUTUBE_API_KEY" || true)" ".env_file"
 
   if [[ "${#candidates[@]}" -eq 0 ]]; then
-    fail "YOUTUBE_API_KEY is missing in .env/current-shell; 需要用户提供有效key"
+    fail "YOUTUBE_API_KEY is missing in .env/current-shell; provide a valid key before running live smoke"
   fi
 
   for idx in "${!candidates[@]}"; do
@@ -422,7 +422,7 @@ ensure_valid_youtube_api_key() {
     fi
   done
 
-  fail "YOUTUBE_API_KEY 无效（已尝试 .env/current-shell），需要用户提供有效key"
+  fail "YOUTUBE_API_KEY is invalid after probing .env/current-shell candidates; provide a valid key before running live smoke"
 }
 
 record_scenario() {

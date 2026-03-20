@@ -8,6 +8,12 @@ SCRIPT_NAME="quality_gate"
 export PYTHONDONTWRITEBYTECODE="${PYTHONDONTWRITEBYTECODE:-1}"
 export PYTHONPYCACHEPREFIX="${PYTHONPYCACHEPREFIX:-$ROOT_DIR/.runtime-cache/tmp/pycache}"
 
+# Keep uv-managed environments out of the repo root so governance gates do not race with
+# transient `.venv` creation during parallel checks.
+# shellcheck source=./scripts/lib/standard_env.sh
+source "$ROOT_DIR/scripts/lib/standard_env.sh"
+ensure_external_uv_project_environment "$ROOT_DIR"
+
 # shellcheck source=./scripts/runtime/logging.sh
 source "$ROOT_DIR/scripts/runtime/logging.sh"
 MODE="pre-push"

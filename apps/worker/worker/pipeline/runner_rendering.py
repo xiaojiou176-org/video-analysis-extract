@@ -67,7 +67,7 @@ def timestamp_link(source_url: str, timestamp_s: int) -> str:
 def build_comments_prompt_context(comments: dict[str, Any], *, top_n: int = 4) -> str:
     top_comments = comments.get("top_comments") if isinstance(comments, dict) else None
     if not isinstance(top_comments, list) or not top_comments:
-        return "暂无评论数据。"
+        return "No comment data available."
     lines: list[str] = []
     for idx, item in enumerate(top_comments[:top_n], start=1):
         if not isinstance(item, dict):
@@ -75,7 +75,7 @@ def build_comments_prompt_context(comments: dict[str, Any], *, top_n: int = 4) -
         author = str(item.get("author") or "unknown")
         content = str(item.get("content") or "").strip() or "empty"
         likes = coerce_int(item.get("like_count"), 0)
-        lines.append(f"{idx}. {author}（点赞={likes}）：{content}")
+        lines.append(f"{idx}. {author} (likes={likes}): {content}")
         replies = item.get("replies")
         if isinstance(replies, list):
             for reply in replies[:2]:
@@ -84,8 +84,8 @@ def build_comments_prompt_context(comments: dict[str, Any], *, top_n: int = 4) -
                 reply_author = str(reply.get("author") or "unknown")
                 reply_text = str(reply.get("content") or "").strip() or "empty"
                 reply_likes = coerce_int(reply.get("like_count"), 0)
-                lines.append(f"   - 回复 {reply_author}（点赞={reply_likes}）：{reply_text}")
-    return "\n".join(lines) if lines else "暂无评论数据。"
+                lines.append(f"   - Reply from {reply_author} (likes={reply_likes}): {reply_text}")
+    return "\n".join(lines) if lines else "No comment data available."
 
 
 def should_include_frame_prompt(settings: Settings) -> bool:

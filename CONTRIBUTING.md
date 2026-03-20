@@ -26,6 +26,7 @@ Out of scope by default:
 2. Keep changes surgical and contract-aware.
 3. Update docs when you change behavior, environment contracts, governance surfaces, or public-facing commands.
 4. Run the smallest truthful verification set for your change.
+5. Read `docs/reference/contributor-rights-model.md` before submitting automation-assisted, copied, or provenance-sensitive changes.
 
 Preferred repo-side checks:
 
@@ -40,3 +41,23 @@ Preferred repo-side checks:
 - List the exact commands you ran.
 - Call out whether the change only closes a repo-side lane or also closes an external lane.
 - Do not hide unresolved risks; list them explicitly.
+
+## Contribution Rights And Automation
+
+This repository uses an **inbound = outbound** contribution rule.
+
+By submitting a contribution, you confirm:
+
+- you have the right to contribute the material,
+- the repository may redistribute accepted changes under the repository license and documented third-party obligations,
+- and you are not introducing undisclosed employer, client, or vendor restrictions.
+
+Automation-assisted contributions are allowed, but they are **not** self-justifying.
+
+If a tool or agent helped produce a change:
+
+- a human maintainer still needs to review it,
+- the reviewer must be able to explain its provenance,
+- and the repository must still be able to publish it under the stated policy.
+
+See `docs/reference/contributor-rights-model.md` for the repository's public rights model.

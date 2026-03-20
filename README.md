@@ -19,11 +19,13 @@
 - external lane 状态说明：见 `docs/reference/external-lane-status.md`；`docs/generated/external-lane-snapshot.md` 现在只保留 tracked pointer，current verdict 只看 `.runtime-cache/reports/**`。
 - public readiness 总览：见 `docs/reference/public-repo-readiness.md`
 - 权利与来源边界：见 `docs/reference/public-rights-and-provenance.md`
+- 贡献与自动化权利模型：见 `docs/reference/contributor-rights-model.md`
 - 数据与隐私边界：见 `docs/reference/public-privacy-and-data-boundary.md`
 - 平台与品牌边界：见 `docs/reference/public-brand-boundary.md`
 - 平台安全能力当前态：读 `.runtime-cache/reports/governance/remote-platform-truth.json`；`private_vulnerability_reporting` 只能按 `enabled|disabled|unverified` 陈述
 - 开源安全 freshness 当前态：读 `.runtime-cache/reports/governance/open-source-audit-freshness.json`；旧 commit 的 gitleaks 收据不能冒充 current-proof
 - 项目定位与目标用户：见 `docs/reference/project-positioning.md`
+- public-safe 价值证明入口：见 `docs/generated/public-value-proof.md`
 - AI formal eval 最小系统：见 `docs/reference/ai-evaluation.md`
 
 默认对外验收命令：
@@ -39,6 +41,7 @@
 - `./bin/repo-side-strict-ci --mode pre-push --strict-full-run 1 --ci-dedupe 0` 的 fresh PASS 收据，才是 repo-side 终局验收的关键一票。
 - 若要看当前 HEAD 的 repo-side newcomer / strict receipt，请读 `.runtime-cache/reports/governance/newcomer-result-proof.json`。
 - 若要看 external lane current state，请读 `.runtime-cache/reports/governance/current-state-summary.md` 与底层 runtime reports；`ready` 不等于 `verified`。
+- 仓库当前是 **可公开审阅**，不自动等于 **可安全开源分发**；协作与权利边界请同时读取 `docs/reference/public-repo-readiness.md`、`docs/reference/public-rights-and-provenance.md` 与 `docs/reference/contributor-rights-model.md`。
 
 ## 项目目的
 
@@ -142,7 +145,7 @@ Repo-side / external 双层完成信号：
 - Docker Compose（基础设施真相源）：`infra/compose/core-services.compose.yml`（核心服务镜像已收口为 digest-pinned service images，可直接对齐 strict contract）、`infra/compose/miniflux-nextflux.compose.yml`
 - DevContainer（AI/自动化标准执行环境）：`.devcontainer/devcontainer.json`。当前已移除浮动 devcontainer feature 依赖，`post-create.sh` 会直接校验 strict contract 的 `uv/node/chromium` 是否可用，不再用 best-effort 浏览器安装掩盖漂移。
 - 严格 CI 标准镜像真相源：`infra/config/strict_ci_contract.json`。`bin/strict-ci` / `./bin/run-in-standard-env` 现在只接受 digest-pinned 标准镜像，不再允许静默回退到旧的本地 tag 镜像。
-- `build-ci-standard-image.yml` 现在会先显式准备 Docker Buildx，再调用 `scripts/ci/build_standard_image.sh` 做多架构标准镜像构建，避免 self-hosted runner 在构建入口阶段把 `docker buildx build` 当成未准备好的环境能力。
+- `build-ci-standard-image.yml` 现在会先在 hosted runner 上显式准备 Docker Buildx，再调用 `scripts/ci/build_standard_image.sh` 做多架构标准镜像构建，避免镜像工作流在构建入口阶段把 `docker buildx build` 当成未准备好的环境能力。
 - 标准镜像构建链会对 NodeSource signing key 使用显式重试，并先写入临时 key 文件再 `gpg --dearmor`，避免 ARM64/QEMU buildx 路径把瞬时空响应直接喂给 `gpg`。
 - 标准镜像供应链增强：`build-ci-standard-image.yml` 现在会产出镜像 SBOM artifact，并对镜像本体与 SBOM 做 GitHub attestation。
 - self-hosted runner 预清理会同时处理 `/tmp/video-digestor-*` 下的目录与单文件 stale residue，并在删除前补用户写权限，避免 `build-ci-standard-image.yml` 在 runner hygiene 阶段被陈旧 `.db/.db-shm/.db-wal` 文件卡死。

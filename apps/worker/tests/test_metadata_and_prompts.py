@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import re
 from types import SimpleNamespace
 from typing import Any
 
@@ -136,6 +137,34 @@ def test_translation_prompt_and_supporting_frame_selection_are_structured() -> N
             {"timestamp_s": 5, "reason": "supporting_frame", "path": "b.jpg"},
         ]
     }
+
+
+def test_prompt_templates_are_english_first_while_output_contract_stays_chinese() -> None:
+    outline_prompt = build_outline_prompt(
+        title="Demo",
+        metadata={"lang": "en"},
+        transcript="hello world",
+        comments={"top_comments": []},
+        frames=[],
+        source_url="https://example.com",
+        include_frame_context=False,
+    )
+    digest_prompt = build_digest_prompt(
+        metadata={"lang": "en"},
+        outline={"title": "Demo"},
+        transcript="hello world",
+        comments={"top_comments": []},
+        frames=[],
+        source_url="https://example.com",
+        include_frame_context=False,
+    )
+
+    assert "Simplified Chinese" in outline_prompt
+    assert "Simplified Chinese" in digest_prompt
+    assert "No comment data available." in outline_prompt
+    assert "No comment data available." in digest_prompt
+    assert re.search(r"[\u4e00-\u9fff]", outline_prompt) is None
+    assert re.search(r"[\u4e00-\u9fff]", digest_prompt) is None
 
 
 def test_build_evidence_citations_prioritizes_chapters_then_comments() -> None:

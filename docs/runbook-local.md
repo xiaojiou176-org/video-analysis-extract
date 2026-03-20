@@ -90,7 +90,7 @@ UV_PROJECT_ENVIRONMENT="$HOME/.cache/video-digestor/project-venv" uv sync --froz
 ./bin/workspace-hygiene --apply
 ```
 
-- `build-ci-standard-image.yml` 现在会先显式准备 Docker Buildx，再调用 `scripts/ci/build_standard_image.sh` 做多架构标准镜像构建；如果镜像工作流仍在构建入口阶段立刻失败，先检查 runner 的 buildx 准备步骤是否成功，而不是先怀疑 GHCR 权限。
+- `build-ci-standard-image.yml` 现在会先在 hosted runner 上显式准备 Docker Buildx，再调用 `scripts/ci/build_standard_image.sh` 做多架构标准镜像构建；如果镜像工作流仍在构建入口阶段立刻失败，先检查 hosted buildx 准备步骤是否成功，而不是先怀疑 GHCR 权限。
 - GHCR 相关本地/预检凭证优先级现在是：显式 `GHCR_WRITE_USERNAME/GHCR_WRITE_TOKEN` -> 本地调试用 `GHCR_USERNAME/GHCR_TOKEN` -> 当前 `gh auth` 身份。Hosted `build-ci-standard-image.yml` 则优先走 `github.actor + GITHUB_TOKEN` 的仓库级 token 路径，避免陈旧 `GHCR_WRITE_*` secret 抢先遮住更健康的 hosted path。只要选中的 token 路径具备足够权限，readiness 就会继续预探 blob upload 写能力。
 - 标准镜像构建链依赖 `.devcontainer/Dockerfile`；当前约定会对 NodeSource signing key 做显式重试，并先写入临时 key 文件再 `gpg --dearmor`，这样 ARM64/QEMU buildx 路径遇到短暂 HTTP/2 抖动时，不会把空响应直接当成有效 key。
 - self-hosted runner 在进入 `build-ci-standard-image.yml` 之前，会用 `scripts/governance/runner_workspace_maintenance.sh` 统一清理 `.runtime-cache`、`mutants/` 和 `/tmp/video-digestor-*` 下的目录/单文件 stale residue；如果 workflow 再次在 runner hygiene 阶段失败，先看是否出现新的不可写残留，而不是先怀疑 GHCR 权限。

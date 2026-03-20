@@ -7,6 +7,8 @@ ARG STRICT_CI_TEMPORAL_CLI_VERSION=1.5.1
 ARG STRICT_CI_TEMPORAL_CLI_SHA256_LINUX_AMD64=ddc95e08b0b076efd4ea9733a3f488eb7d2be875f8834e616cd2a37358b4852d
 ARG STRICT_CI_TEMPORAL_CLI_SHA256_LINUX_ARM64=bd1b0db9f18b051026de8bf6cc1505f2510f14bbb7a8b9a4a91fff46c77454f5
 
+LABEL org.opencontainers.image.source="https://github.com/xiaojiou176-org/video-analysis-extract"
+
 ENV PLAYWRIGHT_BROWSERS_PATH=/tmp/ci-cache/ms-playwright
 
 RUN rm -f /etc/apt/sources.list.d/yarn.list \

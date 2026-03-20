@@ -8,6 +8,8 @@
 - current external/public 口径：`docs/reference/public-repo-readiness.md`
 - 安全报告边界：`SECURITY.md`
 - 环境模板：`.env.example`
+- 贡献与自动化权利边界：`docs/reference/contributor-rights-model.md`
+- public-safe 价值证明阅读入口：`docs/generated/public-value-proof.md`
 
 ## What The Public Repo Does Not Ship
 
@@ -20,6 +22,7 @@
 - public tree 里允许的样本，必须是 **sanitized** 或 **synthetic**。
 - `artifacts/performance/rsshub/public_probe_summary.sample.tsv` 这类样本，只有在 policy 显式 allowlist 且仍为脱敏/合成证据时才允许保留。
 - `rum-baseline` / `rum-observations` 这类公开样本，只能保留聚合指标，不保留真实来源身份线索。
+- automation-assisted contribution rights 决定“谁有权把材料放进仓库”；privacy/data boundary 决定“哪些材料即使能提交，也不能原样暴露到 public tree”。这两层必须一起看，不能只看其一。
 
 ## Operator Boundary
 

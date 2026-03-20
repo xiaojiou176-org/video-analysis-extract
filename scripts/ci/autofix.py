@@ -67,37 +67,37 @@ def _suggestion_for_signal(kind: str, signal: str) -> dict[str, str]:
     if kind == "junit" and ("assert" in lower or "expected" in lower):
         return {
             "category": "test_assertion",
-            "action": "复现失败用例并修正断言或业务逻辑；补充边界输入样例。",
-            "validation": "仅重跑失败测试，再跑全量测试。",
+            "action": "Reproduce the failing test, fix the assertion or business logic, and add boundary-case coverage.",
+            "validation": "Re-run the failed test first, then run the broader test set.",
         }
     if "timeout" in lower or "timed out" in lower:
         return {
             "category": "timeout",
-            "action": "排查慢调用/死循环，必要时缩小测试数据或提升稳定等待条件。",
-            "validation": "串行重跑失败用例 3 次。",
+            "action": "Inspect slow calls or dead loops; if needed, shrink test data or improve stability waits.",
+            "validation": "Re-run the failing case serially three times.",
         }
     if "module not found" in lower or "cannot import" in lower:
         return {
             "category": "dependency_or_import",
-            "action": "检查依赖安装与导入路径；必要时锁定缺失依赖版本。",
-            "validation": "重新安装依赖后跑构建与相关测试。",
+            "action": "Check dependency installation and import paths; pin the missing dependency version if needed.",
+            "validation": "Reinstall dependencies, then rerun the build and related tests.",
         }
     if "ts" in lower:
         return {
             "category": "typescript_compile",
-            "action": "修复类型签名不匹配并校准 tsconfig/类型依赖。",
-            "validation": "运行 `npx tsc --noEmit` 后重跑测试。",
+            "action": "Fix the type-signature mismatch and align tsconfig or type dependencies.",
+            "validation": "Run `npx tsc --noEmit`, then rerun the affected tests.",
         }
     if "eslint" in lower:
         return {
             "category": "lint",
-            "action": "修复 lint 违规，避免 suppress；必要时先执行自动格式化。",
-            "validation": "运行 lint 与格式检查。",
+            "action": "Fix the lint violation without suppressing it; run auto-formatting first if needed.",
+            "validation": "Run lint and formatting checks.",
         }
     return {
         "category": "generic_failure",
-        "action": "基于失败指纹定位首个错误，最小改动修复并补充回归测试。",
-        "validation": "重跑失败步骤并确认无新增失败。",
+        "action": "Use the failure fingerprint to locate the first real error, make the smallest fix, and add a regression test.",
+        "validation": "Re-run the failed step and confirm there are no new failures.",
     }
 
 
@@ -111,8 +111,8 @@ def _build_oversize_finding(source_type: str, path: Path, *, max_bytes: int) -> 
         "examples": [_sanitize_report_text(str(path))],
         "fingerprint_id": _fingerprint_id([source_type, "oversize", str(path), str(max_bytes)]),
         "category": "resource_limit",
-        "action": "拆分或压缩输入文件后重试，避免超大单文件导致解析风险。",
-        "validation": "确认输入文件体积受控后重跑该步骤。",
+        "action": "Split or compress the input file before retrying so oversized single files do not break parsing.",
+        "validation": "Confirm the input size is back under control, then rerun the step.",
     }
 
 

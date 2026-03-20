@@ -75,6 +75,18 @@
           ".runtime-cache/reports/governance/standard-image-publish-readiness.json",
           ".runtime-cache/reports/release/release-evidence-attest-readiness.json"
         ]
+      },
+      {
+        "id": "public_value_proof_reference",
+        "path": "docs/generated/public-value-proof.md",
+        "kind": "render_only",
+        "sources": [
+          "docs/reference/value-proof.md",
+          "docs/proofs/task-result-proof-pack.md",
+          "docs/reference/newcomer-result-proof.md",
+          "docs/reference/external-lane-status.md",
+          ".runtime-cache/reports/governance/current-state-summary.md"
+        ]
       }
   ],
   "fragments": [

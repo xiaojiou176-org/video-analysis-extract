@@ -66,6 +66,10 @@ def _check_control_plane() -> list[str]:
 
     if not boundary.get("trust_boundary", {}).get("mode"):
         failures.append("boundary policy missing trust_boundary.mode")
+    if "render_only_paths" in boundary:
+        failures.append(
+            "boundary-policy.json: render_only_paths has been retired; render-only docs must be declared only in config/docs/render-manifest.json"
+        )
 
     return failures
 

@@ -10,6 +10,7 @@
 | `artifacts/performance/rsshub/*.tsv` | forbidden in tracked public tree unless explicitly allowlisted | 原始 probe TSV 会暴露真实路由、对象或公网节点语境 | 默认禁止；只有 policy 中显式 allowlist 的 sample 才能被 track |
 | `artifacts/performance/rsshub/public_probe_summary.sample.tsv` | safe to publish via explicit allowlist | 合成化、脱敏后的公开样本 | 只允许保留这一份 allowlisted 分类摘要，不保留真实 route / uid / up_name |
 | `artifacts/releases/*` | safe to publish with boundary note | 历史 evidence 可公开，但不能冒充当前 release verdict | 必须保留“historical examples, not canonical verdict”说明 |
+| `docs/generated/public-value-proof.md` | safe to publish as tracked pointer page | 它只负责告诉读者“先看哪几层证据”，不承载 current runtime verdict | 允许 track，但必须保持 pointer-only 语义 |
 
 ## Default Rules
 
@@ -26,3 +27,4 @@
 - `docs/generated/external-lane-snapshot.md` 只能当 pointer / reading rule。
 - 当前 external/public 状态必须从 runtime-owned reports 读取，尤其是 `.runtime-cache/reports/governance/current-state-summary.md` 与底层 runtime artifacts。
 - 当前 public/security freshness 还必须读取 `.runtime-cache/reports/governance/open-source-audit-freshness.json`；旧 commit 的 gitleaks 收据不能当 current artifact exposure proof。
+- `docs/generated/public-value-proof.md` 可以作为 public-safe 导航页存在于 tracked tree，但它只是阅读指引，不得升级包装成 current proof artifact。

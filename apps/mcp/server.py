@@ -4,9 +4,13 @@ import base64
 import json
 import os
 import re
+import subprocess
+import sys
 import time
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 import httpx
 from mcp.server.fastmcp import FastMCP
@@ -21,6 +25,21 @@ from .tools.retrieval import register_retrieval_tools
 from .tools.subscriptions import register_subscription_tools
 from .tools.ui_audit import register_ui_audit_tools
 from .tools.workflows import register_workflow_tools
+
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+_LOG_EVENT_SCRIPT = _REPO_ROOT / "scripts" / "runtime" / "log_jsonl_event.py"
+_MCP_API_LOG_PATH = _REPO_ROOT / ".runtime-cache" / "logs" / "app" / "mcp-api.jsonl"
+_REPO_COMMIT = (
+    subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=_REPO_ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    or "unknown"
+)
+_ENV_PROFILE = os.getenv("ENV_PROFILE", "unknown")
 
 
 class ApiError(RuntimeError):
@@ -38,6 +57,123 @@ class ApiError(RuntimeError):
             "message": _redact_sensitive_text(self.message),
             "details": _normalize_error_details(self.details),
         }
+
+
+def _first_present_str(*values: Any) -> str:
+    for value in values:
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return ""
+
+
+def _extract_log_correlation(
+    *,
+    params: dict[str, Any] | None,
+    json_body: dict[str, Any] | None,
+    payload: dict[str, Any] | None,
+    request_id: str,
+) -> tuple[str, str]:
+    payload = payload or {}
+    params = params or {}
+    json_body = json_body or {}
+    run_id = _first_present_str(
+        payload.get("run_id"),
+        payload.get("workflow_id"),
+        payload.get("job_id"),
+        json_body.get("run_id"),
+        json_body.get("workflow_id"),
+        json_body.get("job_id"),
+        params.get("run_id"),
+        params.get("workflow_id"),
+        params.get("job_id"),
+        request_id,
+    )
+    trace_id = _first_present_str(
+        payload.get("trace_id"),
+        payload.get("request_id"),
+        json_body.get("trace_id"),
+        json_body.get("request_id"),
+        params.get("trace_id"),
+        params.get("request_id"),
+        run_id,
+        request_id,
+    )
+    return run_id, trace_id
+
+
+def _log_mcp_api_event(
+    *,
+    event: str,
+    severity: str,
+    method: str,
+    path: str,
+    upstream_operation: str = "",
+    request_id: str,
+    run_id: str,
+    trace_id: str,
+    message: str,
+) -> None:
+    if not _LOG_EVENT_SCRIPT.is_file():
+        return
+    subprocess.run(
+        [
+            sys.executable,
+            str(_LOG_EVENT_SCRIPT),
+            "--path",
+            str(_MCP_API_LOG_PATH),
+            "--run-id",
+            run_id,
+            "--trace-id",
+            trace_id,
+            "--request-id",
+            request_id,
+            "--upstream-operation",
+            upstream_operation,
+            "--service",
+            "mcp",
+            "--component",
+            "mcp-api",
+            "--channel",
+            "app",
+            "--entrypoint",
+            "apps.mcp.server:ApiClient.request",
+            "--env-profile",
+            _ENV_PROFILE,
+            "--repo-commit",
+            _REPO_COMMIT,
+            "--event",
+            event,
+            "--severity",
+            severity,
+            "--message",
+            f"{method} {path} | {message}",
+        ],
+        cwd=_REPO_ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+
+def _normalize_operation_token(value: str) -> str:
+    normalized = re.sub(r"[^a-z0-9]+", "_", str(value or "").strip().lower()).strip("_")
+    return normalized or "unknown"
+
+
+def _classify_upstream_path_family(path: str) -> str:
+    segments = [segment for segment in str(path or "").split("/") if segment]
+    if len(segments) >= 2 and segments[0] == "api" and re.fullmatch(r"v\d+", segments[1]):
+        segments = segments[2:]
+    if not segments:
+        return "root"
+    family = segments[0]
+    if family in {"healthz", "readyz", "livez"}:
+        return "health"
+    return _normalize_operation_token(family)
+
+
+def _classify_upstream_operation(path: str, outcome: str) -> str:
+    return f"{_classify_upstream_path_family(path)}.{_normalize_operation_token(outcome)}"
 
 
 @dataclass(frozen=True)
@@ -134,6 +270,7 @@ class ApiClient:
     ) -> dict[str, Any]:
         normalized_path = _normalize_upstream_path(path)
         normalized_method = str(method or "").upper()
+        request_id = uuid4().hex
         headers: dict[str, str] = {"Accept": "application/json"}
         if self._config.api_key:
             headers["Authorization"] = f"Bearer {self._config.api_key}"
@@ -163,6 +300,19 @@ class ApiClient:
                     if should_retry:
                         _sleep_with_backoff(self._config.retry_backoff_sec, attempt)
                         continue
+                    _log_mcp_api_event(
+                        event="upstream_api_request_failed",
+                        severity="error",
+                        method=normalized_method,
+                        path=normalized_path,
+                        upstream_operation=_classify_upstream_operation(
+                            normalized_path, "http_error"
+                        ),
+                        request_id=request_id,
+                        run_id=request_id,
+                        trace_id=request_id,
+                        message=f"status={response.status_code} upstream-http-error",
+                    )
                     raise ApiError(
                         "UPSTREAM_HTTP_ERROR",
                         _extract_error_message(
@@ -170,8 +320,14 @@ class ApiClient:
                             fallback=f"{normalized_method} {normalized_path} failed with status {response.status_code}.",
                         ),
                         {
+                            "run_id": request_id,
+                            "trace_id": request_id,
+                            "request_id": request_id,
                             "method": normalized_method,
                             "path": normalized_path,
+                            "upstream_operation": _classify_upstream_operation(
+                                normalized_path, "http_error"
+                            ),
                             "status_code": response.status_code,
                             "body_preview": _safe_body_preview(error_body),
                             "attempts": attempt,
@@ -183,12 +339,29 @@ class ApiClient:
                 if is_retryable_method and attempt < attempts:
                     _sleep_with_backoff(self._config.retry_backoff_sec, attempt)
                     continue
+                _log_mcp_api_event(
+                    event="upstream_api_request_failed",
+                    severity="error",
+                    method=normalized_method,
+                    path=normalized_path,
+                    upstream_operation=_classify_upstream_operation(normalized_path, "timeout"),
+                    request_id=request_id,
+                    run_id=request_id,
+                    trace_id=request_id,
+                    message="upstream-timeout",
+                )
                 raise ApiError(
                     "UPSTREAM_TIMEOUT",
                     "Upstream API request timed out.",
                     {
+                        "run_id": request_id,
+                        "trace_id": request_id,
+                        "request_id": request_id,
                         "method": normalized_method,
                         "path": normalized_path,
+                        "upstream_operation": _classify_upstream_operation(
+                            normalized_path, "timeout"
+                        ),
                         "error": str(exc),
                         "attempts": attempt,
                     },
@@ -198,30 +371,83 @@ class ApiClient:
                 if is_retryable_method and attempt < attempts:
                     _sleep_with_backoff(self._config.retry_backoff_sec, attempt)
                     continue
+                _log_mcp_api_event(
+                    event="upstream_api_request_failed",
+                    severity="error",
+                    method=normalized_method,
+                    path=normalized_path,
+                    upstream_operation=_classify_upstream_operation(
+                        normalized_path, "network_error"
+                    ),
+                    request_id=request_id,
+                    run_id=request_id,
+                    trace_id=request_id,
+                    message="upstream-network-error",
+                )
                 raise ApiError(
                     "UPSTREAM_NETWORK_ERROR",
                     "Failed to reach upstream API.",
                     {
+                        "run_id": request_id,
+                        "trace_id": request_id,
+                        "request_id": request_id,
                         "method": normalized_method,
                         "path": normalized_path,
+                        "upstream_operation": _classify_upstream_operation(
+                            normalized_path, "network_error"
+                        ),
                         "error": str(exc),
                         "attempts": attempt,
                     },
                 ) from exc
 
         if response is None:
+            _log_mcp_api_event(
+                event="upstream_api_request_failed",
+                severity="error",
+                method=normalized_method,
+                path=normalized_path,
+                upstream_operation=_classify_upstream_operation(normalized_path, "network_error"),
+                request_id=request_id,
+                run_id=request_id,
+                trace_id=request_id,
+                message="upstream-network-error no-response",
+            )
             raise ApiError(
                 "UPSTREAM_NETWORK_ERROR",
                 "Failed to reach upstream API.",
                 {
+                    "run_id": request_id,
+                    "trace_id": request_id,
+                    "request_id": request_id,
                     "method": normalized_method,
                     "path": normalized_path,
+                    "upstream_operation": _classify_upstream_operation(
+                        normalized_path, "network_error"
+                    ),
                     "error": str(last_exception) if last_exception else "unknown error",
                     "attempts": attempts,
                 },
             )
 
         if not response.content:
+            run_id, trace_id = _extract_log_correlation(
+                params=params,
+                json_body=json_body,
+                payload={"ok": True},
+                request_id=request_id,
+            )
+            _log_mcp_api_event(
+                event="upstream_api_request_completed",
+                severity="info",
+                method=normalized_method,
+                path=normalized_path,
+                upstream_operation=_classify_upstream_operation(normalized_path, "empty"),
+                request_id=request_id,
+                run_id=run_id,
+                trace_id=trace_id,
+                message="status=ok empty-response",
+            )
             return {"ok": True}
 
         content_type = response.headers.get("content-type", "")
@@ -229,30 +455,112 @@ class ApiClient:
             if return_bytes_base64:
                 size_bytes = len(response.content)
                 if size_bytes > self._config.max_base64_bytes:
+                    _log_mcp_api_event(
+                        event="upstream_api_request_failed",
+                        severity="error",
+                        method=normalized_method,
+                        path=normalized_path,
+                        upstream_operation=_classify_upstream_operation(
+                            normalized_path, "payload_too_large"
+                        ),
+                        request_id=request_id,
+                        run_id=request_id,
+                        trace_id=request_id,
+                        message=f"payload-too-large size_bytes={size_bytes}",
+                    )
                     raise ApiError(
                         "PAYLOAD_TOO_LARGE",
                         "Binary payload exceeds base64 return limit.",
                         {
                             "method": method,
                             "path": normalized_path,
+                            "upstream_operation": _classify_upstream_operation(
+                                normalized_path, "payload_too_large"
+                            ),
                             "size_bytes": size_bytes,
                             "max_size_bytes": self._config.max_base64_bytes,
+                            "run_id": request_id,
+                            "trace_id": request_id,
+                            "request_id": request_id,
                         },
                     )
+                _log_mcp_api_event(
+                    event="upstream_api_request_completed",
+                    severity="info",
+                    method=normalized_method,
+                    path=normalized_path,
+                    upstream_operation=_classify_upstream_operation(normalized_path, "binary"),
+                    request_id=request_id,
+                    run_id=request_id,
+                    trace_id=request_id,
+                    message=f"status=ok binary-response size_bytes={size_bytes}",
+                )
                 return {
                     "base64": base64.b64encode(response.content).decode("ascii"),
                     "mime_type": content_type or "application/octet-stream",
                     "size_bytes": size_bytes,
                 }
+            _log_mcp_api_event(
+                event="upstream_api_request_completed",
+                severity="info",
+                method=normalized_method,
+                path=normalized_path,
+                upstream_operation=_classify_upstream_operation(normalized_path, "text"),
+                request_id=request_id,
+                run_id=request_id,
+                trace_id=request_id,
+                message="status=ok text-response",
+            )
             return {"text": response.text}
 
         try:
             data = response.json()
         except ValueError:
+            _log_mcp_api_event(
+                event="upstream_api_request_completed",
+                severity="info",
+                method=normalized_method,
+                path=normalized_path,
+                upstream_operation=_classify_upstream_operation(
+                    normalized_path, "invalid_json_text"
+                ),
+                request_id=request_id,
+                run_id=request_id,
+                trace_id=request_id,
+                message="status=ok invalid-json-fallback-to-text",
+            )
             return {"text": response.text}
 
         if isinstance(data, dict):
+            run_id, trace_id = _extract_log_correlation(
+                params=params,
+                json_body=json_body,
+                payload=data,
+                request_id=request_id,
+            )
+            _log_mcp_api_event(
+                event="upstream_api_request_completed",
+                severity="info",
+                method=normalized_method,
+                path=normalized_path,
+                upstream_operation=_classify_upstream_operation(normalized_path, "json_dict"),
+                request_id=request_id,
+                run_id=run_id,
+                trace_id=trace_id,
+                message="status=ok json-dict",
+            )
             return data
+        _log_mcp_api_event(
+            event="upstream_api_request_completed",
+            severity="info",
+            method=normalized_method,
+            path=normalized_path,
+            upstream_operation=_classify_upstream_operation(normalized_path, "json_list"),
+            request_id=request_id,
+            run_id=request_id,
+            trace_id=request_id,
+            message="status=ok json-list",
+        )
         return {"items": data}
 
 
@@ -303,6 +611,11 @@ def _stringify_value(value: Any) -> str:
 
 def _normalize_error_details(details: dict[str, Any]) -> dict[str, Any]:
     normalized: dict[str, Any] = {}
+    for key in ("run_id", "trace_id", "request_id"):
+        value = details.get(key)
+        if isinstance(value, str) and value:
+            normalized[key] = value
+
     method = details.get("method")
     if isinstance(method, str) and method:
         normalized["method"] = method
@@ -310,6 +623,10 @@ def _normalize_error_details(details: dict[str, Any]) -> dict[str, Any]:
     path = details.get("path")
     if isinstance(path, str) and path:
         normalized["path"] = path
+
+    upstream_operation = details.get("upstream_operation")
+    if isinstance(upstream_operation, str) and upstream_operation:
+        normalized["upstream_operation"] = upstream_operation
 
     status_code = details.get("status_code")
     if isinstance(status_code, int):

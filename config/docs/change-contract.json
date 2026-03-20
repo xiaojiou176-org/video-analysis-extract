@@ -54,8 +54,7 @@
         "contracts/generated/jsonschema/*.json"
       ],
       "required_paths": [
-        "docs/testing.md",
-        "docs/generated/ci-topology.md"
+        "docs/testing.md"
       ]
     },
     {
@@ -117,9 +116,6 @@
         "config/docs/*.json"
       ],
       "required_paths": [
-        "docs/generated/ci-topology.md",
-        "docs/generated/runner-baseline.md",
-        "docs/generated/release-evidence.md",
         "README.md",
         "docs/start-here.md",
         "docs/runbook-local.md",

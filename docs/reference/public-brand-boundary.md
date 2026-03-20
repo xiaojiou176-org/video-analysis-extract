@@ -13,12 +13,14 @@
 - 允许在 docs、代码、compat matrix、upstream registry 中按事实引用平台名称。
 - 允许在样本与运行说明中说明“哪条链路依赖哪个平台”。
 - 允许说明外部 blocker 是平台权限、配额、GHCR、workflow 或 provider 状态。
+- 允许说明 `docs/generated/public-value-proof.md`、`external-lane-status.md` 这类页面是在描述证据分层与 capability state，而不是在借用平台品牌给仓库“背书”。
 
 ## Forbidden Public Usage
 
 - 禁止把上游平台 logo、品牌资产、官方 UI 素材当作仓库默认公开展示面。
 - 禁止使用会暗示官方 affiliation 的文案。
 - 禁止把“支持某平台”偷换成“获得该平台官方认可或长期 SLA”。
+- 禁止把 GitHub / GHCR workflow 能力、package 权限或 hosted runner 路径写成默认可用的品牌承诺；这些都要回到 runtime probe 和 current lane state 说话。
 
 ## Canonical References
 

@@ -13,10 +13,10 @@ from worker.pipeline.step_executor import jsonable
 def build_translation_prompt(payload: dict[str, Any], *, schema_label: str) -> str:
     return "\n\n".join(
         [
-            "将下面 JSON 中所有面向读者的自然语言翻译为简体中文。",
-            "保持 JSON 的 key、结构、数字、时间戳、URL、ID 不变。",
-            "如果包含代码片段（如 code_snippets.snippet / code_blocks.snippet），代码内容不要翻译。",
-            "只返回 JSON，不要解释。",
+            "Translate every reader-facing natural-language string in the JSON below into Simplified Chinese.",
+            "Keep JSON keys, structure, numbers, timestamps, URLs, and IDs unchanged.",
+            "If the payload includes code snippets such as code_snippets.snippet or code_blocks.snippet, do not translate the code itself.",
+            "Return JSON only. Do not add explanations.",
             f"Schema: {schema_label}",
             json.dumps(jsonable(payload), ensure_ascii=False),
         ]
@@ -34,12 +34,12 @@ def build_outline_prompt(
     include_frame_context: bool,
 ) -> str:
     prompt_parts = [
-        "你是资深技术视频分析师，请基于多模态输入生成严格 JSON 大纲。",
-        "输出约束：只返回 JSON，不要 Markdown，不要代码块围栏。",
-        "语言约束：所有面向读者字段必须是简体中文（专有名词、产品名、代码标识可保留英文）。",
-        "结构约束：顶层字段必须包含 title,tldr,highlights,recommended_actions,risk_or_pitfalls,chapters,timestamp_references。",
-        "章节约束：chapter 必须包含 chapter_no,title,anchor,start_s,end_s,summary,bullets,key_terms,code_snippets。",
-        "证据约束：尽量给出时间戳与评论证据，避免编造。",
+        "You are a senior technical-video analyst. Produce a strict JSON outline from the multimodal evidence.",
+        "Output contract: return JSON only. Do not return Markdown or fenced code blocks.",
+        "Language contract: every reader-facing field must be Simplified Chinese. Proper nouns, product names, and code identifiers may remain in English.",
+        "Structure contract: the top-level object must contain title, tldr, highlights, recommended_actions, risk_or_pitfalls, chapters, and timestamp_references.",
+        "Chapter contract: each chapter must contain chapter_no, title, anchor, start_s, end_s, summary, bullets, key_terms, and code_snippets.",
+        "Evidence contract: include timestamps and comment evidence whenever possible, and do not fabricate support.",
         f"Title: {title}",
         f"Metadata: {json.dumps(jsonable(metadata), ensure_ascii=False)}",
         f"Transcript (truncated):\n{transcript[:12000]}",
@@ -63,11 +63,11 @@ def build_digest_prompt(
     include_frame_context: bool,
 ) -> str:
     prompt_parts = [
-        "你是资深技术内容编辑，请输出结构化摘要 JSON。",
-        "输出约束：只返回 JSON，不要 Markdown，不要代码块围栏。",
-        "语言约束：所有面向读者字段必须是简体中文（专有名词、产品名、代码标识可保留英文）。",
-        "字段约束：必须包含 title,summary,tldr,highlights,action_items,code_blocks,timestamp_references,fallback_notes。",
-        "质量约束：summary 120~220字；条目去重、可执行、证据导向。",
+        "You are a senior technical-content editor. Produce a structured digest as JSON.",
+        "Output contract: return JSON only. Do not return Markdown or fenced code blocks.",
+        "Language contract: every reader-facing field must be Simplified Chinese. Proper nouns, product names, and code identifiers may remain in English.",
+        "Field contract: the object must contain title, summary, tldr, highlights, action_items, code_blocks, timestamp_references, and fallback_notes.",
+        "Quality contract: keep summary length around 120-220 Chinese characters, deduplicate list items, prefer actionable wording, and stay evidence-driven.",
         f"Metadata:\n{json.dumps(jsonable(metadata), ensure_ascii=False)}",
         f"Outline:\n{json.dumps(jsonable(outline), ensure_ascii=False)}",
         f"Transcript (truncated):\n{transcript[:12000]}",
@@ -116,7 +116,7 @@ def build_evidence_citations(
         if not isinstance(chapter, dict):
             continue
         start_s = int(chapter.get("start_s") or 0)
-        title = str(chapter.get("title") or "章节").strip() or "章节"
+        title = str(chapter.get("title") or "chapter").strip() or "chapter"
         citations.append(f"[{start_s}s] {title}")
         if len(citations) >= max_items:
             break

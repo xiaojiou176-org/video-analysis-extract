@@ -82,3 +82,4 @@
 - `docs/generated/runner-baseline.md`
 - `docs/generated/release-evidence.md`
 - `docs/generated/external-lane-snapshot.md`
+- `docs/generated/public-value-proof.md`

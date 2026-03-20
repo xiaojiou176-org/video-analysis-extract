@@ -57,6 +57,10 @@ def _run_build_ci_standard_image(
         (bin_dir / "python3").write_text(
             """#!/usr/bin/env bash
 set -euo pipefail
+if [[ "${1:-}" == "-" ]]; then
+  printf 'https://github.com/xiaojiou176-org/video-analysis-extract\\n'
+  exit 0
+fi
 if [[ "${2:-}" == "shell-exports" ]]; then
   cat <<'EOF'
 export STRICT_CI_STANDARD_IMAGE_REPOSITORY=ghcr.io/example/standard-env
@@ -158,6 +162,12 @@ def test_build_ci_standard_image_uses_single_platform_for_local_load() -> None:
     assert result.docker_args[result.docker_args.index("--tag") + 1] == "ghcr.io/example/standard-env:local-debug"
     assert "--platform" in result.docker_args
     assert result.docker_args[result.docker_args.index("--platform") + 1] == "linux/arm64"
+    labels = [
+        result.docker_args[index + 1]
+        for index, value in enumerate(result.docker_args[:-1])
+        if value == "--label"
+    ]
+    assert "org.opencontainers.image.source=https://github.com/xiaojiou176-org/video-analysis-extract" in labels
 
 
 def test_build_ci_standard_image_default_path_preserves_buildx_multi_platform_semantics() -> None:
@@ -168,6 +178,12 @@ def test_build_ci_standard_image_default_path_preserves_buildx_multi_platform_se
     assert "--push" not in result.docker_args
     assert "--platform" in result.docker_args
     assert result.docker_args[result.docker_args.index("--platform") + 1] == "linux/amd64,linux/arm64"
+    labels = [
+        result.docker_args[index + 1]
+        for index, value in enumerate(result.docker_args[:-1])
+        if value == "--label"
+    ]
+    assert "org.opencontainers.image.source=https://github.com/xiaojiou176-org/video-analysis-extract" in labels
 
 
 def test_build_ci_standard_image_preserves_multi_platform_push() -> None:

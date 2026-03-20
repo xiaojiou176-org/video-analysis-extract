@@ -28,6 +28,12 @@
 2. 能解释为什么不过
 3. 能把质量、引用卫生、失败诚实度纳入同一套 rubric
 
+## Public Value Positioning
+
+- `docs/generated/public-value-proof.md` 可以把 eval regression 当成“为什么这个仓值得信”的一层代表性证据。
+- 但 deterministic eval 只是在回答“质量有没有回退”，不是在回答“外部世界今天是否已经验收通过”。
+- 换句话说，eval 更像固定考卷成绩，能证明基本功；它不能替代 GHCR、provider、remote workflow 这类 external lane 的 current proof。
+
 ## Repo-side Deterministic Regression
 
 repo-side 现在不只检查“考卷在不在”，还要检查“评分器能不能把固定样卷跑出结果”。

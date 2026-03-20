@@ -24,9 +24,14 @@ env:
   UV_CACHE_DIR: /tmp/ci-cache/uv
 
 jobs:
+  trusted-pr-boundary:
+    uses: ./.github/workflows/_trusted-pr-boundary.yml
+
   contract-diff:
     runs-on: [self-hosted, video-analysis-extract]
     timeout-minutes: 25
+    needs: [trusted-pr-boundary]
+    if: ${{ always() && needs.trusted-pr-boundary.result == 'success' }}
     steps:
       - name: Normalize self-hosted workspace (pre-checkout)
         uses: ./.github/actions/normalize-self-hosted-workspace

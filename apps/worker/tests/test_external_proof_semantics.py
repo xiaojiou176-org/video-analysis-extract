@@ -750,3 +750,179 @@ def test_render_current_state_summary_explains_pending_strict_ci_compose_row_via
     rendered = module.render()
 
     assert "| `strict-ci-compose-image-set` | `pending` | external; blocked on `ghcr-standard-image` (registry-auth-failure) |" in rendered
+
+
+def test_render_current_state_summary_reports_current_head_preflight_failure_for_ghcr(
+    monkeypatch, tmp_path: Path
+) -> None:
+    module = _load_governance_module(
+        "render_current_state_summary_preflight_failure_test",
+        "scripts/governance/render_current_state_summary.py",
+    )
+    head = "1111111111111111111111111111111111111111"
+
+    (tmp_path / ".runtime-cache" / "reports" / "governance").mkdir(parents=True, exist_ok=True)
+    (tmp_path / ".runtime-cache" / "reports" / "release").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "config" / "governance").mkdir(parents=True, exist_ok=True)
+
+    _write_json(
+        tmp_path / ".runtime-cache/reports/governance/standard-image-publish-readiness.json",
+        {
+            "version": 1,
+            "status": "blocked",
+            "blocker_type": "registry-auth-failure",
+        },
+    )
+    _write_json(
+        tmp_path / ".runtime-cache/reports/governance/external-lane-workflows.json",
+        {
+            "version": 1,
+            "source_commit": head,
+            "lanes": [
+                {
+                    "name": "ghcr-standard-image",
+                    "state": "blocked",
+                    "note": "remote workflow for current HEAD concluded `failure`",
+                    "latest_run_matches_current_head": True,
+                    "latest_run": {
+                        "databaseId": 42,
+                        "status": "completed",
+                        "conclusion": "failure",
+                        "headSha": head,
+                    },
+                    "failure_details": {
+                        "job_name": "publish",
+                        "failed_step_name": "Standard image publish preflight",
+                    },
+                }
+            ],
+        },
+    )
+    _write_json(
+        tmp_path / ".runtime-cache/reports/governance/remote-platform-truth.json",
+        {"version": 1, "status": "pass", "blocker_type": ""},
+    )
+    _write_json(
+        tmp_path / ".runtime-cache/reports/governance/remote-required-checks.json",
+        {
+            "version": 1,
+            "status": "pass",
+            "expected_required_checks": ["a"],
+            "actual_required_checks": ["a"],
+        },
+    )
+    _write_json(
+        tmp_path / ".runtime-cache/reports/governance/open-source-audit-freshness.json",
+        {"version": 1, "status": "pass"},
+    )
+    _write_json(
+        tmp_path / ".runtime-cache/reports/governance/newcomer-result-proof.json",
+        {
+            "version": 1,
+            "status": "pass",
+            "current_workspace_verdict": {"status": "pass", "blocking_conditions": []},
+            "repo_side_strict_receipt": {"status": "pass"},
+        },
+    )
+    _write_json(tmp_path / "config/governance/upstream-compat-matrix.json", {"matrix": []})
+
+    monkeypatch.setattr(module, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(module, "_current_head", lambda: head)
+    monkeypatch.setattr(module, "_worktree_changes", list)
+
+    rendered = module.render()
+
+    assert "| `ghcr-standard-image` | `blocked` |" in rendered
+    assert "local readiness artifact=blocked:registry-auth-failure" in rendered
+    assert "failed at `Standard image publish preflight` before build/push" in rendered
+
+
+def test_render_current_state_summary_reports_manifest_unknown_for_ghcr(
+    monkeypatch, tmp_path: Path
+) -> None:
+    module = _load_governance_module(
+        "render_current_state_summary_manifest_unknown_test",
+        "scripts/governance/render_current_state_summary.py",
+    )
+    head = "2222222222222222222222222222222222222222"
+
+    (tmp_path / ".runtime-cache" / "reports" / "governance").mkdir(parents=True, exist_ok=True)
+    (tmp_path / ".runtime-cache" / "reports" / "release").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "config" / "governance").mkdir(parents=True, exist_ok=True)
+
+    _write_json(
+        tmp_path / ".runtime-cache/reports/governance/standard-image-publish-readiness.json",
+        {
+            "version": 1,
+            "status": "blocked",
+            "blocker_type": "registry-auth-failure",
+            "manifest_probe": {
+                "target": "ghcr.io/xiaojiou176-org/video-analysis-extract-ci-standard@sha256:test",
+                "returncode": 1,
+                "stdout": "",
+                "stderr": "manifest unknown\n",
+            },
+        },
+    )
+    _write_json(
+        tmp_path / ".runtime-cache/reports/governance/external-lane-workflows.json",
+        {
+            "version": 1,
+            "source_commit": head,
+            "lanes": [
+                {
+                    "name": "ghcr-standard-image",
+                    "state": "blocked",
+                    "note": "remote workflow for current HEAD concluded `failure`",
+                    "latest_run_matches_current_head": True,
+                    "latest_run": {
+                        "databaseId": 43,
+                        "status": "completed",
+                        "conclusion": "failure",
+                        "headSha": head,
+                    },
+                    "failure_details": {
+                        "job_name": "publish",
+                        "failed_step_name": "Standard image publish preflight",
+                        "failure_signature": "ghcr-blob-upload-401-unauthorized",
+                    },
+                }
+            ],
+        },
+    )
+    _write_json(
+        tmp_path / ".runtime-cache/reports/governance/remote-platform-truth.json",
+        {"version": 1, "status": "pass", "blocker_type": ""},
+    )
+    _write_json(
+        tmp_path / ".runtime-cache/reports/governance/remote-required-checks.json",
+        {
+            "version": 1,
+            "status": "pass",
+            "expected_required_checks": ["a"],
+            "actual_required_checks": ["a"],
+        },
+    )
+    _write_json(
+        tmp_path / ".runtime-cache/reports/governance/open-source-audit-freshness.json",
+        {"version": 1, "status": "pass"},
+    )
+    _write_json(
+        tmp_path / ".runtime-cache/reports/governance/newcomer-result-proof.json",
+        {
+            "version": 1,
+            "status": "pass",
+            "current_workspace_verdict": {"status": "pass", "blocking_conditions": []},
+            "repo_side_strict_receipt": {"status": "pass"},
+        },
+    )
+    _write_json(tmp_path / "config/governance/upstream-compat-matrix.json", {"matrix": []})
+
+    monkeypatch.setattr(module, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(module, "_current_head", lambda: head)
+    monkeypatch.setattr(module, "_worktree_changes", list)
+
+    rendered = module.render()
+
+    assert "GHCR blob upload probe rejected the selected token with HTTP 401" in rendered
+    assert "manifest unknown" in rendered

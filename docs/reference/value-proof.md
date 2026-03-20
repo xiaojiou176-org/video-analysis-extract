@@ -22,6 +22,23 @@
 - 如果你想确认“外部世界今天认不认账”，看 [external-lane-status.md](./external-lane-status.md) 和 runtime-owned `current-state-summary.md`。
 - 如果你想确认“这套系统靠哪些 representative cases 证明自己有任务价值”，继续看 [Task Result Proof Pack](../proofs/task-result-proof-pack.md)。
 
+## Current-safe Reading Rule
+
+This page is intentionally **not** a current-run verdict page.
+
+Use it like this:
+
+- `value-proof.md` answers **why these representative results are worth caring about**,
+- `Task Result Proof Pack` answers **which public-safe cases support that story**,
+- `newcomer-result-proof.json` answers **whether repo-side proof is current for this head**,
+- and `current-state-summary.md` answers **whether the current workspace and external lanes are actually closed today**.
+
+In plain English:
+
+- this page proves the repository has a meaningful task shape,
+- it does **not** prove that today's external world has already accepted every claim,
+- and it does **not** let a historical sample impersonate a current result.
+
 ## Why This Page Exists
 
 - 防止把“治理很强、文档很全”误讲成“任务结果一定很硬”。
@@ -119,6 +136,7 @@
 - 不证明这个仓库已经是成熟 SaaS。
 - 不证明 external lane、GHCR、provider/live stability 已全部闭环。
 - 不证明 checked-in historical example 就等于当前官方结论。
+- 不证明 current-safe repo-side proof 已经天然存在；这件事必须回到 runtime-owned newcomer / current-state artifacts 去读。
 - 不证明 repo-side governance 强，就自动等于用户结果、外部分发和 adoption 风险都已经解决。
 - 不证明任何 `unsupported` / `degraded` / `failed` 的 AI path 可以被当成“执行成功”。
 

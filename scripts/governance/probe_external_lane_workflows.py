@@ -108,6 +108,8 @@ def _failure_signature(repo: str, run_id: int | str | None) -> tuple[str, dict[s
         }
     for raw_line in result.stdout.splitlines():
         line = raw_line.strip()
+        if "GHCR blob upload probe rejected the selected token via ghcr blob upload endpoint (HTTP 401)" in line:
+            return "ghcr-blob-upload-401-unauthorized", None
         if "403 Forbidden" in line and "blobs/sha256" in line:
             return "blob-head-403-forbidden", None
         if "failed to push" in line and "ghcr.io/" in line:

@@ -165,6 +165,35 @@ def main() -> int:
             check=True,
             cwd=root,
         )
+
+    additional_app_targets = (
+        (
+            root / ".runtime-cache" / "logs" / "app" / "worker-commands.jsonl",
+            "worker",
+            "worker-cli",
+            "worker-command-sample",
+        ),
+        (
+            root / ".runtime-cache" / "logs" / "app" / "mcp-api.jsonl",
+            "mcp",
+            "mcp-api",
+            "mcp-api-sample",
+        ),
+    )
+    for path, service, component, run_id in additional_app_targets:
+        _emit_jsonl_sample(
+            root=root,
+            path=path,
+            run_id=run_id,
+            trace_id=f"trace-{component}",
+            request_id=f"req-{component}",
+            service=service,
+            component=component,
+            channel="app",
+            source_kind="app",
+            event="sample_ready",
+            env_profile=env_profile,
+        )
     return 0
 
 

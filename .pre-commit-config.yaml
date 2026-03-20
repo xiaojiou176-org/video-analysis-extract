@@ -180,10 +180,10 @@ repos:
 
       - id: check-iac-exists
         name: IaC entrypoint guard
-        entry: bash scripts/check_iac_entrypoint.sh .
+        entry: bash scripts/governance/check_iac_entrypoint.sh .
         language: system
         pass_filenames: false
-        files: ^(infra/compose/.*\.ya?ml|\.devcontainer/.*|flake\.nix|flake\.lock|scripts/check_iac_entrypoint\.sh)$
+        files: ^(infra/compose/.*\.ya?ml|\.devcontainer/.*|flake\.nix|flake\.lock|scripts/governance/check_iac_entrypoint\.sh)$
 
       - id: check-env-count
         name: env contract guard

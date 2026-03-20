@@ -104,6 +104,120 @@ def test_main_async_run_worker_branch(monkeypatch) -> None:
     assert called["value"] is True
 
 
+def test_main_async_emits_success_log_with_output_correlation(monkeypatch, capsys) -> None:
+    monkeypatch.setattr(worker_main.Settings, "from_env", staticmethod(_fake_settings))
+    events: list[dict[str, object]] = []
+
+    async def _stub(*_args, **_kwargs):
+        return {"ok": True, "run_id": "run-123", "kind": "poll"}
+
+    monkeypatch.setattr(worker_main, "start_poll_workflow", _stub)
+    monkeypatch.setattr(
+        worker_main, "_emit_worker_command_log", lambda **kwargs: events.append(kwargs)
+    )
+    args = argparse.Namespace(
+        command="start-poll-workflow",
+        subscription_id=None,
+        platform="youtube",
+        max_new_videos=10,
+        job_id=None,
+        run_once=False,
+        local_hour=None,
+        timezone_name=None,
+        timezone_offset_minutes=None,
+        workflow_id="poll-id",
+        interval_minutes=5,
+        retry_batch_limit=10,
+        interval_hours=1,
+        timeout_seconds=8,
+        older_than_hours=24,
+        workspace_dir=None,
+        cache_dir=None,
+        cache_older_than_hours=None,
+        cache_max_size_mb=None,
+    )
+
+    asyncio.run(worker_main._main_async(args))
+
+    printed = json.loads(capsys.readouterr().out.strip())
+    assert printed["run_id"] == "run-123"
+    assert [event["event"] for event in events] == [
+        "worker_command_started",
+        "worker_command_completed",
+    ]
+    assert events[0]["run_id"] == events[0]["request_id"]
+    assert events[1]["run_id"] == "run-123"
+    assert events[1]["trace_id"] == "run-123"
+    assert events[1]["request_id"]
+
+
+def test_main_async_emits_failure_log_with_argument_correlation(monkeypatch) -> None:
+    monkeypatch.setattr(worker_main.Settings, "from_env", staticmethod(_fake_settings))
+    events: list[dict[str, object]] = []
+
+    async def _stub(*_args, **_kwargs):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(worker_main, "start_process_workflow", _stub)
+    monkeypatch.setattr(
+        worker_main, "_emit_worker_command_log", lambda **kwargs: events.append(kwargs)
+    )
+    args = argparse.Namespace(
+        command="start-process-workflow",
+        subscription_id=None,
+        platform=None,
+        max_new_videos=50,
+        job_id="job-123",
+        run_once=False,
+        local_hour=None,
+        timezone_name=None,
+        timezone_offset_minutes=None,
+        workflow_id="process-id",
+        interval_minutes=5,
+        retry_batch_limit=10,
+        interval_hours=1,
+        timeout_seconds=8,
+        older_than_hours=24,
+        workspace_dir=None,
+        cache_dir=None,
+        cache_older_than_hours=None,
+        cache_max_size_mb=None,
+    )
+
+    with pytest.raises(RuntimeError, match="boom"):
+        asyncio.run(worker_main._main_async(args))
+
+    assert [event["event"] for event in events] == [
+        "worker_command_started",
+        "worker_command_failed",
+    ]
+    assert events[1]["run_id"] == "job-123"
+    assert events[1]["trace_id"] == "job-123"
+    assert events[1]["request_id"]
+
+
+def test_main_async_run_worker_emits_loop_lifecycle_logs(monkeypatch) -> None:
+    monkeypatch.setattr(worker_main.Settings, "from_env", staticmethod(_fake_settings))
+    events: list[dict[str, object]] = []
+
+    async def _run_worker(_settings):
+        return None
+
+    monkeypatch.setattr(worker_main, "run_temporal_worker", _run_worker)
+    monkeypatch.setattr(
+        worker_main, "_emit_worker_command_log", lambda **kwargs: events.append(kwargs)
+    )
+
+    asyncio.run(worker_main._main_async(argparse.Namespace(command="run-worker")))
+
+    assert [event["event"] for event in events] == [
+        "worker_command_started",
+        "worker_loop_started",
+        "worker_loop_exited",
+    ]
+    assert all(event["run_id"] == events[0]["request_id"] for event in events)
+
+
 def test_main_async_unsupported_command_raises(monkeypatch) -> None:
     monkeypatch.setattr(worker_main.Settings, "from_env", staticmethod(_fake_settings))
     with pytest.raises(ValueError, match="Unsupported command"):

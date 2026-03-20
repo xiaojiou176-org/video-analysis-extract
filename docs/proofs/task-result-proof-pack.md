@@ -24,6 +24,22 @@
 - 想知道“这套系统到底靠什么 representative cases 证明自己有任务价值”，再回来看这份 pack。
 - 换句话说：`newcomer-result-proof` 负责**今天的 repo-side 收据**，`Task Result Proof Pack` 负责**代表性结果案例**；两者要一起读，不能互相冒充。
 
+## Current-safe Boundary
+
+This pack is a **public-safe representative case ledger**, not a current-run receipt.
+
+That means:
+
+- it can justify why the repository's task shape is real,
+- it can show what kinds of result surfaces exist,
+- but it must not be used to claim that the current head is externally verified today.
+
+If a reader wants today's truth:
+
+- repo-side current truth -> `newcomer-result-proof.json`
+- current workspace / external lane truth -> `current-state-summary.md`
+- public/external reading rule -> `external-lane-status.md`
+
 ## Source Inventory
 
 | 证据源 | 类型 | 为什么可公开 | 在 proof pack 里的用途 |

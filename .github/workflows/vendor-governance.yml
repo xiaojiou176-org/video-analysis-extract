@@ -35,9 +35,14 @@ permissions:
   contents: read
 
 jobs:
+  trusted-pr-boundary:
+    uses: ./.github/workflows/_trusted-pr-boundary.yml
+
   upstream-lock-validation:
     runs-on: [self-hosted, video-analysis-extract]
     timeout-minutes: 10
+    needs: [trusted-pr-boundary]
+    if: ${{ always() && needs.trusted-pr-boundary.result == 'success' }}
     steps:
       - name: Normalize self-hosted workspace (pre-checkout)
         uses: ./.github/actions/normalize-self-hosted-workspace

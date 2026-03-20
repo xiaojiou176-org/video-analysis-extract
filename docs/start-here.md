@@ -168,7 +168,7 @@ DevContainer 启动拓扑补充（2026-03）：
 - `.devcontainer/post-create.sh` 已移除 `curl|sh` 安装模式，改为 `python3 -m pip install --user --upgrade "uv>=0.10,<1.0"`；当前会直接校验 strict contract 里的 Chromium 是否可启动，失败时直接报 drift，不再 `playwright install ... || true`。
 - 并发 Web E2E 场景可通过 `WEB_E2E_NEXT_DIST_DIR` 隔离 Next.js `distDir`，避免 `.next/dev/lock` 冲突（默认常规开发无需设置）。
 - `infra/config/strict_ci_contract.json` 现在是标准镜像真相源；`bin/strict-ci` / `./bin/run-in-standard-env` 只接受 digest-pinned 标准镜像，拉取失败会直接终止，不再静默回退到旧本地镜像。
-- `build-ci-standard-image.yml` 现在会先显式准备 Docker Buildx，再调用 `scripts/ci/build_standard_image.sh` 做多架构标准镜像构建，避免 self-hosted runner 在构建入口阶段因为 buildx 环境未准备好而直接失败。
+- `build-ci-standard-image.yml` 现在会先在 hosted runner 上显式准备 Docker Buildx，再调用 `scripts/ci/build_standard_image.sh` 做多架构标准镜像构建，避免镜像工作流在构建入口阶段因为 buildx 环境未准备好而直接失败。
 - 标准镜像构建链会对 NodeSource signing key 使用显式重试，并先落临时 key 文件再 `gpg --dearmor`；这是为了降低 ARM64/QEMU buildx 路径里“HTTP/2 中断导致空 key 响应”的瞬时失败率。
 - 关键 correctness gates（`preflight-heavy`、`db-migration-smoke`、`dependency-vuln-scan`、`web-e2e-perceived`、后端/前端 lint hosted/fallback）已经跟 `python-tests` / `api-real-smoke` / `web-e2e` 一样迁入标准镜像执行，因此宿主 Docker 可用性现在是 CI 等价本地验收的前提。
 - self-hosted runner 基线合同已独立成 `infra/config/self_hosted_runner_baseline.json`；主 `ci.yml` 不再预热/拉起 runner，runner 健康检查改由 `runner-health.yml` 负责。

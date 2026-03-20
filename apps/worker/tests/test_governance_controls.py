@@ -217,6 +217,35 @@ def test_runtime_and_logging_contracts_reference_runtime_cache_root() -> None:
     assert "legacy_runtime_patterns" not in runtime_outputs
 
 
+def test_standard_image_build_path_declares_repository_source_metadata() -> None:
+    root = _repo_root()
+    dockerfile = (root / ".devcontainer" / "Dockerfile").read_text(encoding="utf-8")
+    build_script = (root / "scripts" / "ci" / "build_standard_image.sh").read_text(
+        encoding="utf-8"
+    )
+
+    assert (
+        'LABEL org.opencontainers.image.source="https://github.com/xiaojiou176-org/video-analysis-extract"'
+        in dockerfile
+    )
+    assert '--label "org.opencontainers.image.source=${source_repository_url}"' in build_script
+
+
+def test_governance_language_gate_keeps_llm_prompt_builders_english_first() -> None:
+    root = _repo_root()
+    script = (root / "scripts" / "governance" / "check_governance_language.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert '"apps/worker/worker/pipeline/steps/llm_prompts.py"' in script
+    strict_section = script.split("STRICT_ENGLISH_PATHS =", 1)[1].split(
+        "PRODUCT_OUTPUT_LOCALE_ALLOWLIST_PATHS =", 1
+    )[0]
+    allowlist_section = script.split("PRODUCT_OUTPUT_LOCALE_ALLOWLIST_PATHS =", 1)[1]
+    assert '"apps/worker/worker/pipeline/steps/llm_prompts.py"' in strict_section
+    assert '"apps/worker/worker/pipeline/steps/llm_prompts.py"' not in allowlist_section
+
+
 def test_shell_logging_helper_contract_exists_and_is_wired() -> None:
     root = _repo_root()
     helper = (root / "scripts" / "runtime" / "logging.sh").read_text(encoding="utf-8")
@@ -275,6 +304,51 @@ def test_runtime_jsonl_logging_script_emits_required_fields(tmp_path: Path) -> N
     assert payload["event"] == "start"
     assert payload["severity"] == "info"
     assert payload["ts"]
+
+
+def test_logging_correlation_gate_tracks_worker_and_mcp_app_surfaces() -> None:
+    script = (
+        _repo_root() / "scripts" / "governance" / "check_log_correlation_completeness.py"
+    ).read_text(encoding="utf-8")
+
+    assert "ADDITIONAL_APP_CORRELATION_TARGETS" in script
+    assert ".runtime-cache/logs/app/worker-commands.jsonl" in script
+    assert ".runtime-cache/logs/app/mcp-api.jsonl" in script
+
+
+def test_logging_contract_tracks_optional_app_surfaces() -> None:
+    contract = json.loads(
+        (_repo_root() / "config" / "governance" / "logging-contract.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    optional_targets = contract.get("optional_sample_targets", {})
+    assert "app" in optional_targets
+    assert ".runtime-cache/logs/app/worker-commands.jsonl" in optional_targets["app"]
+    assert ".runtime-cache/logs/app/mcp-api.jsonl" in optional_targets["app"]
+
+
+def test_render_manifest_tracks_public_value_proof_pointer_page() -> None:
+    manifest = json.loads(
+        (_repo_root() / "config" / "docs" / "render-manifest.json").read_text(encoding="utf-8")
+    )
+    generated_docs = manifest.get("generated_docs", [])
+    assert any(
+        isinstance(entry, dict)
+        and entry.get("path") == "docs/generated/public-value-proof.md"
+        and entry.get("kind") == "render_only"
+        for entry in generated_docs
+    )
+
+
+def test_ghcr_readiness_script_tracks_manifest_probe() -> None:
+    script = (
+        _repo_root() / "scripts" / "ci" / "check_standard_image_publish_readiness.sh"
+    ).read_text(encoding="utf-8")
+
+    assert "probe_registry_manifest()" in script
+    assert "manifest unknown" in script
+    assert '"manifest_probe"' in script
 
 
 def test_runtime_outputs_contract_has_no_legacy_ui_audit_children() -> None:

@@ -143,6 +143,106 @@ def test_api_client_http_error_with_invalid_json_body_uses_text_preview(
     assert exc_info.value.details["body_preview"] == "{"
 
 
+def test_classify_upstream_operation_uses_path_family_and_outcome() -> None:
+    assert server._classify_upstream_operation("/api/v1/jobs/job-123", "json_dict") == (
+        "jobs.json_dict"
+    )
+    assert server._classify_upstream_operation("/healthz", "timeout") == "health.timeout"
+
+
+def test_api_client_logs_binary_operation_classification(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    events: list[dict[str, Any]] = []
+    monkeypatch.setattr(
+        "apps.mcp.server.httpx.Client",
+        lambda timeout: _DummyClient(
+            response=_response(text="abc", content_type="application/octet-stream")
+        ),
+    )
+    monkeypatch.setattr(server, "_log_mcp_api_event", lambda **kwargs: events.append(kwargs))
+    client = ApiClient(
+        ApiConfig(base_url="http://api", timeout_sec=2, api_key=None, max_base64_bytes=8)
+    )
+
+    payload = client.request("GET", "/api/v1/artifacts/file.bin", return_bytes_base64=True)
+
+    assert payload["base64"] == "YWJj"
+    assert events[-1]["upstream_operation"] == "artifacts.binary"
+
+
+def test_api_client_timeout_error_includes_operation_classification(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    events: list[dict[str, Any]] = []
+    monkeypatch.setattr(
+        "apps.mcp.server.httpx.Client",
+        lambda timeout: _DummyClient(exc=httpx.TimeoutException("timed out")),
+    )
+    monkeypatch.setattr(server, "_log_mcp_api_event", lambda **kwargs: events.append(kwargs))
+    client = ApiClient(ApiConfig(base_url="http://api", timeout_sec=2, api_key=None))
+
+    with pytest.raises(ApiError) as exc_info:
+        client.request("GET", "/api/v1/jobs/run-1")
+
+    assert exc_info.value.code == "UPSTREAM_TIMEOUT"
+    assert exc_info.value.details["upstream_operation"] == "jobs.timeout"
+    assert events[-1]["upstream_operation"] == "jobs.timeout"
+
+
+def test_api_client_dict_response_uses_payload_correlation_for_log_event(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    events: list[dict[str, Any]] = []
+    monkeypatch.setattr(
+        "apps.mcp.server.httpx.Client",
+        lambda timeout: _DummyClient(
+            response=_response(
+                json_body={
+                    "ok": True,
+                    "run_id": "workflow-run-1",
+                    "trace_id": "trace-1",
+                    "request_id": "req-upstream-1",
+                }
+            )
+        ),
+    )
+    monkeypatch.setattr(server, "_log_mcp_api_event", lambda **kwargs: events.append(kwargs))
+    client = ApiClient(ApiConfig(base_url="http://api", timeout_sec=2, api_key=None))
+
+    payload = client.request("GET", "/api/v1/workflows/run-1")
+
+    assert payload["run_id"] == "workflow-run-1"
+    assert events[-1]["event"] == "upstream_api_request_completed"
+    assert events[-1]["run_id"] == "workflow-run-1"
+    assert events[-1]["trace_id"] == "trace-1"
+    assert events[-1]["request_id"]
+    assert events[-1]["upstream_operation"] == "workflows.json_dict"
+
+
+def test_api_client_error_payloads_carry_correlation_fields(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "apps.mcp.server.httpx.Client",
+        lambda timeout: _DummyClient(
+            response=_response(
+                status_code=502,
+                json_body={"message": "upstream down"},
+            )
+        ),
+    )
+    client = ApiClient(ApiConfig(base_url="http://api", timeout_sec=2, api_key=None))
+
+    with pytest.raises(ApiError) as exc_info:
+        client.request("GET", "/api/v1/jobs/job-1")
+
+    assert exc_info.value.details["run_id"]
+    assert exc_info.value.details["trace_id"]
+    assert exc_info.value.details["request_id"]
+    assert exc_info.value.details["upstream_operation"] == "jobs.http_error"
+
+
 def test_extract_error_message_supports_detail_list() -> None:
     message = server._extract_error_message(
         {"detail": [{"msg": "bad request"}]}, fallback="fallback"

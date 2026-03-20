@@ -17,6 +17,7 @@
 - `worktree_state.dirty=true` 代表当前工作树带有未提交改动；这时报告最多只能诚实到 `partial`，因为 commit-aligned 收据并不能完整证明这份脏工作树。
 - newcomer/result proof 的职责是回答“repo-side newcomer 与 strict 收据今天拿到了没有”；它不替代 external lane current verdict。
 - 如果你想看“这个仓库到底拿什么代表性结果来证明自己有价值”，请继续读 `docs/proofs/task-result-proof-pack.md`；它提供的是 representative cases，不是 current external verdict。
+- 如果你想看“这些 representative cases 应该按什么顺序读”，请读 `docs/generated/public-value-proof.md`；那一页是 pointer，不是 newcomer/current-state receipt。
 - 结果证明不只看治理，还会同时引用 eval regression 与 current-proof 对齐结果。
 - `docs/generated/external-lane-snapshot.md` 不再提供 current verdict；外层当前状态要看 runtime-owned 汇总和底层 reports。
 - `.runtime-cache/reports/governance/current-state-summary.md` 只是 runtime-owned 聚合页，不是免检通行证；如果它自己的 `.meta.json` `source_commit` 不等于当前 HEAD，整页都只能按 `historical` / `mismatch` 理解，不能拿里面的 green-like 行当 current verdict。
