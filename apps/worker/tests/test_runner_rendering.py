@@ -96,9 +96,9 @@ def test_comments_prompt_context_renders_top_comments_and_reply_lines() -> None:
         ]
     }
     text = build_comments_prompt_context(comments, top_n=2)
-    assert "alice（点赞=10）" in text
-    assert "回复 bob（点赞=2）" in text
-    assert build_comments_prompt_context({}) == "暂无评论数据。"
+    assert "alice (likes=10)" in text
+    assert "Reply from bob (likes=2)" in text
+    assert build_comments_prompt_context({}) == "No comment data available."
 
 
 def test_code_block_collection_and_rendering() -> None:
