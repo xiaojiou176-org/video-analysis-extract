@@ -24,6 +24,26 @@ def _tolerated_local_private_entries() -> set[str]:
     }
 
 
+def _nested_boundary_notes() -> list[str]:
+    payload = load_governance_json("root-allowlist.json")
+    notes: list[str] = []
+    for item in payload.get("tracked_root_allowlist", []):
+        if not isinstance(item, dict):
+            continue
+        for hint in item.get("nested_boundary_hints", []):
+            if not isinstance(hint, dict):
+                continue
+            path = str(hint.get("path") or "").strip()
+            if not path:
+                continue
+            candidate = repo_root() / path
+            if candidate.exists():
+                notes.append(
+                    f"{path} ({hint.get('current_tracking_state', 'unknown')} -> {hint.get('target_tracking_state', 'unknown')})"
+                )
+    return sorted(dict.fromkeys(notes))
+
+
 def _hygiene_violations() -> list[str]:
     payload = load_governance_json("runtime-outputs.json")
     violations: list[str] = []
@@ -77,6 +97,7 @@ def main() -> int:
     new_entries = sorted((after - before) - tolerated_entries)
     hygiene_violations = _hygiene_violations()
     runtime_root_unknown_children = _runtime_root_unknown_children()
+    nested_boundary_notes = _nested_boundary_notes()
     if new_entries:
         print("[root-dirtiness] FAIL")
         print("  - new top-level entries after task: " + ", ".join(new_entries))
@@ -92,6 +113,11 @@ def main() -> int:
             + ", ".join(runtime_root_unknown_children)
         )
         return 1
+    if nested_boundary_notes:
+        print(
+            "[root-dirtiness] note: nested boundary migration targets present="
+            + ", ".join(nested_boundary_notes)
+        )
     print("[root-dirtiness] PASS")
     return 0
 

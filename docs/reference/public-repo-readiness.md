@@ -73,12 +73,25 @@ Boundary explanation entrypoints:
 - historical examples that are explicitly marked non-canonical,
 - sanitized public samples only.
 
+Public-safe means **tracked, reviewable, and intentionally publishable**.
+It does **not** mean that every local file in a maintainer's working directory is safe to zip, screenshot, or mirror.
+
 ### Internal or conditional
 
 - provider-level secrets and live tokens,
 - GHCR / public distribution proof,
 - samples that still point at production-like identities, routes, or credentials,
 - any contribution surface whose rights basis is still unclear.
+- `.env`,
+- `.runtime-cache/**`,
+- `.agents/Plans/**`,
+- `.agents/Conversations/**`.
+
+In plain English:
+
+- the tracked repository tree can be public-source-first,
+- while the local working directory may still contain private execution residue,
+- and those two surfaces must never be described as equivalent.
 
 ## Platform Truth Rule
 

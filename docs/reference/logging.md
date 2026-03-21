@@ -8,6 +8,8 @@
 - 通知脚本：`bin/run-daily-digest`、`bin/run-failure-alerts`
 - 服务运行日志（Uvicorn/Worker/MCP）
 
+说得更直白一点，`.runtime-cache/logs/**` 是“机房值班记录”，不是对外展示的公告栏。它属于 internal operational evidence，用来排障、验收和同轮次关联，不应该被当成长期 public surface。
+
 ## Output Contract
 
 - 开发脚本默认输出到标准输出/标准错误；需要跨运行关联的结构化事件写入 `.runtime-cache/logs/**`，例如 API HTTP 请求日志会写入 `.runtime-cache/logs/app/api-http.jsonl`。
@@ -16,6 +18,24 @@
 - 计划任务（cron/launchd）场景，日志统一重定向到 `.runtime-cache/logs/`，不再向仓库根级 `logs/` 写入。
 - 脚本日志必须带前缀（如 `[run_daily_digest]`、`[dev_worker]`）以便 grep。
 - 关键运行链必须能按“案号”串联：HTTP 至少保留 `trace_id/request_id`，异步作业至少保留 `run_id`。
+
+## Correlation Spine
+
+你可以把相关字段理解成“快递单号三件套”：
+
+- `run_id`：这一轮执行的总单号，负责把同一次运行串起来。
+- `trace_id`：链路追踪号，负责把跨组件请求接起来。
+- `request_id`：单次请求或命令号，负责把同一次交互钉住。
+
+当前仓库级 contract 进一步要求：
+
+- 所有结构化日志都必须至少包含：`run_id`、`trace_id`、`request_id`、`repo_commit`、`entrypoint`、`env_profile`、`message`
+- `tests` 通道额外必须带 `test_run_id`
+- `governance` 通道额外必须带 `gate_run_id`
+- `upstreams` 通道额外必须带 `upstream_id`、`upstream_operation`、`upstream_contract_surface`
+- `upstream_contract_surface` 只能是 `public` 或 `internal`
+
+换句话说，当一条日志跨过 public/internal 边界时，必须把“这次是在走公开契约，还是在走内部契约”写清楚，避免排障时把两条不同水管看成同一条。
 
 ## No Logs No Merge
 
@@ -137,9 +157,10 @@ python3 scripts/governance/check_no_unindexed_evidence.py
 当前统一要求：
 
 - 结构化日志必须包含：`run_id`、`trace_id`、`request_id`、`repo_commit`、`entrypoint`、`env_profile`
+- 结构化日志必须包含非空 `message`
 - `tests` 通道额外必须带 `test_run_id`
 - `governance` 通道额外必须带 `gate_run_id`
-- `upstreams` 通道额外必须带 `upstream_id` 与 `upstream_operation`
+- `upstreams` 通道额外必须带 `upstream_id`、`upstream_operation` 与 `upstream_contract_surface`
 - `worker-commands` 与 `mcp-api` 这类 app 通道事件至少必须让 `run_id/request_id/trace_id` 三者可见；其中 `mcp-api` 还应尽量补上稳定的 `upstream_operation`，让“哪个路径家族 + 哪种结果语义”一眼可读，而不是只剩原始 path/method。
 - `python3 scripts/governance/check_log_correlation_completeness.py` 现在不仅检查 `api-http.jsonl`，也会显式检查 `.runtime-cache/logs/app/worker-commands.jsonl` 与 `.runtime-cache/logs/app/mcp-api.jsonl`，防止“代码已经接线，但治理门禁没认账”。
 - `reports` / `evidence` artifact 必须带 sidecar metadata，避免历史 artifact 冒充 current verification

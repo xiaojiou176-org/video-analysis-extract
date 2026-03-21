@@ -91,7 +91,7 @@ UV_PROJECT_ENVIRONMENT="$HOME/.cache/video-digestor/project-venv" uv sync --froz
 ```
 
 - `build-ci-standard-image.yml` 现在会先在 hosted runner 上显式准备 Docker Buildx，再调用 `scripts/ci/build_standard_image.sh` 做多架构标准镜像构建；如果镜像工作流仍在构建入口阶段立刻失败，先检查 hosted buildx 准备步骤是否成功，而不是先怀疑 GHCR 权限。
-- GHCR 相关本地/预检凭证优先级现在是：显式 `GHCR_WRITE_USERNAME/GHCR_WRITE_TOKEN` -> 本地调试用 `GHCR_USERNAME/GHCR_TOKEN` -> 当前 `gh auth` 身份。Hosted `build-ci-standard-image.yml` 则优先走 `github.actor + GITHUB_TOKEN` 的仓库级 token 路径，避免陈旧 `GHCR_WRITE_*` secret 抢先遮住更健康的 hosted path。只要选中的 token 路径具备足够权限，readiness 就会继续预探 blob upload 写能力。
+- GHCR 相关本地/预检凭证优先级现在是：显式 `GHCR_WRITE_USERNAME/GHCR_WRITE_TOKEN` -> 本地调试用 `GHCR_USERNAME/GHCR_TOKEN` -> 当前 `gh auth` 身份。Hosted `build-ci-standard-image.yml` 会先尝试 `github.actor + GITHUB_TOKEN` 的仓库级 token 路径；若该路径在 blob-upload preflight 上失败，且显式 `GHCR_WRITE_*` 存在，则会回退到显式 writer 凭证继续验证与登录；若显式 writer 路径仍无法在 preflight 阶段证明 blob upload，但当前头 hosted build/push 才能给出更强证据，则会以 `fallback-unverified` 方式继续执行真实 build/push。
 - 标准镜像构建链依赖 `.devcontainer/Dockerfile`；当前约定会对 NodeSource signing key 做显式重试，并先写入临时 key 文件再 `gpg --dearmor`，这样 ARM64/QEMU buildx 路径遇到短暂 HTTP/2 抖动时，不会把空响应直接当成有效 key。
 - self-hosted runner 在进入 `build-ci-standard-image.yml` 之前，会用 `scripts/governance/runner_workspace_maintenance.sh` 统一清理 `.runtime-cache`、`mutants/` 和 `/tmp/video-digestor-*` 下的目录/单文件 stale residue；如果 workflow 再次在 runner hygiene 阶段失败，先看是否出现新的不可写残留，而不是先怀疑 GHCR 权限。
 
@@ -109,7 +109,7 @@ pre-commit install --hook-type pre-commit --hook-type commit-msg --hook-type pre
 
 协同关系（当前实现）：
 
-- `.githooks/*` 是默认强制入口，负责调用 `quality_gate` 与 `commitlint`。
+- `.githooks/*` 是默认强制入口：`.githooks/pre-commit` 调用 `./bin/quality-gate --mode pre-commit --profile local`，`.githooks/pre-push` 调用 `./bin/strict-ci --mode pre-push --heartbeat-seconds 20 --ci-dedupe 0`，`.githooks/commit-msg` 调用 `commitlint`。
 - `.pre-commit-config.yaml` 是可复用检查清单，主要用于手动执行全量检查与依赖版本保养。
 - 因此本仓库口径是：`.githooks` 负责“提交/推送阻断”，`pre-commit` 负责“批量清洗与工具链维护”。
 
@@ -390,9 +390,9 @@ Live smoke 执行约束（2026-02 更新）：
 推荐命令：
 
 ```bash
-./bin/quality-gate --mode pre-push --profile ci --profile live-smoke --ci-dedupe 0
+./bin/strict-ci --mode pre-push --heartbeat-seconds 20 --ci-dedupe 0
 ./bin/api-real-smoke-local
-./bin/quality-gate --mode pre-push --strict-full-run 1 --profile ci --profile live-smoke --ci-dedupe 0
+./bin/strict-ci --mode pre-push --strict-full-run 1 --heartbeat-seconds 20 --ci-dedupe 0
 ```
 
 标准严格验收命令（固定顺序）：
@@ -401,7 +401,7 @@ Live smoke 执行约束（2026-02 更新）：
 ./bin/full-stack up
 ./bin/api-real-smoke-local
 ./bin/smoke-full-stack
-./bin/quality-gate --mode pre-push --strict-full-run 1 --profile ci --profile live-smoke --ci-dedupe 0
+./bin/strict-ci --mode pre-push --strict-full-run 1 --heartbeat-seconds 20 --ci-dedupe 0
 ```
 
 如果 `api_real_smoke_local.sh` 在最开始就失败并输出 `host_loopback_ipv4_exhausted`：

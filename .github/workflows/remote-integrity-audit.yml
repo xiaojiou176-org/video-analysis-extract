@@ -2,6 +2,9 @@ name: remote-integrity-audit
 
 on:
   workflow_call:
+    secrets:
+      REMOTE_INTEGRITY_GH_TOKEN:
+        required: false
   workflow_dispatch:
 
 permissions:
@@ -35,3 +38,13 @@ jobs:
           path: |
             .runtime-cache/reports/governance/remote-platform-truth.json
             .runtime-cache/reports/governance/remote-required-checks.json
+
+      - name: Summarize remote-integrity boundary
+        if: always()
+        run: |
+          {
+            echo "### remote-integrity boundary"
+            echo "- scope: remote required-check alignment and platform truth only"
+            echo "- current-head closure: not proven by this workflow alone"
+            echo "- caller secret surface: explicit \`REMOTE_INTEGRITY_GH_TOKEN\` only; otherwise falls back to repo-scoped \`github.token\`"
+          } >> "$GITHUB_STEP_SUMMARY"

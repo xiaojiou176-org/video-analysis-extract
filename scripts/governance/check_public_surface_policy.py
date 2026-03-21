@@ -16,8 +16,10 @@ def main() -> int:
     root = repo_root()
     errors: list[str] = []
     allowed_paths = {str(item).strip() for item in payload.get("allowed_tracked_paths", []) if str(item).strip()}
+    forbidden_patterns = [str(item) for item in payload.get("forbidden_tracked_globs", [])]
+    forbidden_patterns.extend(str(item) for item in payload.get("internal_only_surfaces", []))
 
-    for pattern in payload.get("forbidden_tracked_globs", []):
+    for pattern in forbidden_patterns:
         matches = sorted(
             path
             for path in tracked
@@ -43,7 +45,7 @@ def main() -> int:
         rel_text = str(rel)
         matching_forbidden = [
             str(pattern)
-            for pattern in payload.get("forbidden_tracked_globs", [])
+            for pattern in forbidden_patterns
             if fnmatch(rel_text, str(pattern))
         ]
         if matching_forbidden and rel_text not in allowed_paths:

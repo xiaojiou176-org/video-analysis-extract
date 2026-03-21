@@ -1,13 +1,20 @@
 {
   "version": 2,
   "forbidden_tracked_globs": [
-    "artifacts/performance/rsshub/*.tsv"
+    "artifacts/performance/rsshub/*.tsv",
+    ".agents/Plans/*.md"
   ],
   "allowed_tracked_paths": [
     "artifacts/performance/rsshub/public_probe_summary.sample.tsv"
   ],
   "required_public_samples": [
     "artifacts/performance/rsshub/public_probe_summary.sample.tsv"
+  ],
+  "internal_only_surfaces": [
+    ".agents/Plans/*.md",
+    ".agents/Conversations/**",
+    ".runtime-cache/**",
+    ".env"
   ],
   "contact_policy": {
     "SECURITY.md": {

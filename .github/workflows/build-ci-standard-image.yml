@@ -11,11 +11,10 @@ on:
       - "scripts/ci/build_standard_image.sh"
 
 permissions:
-  contents: write
+  contents: read
   packages: write
   attestations: write
   id-token: write
-  artifact-metadata: write
 
 jobs:
   publish:
@@ -38,13 +37,19 @@ jobs:
           python3 scripts/governance/check_runner_baseline.py --profile ci-heavy --workspace "$GITHUB_WORKSPACE"
 
       - name: Login to GHCR
+        env:
+          GHCR_WRITE_USERNAME: ${{ secrets.GHCR_WRITE_USERNAME }}
+          GHCR_WRITE_TOKEN: ${{ secrets.GHCR_WRITE_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          username="${{ github.actor }}"
-          token="${{ secrets.GITHUB_TOKEN }}"
+          username="${GHCR_WRITE_USERNAME:-${{ github.actor }}}"
+          token="${GHCR_WRITE_TOKEN:-${GITHUB_TOKEN}}"
           echo "$token" | docker login ghcr.io -u "$username" --password-stdin
 
       - name: Standard image publish preflight
         env:
+          GHCR_WRITE_USERNAME: ${{ secrets.GHCR_WRITE_USERNAME }}
+          GHCR_WRITE_TOKEN: ${{ secrets.GHCR_WRITE_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_ACTIONS: "true"
         run: ./scripts/ci/check_standard_image_publish_readiness.sh
@@ -75,8 +80,28 @@ jobs:
           format: spdx-json
           output-file: .runtime-cache/reports/attestations/strict-ci-image.spdx.json
           upload-artifact: false
-          registry-username: ${{ github.actor }}
-          registry-password: ${{ secrets.GITHUB_TOKEN }}
+          registry-username: ${{ secrets.GHCR_WRITE_USERNAME != '' && secrets.GHCR_WRITE_USERNAME || github.actor }}
+          registry-password: ${{ secrets.GHCR_WRITE_TOKEN != '' && secrets.GHCR_WRITE_TOKEN || secrets.GITHUB_TOKEN }}
+
+      - name: Record strict CI contract candidate (artifact only)
+        run: |
+          python3 - <<'PY' "${{ steps.digest.outputs.digest }}" "${{ github.sha }}"
+          import json
+          import sys
+          from pathlib import Path
+
+          payload = {
+              "standard_image": {
+                  "tag": sys.argv[2],
+                  "digest": sys.argv[1],
+              },
+              "source_commit": sys.argv[2],
+              "promotion_rule": "manual-pr-only",
+          }
+          candidate_path = Path(".runtime-cache/reports/build-ci-standard-image/contract-candidate.json")
+          candidate_path.parent.mkdir(parents=True, exist_ok=True)
+          candidate_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+          PY
 
       - name: Upload strict CI supply-chain artifacts
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -86,6 +111,7 @@ jobs:
           path: |
             .runtime-cache/reports/governance/standard-image-publish-readiness.json
             .runtime-cache/reports/build-ci-standard-image/metadata.json
+            .runtime-cache/reports/build-ci-standard-image/contract-candidate.json
             .runtime-cache/reports/attestations/strict-ci-image.spdx.json
 
       - name: Attest strict CI image provenance
@@ -103,27 +129,12 @@ jobs:
           sbom-path: .runtime-cache/reports/attestations/strict-ci-image.spdx.json
           push-to-registry: true
 
-      - name: Update strict CI contract digest
+      - name: Summarize manual promotion boundary
         run: |
-          python3 - <<'PY' "${{ steps.digest.outputs.digest }}" "${{ github.sha }}"
-          import json
-          import sys
-          from pathlib import Path
-
-          contract_path = Path("infra/config/strict_ci_contract.json")
-          contract = json.loads(contract_path.read_text(encoding="utf-8"))
-          contract["standard_image"]["tag"] = sys.argv[2]
-          contract["standard_image"]["digest"] = sys.argv[1]
-          contract_path.write_text(json.dumps(contract, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-          PY
-
-      - name: Commit strict CI contract digest
-        run: |
-          if git diff --quiet -- infra/config/strict_ci_contract.json; then
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add infra/config/strict_ci_contract.json
-          git commit -m "ci: update strict ci image digest"
-          git push
+          {
+            echo "### Strict CI image publish result"
+            echo "- published digest: \`${{ steps.digest.outputs.digest }}\`"
+            echo "- source commit: \`${{ github.sha }}\`"
+            echo "- repository write-back: disabled"
+            echo "- next step: promote \`infra/config/strict_ci_contract.json\` through a reviewed PR using the uploaded \`contract-candidate.json\` artifact"
+          } >> "$GITHUB_STEP_SUMMARY"

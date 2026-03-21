@@ -224,6 +224,21 @@ def _check_generated_doc_semantics() -> list[str]:
         failures.append(
             "docs/reference/newcomer-result-proof.md: missing explicit terminal-closure non-equivalence rule"
         )
+
+    root_agents = (REPO_ROOT / "AGENTS.md").read_text(encoding="utf-8")
+    root_claude = (REPO_ROOT / "CLAUDE.md").read_text(encoding="utf-8")
+    if root_agents != root_claude:
+        failures.append("AGENTS.md and CLAUDE.md diverged at the repository root")
+
+    start_here = (REPO_ROOT / "docs" / "start-here.md").read_text(encoding="utf-8")
+    if ".githooks/pre-push -> ./bin/strict-ci --mode pre-push --heartbeat-seconds 20 --ci-dedupe 0" not in start_here:
+        failures.append(
+            "docs/start-here.md: missing explicit `.githooks/pre-push -> ./bin/strict-ci --mode pre-push --heartbeat-seconds 20 --ci-dedupe 0` mapping"
+        )
+    if ".githooks/pre-commit -> ./bin/quality-gate --mode pre-commit --profile local" not in start_here:
+        failures.append(
+            "docs/start-here.md: missing explicit `.githooks/pre-commit -> ./bin/quality-gate --mode pre-commit --profile local` mapping"
+        )
     return failures
 
 

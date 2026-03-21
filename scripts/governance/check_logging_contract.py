@@ -76,6 +76,9 @@ def main() -> int:
         str(channel): [str(field) for field in fields]
         for channel, fields in config.get("channel_required_fields", {}).items()
     }
+    allowed_upstream_contract_surfaces = {
+        str(value) for value in config.get("allowed_upstream_contract_surfaces", [])
+    }
 
     for channel, path in sample_targets.items():
         if not path.is_file():
@@ -116,6 +119,12 @@ def main() -> int:
             if payload.get(field) in (None, ""):
                 errors.append(
                     f"logging sample for channel `{channel}` missing channel-required field `{field}`"
+                )
+        if channel == "upstreams":
+            surface = str(payload.get("upstream_contract_surface") or "")
+            if surface not in allowed_upstream_contract_surfaces:
+                errors.append(
+                    f"logging sample for channel `upstreams` must use allowed upstream_contract_surface: {surface or '<missing>'}"
                 )
         if channel == "app" and payload.get("trace_id") in (None, "", "missing_trace"):
             errors.append("logging sample for channel `app` must include a real trace_id")
@@ -174,6 +183,13 @@ def main() -> int:
                 if payload.get(field) in (None, ""):
                     errors.append(
                         f"logging optional sample for channel `{channel}` missing channel-required field `{field}`: {path.relative_to(root).as_posix()}"
+                    )
+            if channel == "upstreams":
+                surface = str(payload.get("upstream_contract_surface") or "")
+                if surface not in allowed_upstream_contract_surfaces:
+                    errors.append(
+                        "logging optional sample for channel `upstreams` must use allowed upstream_contract_surface: "
+                        f"{path.relative_to(root).as_posix()} ({surface or '<missing>'})"
                     )
             if channel == "app" and payload.get("trace_id") in (None, "", "missing_trace"):
                 errors.append(

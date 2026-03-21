@@ -29,13 +29,15 @@ Those current-state artifacts must also satisfy one additional rule:
 - Repo-side green does not equal external-lane green.
 - `governance-audit PASS` also does not equal external-lane green; it cannot even replace the repo-side strict current receipt on its own.
 - `remote-required-checks=status=pass` only proves merge-relevant required-check integrity, meaning `docs/generated/required-checks.md`, branch protection, and merge-relevant lanes such as `remote-integrity` have not drifted apart. It answers “is the required lane list aligned for PR/merge,” not “did `ci-final-gate`, `live-smoke`, or nightly terminal closure pass.”
+- `runner-health` is platform telemetry only. You can think of it as checking whether the delivery trucks are awake, not whether today’s package was delivered. It must never be cited as repo closure, current-head closure, or external-lane success.
 - An external lane counts as `verified` only when fresh artifacts, runtime metadata, and same-run proof all line up.
 - For lanes that consume remote workflow results, `verified` also requires the latest successful run to have `headSha == current HEAD`.
 - If a remote workflow succeeded on an old commit, that run is historical evidence only and must not upgrade the current state.
+- `current-head closure` means the proof was produced by a run that actually executed against the current commit, and that the proof closes the lane you are talking about. A green helper run on another commit, or a green platform-health run on the same commit, does not satisfy that closure.
 - Platform permission problems must be reported as platform blockers instead of being disguised as repository bugs.
 - If a GHCR lane workflow artifact records `failed_step_name=Build and push strict CI standard image` and `failure_signature=blob-head-403-forbidden`, interpret it as: preflight passed, and the real failure landed on the registry blob-write boundary.
 - `check_standard_image_publish_readiness.sh` now checks more than token-path visibility and GitHub Packages API visibility. When an explicit token path is available, it also probes `ghcr.io/v2/<repo>/blobs/uploads/`. Only `202` counts as a blob-write preflight pass; `401/403` must be treated as platform write-permission blockers.
-- For hosted `build-ci-standard-image.yml` runs, GHCR readiness intentionally uses `github.actor + GITHUB_TOKEN` first so a stale `GHCR_WRITE_*` secret cannot mask a healthier repository-scoped token path. Local debug paths still check explicit `GHCR_WRITE_*`, then `GHCR_*`, and finally GitHub Actions / `gh auth`.
+- For hosted `build-ci-standard-image.yml` runs, GHCR readiness now tries `github.actor + GITHUB_TOKEN` first. If that hosted repository token fails the blob-upload preflight, the workflow may fall back to explicit `GHCR_WRITE_*` credentials when they are present. If the explicit writer path still cannot prove blob upload during preflight, the hosted run may continue in a `fallback-unverified` mode so the real build/push step can provide the decisive evidence. Local debug paths still check explicit `GHCR_WRITE_*`, then `GHCR_*`, and finally GitHub Actions / `gh auth`.
 - GitHub's container-registry docs also state that a **command-line image push is not linked to a repository by default**, even when the image path matches the repository name. The strict CI standard-image build path must therefore carry `org.opencontainers.image.source=https://github.com/<owner>/<repo>` so GHCR can connect the package back to the repository and let repository-scoped workflow permissions inherit correctly.
 - If a package lookup with a token that claims `write:packages` still returns `404`, treat that as a possible **package-path / ownership / visibility** boundary problem, not as proof that the lane is healthy.
 - If a token with `write:packages` can list packages for the target org/user/repository and all three views still come back empty while the expected package path returns `404`, treat that as stronger evidence that the package has **not been created under the expected namespace or has not been linked there yet**.
@@ -75,6 +77,14 @@ Examples:
   - report all four facts together,
   - keep the lane **unverified**,
   - and explain that the problem is no longer “workflow forgot to ask for packages write”; it is now closer to **package creation/linkage/visibility** or **registry-side write acceptance**.
+- `hosted GITHUB_TOKEN preflight = blocked` + `explicit GHCR_WRITE fallback = ready`
+  - report both layers,
+  - keep the lane **unverified** until the current-head hosted run succeeds,
+  - and explain that the repository token path is still weaker than the explicit writer path.
+- `hosted GITHUB_TOKEN preflight = blocked` + `explicit GHCR_WRITE fallback = fallback-unverified`
+  - allow the current-head hosted build to continue,
+  - keep the lane **unverified** until the real build/push result lands,
+  - and report that preflight could not prove blob upload but the workflow deliberately advanced to collect stronger evidence from the real publish path.
 - `bearer token exchange = success` + `registry upload = 403 permission_denied`
   - report both layers,
   - keep the lane **unverified**,
@@ -234,6 +244,28 @@ Success criteria for closing the blocker:
 - When GHCR has both a local readiness artifact and a remote current-head workflow record, the summary must report both layers explicitly instead of letting `queued` or `ready` sound like progress toward `verified`.
 - When the current GHCR blocked run provides an explicit failed step or failure signature, use that data first to distinguish preflight failures from buildx-setup failures or final build-and-push failures.
 - If the remote workflow still points at an old head, the summary/pointer may only honestly say `historical`, `ready`, or `blocked`. It must never wrap that old run into current `verified`.
+- If `build-ci-standard-image.yml` publishes successfully, that still does **not** rewrite `infra/config/strict_ci_contract.json` automatically. Treat the uploaded `contract-candidate.json` artifact as evidence for a reviewed follow-up PR, not as an already-promoted repository truth.
+
+## Current-Head Closure Checklist
+
+When someone says “the external lane is closed,” read it like a signed delivery receipt. The receipt only counts when the package, address, and timestamp all match the shipment you care about.
+
+Minimum checklist:
+
+- the artifact/report says which workflow or probe produced the proof
+- runtime metadata `source_commit` or remote workflow `headSha` equals the current HEAD
+- the proof is for the lane itself, not for a helper lane such as `runner-health`
+- if the lane depends on a remote workflow, the latest successful run for that lane is also a current-head run
+- if the lane depends on both local readiness and remote execution, both layers are current-head and both are closed
+
+Fail-close examples:
+
+- `runner-health=success` + `build-ci-standard-image=queued`
+  - the trucks are awake, but the package is not delivered; lane remains **unverified**
+- `remote-integrity=success` + `ci-final-gate` missing for current HEAD
+  - required-check alignment is healthy, but terminal closure is still **unverified**
+- `build-ci-standard-image=success` on yesterday's SHA
+  - keep it **historical**, not current-head closed
 
 ## Canonical Commands
 

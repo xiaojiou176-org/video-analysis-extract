@@ -12,6 +12,10 @@ on:
       - "infra/config/self_hosted_runner_baseline.json"
       - "scripts/governance/check_runner_baseline.py"
 
+concurrency:
+  group: runner-health-${{ github.workflow }}-${{ github.ref || github.event_name }}
+  cancel-in-progress: false
+
 permissions:
   contents: read
   id-token: write
@@ -108,7 +112,7 @@ jobs:
             label_online_count="$(gh api "orgs/${GH_ORG}/actions/runners" --jq "[.runners[] | select((.labels | map(.name) | index(\"video-analysis-extract\")) and .status==\"online\")] | length")"
             echo "  online runners: pool-core*=${online_count} (min ${MIN_ONLINE_CORE_RUNNERS}), label video-analysis-extract=${label_online_count} (min ${MIN_ONLINE_LABEL_RUNNERS}) [attempt ${attempt}/40]"
             if [[ "${online_count}" -ge "${MIN_ONLINE_CORE_RUNNERS}" && "${label_online_count}" -ge "${MIN_ONLINE_LABEL_RUNNERS}" ]]; then
-              echo "Runner bootstrap passed: label-routed runners are online (no exact instance-name binding)."
+              echo "Runner platform health passed: label-routed runners are online (no exact instance-name binding)."
               exit 0
             fi
             if [[ "$attempt" -eq 40 ]]; then
@@ -120,3 +124,14 @@ jobs:
             fi
             sleep 15
           done
+
+      - name: Summarize platform-only semantics
+        if: always()
+        run: |
+          {
+            echo "### runner-health boundary"
+            echo "- purpose: self-hosted runner platform health and wake-up only"
+            echo "- not a merge receipt"
+            echo "- not a current-head closure proof"
+            echo "- not an external-lane success certificate"
+          } >> "$GITHUB_STEP_SUMMARY"

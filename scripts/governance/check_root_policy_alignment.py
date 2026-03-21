@@ -34,9 +34,9 @@ def main() -> int:
 
     gitignore_lines = (root / ".gitignore").read_text(encoding="utf-8").splitlines()
     if ".agents/" in {line.strip() for line in gitignore_lines}:
-        errors.append("`.agents/` must not be ignored wholesale; keep Plans tracked and scope ignores to subpaths")
-    if "!.agents/Plans/" not in {line.strip() for line in gitignore_lines}:
-        errors.append("`.agents/Plans/` must be explicitly unignored")
+        errors.append("`.agents/` must not be ignored wholesale; scope ignores to subpaths only")
+    if ".agents/Plans/" not in {line.strip() for line in gitignore_lines}:
+        errors.append("`.agents/Plans/` must be explicitly ignored as a local execution ledger path")
 
     raw_uv_sync = re.compile(r"(?m)^uv sync --frozen --extra dev --extra e2e$")
     for rel in DOCS_REQUIRING_MANAGED_UV:

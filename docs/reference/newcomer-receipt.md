@@ -1,87 +1,87 @@
 # Newcomer Clean-Room Receipt
 
-这份文档不是 onboarding 摘要，而是一张**执行收据**。你可以先把它理解成“在 integrator 验收阶段，针对下方注明的那次 fresh 运行，官方入口实际跑了哪一步，以及没跑哪一步”的小票。
+This document is not an onboarding summary. Think of it as an **execution receipt**: for the fresh run listed below, it shows which official newcomer steps really ran and which ones did not.
 
-当前口径必须保持诚实：
+The wording here must stay honest:
 
-- 本仓库对外是 **public source-first + limited-maintenance**，不是“一键可商用产品”。
-- 这张收据只证明 **最小可试路径** 在下方记录的那次运行里拿到了 fresh 票据，不证明 full-stack/operator 路径已经 fresh 跑通。
-- 更重的 repo-side strict / external lane 仍要看独立收据，不能拿这张票据冒充。
+- This repository is publicly presented as **public source-first + limited-maintenance**, not as a one-command commercial product.
+- This receipt only proves that the **minimum try-it path** produced a fresh receipt for the run captured below. It does not prove that the full-stack or operator paths were freshly rerun.
+- Heavier repo-side strict and external-lane acceptance still require their own independent receipts. This page must not be used as a substitute.
 
-## 本次收据证明了什么
+## What This Receipt Proves
 
-- **已 fresh 证明**：`docs/start-here.md` 中标注的 newcomer 最短路径 `./bin/validate-profile --profile local` 在下方记录的 source commit 上可以执行并产出收据。
-- **未 fresh 证明**：`./bin/full-stack up`、`./bin/smoke-full-stack`、`./bin/api-real-smoke-local`、`./bin/repo-side-strict-ci ...`、`./bin/strict-ci ...`。
+- **Freshly proved**: the newcomer shortest path documented in `docs/start-here.md`, `./bin/validate-profile --profile local`, ran successfully on the source commit listed below and produced a receipt.
+- **Not freshly proved**: `./bin/full-stack up`, `./bin/smoke-full-stack`, `./bin/api-real-smoke-local`, `./bin/repo-side-strict-ci ...`, and `./bin/strict-ci ...`.
 
-换句话说，这次像是先确认“钥匙和门牌号对得上”，还**没有**证明“整套厨房、水电、排烟都已经点火运行”。
+Put more plainly: this is like confirming that the key matches the front door. It does **not** prove that the full kitchen, plumbing, and ventilation have all been turned on and checked.
 
-## 真相源
+## Sources Of Truth
 
-- 官方 newcomer 入口：`docs/start-here.md`
-- operator runbook：`docs/runbook-local.md`
-- public/source-first 边界：`docs/reference/public-repo-readiness.md`
-- 最短路径入口脚本：`bin/validate-profile`
-- 实际执行脚本：`scripts/env/validate_profile.sh`
-- 机器可读状态页：`docs/reference/newcomer-result-proof.md`
+- Official newcomer entrypoint: `docs/start-here.md`
+- Operator runbook: `docs/runbook-local.md`
+- Public/source-first boundary: `docs/reference/public-repo-readiness.md`
+- Shortest-path entry script: `bin/validate-profile`
+- Actual executed script: `scripts/env/validate_profile.sh`
+- Machine-readable status page: `docs/reference/newcomer-result-proof.md`
 
 ## Fresh Run Stamp
 
-这部分记录的是**收据来源**，不是“仓库未来所有 commit 的永恒当前态”。当前 live 读数仍应以 `docs/reference/newcomer-result-proof.md` 指向的 runtime report 为准。
+This section records the **receipt source**, not a forever-current status for every future commit. For the live reading, still defer to the runtime report pointed to by `docs/reference/newcomer-result-proof.md`.
 
-| 字段 | 值 |
+| Field | Value |
 | --- | --- |
-| 日期 | 2026-03-16 America/Los_Angeles |
-| 近似时间 | 22:59 PDT |
-| commit | `c7ddaed526671b927396063f2812978b9a739a15` |
-| 命令 | `./bin/validate-profile --profile local` |
-| 退出码 | `0` |
-| 耗时 | `0.42s` |
+| Date | 2026-03-16 America/Los_Angeles |
+| Approximate time | 22:59 PDT |
+| Commit | `c7ddaed526671b927396063f2812978b9a739a15` |
+| Command | `./bin/validate-profile --profile local` |
+| Exit code | `0` |
+| Duration | `0.42s` |
 
-## 环境前提
+## Environment Preconditions
 
-这条 newcomer 最短路径的门槛比 full-stack 低，实际观察到的前提如下：
+This newcomer shortest path has a lower bar than full-stack startup. The observed prerequisites were:
 
-- 需要仓库内置的 `env/core.env.example`
-- 需要 `env/profiles/local.env`
-- 需要 `python3` 与仓库脚本运行能力
-- **本次运行时 `.env` 缺失**，但该命令仍然通过；脚本把这件事标成 `risk hint`，没有假装当前机器已经具备完整运行态
-- 这条路径**不要求**当前先启动 Docker、Postgres、Temporal，也不证明这些依赖已经可用
+- the repository-shipped `env/core.env.example`
+- `env/profiles/local.env`
+- `python3` plus the ability to run repository scripts
+- **`.env` was missing during this run**, but the command still passed; the script reported that as a `risk hint` instead of pretending the machine already had a full runnable setup
+- this path does **not** require Docker, PostgreSQL, or Temporal to be started first, and it does not prove those dependencies are available
 
-## 精确命令
+## Exact Commands
 
 ```bash
 ./bin/validate-profile --profile local
 python3 scripts/governance/render_newcomer_result_proof.py
 ```
 
-第二条命令不是 newcomer 官方入口本身，而是把本轮 fresh 结果渲染成机器可读状态包，方便 integrator 后续挂载。
+The second command is not the official newcomer entrypoint itself. It only renders the fresh result into a machine-readable proof bundle for later integrator use.
 
-## 实际产物
+## Actual Artifacts
 
-### 1. resolved env 快照
+### 1. Resolved env snapshot
 
-路径：
+Path:
 
 - `.runtime-cache/tmp/.env.local.resolved`
 
-本轮实际内容摘要：
+Observed content summary for this run:
 
 ```dotenv
 ENV_PROFILE=local
 ```
 
-解释：
+Interpretation:
 
-- 这说明 profile 组合至少成功落地成了一份 resolved env 文件。
-- 但当前只解析出了 **1 个键**，所以它更像“profile 组合成功”的证明，而不是“应用运行配置已经齐全”的证明。
+- This proves that the profile composition at least produced a resolved env file.
+- But only **one key** was resolved, so this is better read as proof that profile composition still works, not proof that the application runtime configuration is fully populated.
 
-### 2. 运行 manifest
+### 2. Run manifest
 
-路径：
+Path:
 
 - `.runtime-cache/run/manifests/20d2fb35724d4aa89de9f46b04012bff.json`
 
-关键字段摘要：
+Key field summary:
 
 - `entrypoint=validate-profile`
 - `channel=governance`
@@ -90,69 +90,69 @@ ENV_PROFILE=local
 - `repo_commit=c7ddaed526671b927396063f2812978b9a739a15`
 - `log_path=.runtime-cache/logs/governance/20d2fb35724d4aa89de9f46b04012bff.jsonl`
 
-### 3. newcomer result proof JSON
+### 3. Newcomer result proof JSON
 
-路径：
+Path:
 
 - `.runtime-cache/reports/governance/newcomer-result-proof.json`
 
-本轮 fresh 读数摘要：
+Fresh reading summary for this run:
 
 - `newcomer_preflight=status=pass`
 - `repo_side_strict_receipt=status=missing_current_receipt`
 - `governance_audit_receipt=status=missing`
 
-这三个状态合起来的意思是：
+Together, those three states mean:
 
-- **最小可试路径**已经 freshly proved
-- **更重的 repo-side strict 收据**当前 commit 还没有 fresh PASS 收据
-- **governance audit 收据**这次也没有一并 fresh 捕获
+- the **minimum try-it path** is freshly proved
+- the heavier **repo-side strict receipt** is still missing a fresh PASS receipt for this commit
+- the **governance audit receipt** was not freshly captured in the same run
 
-## 本轮观察到的失败点 / 限制
+## Observed Limits And Failure Points
 
-### 已实际观察到的限制
+### Limits that were actually observed
 
-- `validate-profile` 输出了 `risk hint: .env is missing; validation passed with available files only.`
-- 也就是说，这条路径不会替你证明 `.env` 已经准备好，更不会替你证明 API/Worker/Web/Reader 能启动
+- `validate-profile` printed `risk hint: .env is missing; validation passed with available files only.`
+- In other words, this path does not prove that `.env` is already prepared, and it definitely does not prove that API, Worker, Web, or Reader can start
 
-### 该路径的脚本级 fail-fast 点
+### Script-level fail-fast points for this path
 
-来自 `scripts/env/validate_profile.sh` 的实际逻辑，这条 newcomer 路径在以下情况会直接失败：
+Based on the real logic in `scripts/env/validate_profile.sh`, this newcomer path will fail immediately if:
 
-- `env/profiles/<profile>.env` 缺失
-- `compose_env.sh` 组合 env 失败
-- resolved env 文件为空
-- 发现不到任何可用 env 文件
+- `env/profiles/<profile>.env` is missing
+- `compose_env.sh` fails while composing env files
+- the resolved env file is empty
+- no usable env file can be found at all
 
-## 与完整 full-stack 路径的区别
+## How It Differs From The Full Full-Stack Path
 
-这部分特别容易被误解，所以单独写清楚。
+This is the part most likely to be misunderstood, so it is written out separately.
 
-### 最小可试路径
+### Minimum try-it path
 
-命令：
+Command:
 
 ```bash
 ./bin/validate-profile --profile local
 ```
 
-它证明的是：
+What it proves:
 
-- newcomer 入口没有写成死文档
-- local profile 至少还能被脚本组合出来
-- 当前 HEAD 至少有一条低门槛入口是 fresh 的
+- the newcomer entrypoint is not stale documentation
+- the local profile can still be composed by the scripts
+- the current HEAD still has at least one low-bar fresh entrypoint
 
-它**不**证明的是：
+What it does **not** prove:
 
-- `.env` 已存在且完整
-- Docker / DevContainer 可用
-- Postgres / Temporal 可用
-- API/Worker/Web 能启动
-- smoke / real smoke / strict-ci 已 fresh 通过
+- `.env` already exists and is complete
+- Docker or DevContainer are available
+- PostgreSQL or Temporal are available
+- API, Worker, and Web can start
+- smoke, real smoke, or strict-ci have freshly passed
 
-### 完整 operator / full-stack 路径
+### Full operator / full-stack path
 
-参考命令：
+Reference commands:
 
 ```bash
 ./bin/bootstrap-full-stack
@@ -162,25 +162,25 @@ ENV_PROFILE=local
 ./bin/repo-side-strict-ci --mode pre-push --strict-full-run 1 --ci-dedupe 0
 ```
 
-这些才是在“真正做饭上桌”的那条路上。它们需要更高 operator 门槛，也更依赖标准环境、基础设施和外部条件。
+Those are the commands that move toward the real "cook the meal and serve it" path. They require a higher operator bar and depend more heavily on the standard environment, infrastructure, and external conditions.
 
-## Operator 门槛说明
+## Operator-Bar Reminder
 
-如果你是第一次接触这个仓库，最安全的理解方式是：
+If this is your first time touching the repository, the safest reading is:
 
-- 这不是轻量玩具项目，不要把它当成“clone 后三秒一键开箱 app”
-- newcomer 最短路径是**配置与入口真伪检查**
-- full-stack/operator 路径才是**运行与验收链**
-- 严格验收还要区分 `repo-side` 和 `external lane`，两条都不是这张收据当前证明的内容
+- this is not a lightweight toy project, so do not treat it like a clone-and-open app
+- the newcomer shortest path is a **configuration and entrypoint truth check**
+- the full-stack/operator path is the actual **runtime and acceptance chain**
+- strict acceptance is still split into `repo-side` and `external lane`, and this receipt does not currently prove either one end to end
 
-## Reviewer 判断标准
+## Reviewer Checklist
 
-如果 reviewer 想判断这页是不是“抄文档”，可以看这几个点：
+If a reviewer wants to tell whether this page is grounded in a real run instead of copied boilerplate, they should be able to find:
 
-- 文中给出了 **当前 commit**
-- 给出了 **fresh 命令**
-- 给出了 **退出码和耗时**
-- 给出了 **实际运行产物路径**
-- 明确写出 **`.env` 缺失但命令仍通过** 这一限制
-- 明确区分了 **最小可试路径** 和 **完整 full-stack 路径**
-- 没有把缺失的 strict / governance receipt 包装成通过
+- the **current commit**
+- the **fresh command**
+- the **exit code and duration**
+- the **real runtime artifact paths**
+- an explicit note that **`.env` was missing but the command still passed**
+- a clear separation between the **minimum try-it path** and the **full full-stack path**
+- no attempt to disguise missing strict or governance receipts as a pass

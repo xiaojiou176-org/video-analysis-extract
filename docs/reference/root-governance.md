@@ -14,7 +14,7 @@ The repository root only serves two roles:
 
 ## Final Entry-Point Constraints
 
-- `.agents/Plans/`: the in-repo execution board and construction log; this is a governed public control surface.
+- `.agents/Plans/`: local execution ledger storage for the active implementation session. It must not stay in the tracked public tree long-term; only the currently active local plan may remain in the working directory.
 - `bin/`: the stable public command surface. Humans, hooks, CI, and docs must reference `bin/*` instead of exposing `scripts/*` as long-term public entrypoints.
 - `THIRD_PARTY_NOTICES.md`: the third-party rights ledger used for public distribution. It must stay machine-generated instead of hand-maintained.
 - Root-level `.venv` / `venv` are not legal root assets; governed Python environments must live under `.runtime-cache/tmp/` or a controlled path outside the repository.
@@ -28,6 +28,7 @@ The following paths may exist at the root, but they must stay untracked:
 - `.codex/`
 - `.claude/`
 - `.cursor/`
+- `.agents/Plans/`
 
 ## Gates
 
@@ -50,5 +51,6 @@ Additional Reading Rule:
 - Do not add undeclared top-level entries.
 - Do not reintroduce denylisted catch-all directories at the root.
 - Do not commit local-private tolerated items.
+- Do not treat `.agents/Plans/` as a permanent tracked public control surface.
 - Do not spread local helpers, experiments, or one-off outputs across the root hallway.
 - Do not bypass `bin/*` and expose `scripts/*` directly to docs, hooks, or workflows as public entrypoints.

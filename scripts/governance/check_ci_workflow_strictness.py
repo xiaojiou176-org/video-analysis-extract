@@ -7,7 +7,9 @@ from pathlib import Path
 
 WORKFLOW_DIR = Path(".github/workflows")
 WORKFLOW_PATH = WORKFLOW_DIR / "ci.yml"
+BUILD_STANDARD_IMAGE_WORKFLOW_PATH = WORKFLOW_DIR / "build-ci-standard-image.yml"
 RUNNER_HEALTH_WORKFLOW_PATH = WORKFLOW_DIR / "runner-health.yml"
+REMOTE_INTEGRITY_WORKFLOW_PATH = WORKFLOW_DIR / "remote-integrity-audit.yml"
 TRUSTED_BOUNDARY_REUSABLE_WORKFLOW_PATH = WORKFLOW_DIR / "_trusted-pr-boundary.yml"
 CONTRACT_PATH = Path("infra/config/strict_ci_contract.json")
 RUNNER_BASELINE_CONTRACT_PATH = Path("infra/config/self_hosted_runner_baseline.json")
@@ -162,7 +164,8 @@ def _trusted_boundary_reusable_is_valid() -> bool:
     blocks = dict(_job_blocks(text))
     run_block = blocks.get("trusted-pr-boundary", "")
     return (
-        "runs-on: ubuntu-latest" in run_block
+        "permissions: {}" in text
+        and "runs-on: ubuntu-latest" in run_block
         and "trusted internal PR boundary violated" in run_block
         and "timeout-minutes:" in run_block
     )
@@ -173,22 +176,14 @@ def _trusted_boundary_job_is_valid(workflow_name: str, block: str, failures: lis
         failures.append(f"{workflow_name}: trusted-pr-boundary: missing job")
         return
     uses_target = _job_level_uses_target(block)
-    if uses_target:
-        if uses_target != "./.github/workflows/_trusted-pr-boundary.yml":
-            failures.append(
-                f"{workflow_name}: trusted-pr-boundary: must use `./.github/workflows/_trusted-pr-boundary.yml`"
-            )
-            return
-        if not _trusted_boundary_reusable_is_valid():
-            failures.append(
-                f"{workflow_name}: trusted-pr-boundary: reusable workflow `_trusted-pr-boundary.yml` is missing hosted runner or explicit failure message"
-            )
-        return
-    if "runs-on: ubuntu-latest" not in block:
-        failures.append(f"{workflow_name}: trusted-pr-boundary: must run on hosted runner")
-    if "trusted internal PR boundary violated" not in block:
+    if uses_target != "./.github/workflows/_trusted-pr-boundary.yml":
         failures.append(
-            f"{workflow_name}: trusted-pr-boundary: missing explicit trusted internal PR failure message"
+            f"{workflow_name}: trusted-pr-boundary: must use `./.github/workflows/_trusted-pr-boundary.yml`"
+        )
+        return
+    if not _trusted_boundary_reusable_is_valid():
+        failures.append(
+            f"{workflow_name}: trusted-pr-boundary: reusable workflow `_trusted-pr-boundary.yml` must keep empty permissions, hosted runner, and explicit failure messaging"
         )
 
 
@@ -683,7 +678,7 @@ def _check_ci_specific_rules(blocks: dict[str, str], failures: list[str]) -> Non
     _check_ci_post_container_rules(blocks, failures)
 
 
-def _check_runner_health_specific_rules(blocks: dict[str, str], failures: list[str]) -> None:
+def _check_runner_health_specific_rules(text: str, blocks: dict[str, str], failures: list[str]) -> None:
     runner_bootstrap = blocks.get("runner-bootstrap", "")
     if not runner_bootstrap:
         failures.append("runner-health.yml: runner-bootstrap: missing job")
@@ -716,6 +711,55 @@ def _check_runner_health_specific_rules(blocks: dict[str, str], failures: list[s
         failures.append(
             "runner-health.yml: runner-bootstrap: must not install gh dynamically; enforce runner baseline instead"
         )
+    if "concurrency:\n  group: runner-health-" not in text:
+        failures.append(
+            "runner-health.yml: must serialize overlapping wake-up runs with a stable top-level concurrency group"
+        )
+    if "not a current-head closure proof" not in text:
+        failures.append(
+            "runner-health.yml: must publish a platform-only summary that explicitly rejects current-head closure semantics"
+        )
+
+
+def _check_build_standard_image_specific_rules(text: str, failures: list[str]) -> None:
+    if re.search(r"^\s{2}contents:\s+write\s*$", text, flags=re.MULTILINE):
+        failures.append(
+            "build-ci-standard-image.yml: permissions.contents must stay read-only; image publish must not mutate the repository"
+        )
+    forbidden_markers = (
+        "git push",
+        "git commit",
+        "git add infra/config/strict_ci_contract.json",
+        'contract_path.write_text(',
+        "Update strict CI contract digest",
+        "Commit strict CI contract digest",
+    )
+    for marker in forbidden_markers:
+        if marker in text:
+            failures.append(
+                f"build-ci-standard-image.yml: forbidden repository write-back marker detected (`{marker}`)"
+            )
+    if "contract-candidate.json" not in text:
+        failures.append(
+            "build-ci-standard-image.yml: must emit a contract-candidate artifact instead of writing infra/config/strict_ci_contract.json"
+        )
+
+
+def _check_remote_integrity_specific_rules(text: str, blocks: dict[str, str], failures: list[str]) -> None:
+    if "workflow_call:\n    secrets:\n      REMOTE_INTEGRITY_GH_TOKEN:" not in text:
+        failures.append(
+            "remote-integrity-audit.yml: workflow_call must declare REMOTE_INTEGRITY_GH_TOKEN as an explicit optional secret"
+        )
+    if "scope: remote required-check alignment and platform truth only" not in text:
+        failures.append(
+            "remote-integrity-audit.yml: must publish a summary that scopes the workflow to remote alignment/platform truth only"
+        )
+    block = blocks.get("remote-integrity", "")
+    if not block:
+        failures.append("remote-integrity-audit.yml: remote-integrity: missing job")
+        return
+    if "runs-on: ubuntu-latest" not in block:
+        failures.append("remote-integrity-audit.yml: remote-integrity: must run on hosted runner")
 
 
 def _check_ci_post_container_rules(blocks: dict[str, str], failures: list[str]) -> None:
@@ -812,6 +856,18 @@ def _check_ci_post_container_rules(blocks: dict[str, str], failures: list[str]) 
         failures.append(
             "ci.yml: aggregate-gate: must hard-fail when required-ci-secrets result is not success"
         )
+    remote_integrity = blocks.get("remote-integrity", "")
+    if not remote_integrity:
+        failures.append("ci.yml: remote-integrity: missing job")
+    else:
+        if "secrets: inherit" in remote_integrity:
+            failures.append(
+                "ci.yml: remote-integrity: must not use secrets: inherit; pass only REMOTE_INTEGRITY_GH_TOKEN explicitly"
+            )
+        if "REMOTE_INTEGRITY_GH_TOKEN:" not in remote_integrity:
+            failures.append(
+                "ci.yml: remote-integrity: must pass REMOTE_INTEGRITY_GH_TOKEN explicitly to the reusable workflow"
+            )
 
     # Preflight must include focused-test guard steps.
     required_preflight_markers = {
@@ -884,8 +940,12 @@ def main() -> int:
         _check_shared_self_hosted_pr_boundary_rules(workflow, text, blocks, failures)
         if workflow == WORKFLOW_PATH:
             _check_ci_specific_rules(blocks, failures)
+        elif workflow == BUILD_STANDARD_IMAGE_WORKFLOW_PATH:
+            _check_build_standard_image_specific_rules(text, failures)
         elif workflow == RUNNER_HEALTH_WORKFLOW_PATH:
-            _check_runner_health_specific_rules(blocks, failures)
+            _check_runner_health_specific_rules(text, blocks, failures)
+        elif workflow == REMOTE_INTEGRITY_WORKFLOW_PATH:
+            _check_remote_integrity_specific_rules(text, blocks, failures)
 
     if failures:
         print("ci workflow strictness gate failed:")

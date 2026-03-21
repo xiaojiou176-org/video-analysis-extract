@@ -11,6 +11,13 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
+sys.dont_write_bytecode = True
+
+SCRIPT_DIR = Path(__file__).resolve().parent
+if str(SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPT_DIR))
+
+from common import write_json_artifact
 
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_OUTPUT = ROOT / ".runtime-cache" / "reports" / "governance" / "ghcr-registry-auth-probe.json"
@@ -100,7 +107,7 @@ def _exchange_registry_token(*, login: str, token: str, repository_path: str, ch
         "challenge_scope": challenge_scope,
         "requested_scope": requested_scope,
         "status": response["status"],
-        "body": response["body"],
+        "body": str(response["body"]),
     }
     body_text = str(response["body"])
     bearer_token = ""
@@ -112,6 +119,7 @@ def _exchange_registry_token(*, login: str, token: str, repository_path: str, ch
         payload["token_keys"] = sorted(body_json.keys())
         bearer_token = str(body_json.get("token") or body_json.get("access_token") or "")
         payload["token_length"] = len(bearer_token)
+        payload["body"] = "<redacted: registry bearer token issued>"
     if bearer_token:
         upload = _http_request(
             f"https://ghcr.io/v2/{repository_path}/blobs/uploads/",
@@ -172,8 +180,15 @@ def main() -> int:
             }
         )
 
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    write_json_artifact(
+        output_path,
+        payload,
+        source_entrypoint="scripts/governance/probe_ghcr_registry_auth.py",
+        verification_scope="ghcr-registry-auth-probe",
+        source_run_id="ghcr-registry-auth-probe",
+        freshness_window_hours=24,
+        extra={"report_kind": "ghcr-registry-auth-probe"},
+    )
     print(f"[ghcr-registry-auth-probe] wrote {output_path}")
     return 0
 

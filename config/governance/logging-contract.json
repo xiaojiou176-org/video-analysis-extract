@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "minimum_common_fields": [
     "run_id",
     "trace_id",
@@ -13,20 +13,38 @@
     "ts",
     "repo_commit",
     "entrypoint",
-    "env_profile"
+    "env_profile",
+    "message"
   ],
   "channel_required_fields": {
+    "app": [
+      "request_id"
+    ],
+    "components": [
+      "request_id"
+    ],
     "tests": [
+      "request_id",
       "test_run_id"
     ],
     "governance": [
+      "request_id",
       "gate_run_id"
     ],
+    "infra": [
+      "request_id"
+    ],
     "upstreams": [
+      "request_id",
       "upstream_id",
-      "upstream_operation"
+      "upstream_operation",
+      "upstream_contract_surface"
     ]
   },
+  "allowed_upstream_contract_surfaces": [
+    "public",
+    "internal"
+  ],
   "channels": {
     "app": ".runtime-cache/logs/app",
     "components": ".runtime-cache/logs/components",
@@ -88,14 +106,16 @@
       "path": "docs/reference/logging.md",
       "contains": [
         ".runtime-cache/logs/",
-        "run_id"
+        "run_id",
+        "upstream_contract_surface"
       ]
     },
     {
       "path": "scripts/runtime/logging.sh",
       "contains": [
         "vd_log_init()",
-        "scripts/runtime/log_jsonl_event.py"
+        "scripts/runtime/log_jsonl_event.py",
+        "--upstream-contract-surface"
       ]
     },
     {

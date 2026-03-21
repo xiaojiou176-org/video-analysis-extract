@@ -1,58 +1,61 @@
-# apps/worker 模块协作规范
+# Worker Module Governance
 
-## 0. 模块目的
+## 0. Canonical Scope
 
-- 本模块负责视频处理主流水线执行：poll、pipeline、状态写回、产物生成。
-- 本模块必须与 Temporal 协作，严格执行 `3 阶段 + 9-step pipeline`。
+- This file is the English-first canonical governance surface for the worker module.
+- `apps/worker/AGENTS.md` and `apps/worker/CLAUDE.md` MUST stay content-identical.
 
-## 1. 技术栈
+## 1. Module Mission
+
+- This module runs the main video processing pipeline: poll, pipeline execution, state write-back, and artifact generation.
+- It MUST work with Temporal and follow the `3-stage + 9-step pipeline` contract strictly.
+
+## 2. Tech Stack
 
 - Python 3.11+
 - Temporal worker
 - pytest
 
-## 2. 导航索引（Lazy-Load）
+## 3. Lazy-Load Navigation
 
-1. `apps/worker/worker/main.py`（worker 入口）
-2. `apps/worker/worker/pipeline/`（流程编排）
-3. `apps/worker/worker/temporal/`（workflow/activities）
-4. `apps/worker/tests/`（模块测试）
+1. `apps/worker/worker/main.py` for the worker entrypoint
+2. `apps/worker/worker/pipeline/` for pipeline orchestration
+3. `apps/worker/worker/temporal/` for workflows and activities
+4. `apps/worker/tests/` for module tests
 
-## 3. 质量门禁（MUST）
-
-### 3.1 模块命令
+## 4. Required Commands
 
 ```bash
 ./bin/dev-worker
-
 ./bin/python-tests
 ```
 
-### 3.2 强制规则
+## 5. Verification Requirements (MUST)
 
-1. 涉及 pipeline 行为改动时，必须通过 `apps/worker/tests`。
-2. 涉及 `PIPELINE_STEPS` 改动时，必须同步 `docs/state-machine.md` 并完成对应验证。
-3. 涉及跨模块改动时，必须遵循根门禁：env contract + backend pytest + web lint + fake assertion gate。
-4. 涉及启动/链路改动时，必须补一次 `./bin/smoke-full-stack` 或在交付中说明未执行原因。
+1. Any pipeline behavior change MUST pass `apps/worker/tests`.
+2. Any change to `PIPELINE_STEPS` MUST sync `docs/state-machine.md` and complete the matching verification.
+3. Any cross-module change MUST also satisfy the root gates: env contract, backend pytest, web lint, and the fake assertion gate.
+4. Any startup-path or end-to-end flow change MUST run `./bin/smoke-full-stack`, or the delivery report MUST explicitly explain why it was not run.
 
-## 4. 文档优先级（模块内）
+## 6. Module Document Truth Order
 
 1. `apps/worker/AGENTS.md`
 2. `apps/worker/CLAUDE.md`
 3. `docs/state-machine.md`
 4. `docs/start-here.md`
 5. `docs/runbook-local.md`
-6. 根级 `AGENTS.md` / `CLAUDE.md`
+6. Root `AGENTS.md` / `CLAUDE.md`
 
-冲突处理：worker 行为契约以 `docs/state-machine.md` 与本模块文档优先，跨模块与全局规则以根级文档优先。
+Conflict handling:
+Worker behavior contracts defer to `docs/state-machine.md` and this module document first. Cross-module and global rules defer to the root governance documents.
 
-## 5. 文档联动（Docs Drift）
+## 7. Doc Drift Triggers
 
-- 修改 `apps/worker/worker/pipeline/types.py` 中 `PIPELINE_STEPS`：同步 `docs/state-machine.md`。
-- 调整 worker 启动参数、运行路径或脚本默认值：同步 `docs/start-here.md`、`docs/runbook-local.md`、`README.md`。
-- 新增/修改环境变量：同步 `.env.example`、`ENVIRONMENT.md`、`infra/config/env.contract.json`。
+- If `PIPELINE_STEPS` changes in `apps/worker/worker/pipeline/types.py`, sync `docs/state-machine.md`.
+- If worker startup parameters, runtime paths, or script defaults change, sync `docs/start-here.md`, `docs/runbook-local.md`, and `README.md`.
+- If environment variables change, sync `.env.example`, `ENVIRONMENT.md`, and `infra/config/env.contract.json`.
 
-## 6. Hooks 对齐
+## 8. Hook Alignment
 
-- pre-commit：`./bin/quality-gate --mode pre-commit`（含 `scripts/governance/ci_or_local_gate_doc_drift.sh --scope staged`）。
-- pre-push：`./bin/quality-gate --mode pre-push --heartbeat-seconds 20`（含 `scripts/governance/ci_or_local_gate_doc_drift.sh --scope push`）。
+- `pre-commit`: `./bin/quality-gate --mode pre-commit` including `scripts/governance/ci_or_local_gate_doc_drift.sh --scope staged`
+- `pre-push`: `./bin/strict-ci --mode pre-push --heartbeat-seconds 20 --ci-dedupe 0` including `scripts/governance/ci_or_local_gate_doc_drift.sh --scope push`

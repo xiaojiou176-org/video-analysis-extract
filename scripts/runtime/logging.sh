@@ -57,8 +57,13 @@ vd_log_json_only() {
     --component "${vd_log_component:?}" \
     --channel "${vd_log_channel:?}" \
     --source-kind "$source_kind" \
+    --test-id "${vd_test_id:-}" \
     --test-run-id "${vd_test_run_id:-}" \
     --gate-run-id "${vd_gate_run_id:-}" \
+    --upstream-id "${vd_upstream_id:-}" \
+    --upstream-operation "${vd_upstream_operation:-}" \
+    --upstream-contract-surface "${vd_upstream_contract_surface:-}" \
+    --failure-class "${vd_failure_class:-}" \
     --entrypoint "${vd_log_entrypoint:-${vd_log_component:?}}" \
     --env-profile "${vd_log_env_profile:-unknown}" \
     --repo-commit "${vd_log_repo_commit:-unknown}" \

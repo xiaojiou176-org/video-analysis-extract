@@ -11,7 +11,10 @@ usage() {
 Usage: ./bin/workspace-hygiene [--apply]
 
 Detects repo-side runtime residue that is forbidden by root/runtime governance:
+  - .cache / cache / logs / mutants / playwright-report / test-results / htmlcov
+  - .coverage / .pytest_cache / .ruff_cache
   - .venv
+  - venv
   - apps/web/node_modules
   - .runtime-cache/tmp/uv-project-env
   - source-tree __pycache__ directories
@@ -43,6 +46,29 @@ done
 
 declare -a dir_targets=()
 declare -a file_targets=()
+
+for rel in \
+  ".cache" \
+  ".pytest_cache" \
+  ".ruff_cache" \
+  ".venv" \
+  "venv" \
+  "cache" \
+  "logs" \
+  "mutants" \
+  "playwright-report" \
+  "test-results" \
+  "htmlcov"; do
+  if [[ -d "$ROOT_DIR/$rel" ]]; then
+    dir_targets+=("$ROOT_DIR/$rel")
+  fi
+done
+
+for rel in ".coverage"; do
+  if [[ -f "$ROOT_DIR/$rel" ]]; then
+    file_targets+=("$ROOT_DIR/$rel")
+  fi
+done
 
 if [[ -d "$ROOT_DIR/.venv" ]]; then
   dir_targets+=("$ROOT_DIR/.venv")

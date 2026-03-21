@@ -1,12 +1,21 @@
 {
-  "version": 2,
+  "version": 3,
   "tracked_root_allowlist": [
     {
       "path": ".agents",
       "kind": "governance",
-      "reason": "In-repo execution plans and long-running agent control boards.",
+      "reason": "Governed agent workspace root; public root presence is stable, while nested execution ledgers are migrating toward internal-only handling.",
       "owner": "platform",
-      "mutable": false
+      "mutable": false,
+      "nested_boundary_hints": [
+        {
+          "path": ".agents/Plans",
+          "boundary": "internal-execution-ledger",
+          "current_tracking_state": "tracked-history-read-only",
+          "target_tracking_state": "local-private-or-untracked",
+          "reason": "Historical plan ledgers may still exist temporarily, but the target state is an internal execution surface rather than a long-lived public control board."
+        }
+      ]
     },
     {
       "path": ".devcontainer",

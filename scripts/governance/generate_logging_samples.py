@@ -26,6 +26,7 @@ def _emit_jsonl_sample(
     source_kind: str,
     event: str,
     env_profile: str,
+    extra_args: list[str] | None = None,
 ) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     subprocess.run(
@@ -62,6 +63,7 @@ def _emit_jsonl_sample(
             "info",
             "--message",
             f"{channel} logging sample ready",
+            *(extra_args or []),
         ],
         check=True,
         cwd=root,
@@ -124,6 +126,8 @@ def main() -> int:
                 "sample-upstream",
                 "--upstream-operation",
                 "health_probe",
+                "--upstream-contract-surface",
+                "public",
             ]
         path.parent.mkdir(parents=True, exist_ok=True)
         subprocess.run(
@@ -193,6 +197,18 @@ def main() -> int:
             source_kind="app",
             event="sample_ready",
             env_profile=env_profile,
+            extra_args=(
+                [
+                    "--upstream-id",
+                    "internal-backend",
+                    "--upstream-operation",
+                    "jobs_json_dict",
+                    "--upstream-contract-surface",
+                    "internal",
+                ]
+                if component == "mcp-api"
+                else None
+            ),
         )
     return 0
 

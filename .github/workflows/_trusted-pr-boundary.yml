@@ -3,6 +3,8 @@ name: _trusted-pr-boundary (reusable)
 on:
   workflow_call:
 
+permissions: {}
+
 jobs:
   trusted-pr-boundary:
     runs-on: ubuntu-latest
@@ -10,6 +12,10 @@ jobs:
     steps:
       - name: Enforce trusted internal PR boundary
         run: |
+          if [[ "${{ github.event_name }}" == "pull_request_target" ]]; then
+            echo "::error::trusted internal PR boundary violated: pull_request_target must not be used to unlock privileged or self-hosted CI lanes."
+            exit 1
+          fi
           if [[ "${{ github.event_name }}" == "pull_request" && "${{ github.event.pull_request.head.repo.full_name }}" != "${{ github.repository }}" ]]; then
             echo "::error::trusted internal PR boundary violated: fork or untrusted PRs must not enter the privileged self-hosted CI path."
             exit 1

@@ -22,9 +22,17 @@ def main() -> int:
     tracked_entries = payload.get("tracked_root_allowlist", [])
     tolerated_entries = payload.get("local_private_root_tolerations", [])
     tracked_required_fields = {"path", "kind", "reason", "owner", "mutable"}
+    nested_hint_required_fields = {
+        "path",
+        "boundary",
+        "current_tracking_state",
+        "target_tracking_state",
+        "reason",
+    }
     tolerated_required_fields = {"path", "kind", "reason", "owner", "must_be_untracked"}
     tracked_allowed = set()
     tolerated_allowed = set()
+    nested_hint_notes: list[str] = []
     errors: list[str] = []
     tracked_paths = git_tracked_paths()
 
@@ -37,6 +45,31 @@ def main() -> int:
             )
             continue
         tracked_allowed.add(str(item["path"]))
+        parent_path = str(item["path"]).rstrip("/")
+        nested_hints = item.get("nested_boundary_hints", [])
+        if nested_hints and not isinstance(nested_hints, list):
+            errors.append(f"tracked root allowlist entry `{parent_path}` has non-list nested_boundary_hints")
+            continue
+        for hint in nested_hints:
+            if not isinstance(hint, dict):
+                errors.append(f"tracked root allowlist entry `{parent_path}` has invalid nested boundary hint")
+                continue
+            if not nested_hint_required_fields.issubset(hint):
+                missing = sorted(nested_hint_required_fields - set(hint))
+                errors.append(
+                    f"nested boundary hint missing fields for {hint.get('path', '<unknown>')}: "
+                    + ", ".join(missing)
+                )
+                continue
+            hint_path = str(hint["path"]).rstrip("/")
+            if not hint_path.startswith(parent_path + "/"):
+                errors.append(
+                    f"nested boundary hint `{hint_path}` must stay under declared root entry `{parent_path}`"
+                )
+                continue
+            nested_hint_notes.append(
+                f"{hint_path} ({hint['boundary']} -> {hint['target_tracking_state']})"
+            )
 
     for item in tolerated_entries:
         if not tolerated_required_fields.issubset(item):
@@ -70,6 +103,11 @@ def main() -> int:
         print(
             "[root-allowlist] note: local-private tolerated entries present="
             + ", ".join(tolerated_present)
+        )
+    if nested_hint_notes:
+        print(
+            "[root-allowlist] note: nested boundary migration targets="
+            + ", ".join(sorted(nested_hint_notes))
         )
 
     if errors:

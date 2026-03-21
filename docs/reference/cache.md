@@ -2,6 +2,15 @@
 
 ## Cache Layers
 
+先讲人话：`.runtime-cache/**` 是仓库里的“后勤仓库”，用来放运行时垃圾桶、报告柜、证据柜和临时工位；它不是 public surface，也不是长期协作文档区。
+
+边界规则补充：
+
+- repo-side runtime/cache 只能落在 `.runtime-cache/**`
+- 仓库根级 `cache/`、`.cache/`、`logs/` 这类目录都属于 forbidden residue，发现后应通过 `./bin/workspace-hygiene --apply` 清理
+- `.agents/Plans/**` 的迁移准备物如果必须暂存到仓内，只能放在 `.runtime-cache/tmp/**` 这类 internal scratch 区，不能继续把根级或 public-facing 路径当成缓冲带
+- `reports/`、`evidence/`、`logs/` 各自分舱，不能混用；不要把 execution plan、临时草稿或本地私有状态伪装成 cache/report/evidence
+
 ## CI Tool Cache Governance
 
 - Repo 内允许：`.runtime-cache/` 是唯一合法 repo-side 运行时出口，用于日志、Junit/XML、coverage、诊断 JSON、artifact staging 等一次性运行产物。
@@ -95,6 +104,12 @@
 
 这条默认目录说的是 **worker workspace 外侧的 operator-side cache**，不是 repo 根目录里的 `./cache`。
 Repo-side 仍然只有一个合法运行时出口：`.runtime-cache/**`。
+
+这条规则像仓库分区图一样工作：
+
+- 对外门厅：根目录公开资产
+- 内部仓库：`.runtime-cache/**`
+- 内部账本迁移带：如需为 `.agents/Plans/**` 迁移做短期暂存，只能进 `.runtime-cache/tmp/**`
 
 执行一次清理：
 

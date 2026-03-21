@@ -29,7 +29,17 @@ FORBIDDEN_SNIPPETS = [
 ]
 
 STRICT_ENGLISH_PATHS = [
+    "AGENTS.md",
+    "CLAUDE.md",
     "CONTRIBUTING.md",
+    "apps/api/AGENTS.md",
+    "apps/api/CLAUDE.md",
+    "apps/worker/AGENTS.md",
+    "apps/worker/CLAUDE.md",
+    "apps/mcp/AGENTS.md",
+    "apps/mcp/CLAUDE.md",
+    "apps/web/AGENTS.md",
+    "apps/web/CLAUDE.md",
     "apps/worker/worker/pipeline/steps/llm_prompts.py",
     "scripts/governance/render_current_state_summary.py",
     "scripts/governance/render_docs_governance.py",

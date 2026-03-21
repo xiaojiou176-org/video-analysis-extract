@@ -170,7 +170,7 @@ python3 scripts/governance/check_web_coverage_threshold.py \
 - `./bin/api-real-smoke-local` 默认使用 `127.0.0.1:18080`；若默认端口已被占用且未显式传 `--api-port`，脚本会自动回退到下一个可用端口并记录诊断日志。
 - `./bin/api-real-smoke-local` 会在 cleanup workflow closure probe 前临时拉起一个本地 worker，并在脚本退出时自动回收，因此不再要求调用方先手动启动 worker。
 - `./bin/api-real-smoke-local` 现在包含本机 IPv4 loopback preflight；若主机先天无法建立 `127.0.0.1` 自连接，会直接输出 `failure_kind=host_loopback_ipv4_exhausted` 并 fail-fast，这属于环境级阻塞，不应误判为 API/worker 业务回归。
-- 当执行 `./bin/quality-gate --mode pre-push --strict-full-run 1 ...` 时，必须额外跑本地真实 Postgres smoke。
+- 当执行 `./bin/strict-ci --mode pre-push --strict-full-run 1 ...` 时，必须额外跑本地真实 Postgres smoke。
 - `strict-full-run=1` 会强制关闭 `--ci-dedupe` 且禁止 `--skip-mutation`，确保本地执行真实全量门禁。
 - `./bin/smoke-full-stack` 负责本地联调与 live smoke 相关检查，不是 `api-real-smoke` 的替代品。
 - `UI Audit` 结果现会落盘到 `UI_AUDIT_RUN_STORE_DIR`（默认 `.runtime-cache/evidence/tests/ui-audit-runs/`），避免 API 重启后审查记录丢失。
@@ -349,7 +349,7 @@ python3 scripts/governance/check_test_assertions.py
 ./bin/full-stack up
 ./bin/api-real-smoke-local
 ./bin/smoke-full-stack
-./bin/quality-gate --mode pre-push --strict-full-run 1 --profile ci --profile live-smoke --ci-dedupe 0
+./bin/strict-ci --mode pre-push --strict-full-run 1 --heartbeat-seconds 20 --ci-dedupe 0
 ```
 
 ### 0.1.1) 一键最终门禁集成验收（profile -> pre-commit -> pre-push）
@@ -426,7 +426,7 @@ pre-commit install --hook-type pre-commit --hook-type commit-msg --hook-type pre
 
 协同口径（与仓库现状一致）：
 
-- 默认强制链路：`.githooks/* -> quality_gate/commitlint`。
+- 默认强制链路：`.githooks/pre-commit -> ./bin/quality-gate --mode pre-commit --profile local`，`.githooks/pre-push -> ./bin/strict-ci --mode pre-push --heartbeat-seconds 20 --ci-dedupe 0`，`.githooks/commit-msg -> commitlint`。
 - `.pre-commit-config.yaml`：统一可复用 checks（手动执行、全量清洗、版本保养）。
 - 当前 `.githooks` 不直接调用 `pre-commit run`，因此 `pre-commit` 在本仓库是“补充工具链”，不是唯一强制入口。
 

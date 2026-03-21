@@ -1,22 +1,22 @@
 # Start Here (1-Minute Onboarding)
 
-这是仓库唯一上手入口。先照抄执行，再按导航 Lazy-Load 到对应模块。
+This is the repository's only onboarding entrypoint. Copy the commands first, then lazy-load deeper docs only when you actually need them.
 
-## AI 导航索引（Lazy-Load）
+## AI Navigation Index (Lazy-Load)
 
-1. 根级治理（先读）
+1. Root governance (read first)
 
 - `AGENTS.md`
 - `CLAUDE.md`
 
-2. 模块按需加载（只在改对应模块时再读）
+2. Load modules on demand (only when you are touching that module)
 
-- API：`apps/api/AGENTS.md`、`apps/api/CLAUDE.md`
-- Worker：`apps/worker/AGENTS.md`、`apps/worker/CLAUDE.md`
-- MCP：`apps/mcp/AGENTS.md`、`apps/mcp/CLAUDE.md`
-- Web：`apps/web/AGENTS.md`、`apps/web/CLAUDE.md`
+- API: `apps/api/AGENTS.md`, `apps/api/CLAUDE.md`
+- Worker: `apps/worker/AGENTS.md`, `apps/worker/CLAUDE.md`
+- MCP: `apps/mcp/AGENTS.md`, `apps/mcp/CLAUDE.md`
+- Web: `apps/web/AGENTS.md`, `apps/web/CLAUDE.md`
 
-3. 运行与契约（按问题深度继续）
+3. Runtime and contracts (keep reading as the problem gets deeper)
 
 - `docs/runbook-local.md`
 - `docs/state-machine.md`
@@ -29,13 +29,13 @@
 - `docs/reference/evidence-model.md`
 - `docs/reference/upstream-governance.md`
 
-## 你需要先知道的 5 件事
+## The 5 Things You Need To Know First
 
-1. 流程口径：`ProcessJobWorkflow = 3 阶段 + content_type 分流 pipeline`（video 9-step / article 5-step，详见 `docs/state-machine.md`）。
-2. 环境分层：采用 `core + profile overlay` 架构，`.env` 是 core，`env/profiles/reader.env` 是 reader profile 模板；严格验收只认标准环境与标准镜像入口，reader overlay 只补缺失项，不覆盖当前进程里已显式注入的 reader 凭证。
-3. 密钥策略：只允许通过 `.env` 或进程环境注入；禁止依赖 shell 登录配置作为密钥来源。
-4. Python 命令统一使用 `python3`。
-5. AI/自动化执行必须在标准环境：优先 `.devcontainer/devcontainer.json`，基础设施使用 `infra/compose/*.compose.yml`。
+1. Workflow contract: `ProcessJobWorkflow = 3 stages + a content_type-routed pipeline` (video 9-step / article 5-step; see `docs/state-machine.md`).
+2. Environment layering: the repo uses a `core + profile overlay` model. `.env` is the core layer, and `env/profiles/reader.env` is the reader profile template. Strict acceptance only recognizes the standard environment and standard-image entrypoints. The reader overlay only fills missing values and must not override reader credentials already injected into the current process.
+3. Secret policy: secrets may only come from `.env` or the process environment. Shell login config must not be treated as a runtime secret source.
+4. Use `python3` consistently for Python commands.
+5. AI and automation must run in the standard environment: prefer `.devcontainer/devcontainer.json`, and use `infra/compose/*.compose.yml` for infrastructure.
 
 <!-- docs:generated governance-snapshot start -->
 ## Generated Governance Snapshot
@@ -48,78 +48,82 @@
 - Contract sources now live under `contracts/`, and long-lived tracked artifacts now live under `artifacts/`.
 <!-- docs:generated governance-snapshot end -->
 
-## 环境文件准备（必做）
+## Prepare Environment Files (Required)
 
 ```bash
 cp .env.example .env
 python3 scripts/governance/check_env_contract.py --strict
 ```
 
-说明：
+Notes:
 
-- `.env.example` 现在只保留最小可启动键和少量高频覆盖键，默认足够完成一次本地启动。
-- 标准初始化路径是 `.env.example -> .env`；`./bin/init-env-example` 仅作为辅助模板生成工具，不是默认入口。
-- 脚本参数全集见 `docs/reference/env-script-overrides.md`（按需覆盖，不必全量写入 `.env`）。
+- `.env.example` now keeps only the minimum startup keys plus a small set of common overrides, which is enough for one local boot in the default path.
+- The standard initialization path is `.env.example -> .env`; `./bin/init-env-example` is only a helper for generating extra templates, not the default entrypoint.
+- The full script argument surface is documented in `docs/reference/env-script-overrides.md` for opt-in overrides. You do not need to write every possible variable into `.env`.
 
 ## Public / Internal Boundary
 
-- public-ready/source-first 入口：`README.md`、`docs/start-here.md`
-- deeper operator runbook：`docs/runbook-local.md`
-- repo-side / external 双层完成模型：`docs/reference/done-model.md`
-- repo-side current receipt：`.runtime-cache/reports/governance/newcomer-result-proof.json`
-- public readiness 边界：`docs/reference/public-repo-readiness.md`
-- 当前文档口径是 **public source-first repo + dual completion lanes**，不是 adoption-grade 开源分发包，也不是 hosted product 发布页。
+- public-ready/source-first entry: `README.md`, `docs/start-here.md`
+- deeper operator runbook: `docs/runbook-local.md`
+- repo-side / external dual-completion model: `docs/reference/done-model.md`
+- repo-side current receipt: `.runtime-cache/reports/governance/newcomer-result-proof.json`
+- public-readiness boundary: `docs/reference/public-repo-readiness.md`
+- local-private worktree surface: `.env`, `.runtime-cache/**`, `.agents/Plans/**`, `.agents/Conversations/**`
+- The current documentation stance is **public source-first repo + dual completion lanes**, not an adoption-grade open-source distribution package and not a hosted product landing page.
 
-如果你只是第一次接触这个仓库，先停在 public-ready/source-first 入口，不要一上来把 `docs/runbook-local.md` 当成公共 onboarding 文档。
+If this is your first contact with the repository, stop at the public-ready/source-first entrypoints first. Do not treat `docs/runbook-local.md` as the public onboarding page on day one.
+If you need to share a folder zip or screenshots externally, remove the local-private worktree surface first. The tracked public tree and the maintainer's working directory are not the same public boundary.
 
-## 一键验证（最短路径）
+## One-Command Validation (Shortest Path)
 
 ```bash
 ./bin/validate-profile --profile local
 ```
 
-如果这一步提示存在 forbidden workspace runtime residue，先执行：
+If that command reports forbidden workspace runtime residue, run:
 
 ```bash
 ./bin/workspace-hygiene --apply
 ./bin/validate-profile --profile local
 ```
 
-补充判断：
+Interpretation:
 
-- `validate-profile` 通过，只说明 newcomer preflight 已拿到。
-- `governance-audit` 通过，只说明 repo-side 控制面站稳。
-- 只有 fresh strict receipt 也拿到，repo-side 终局收据才算闭环。
+- A `validate-profile` pass only means newcomer preflight has been captured.
+- A `governance-audit` pass only means the repo-side control plane is standing.
+- Only when a fresh strict receipt also exists is the repo-side terminal receipt actually closed.
 
-## 初始化质量门禁（建议在首次 clone 后执行）
+## Initialize Quality Gates (Recommended After First Clone)
 
 ```bash
 ./bin/install-git-hooks
 ```
 
-可选：如果你希望把 `pre-commit` framework 也直接挂到 Git 生命周期（除仓库默认 `.githooks` 外），执行：
+Optional: if you also want the `pre-commit` framework itself attached directly to the Git lifecycle, in addition to the repository-default `.githooks`, run:
 
 ```bash
 pre-commit install --hook-type pre-commit --hook-type commit-msg --hook-type pre-push
 ```
 
-说明：
+Notes:
 
-- 仓库当前默认强制链路是 `.githooks/* -> bin/quality-gate`。
-- `.pre-commit-config.yaml` 用于统一定义可复用检查集合，适合手动全量清洗与依赖更新。
-- 若执行 `pre-commit install`，会写入当前 `core.hooksPath` 下的 hook 文件；执行前请确认团队约定。
+- The current repository-default enforced chain is:
+  - `.githooks/pre-commit -> ./bin/quality-gate --mode pre-commit --profile local`
+  - `.githooks/pre-push -> ./bin/strict-ci --mode pre-push --heartbeat-seconds 20 --ci-dedupe 0`
+- `.pre-commit-config.yaml` defines a reusable check set that is useful for manual all-files cleanup and dependency refreshes.
+- If you run `pre-commit install`, it writes hook files under the current `core.hooksPath`, so confirm team expectations first.
 
-## Big Bang 全量清洗（可选）
+## Big Bang Cleanup (Optional)
 
 ```bash
 pre-commit run --all-files
 ```
 
-用途：在大规模重构前、长期分支回收前，先把格式/拼写/基础静态问题一次性清干净。
+Use this before large refactors or when cleaning up a long-lived branch so format, spelling, and basic static issues are cleared in one pass.
 
-## detect-secrets baseline（可选补充，与当前强制门禁并行）
+## detect-secrets Baseline (Optional, Parallel To Current Mandatory Gates)
 
-当前仓库强制 secrets 门禁来自 `gitleaks + quality_gate`；`detect-secrets` 不是默认强制项。若你希望补充 baseline 工作流，可执行：
+The mandatory secrets gate in this repository is still `gitleaks + quality_gate`. `detect-secrets` is not a default hard requirement. If you want an extra baseline workflow, run:
 
 ```bash
 uv run --with detect-secrets detect-secrets scan > .secrets.baseline
@@ -127,33 +131,33 @@ uv run --with detect-secrets detect-secrets audit .secrets.baseline
 uv run --with detect-secrets detect-secrets scan --baseline .secrets.baseline > .secrets.baseline
 ```
 
-三步含义：
+What those three steps mean:
 
-- 初始化：`scan > .secrets.baseline`
-- 审核：`audit .secrets.baseline`（标记真实风险 vs 误报）
-- 更新：`scan --baseline ... > .secrets.baseline`（代码变更后重算基线）
+- initialize: `scan > .secrets.baseline`
+- review: `audit .secrets.baseline` to mark real risk vs false positives
+- refresh: `scan --baseline ... > .secrets.baseline` after code changes
 
-## pre-commit 月度保养（可选）
+## Monthly pre-commit Maintenance (Optional)
 
 ```bash
 pre-commit autoupdate
 pre-commit run --all-files
 ```
 
-建议频率：每月一次；更新后至少跑一轮全量检查再提交。
+Suggested cadence: once per month. After updating, run one full pass before you commit.
 
-可选排障命令：
+Optional troubleshooting command:
 
 ```bash
 ./bin/compose-env --profile local --write .runtime-cache/tmp/.env.resolved
 ```
 
-迁移规则：
+Migration rule:
 
-- `.env`：放 core/runtime 与 provider 密钥。
-- `env/profiles/reader.env`：只放 Miniflux/Nextflux 相关变量。
+- `.env`: keep core/runtime settings and provider secrets here.
+- `env/profiles/reader.env`: keep only Miniflux/Nextflux-specific variables here.
 
-## 标准环境入口（AI 必须）
+## Standard Environment Entry (Required For AI)
 
 ```bash
 # VS Code: Dev Containers: Reopen in Container
@@ -161,26 +165,26 @@ pre-commit run --all-files
 devcontainer up --workspace-folder .
 ```
 
-标准环境是强制前置；未先进入标准环境的结果，不算 CI 等价证据。
+The standard environment is a hard prerequisite. Results produced before entering it do not count as CI-equivalent evidence.
 
-DevContainer 启动拓扑补充（2026-03）：
+Additional DevContainer startup topology notes (2026-03):
 
-- `.devcontainer/post-create.sh` 已移除 `curl|sh` 安装模式，改为 `python3 -m pip install --user --upgrade "uv>=0.10,<1.0"`；当前会直接校验 strict contract 里的 Chromium 是否可启动，失败时直接报 drift，不再 `playwright install ... || true`。
-- 并发 Web E2E 场景可通过 `WEB_E2E_NEXT_DIST_DIR` 隔离 Next.js `distDir`，避免 `.next/dev/lock` 冲突（默认常规开发无需设置）。
-- `infra/config/strict_ci_contract.json` 现在是标准镜像真相源；`bin/strict-ci` / `./bin/run-in-standard-env` 只接受 digest-pinned 标准镜像，拉取失败会直接终止，不再静默回退到旧本地镜像。
-- `build-ci-standard-image.yml` 现在会先在 hosted runner 上显式准备 Docker Buildx，再调用 `scripts/ci/build_standard_image.sh` 做多架构标准镜像构建，避免镜像工作流在构建入口阶段因为 buildx 环境未准备好而直接失败。
-- 标准镜像构建链会对 NodeSource signing key 使用显式重试，并先落临时 key 文件再 `gpg --dearmor`；这是为了降低 ARM64/QEMU buildx 路径里“HTTP/2 中断导致空 key 响应”的瞬时失败率。
-- 关键 correctness gates（`preflight-heavy`、`db-migration-smoke`、`dependency-vuln-scan`、`web-e2e-perceived`、后端/前端 lint hosted/fallback）已经跟 `python-tests` / `api-real-smoke` / `web-e2e` 一样迁入标准镜像执行，因此宿主 Docker 可用性现在是 CI 等价本地验收的前提。
-- self-hosted runner 基线合同已独立成 `infra/config/self_hosted_runner_baseline.json`；主 `ci.yml` 不再预热/拉起 runner，runner 健康检查改由 `runner-health.yml` 负责。
-- self-hosted runner 进入 `build-ci-standard-image.yml` 前会先用 `scripts/governance/runner_workspace_maintenance.sh` 清理 `.runtime-cache`、`mutants/` 与 `/tmp/video-digestor-*` 的目录/单文件残留，避免镜像工作流在 runner hygiene 阶段就被陈旧 `.db` / `.db-shm` / `.db-wal` 文件卡住。
-- DevContainer 现在固定挂载到 `/workspace`，并通过 `post-create.sh` 校验 `uv` / `node` / cache 路径是否与 strict contract 一致。
-- Web 依赖树统一进入 `.runtime-cache/tmp/web-runtime/workspace/apps/web`，不再把 `apps/web/node_modules` 作为仓库源码树中的合法长期状态。
-- CI/release 生成式参考页：
+- `.devcontainer/post-create.sh` no longer uses `curl|sh`; it now runs `python3 -m pip install --user --upgrade "uv>=0.10,<1.0"` and directly checks whether Chromium from the strict contract can launch. On failure it reports drift immediately instead of hiding it behind `playwright install ... || true`.
+- Concurrent Web E2E runs may isolate the Next.js `distDir` with `WEB_E2E_NEXT_DIST_DIR` to avoid `.next/dev/lock` conflicts. Normal development usually does not need this.
+- `infra/config/strict_ci_contract.json` is now the source of truth for the standard image. `bin/strict-ci` and `./bin/run-in-standard-env` only accept digest-pinned standard images and fail immediately if the pull cannot be completed.
+- `build-ci-standard-image.yml` now prepares Docker Buildx explicitly on the hosted runner before calling `scripts/ci/build_standard_image.sh`, so the image workflow no longer fails just because Buildx was never set up.
+- The standard-image build chain now retries the NodeSource signing key and writes it to a temporary file before `gpg --dearmor`; this reduces transient ARM64/QEMU failures caused by empty key responses after HTTP/2 interruptions.
+- Key correctness gates (`preflight-heavy`, `db-migration-smoke`, `dependency-vuln-scan`, `web-e2e-perceived`, and the hosted/fallback backend and frontend lint jobs) now run inside the standard image just like `python-tests`, `api-real-smoke`, and `web-e2e`. That means host Docker availability is now part of CI-equivalent local acceptance.
+- The self-hosted runner baseline contract has been split into `infra/config/self_hosted_runner_baseline.json`. The main `ci.yml` no longer prewarms or starts runners; `runner-health.yml` owns that concern.
+- Before entering `build-ci-standard-image.yml`, self-hosted runners now call `scripts/governance/runner_workspace_maintenance.sh` to clear stale `.runtime-cache`, `mutants/`, and `/tmp/video-digestor-*` directory or single-file residue, preventing old `.db` / `.db-shm` / `.db-wal` leftovers from blocking runner hygiene.
+- DevContainer now mounts the workspace at `/workspace` and verifies `uv`, `node`, and cache paths against the strict contract in `post-create.sh`.
+- The Web dependency tree now lives under `.runtime-cache/tmp/web-runtime/workspace/apps/web`; `apps/web/node_modules` is no longer a legitimate long-lived source-tree state.
+- Generated CI/release reference pages:
   - `docs/generated/ci-topology.md`
   - `docs/generated/runner-baseline.md`
   - `docs/generated/release-evidence.md`
 
-## 6 步启动（Host Fallback，仅排障时使用）
+## 6-Step Startup (Host Fallback, For Troubleshooting Only)
 
 ```bash
 UV_PROJECT_ENVIRONMENT="$HOME/.cache/video-digestor/project-venv" uv sync --frozen --extra dev --extra e2e
@@ -207,9 +211,9 @@ curl -sS http://127.0.0.1:9000/healthz
 curl -sS -X POST http://127.0.0.1:9000/api/v1/ingest/poll -H 'Content-Type: application/json' -d '{"max_new_videos": 20}'
 ```
 
-补充：`./bin/prepare-web-runtime` 是 wrapper，真正执行的是 `scripts/ci/prepare_web_runtime.sh`。如果入口报 `Permission denied`，先检查目标 helper 是否仍保留执行位。
+Additional note: `./bin/prepare-web-runtime` is a wrapper. The real target is `scripts/ci/prepare_web_runtime.sh`. If the wrapper reports `Permission denied`, check whether the helper still has its execute bit before assuming the Web runtime workspace logic is broken.
 
-## 一键路径（推荐）
+## One-Command Path (Recommended)
 
 ```bash
 ./bin/bootstrap-full-stack
@@ -217,65 +221,67 @@ curl -sS -X POST http://127.0.0.1:9000/api/v1/ingest/poll -H 'Content-Type: appl
 ./bin/smoke-full-stack
 ```
 
-默认行为：
+Default behavior:
 
-- `./bin/bootstrap-full-stack` 会先运行 `./bin/workspace-hygiene --apply`，清掉根目录 `.venv`、源码树 `apps/web/node_modules`、以及 `apps/**/__pycache__` 这类非法运行态。
-- `./bin/bootstrap-full-stack` 会拉起 core services + Miniflux + Nextflux。
-- `./bin/bootstrap-full-stack` 除首次 `.env` 不存在时复制模板外，不再持久化改写 `.env`；端口冲突与运行时路由决策会写入 `.runtime-cache/run/full-stack/resolved.env`，仅对当前运行生效。
-- `core-services.compose.yml` 现在使用 digest-pinned service 镜像（Postgres/Temporal），并优先接受 strict contract 导出的 `STRICT_CI_SERVICE_IMAGE_*` 值；端口与 Postgres `DB/User` 仍收口为固定默认（`7233` / `video_analysis` / `postgres`）。
-- `miniflux-nextflux.compose.yml` 的 Miniflux 端口与 `DB/User/DB_NAME` 已收口为固定默认（`8080` / `miniflux` / `miniflux`）。
-- 本地路由真相源是 `API_PORT/WEB_PORT`；`VD_API_BASE_URL` 与 `NEXT_PUBLIC_API_BASE_URL` 属于派生目标地址。
-- `./bin/full-stack up` 会按 `API health -> Web -> Worker` 顺序启动；Worker 启动前会先做 Temporal preflight（`TEMPORAL_TARGET_HOST`，默认 `localhost:7233`），不通时直接 fail-fast。
-- `bin/dev-mcp` 为交互式 stdio 入口，不作为 `full_stack.sh` 的后台守护进程管理；需要 MCP 本地调试时单独开一个终端运行。
-- `bin/dev-api` 在检测到 `uv` 时会调用 `uv run python -m uvicorn ...`，避免某些 self-hosted/隔离环境缺少 `uvicorn` console entry 时启动失败。
-- `./bin/smoke-full-stack` 会执行本地联调烟测并覆盖 reader 栈检查；core/reader 任一异常都会直接 fail-fast，不再保留 offline fallback 降级路径。
-- `./bin/smoke-full-stack` 不是 `api-real-smoke` 替代；后端真实 Postgres integration smoke 必须单独执行 `./bin/api-real-smoke-local`。
-- `./bin/api-real-smoke-local` 现在会先做本机 IPv4 loopback 预检；若命中 `failure_kind=host_loopback_ipv4_exhausted`（常见于当前机器本地 127.0.0.1 临时端口池被大量 MCP/Codex 连接占满），脚本会直接 fail-fast，而不是继续启动 API/worker/Temporal 后才深处报错。
-- 本地脚本排障时优先看 `.runtime-cache/logs/components/full-stack/*.log`、`.runtime-cache/run/full-stack/resolved.env` 与 `.runtime-cache/logs/tests/api-real-smoke-local.log`，这样能先区分“端口/路由漂移”还是“业务失败”。
-- `pr-llm-real-smoke`、`live-smoke`、`web-e2e` 的日志统一看 `.runtime-cache/logs/tests/`；对应 diagnostics/JUnit 看 `.runtime-cache/reports/tests/`。
+- `./bin/bootstrap-full-stack` starts with `./bin/workspace-hygiene --apply` and removes illegal runtime residue such as the root `.venv`, source-tree `apps/web/node_modules`, and `apps/**/__pycache__`.
+- `./bin/bootstrap-full-stack` brings up core services plus Miniflux and Nextflux.
+- `./bin/bootstrap-full-stack` copies `.env` only on the first run when it is missing; after that it no longer rewrites `.env` persistently. Port conflict resolution and runtime routing decisions are written to `.runtime-cache/run/full-stack/resolved.env` for the current run only.
+- `core-services.compose.yml` now uses digest-pinned service images for Postgres and Temporal and prefers the `STRICT_CI_SERVICE_IMAGE_*` values exported from the strict contract. Ports and the Postgres `DB/User` still converge on the fixed defaults (`7233` / `video_analysis` / `postgres`).
+- `miniflux-nextflux.compose.yml` converges Miniflux port and `DB/User/DB_NAME` onto fixed defaults (`8080` / `miniflux` / `miniflux`).
+- Local routing truth comes from `API_PORT/WEB_PORT`; `VD_API_BASE_URL` and `NEXT_PUBLIC_API_BASE_URL` are derived target addresses.
+- `./bin/full-stack up` starts in `API health -> Web -> Worker` order. Before Worker starts, it performs a Temporal preflight against `TEMPORAL_TARGET_HOST` (default `localhost:7233`) and fails fast if Temporal is unreachable.
+- `bin/dev-mcp` is an interactive stdio entrypoint. It is not managed as a background daemon by `full_stack.sh`; open a separate terminal when you need local MCP debugging.
+- `bin/dev-api` now uses `uv run python -m uvicorn ...` when `uv` is present, which avoids failures in environments that do not expose a `uvicorn` console entry.
+- `./bin/smoke-full-stack` performs local integration smoke and includes reader-stack checks. Any core or reader failure now fails fast; the old offline fallback path is gone.
+- `./bin/smoke-full-stack` is not a substitute for `api-real-smoke`; real backend Postgres integration acceptance still requires `./bin/api-real-smoke-local`.
+- `./bin/api-real-smoke-local` now performs a host IPv4 loopback preflight first. If it hits `failure_kind=host_loopback_ipv4_exhausted` (commonly when local 127.0.0.1 ephemeral ports are saturated by MCP/Codex traffic), it fails fast immediately instead of booting API/Worker/Temporal and only failing later.
+- For local script troubleshooting, check `.runtime-cache/logs/components/full-stack/*.log`, `.runtime-cache/run/full-stack/resolved.env`, and `.runtime-cache/logs/tests/api-real-smoke-local.log` first so you can separate routing drift from business failures.
+- Logs for `pr-llm-real-smoke`, `live-smoke`, and `web-e2e` are consolidated under `.runtime-cache/logs/tests/`; diagnostics and JUnit outputs live under `.runtime-cache/reports/tests/`.
 
-边界说明：
+Boundary notes:
 
-- 这里的一键 smoke 指本地联调烟测，不等同于 CI 的 live-smoke，也不能替代严格验收。
-- 本地测试口径必须区分：sqlite 口径用于默认快速回归；真实 Postgres 口径用于 integration smoke 的最终验收。
-- CI `live-smoke` 仅在 `main` push / nightly schedule 强制执行，且要求外部 provider secrets 完整（详见 `docs/testing.md`）。
-- CI 信任边界：当前仓库默认只支持 **trusted internal PR** 进入 self-hosted 主链；fork / untrusted PR 不作为支持口径。
-- PR 阶段仅有条件触发真实 LLM 烟测（`pr-llm-real-smoke`）；`web-e2e` 在 CI 主路径默认走 real API，mock API 仅用于本地调试。
+- The one-command smoke here means local integration smoke. It is not CI `live-smoke` and cannot replace strict acceptance.
+- Local test surfaces must stay separated: the sqlite path is for default fast regression, while the real Postgres path is for final integration-smoke acceptance.
+- CI `live-smoke` only runs as a hard requirement on `main` push or nightly schedule, and it requires complete external provider secrets. See `docs/testing.md`.
+- CI trust boundary: the repository currently supports only **trusted internal PRs** on the self-hosted main lane; forked or otherwise untrusted PRs are outside the supported path.
+- PRs only conditionally trigger real LLM smoke (`pr-llm-real-smoke`); `web-e2e` uses the real API by default on the CI main path, and mock API remains for local debugging only.
 
-标准严格验收（唯一权威入口）：
+Strict acceptance (the only authoritative entrypoint):
 
 ```bash
 ./bin/strict-ci --mode pre-push --strict-full-run 1 --ci-dedupe 0
 ```
 
-源码优先公开口径下的 repo-side 权威入口：
+Repo-side authoritative entrypoint under the source-first public stance:
 
 ```bash
 ./bin/repo-side-strict-ci --mode pre-push --strict-full-run 1 --ci-dedupe 0
 ```
 
-门禁口径补充：总覆盖率硬门禁 `>=95%`，Web `lines/functions/branches` 必须同时满足 `global >=95%` 且 `core >=95%`；`strict-full-run=1` 还会强制执行 mutation `score>=0.64 / effective_ratio>=0.27 / no_tests_ratio<=0.72`，并禁止 `ci-dedupe` 与 `skip-mutation`。本地 smoke 与 strict 验收统一采用 fail-fast，不再保留 offline fallback。
+Gate semantics note: total coverage has a hard floor of `>=95%`; Web `lines/functions/branches` must all satisfy `global >=95%` and `core >=95%`; and `strict-full-run=1` also forces mutation `score>=0.64 / effective_ratio>=0.27 / no_tests_ratio<=0.72` while forbidding both `ci-dedupe` and `skip-mutation`. Local smoke and strict acceptance both run fail-fast now; there is no offline fallback left.
 
-本地执行正式 pinned-image 严格验收时，必须满足以下其一：
+When you run the formal pinned-image strict path locally, at least one of the following must be true:
 
-- 已显式导出本地调试用的 `GHCR_WRITE_USERNAME` + `GHCR_WRITE_TOKEN`
-- 已显式导出本地调试用的 `GHCR_USERNAME` + `GHCR_TOKEN`
-- 或当前 `gh auth` 登录态可拉取目标 GHCR 镜像
-Hosted `build-ci-standard-image.yml` 不再优先依赖 `GHCR_WRITE_*` secret；它会先走 `github.actor + GITHUB_TOKEN` 的仓库级 token 路径。
-- `gh auth` 当前登录态可用（仓库脚本会自动复用该身份）
+- `GHCR_WRITE_USERNAME` + `GHCR_WRITE_TOKEN` are explicitly exported for local debugging
+- `GHCR_USERNAME` + `GHCR_TOKEN` are explicitly exported for local debugging
+- or the current `gh auth` session can pull the target GHCR image
 
-`--debug-build` 只用于排障标准环境构建问题，不计入 CI 等价完成信号。
+Hosted `build-ci-standard-image.yml` now probes the repository-level `github.actor + GITHUB_TOKEN` token path first, may fall back to explicit `GHCR_WRITE_*` credentials, and may continue in a `fallback-unverified` mode when only the real hosted build/push can provide the decisive publish evidence.
 
-可选阅读栈（Miniflux + Nextflux）：
+- the current `gh auth` session is usable and will be reused by repository scripts
+
+`--debug-build` is only for troubleshooting standard-environment build problems. It does not count toward CI-equivalent completion evidence.
+
+Optional reader stack (Miniflux + Nextflux):
 
 ```bash
 ./bin/bootstrap-full-stack --with-reader-stack 1 --reader-env-file env/profiles/reader.env
 ```
 
-## 下一步看哪里
+## Where To Go Next
 
-- 本地运维与参数细节：`docs/runbook-local.md`
-- 状态机与处理契约：`docs/state-machine.md`
-- 环境变量契约：`ENVIRONMENT.md`
-- 协作与文档漂移规则：`AGENTS.md`
-- 全文档索引：`docs/index.md`
+- local operations and parameter details: `docs/runbook-local.md`
+- state machine and processing contracts: `docs/state-machine.md`
+- environment variable contract: `ENVIRONMENT.md`
+- collaboration and doc-drift rules: `AGENTS.md`
+- full documentation index: `docs/index.md`

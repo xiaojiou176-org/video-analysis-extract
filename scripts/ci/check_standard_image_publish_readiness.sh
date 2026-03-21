@@ -9,6 +9,7 @@ OUTPUT_PATH="${1:-.runtime-cache/reports/governance/standard-image-publish-readi
 status="ready"
 blocker_type=""
 errors=()
+warnings=()
 
 remote_url="$(git config --get remote.origin.url)"
 repo_slug="$(python3 - <<'PY' "$remote_url"
@@ -304,10 +305,15 @@ blob_upload_probe_json='{}'
 manifest_probe_json='{}'
 selected_token=""
 selected_username="${GHCR_WRITE_USERNAME:-${GHCR_USERNAME:-${GITHUB_ACTOR:-}}}"
+fallback_token="${GHCR_WRITE_TOKEN:-${GHCR_TOKEN:-}}"
+fallback_username="${GHCR_WRITE_USERNAME:-${GHCR_USERNAME:-}}"
+fallback_attempted="false"
+primary_token_mode=""
 # In hosted GitHub Actions runs, prefer the repository-scoped GITHUB_TOKEN first
 # so stale GHCR_WRITE_* secrets cannot mask a healthier current token path.
 if [[ -n "${GITHUB_ACTIONS:-}" && -n "${GITHUB_TOKEN:-}" ]]; then
   token_mode="github-actions-token"
+  primary_token_mode="$token_mode"
   selected_username="${GITHUB_ACTOR:-$selected_username}"
   selected_token="$GITHUB_TOKEN"
   package_probe_json="$(probe_github_package_api "$selected_token" "$expected_owner" "$expected_package_name")"
@@ -417,6 +423,58 @@ PY
   fi
 fi
 
+if [[ "$status" == "blocked" && "$token_mode" == "github-actions-token" && -n "$fallback_token" ]]; then
+  fallback_attempted="true"
+  fallback_package_probe_json="$(probe_github_package_api "$fallback_token" "$expected_owner" "$expected_package_name")"
+  fallback_package_probe_status="$(python3 - <<'PY' "$fallback_package_probe_json"
+import json
+import sys
+
+payload = json.loads(sys.argv[1])
+print(payload.get("status", 0))
+PY
+)"
+  if [[ "$fallback_package_probe_status" == "200" || "$fallback_package_probe_status" == "404" ]]; then
+    fallback_blob_upload_probe_json='{}'
+    fallback_blob_upload_probe_status="0"
+    if [[ -n "$fallback_username" ]]; then
+      fallback_blob_upload_probe_json="$(probe_ghcr_blob_upload "$fallback_username" "$fallback_token" "$expected_repository")"
+      fallback_blob_upload_probe_status="$(python3 - <<'PY' "$fallback_blob_upload_probe_json"
+import json
+import sys
+
+payload = json.loads(sys.argv[1])
+print(payload.get("status", 0))
+PY
+)"
+    fi
+    if [[ "$fallback_blob_upload_probe_status" == "202" ]]; then
+      status="ready"
+      blocker_type=""
+      token_mode="ghcr-write-token-fallback"
+      selected_username="$fallback_username"
+      selected_token="$fallback_token"
+      package_probe_json="$fallback_package_probe_json"
+      blob_upload_probe_json="$fallback_blob_upload_probe_json"
+      blob_upload_scope_ok="true"
+      token_scope_ok="true"
+      errors=()
+    elif [[ -n "${GITHUB_ACTIONS:-}" && ( "$fallback_blob_upload_probe_status" == "401" || "$fallback_blob_upload_probe_status" == "403" || "$fallback_blob_upload_probe_status" == "0" ) ]]; then
+      status="ready"
+      blocker_type=""
+      token_mode="ghcr-write-token-fallback-unverified"
+      selected_username="$fallback_username"
+      selected_token="$fallback_token"
+      package_probe_json="$fallback_package_probe_json"
+      blob_upload_probe_json="$fallback_blob_upload_probe_json"
+      token_scope_ok="true"
+      blob_upload_scope_ok="false"
+      errors=()
+      warnings+=("hosted GHCR fallback could not prove blob upload capability before build; proceeding to real build/push with explicit GHCR_WRITE credentials so the hosted run can provide the decisive evidence")
+    fi
+  fi
+fi
+
 if [[ "$token_scope_ok" != "true" ]]; then
   status="blocked"
   blocker_type="registry-auth-failure"
@@ -447,8 +505,11 @@ fi
 ERRORS_JSON="$(
   printf '%s\n' "${errors[@]}" | python3 -c 'import json, sys; print(json.dumps([line.rstrip("\n") for line in sys.stdin if line.rstrip("\n")], ensure_ascii=False))'
 )"
+WARNINGS_JSON="$(
+  printf '%s\n' "${warnings[@]}" | python3 -c 'import json, sys; print(json.dumps([line.rstrip("\n") for line in sys.stdin if line.rstrip("\n")], ensure_ascii=False))'
+)"
 
-python3 - <<'PY' "$OUTPUT_PATH" "$status" "$blocker_type" "$repo_slug" "$repo_owner" "$expected_repository" "$expected_digest" "$token_mode" "$token_scope_ok" "$blob_upload_scope_ok" "$buildx_version" "$buildx_ls" "$buildx_inspect" "$ERRORS_JSON" "$package_probe_json" "$blob_upload_probe_json" "$manifest_probe_json"
+python3 - "$OUTPUT_PATH" "$status" "$blocker_type" "$repo_slug" "$repo_owner" "$expected_repository" "$expected_digest" "$token_mode" "$token_scope_ok" "$blob_upload_scope_ok" "$buildx_version" "$buildx_ls" "$buildx_inspect" "$ERRORS_JSON" "$package_probe_json" "$blob_upload_probe_json" "$manifest_probe_json" "$fallback_attempted" "$primary_token_mode" "$WARNINGS_JSON" <<'PY'
 import json
 import sys
 from pathlib import Path
@@ -476,6 +537,9 @@ payload = {
     "package_access_probe": json.loads(sys.argv[15]),
     "blob_upload_probe": json.loads(sys.argv[16]),
     "manifest_probe": json.loads(sys.argv[17]),
+    "fallback_attempted": sys.argv[18] == "true",
+    "primary_token_mode": sys.argv[19],
+    "warnings": json.loads(sys.argv[20]),
 }
 write_json_artifact(
     ROOT / output,

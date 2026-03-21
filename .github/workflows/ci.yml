@@ -32,16 +32,7 @@ env:
 
 jobs:
   trusted-pr-boundary:
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - name: Enforce trusted internal PR boundary
-        run: |
-          if [[ "${{ github.event_name }}" == "pull_request" && "${{ github.event.pull_request.head.repo.full_name }}" != "${{ github.repository }}" ]]; then
-            echo "::error::trusted internal PR boundary violated: fork or untrusted PRs must not enter the privileged self-hosted CI path."
-            exit 1
-          fi
-          echo "trusted PR boundary passed"
+    uses: ./.github/workflows/_trusted-pr-boundary.yml
 
   required-ci-secrets:
     runs-on: [self-hosted, video-analysis-extract]
@@ -171,7 +162,8 @@ jobs:
     needs: [trusted-pr-boundary]
     if: ${{ always() && needs.trusted-pr-boundary.result == 'success' }}
     uses: ./.github/workflows/remote-integrity-audit.yml
-    secrets: inherit
+    secrets:
+      REMOTE_INTEGRITY_GH_TOKEN: ${{ secrets.REMOTE_INTEGRITY_GH_TOKEN }}
 
   preflight-heavy:
     runs-on: [self-hosted, video-analysis-extract]
